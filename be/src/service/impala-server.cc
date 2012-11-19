@@ -28,7 +28,6 @@
 #include <server/TServer.h>
 //#include <concurrency/Thread.h>
 #include <concurrency/PosixThreadFactory.h>
-#include <gtest/gtest.h>
 #include <boost/foreach.hpp>
 #include <boost/bind.hpp>
 #include <boost/algorithm/string.hpp>
