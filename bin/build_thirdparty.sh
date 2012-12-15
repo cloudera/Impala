@@ -86,3 +86,22 @@ CFLAGS="-fPIC -DPIC" CXXFLAGS="-fPIC -DPIC" ./configure \
 # the first time you do a make it fails, ignore the error.
 (make || true)
 make install
+
+# Build Thrift
+cd ${IMPALA_HOME}/thirdparty/thrift-${IMPALA_THRIFT_VERSION}
+chmod 755 configure
+./configure --with-pic \
+            --prefix=${IMPALA_HOME}/thirdparty/thrift-${IMPALA_THRIFT_VERSION}/build \
+            PY_PREFIX=${IMPALA_HOME}/thirdparty/thrift-${IMPALA_THRIFT_VERSION}/build \
+            RUBY_PREFIX=${IMPALA_HOME}/thirdparty/thrift-${IMPALA_THRIFT_VERSION}/build
+make install
+cd contrib/fb303
+chmod 755 ./bootstrap.sh
+./bootstrap.sh
+chmod 755 configure
+./configure --prefix=${IMPALA_HOME}/thirdparty/thrift-${IMPALA_THRIFT_VERSION}/build \
+            --with-thriftpath=${IMPALA_HOME}/thirdparty/thrift-${IMPALA_THRIFT_VERSION}/build \
+            PY_PREFIX=${IMPALA_HOME}/thirdparty/thrift-${IMPALA_THRIFT_VERSION}/build \
+            RUBY_PREFIX=${IMPALA_HOME}/thirdparty/thrift-${IMPALA_THRIFT_VERSION}/build
+make install
+

@@ -6,24 +6,27 @@
 #  Thrift_LIBS, Thrift libraries
 #  Thrift_FOUND, If false, do not try to use ant
 
-
 # prefer the thrift version supplied in THRIFT_HOME
-message(STATUS "$ENV{THRIFT_HOME}")
+set(Thrift_HOME $ENV{THRIFT_HOME})
+IF (NOT Thrift_HOME)
+  set(Thrift_HOME ${CMAKE_SOURCE_DIR}/thirdparty/thrift-$ENV{IMPALA_THRIFT_VERSION}/build)
+ENDIF (NOT Thrift_HOME)
+
+message(STATUS "${Thrift_HOME}")
 find_path(Thrift_INCLUDE_DIR Thrift.h HINTS
-  $ENV{THRIFT_HOME}/include/thrift
+  ${Thrift_HOME}/include/thrift
   /usr/local/include/thrift
   /opt/local/include/thrift
 )
 
-# Use the default install dir of thrift contrib (/usr/local)
-# if env var THRIFT_CONTRIB_DIR is not set
+# prefer the thrift contrib version supplied in THRIFT_CONTRIB_DIR
 set(Thrift_CONTRIB_DIR $ENV{THRIFT_CONTRIB_DIR})
 IF (NOT Thrift_CONTRIB_DIR)
-  set(Thrift_CONTRIB_DIR /usr/local)
+  set(Thrift_CONTRIB_DIR ${CMAKE_SOURCE_DIR}/thirdparty/thrift-$ENV{IMPALA_THRIFT_VERSION}/build)
 ENDIF (NOT Thrift_CONTRIB_DIR)
 
 set(Thrift_LIB_PATHS
-  $ENV{THRIFT_HOME}/lib
+  ${Thrift_HOME}/lib
   /usr/local/lib
   /opt/local/lib)
 
@@ -33,7 +36,7 @@ find_path(Thrift_STATIC_LIB_PATH libthrift.a PATHS ${Thrift_LIB_PATHS})
 find_library(Thrift_LIB NAMES thrift HINTS ${Thrift_LIB_PATHS})
 
 find_path(THRIFT_COMPILER_PATH NAMES thrift PATHS
-  $ENV{THRIFT_HOME}/bin
+  ${Thrift_HOME}/bin
   /usr/local/bin
   /usr/bin
 )

@@ -62,9 +62,9 @@ function(THRIFT_GEN VAR)
     
     add_custom_command(
       OUTPUT ${OUTPUT_BE_FILE}
-      COMMAND thrift ${CPP_ARGS} ${FIL}
-      COMMAND thrift ${JAVA_ARGS} ${FIL}
-      COMMAND thrift ${PYTHON_ARGS} ${FIL}
+      COMMAND ${Thrift_COMPILER} ${CPP_ARGS} ${FIL}
+      COMMAND ${Thrift_COMPILER} ${JAVA_ARGS} ${FIL}
+      COMMAND ${Thrift_COMPILER} ${PYTHON_ARGS} ${FIL}
       DEPENDS ${ABS_FIL}
       COMMENT "Running thrift compiler on ${FIL}"
       VERBATIM

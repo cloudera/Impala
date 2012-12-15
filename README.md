@@ -1,8 +1,8 @@
 # Cloudera Impala
 
-Cloudera Impala is a distributed query execution engine that runs against data stored natively in Apache HDFS and Apache HBase. This public repository is a snapshot of our internal development repository that will be updated periodically as we prepare new releases. 
+Cloudera Impala is a distributed query execution engine that runs against data stored natively in Apache HDFS and Apache HBase. This public repository is a snapshot of our internal development repository that will be updated periodically as we prepare new releases.
 
-The rest of this README describes how to build Cloudera Impala from this repository. Further documentation about Cloudera Impala can be found [here](https://ccp.cloudera.com/display/IMPALA10BETADOC/Cloudera+Impala+1.0+Beta+Documentation). 
+The rest of this README describes how to build Cloudera Impala from this repository. Further documentation about Cloudera Impala can be found [here](https://ccp.cloudera.com/display/IMPALA10BETADOC/Cloudera+Impala+1.0+Beta+Documentation).
 
 # Building Cloudera Impala on CentOS 6.2
 
@@ -14,30 +14,11 @@ The rest of this README describes how to build Cloudera Impala from this reposit
     make cmake doxygen.x86_64 glib-devel boost-devel python-devel bzip2-devel svn libevent-devel cyrus-sasl-devel \
     wget git unzip
 
-### Install Thrift 0.7.0
-
-_Note: we will be upgrading to a more recent Thrift in the near future, but for now Thrift 0.7.0 is the only release we have tested against_
-
-    wget http://archive.apache.org/dist/thrift/0.7.0/thrift-0.7.0.tar.gz
-    tar xvzf thrift-0.7.0.tar.gz
-    cd thrift-0.7.0
-    chmod 755 configure
-    ./configure --with-pic
-    make
-    sudo make install
-    cd contrib/fb303
-    chmod 755 ./bootstrap.sh
-    ./bootstrap.sh
-    chmod 755 configure
-    ./configure
-    make
-    sudo make install
-
 ### Install LLVM
 
     wget http://llvm.org/releases/3.0/llvm-3.0.tar.gz
     tar xvzf llvm-3.0.tar.gz
-    cd llvm.3.0.src/tools
+    cd llvm-3.0.src/tools
     svn co http://llvm.org/svn/llvm-project/cfe/tags/RELEASE_30/final/ clang
     cd ../projects
     svn co http://llvm.org/svn/llvm-project/compiler-rt/tags/RELEASE_30/final/ compiler-rt
@@ -53,13 +34,13 @@ Make sure that the Oracle Java Development Kit 6 is installed (not OpenJDK), and
 ### Install Maven
 
     wget http://www.fightrice.com/mirrors/apache/maven/maven-3/3.0.4/binaries/apache-maven-3.0.4-bin.tar.gz
-    tar xvf apache-maven-3.0.4.tar.gz && sudo mv apache-maven-3.0.4 /usr/local
-   
+    tar xvf apache-maven-3.0.4-bin.tar.gz && sudo mv apache-maven-3.0.4 /usr/local
+
 Add the following three lines to your .bashrc:
 
     export M2_HOME=/usr/local/apache-maven-3.0.4
-    export M2=$M2_HOME/bin  
-    export PATH=$M2:$PATH 
+    export M2=$M2_HOME/bin
+    export PATH=$M2:$PATH
 
 And make sure you pick up the changes either by logging in to a fresh shell or running:
 
@@ -80,7 +61,7 @@ and you should see at least:
     git clone https://github.com/cloudera/impala.git
 
 ### Set the Impala environment
-  
+
     cd impala
     . bin/impala-config.sh
 
