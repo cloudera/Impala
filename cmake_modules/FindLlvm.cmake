@@ -7,9 +7,9 @@
 #  LLVM_MODULE_LIBS - list of llvm libs for working with modules.
 #  LLVM_FOUND       - True if llvm found.
 
-find_program(LLVM_CONFIG_EXECUTABLE llvm-config)
+find_program(LLVM_CONFIG_EXECUTABLE NAMES llvm-config llvm-config-$ENV{LLVM_VERSION})
 find_program(LLVM_CLANG_EXECUTABLE clang++)
-find_program(LLVM_OPT_EXECUTABLE opt)
+find_program(LLVM_OPT_EXECUTABLE NAMES opt opt-$ENV{LLVM_VERSION})
 
 if (NOT LLVM_CONFIG_EXECUTABLE)
   message(FATAL_ERROR "Could not find llvm-config")
@@ -48,7 +48,7 @@ execute_process(
 #  OUTPUT_VARIABLE LLVM_CFLAGS
 #  OUTPUT_STRIP_TRAILING_WHITESPACE
 #)
-set(LLVM_CFLAGS 
+set(LLVM_CFLAGS
   "-D_GNU_SOURCE -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS")
 
 execute_process(
@@ -58,7 +58,7 @@ execute_process(
 )
 
 # Get the link libs we need.  llvm has many and we don't want to link all of the libs
-# if we don't need them.   
+# if we don't need them.
 execute_process(
   COMMAND ${LLVM_CONFIG_EXECUTABLE} --libnames core jit native ipo bitreader
   OUTPUT_VARIABLE LLVM_MODULE_LIBS

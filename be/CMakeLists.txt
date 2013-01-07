@@ -28,7 +28,7 @@ PROJECT(ASSEMBLER)
 # compiler flags that are common across debug/release builds
 #  - msse4.2: Enable sse4.2 compiler intrinsics.
 #  - Wall: Enable all warnings.
-#  - Wno-sign-compare: suppress warnings for comparison between signed and unsigned 
+#  - Wno-sign-compare: suppress warnings for comparison between signed and unsigned
 #    integers
 #  - pthread: enable multithreaded malloc
 #  - DBOOST_DATE_TIME_POSIX_TIME_STD_CONFIG: enable nanosecond precision for boost
@@ -82,7 +82,7 @@ else()
 endif ()
 
 # Add flags that are common across build types
-#  - fverboase-asm creates better annotated assembly.  This doesn't seem to affect 
+#  - fverboase-asm creates better annotated assembly.  This doesn't seem to affect
 #    when building the binary.
 # LLMV_CFLAGS - Adding llvm compile flags
 SET(CMAKE_CXX_FLAGS "${CXX_COMMON_FLAGS} ${CMAKE_CXX_FLAGS}")
@@ -205,7 +205,7 @@ set (IMPALA_LINK_LIBS
   glogstatic
   gflagsstatic
   pprofstatic
-  -lz -lbz2 -lboost_date_time
+  -lz -lbz2
 )
 MESSAGE(STATUS, "${IMPALA_LINK_LIBS}")
 

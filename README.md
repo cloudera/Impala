@@ -1,18 +1,36 @@
 # Cloudera Impala
 
-Cloudera Impala is a distributed query execution engine that runs against data stored natively in Apache HDFS and Apache HBase. This public repository is a snapshot of our internal development repository that will be updated periodically as we prepare new releases. 
+Cloudera Impala is a distributed query execution engine that runs against data stored natively in Apache HDFS and Apache HBase. This public repository is a snapshot of our internal development repository that will be updated periodically as we prepare new releases.
 
-The rest of this README describes how to build Cloudera Impala from this repository. Further documentation about Cloudera Impala can be found [here](https://ccp.cloudera.com/display/IMPALA10BETADOC/Cloudera+Impala+1.0+Beta+Documentation). 
+The rest of this README describes how to build Cloudera Impala from this repository. Further documentation about Cloudera Impala can be found [here](https://ccp.cloudera.com/display/IMPALA10BETADOC/Cloudera+Impala+1.0+Beta+Documentation).
 
-# Building Cloudera Impala on CentOS 6.2
+# Building Cloudera Impala
 
-## Prerequisites
-
-### Installing prerequisite packages
+## Prerequisites on CentOS 6.2
 
     sudo yum install boost-test boost-program-options libevent-devel automake libtool flex bison gcc-c++ openssl-devel \
     make cmake doxygen.x86_64 glib-devel boost-devel python-devel bzip2-devel svn libevent-devel cyrus-sasl-devel \
     wget git unzip
+
+### Install LLVM
+
+    wget http://llvm.org/releases/3.0/llvm-3.0.tar.gz
+    tar xvzf llvm-3.0.tar.gz
+    cd llvm-3.0.src/tools
+    svn co http://llvm.org/svn/llvm-project/cfe/tags/RELEASE_30/final/ clang
+    cd ../projects
+    svn co http://llvm.org/svn/llvm-project/compiler-rt/tags/RELEASE_30/final/ compiler-rt
+    cd ..
+    ./configure --with-pic
+    make
+    sudo make install
+
+## Prerequisites on Ubuntu 12.04 and newer
+
+    sudo apt-get install unzip build-essential autoconf git libboost1.48-all-dev libevent-dev \
+                         libbz2-dev cmake llvm-3.0 clang doxygen
+
+## Other prerequisites
 
 ### Install Thrift 0.7.0
 
@@ -33,19 +51,6 @@ _Note: we will be upgrading to a more recent Thrift in the near future, but for 
     make
     sudo make install
 
-### Install LLVM
-
-    wget http://llvm.org/releases/3.0/llvm-3.0.tar.gz
-    tar xvzf llvm-3.0.tar.gz
-    cd llvm.3.0.src/tools
-    svn co http://llvm.org/svn/llvm-project/cfe/tags/RELEASE_30/final/ clang
-    cd ../projects
-    svn co http://llvm.org/svn/llvm-project/compiler-rt/tags/RELEASE_30/final/ compiler-rt
-    cd ..
-    ./configure --with-pic
-    make
-    sudo make install
-
 ### Install the JDK
 
 Make sure that the Oracle Java Development Kit 6 is installed (not OpenJDK), and that `JAVA_HOME` is set in your environment.
@@ -53,13 +58,13 @@ Make sure that the Oracle Java Development Kit 6 is installed (not OpenJDK), and
 ### Install Maven
 
     wget http://www.fightrice.com/mirrors/apache/maven/maven-3/3.0.4/binaries/apache-maven-3.0.4-bin.tar.gz
-    tar xvf apache-maven-3.0.4.tar.gz && sudo mv apache-maven-3.0.4 /usr/local
-   
+    tar xvf apache-maven-3.0.4-bin.tar.gz && sudo mv apache-maven-3.0.4 /usr/local
+
 Add the following three lines to your .bashrc:
 
     export M2_HOME=/usr/local/apache-maven-3.0.4
-    export M2=$M2_HOME/bin  
-    export PATH=$M2:$PATH 
+    export M2=$M2_HOME/bin
+    export PATH=$M2:$PATH
 
 And make sure you pick up the changes either by logging in to a fresh shell or running:
 
@@ -80,13 +85,16 @@ and you should see at least:
     git clone https://github.com/cloudera/impala.git
 
 ### Set the Impala environment
-  
+
     cd impala
     . bin/impala-config.sh
 
 Confirm your environment looks correct:
 
-    (11:11:21@desktop) ~/src/cloudera/impala-public (master) $ env | grep "IMPALA.*VERSION"
+    env | grep "IMPALA.*VERSION"
+
+The output should be:
+
     IMPALA_CYRUS_SASL_VERSION=2.1.23
     IMPALA_HBASE_VERSION=0.92.1-cdh4.1.0
     IMPALA_SNAPPY_VERSION=1.0.5
@@ -106,8 +114,15 @@ Confirm your environment looks correct:
 
 ### Build Impala
 
+On CentOS:
+
     cd ${IMPALA_HOME}
     ./build_public.sh -build_thirdparty
+
+On Ubuntu:
+
+    cd ${IMPALA_HOME}
+    LLVM_VERSION=3.0 ./build_public.sh -build_thirdparty
 
 ## Wrapping up
 

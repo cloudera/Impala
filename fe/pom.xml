@@ -475,6 +475,9 @@
       <id>cdh.rcs.releases.repo</id>
       <url>https://repository.cloudera.com/content/groups/cdh-releases-rcs</url>
       <name>CDH Releases Repository</name>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
       <snapshots>
         <enabled>true</enabled>
       </snapshots>
@@ -483,6 +486,9 @@
       <id>cdh.releases.repo</id>
       <url>https://repository.cloudera.com/content/repositories/releases</url>
       <name>CDH Releases Repository</name>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
       <snapshots>
         <enabled>false</enabled>
       </snapshots>
@@ -491,6 +497,9 @@
       <id>cdh.snapshots.repo</id>
       <url>https://repository.cloudera.com/content/repositories/snapshots</url>
       <name>CDH Snapshots Repository</name>
+      <releases>
+        <enabled>false</enabled>
+      </releases>
       <snapshots>
         <enabled>true</enabled>
       </snapshots>
@@ -499,6 +508,9 @@
       <id>cloudera.thirdparty.repo</id>
       <url>https://repository.cloudera.com/content/repositories/third-party</url>
       <name>Cloudera Third Party Repository</name>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
       <snapshots>
         <enabled>false</enabled>
       </snapshots>
@@ -510,6 +522,9 @@
       <id>cloudera.thirdparty.repo</id>
       <url>https://repository.cloudera.com/content/repositories/third-party</url>
       <name>Cloudera Third Party Repository</name>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
       <snapshots>
         <enabled>false</enabled>
       </snapshots>
@@ -518,6 +533,9 @@
       <id>cloudera.snapshot.repo</id>
       <url>https://repository.cloudera.com/content/repositories/snapshots</url>
       <name>Cloudera Snapshot Repository</name>
+      <releases>
+        <enabled>false</enabled>
+      </releases>
       <snapshots>
         <enabled>true</enabled>
       </snapshots>

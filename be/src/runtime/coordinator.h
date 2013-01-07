@@ -35,6 +35,7 @@
 #include "common/global-types.h"
 #include "util/progress-updater.h"
 #include "util/runtime-profile.h"
+#include "util/container-util.h"
 #include "runtime/runtime-state.h"
 #include "sparrow/simple-scheduler.h"
 #include "gen-cpp/Types_types.h"
@@ -109,7 +110,7 @@ class Coordinator {
   // the next GetNext() call. If *batch is NULL, execution has completed and GetNext()
   // must not be called again.
   // GetNext() will not set *batch=NULL until all backends have
-  // either completed or have failed. 
+  // either completed or have failed.
   // It is safe to call GetNext() even in the case where there is no coordinator fragment
   // (distributed INSERT).
   // '*batch' is owned by the underlying PlanFragmentExecutor and must not be deleted.
@@ -163,15 +164,15 @@ class Coordinator {
 
  private:
   class BackendExecState;
-    
+
   // Typedef for boost utility to compute averaged stats
   // TODO: including the median doesn't compile, looks like some includes are missing
-  typedef boost::accumulators::accumulator_set<int64_t, 
+  typedef boost::accumulators::accumulator_set<int64_t,
       boost::accumulators::features<
-      boost::accumulators::tag::min, 
-      boost::accumulators::tag::max, 
-      boost::accumulators::tag::mean, 
-      boost::accumulators::tag::variance> 
+      boost::accumulators::tag::min,
+      boost::accumulators::tag::max,
+      boost::accumulators::tag::mean,
+      boost::accumulators::tag::variance>
   > SummaryStats;
 
   ExecEnv* exec_env_;
@@ -193,7 +194,7 @@ class Coordinator {
     // Total finished scan ranges per node
     CounterMap scan_ranges_complete_counters;
   };
-  
+
   // execution parameters for a single fragment; used to assemble the
   // per-fragment instance TPlanFragmentExecParams;
   // hosts.size() == instance_ids.size()
@@ -207,6 +208,17 @@ class Coordinator {
     std::vector<TUniqueId> instance_ids;
     std::vector<TPlanFragmentDestination> destinations;
     std::map<PlanNodeId, int> per_exch_num_senders;
+
+    // to work around a bug in Boost 1.4x where the copy assignment operator
+    // for unordered_map doesn't use const for the argument
+    FragmentExecParams &operator=(const FragmentExecParams &src) {
+      hosts = src.hosts;
+      instance_ids = src.instance_ids;
+      destinations = src.destinations;
+      per_exch_num_senders = src.per_exch_num_senders;
+      data_server_map = src.data_server_map;
+      return *this;
+    }
   };
   // populated in ComputeFragmentExecParams()
   std::vector<FragmentExecParams> fragment_exec_params_;
@@ -219,7 +231,7 @@ class Coordinator {
   // vector is indexed by fragment index from TQueryExecRequest.fragments;
   // populated in ComputeScanRangeAssignment()
   std::vector<FragmentScanRangeAssignment> scan_range_assignment_;
-  
+
   // BackendExecStates owned by obj_pool()
   std::vector<BackendExecState*> backend_exec_states_;
 
@@ -261,7 +273,7 @@ class Coordinator {
 
   // True if execution has completed, false otherwise.
   bool execution_completed_;
-  
+
   // Number of remote fragments that have completed
   int num_remote_fragements_complete_;
 
@@ -317,7 +329,7 @@ class Coordinator {
 
     // Root profile for all fragment instances for this fragment
     RuntimeProfile* root_profile;
-    
+
     // Bytes assigned for instances of this fragment
     SummaryStats bytes_assigned;
 
@@ -332,7 +344,7 @@ class Coordinator {
   // This array is only modified at coordinator startup and query completion and
   // does not need locks.
   std::vector<PerFragmentProfileData> fragment_profiles_;
-    
+
   // Throughput counters for the coordinator fragment
   FragmentInstanceCounters coordinator_counters_;
 
@@ -397,8 +409,8 @@ class Coordinator {
   // Derived counter function: aggregates throughput for node_id across all backends
   // (id needs to be for a ScanNode)
   int64_t ComputeTotalThroughput(int node_id);
-  
-  // Derived counter function: aggregates total completed scan ranges for node_id 
+
+  // Derived counter function: aggregates total completed scan ranges for node_id
   // across all backends(id needs to be for a ScanNode)
   int64_t ComputeTotalScanRangesComplete(int node_id);
 
