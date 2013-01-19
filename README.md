@@ -32,6 +32,7 @@ _Note: we will be upgrading to a more recent Thrift in the near future, but for 
     ./configure
     make
     sudo make install
+    cd  ~   # or change to another directory
 
 ### Install LLVM
 
@@ -45,6 +46,7 @@ _Note: we will be upgrading to a more recent Thrift in the near future, but for 
     ./configure --with-pic
     make
     sudo make install
+    cd  ~   # or change to another directory
 
 ### Install the JDK
 
@@ -53,7 +55,7 @@ Make sure that the Oracle Java Development Kit 6 is installed (not OpenJDK), and
 ### Install Maven
 
     wget http://www.fightrice.com/mirrors/apache/maven/maven-3/3.0.4/binaries/apache-maven-3.0.4-bin.tar.gz
-    tar xvf apache-maven-3.0.4.tar.gz && sudo mv apache-maven-3.0.4 /usr/local
+    tar xvf apache-maven-3.0.4-bin.tar.gz && sudo mv apache-maven-3.0.4 /usr/local
    
 Add the following three lines to your .bashrc:
 
