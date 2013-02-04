@@ -1,0 +1,10 @@
+00d6be170eb9fc3b2198ffdcb1f1d6ba7fc6e621  gtest-1.6.0.zip
+94e641e50afd03c574af6a55084e94a347c911d7  glog-0.3.2.tar.gz
+1718dd556367ecdaa5f2ec7f83db04ebaa37449f  gflags-2.0.zip
+da7181a7ba9b5ee7302daf6c16e886c179fe8d1b  gperftools-2.0.tar.gz
+3a3df859cf33f78f8e945c3f67f28685f0f38bb1  snappy-1.0.5.tar.gz
+5df33a6788d6cd8329b109eff777c6cfae1a21bd  cyrus-sasl-2.1.23.tar.gz
+37854a7edacc8cef7e52ba3e0b3dbdcd7ec7d043  mongoose-3.3.tgz
+115086eca432d75a12779841aceb6d245fd65ad5  hadoop-2.0.0-cdh4.1.0.tar.gz
+0fb19cc97081ca3d32086ce051505b06b06fb639  hive-0.9.0-cdh4.1.0.tar.gz
+b8f6877bc75878984355da4efe171ad99ff05b6a  thrift-0.7.0.tar.gz
