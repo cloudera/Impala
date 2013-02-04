@@ -27,6 +27,8 @@ public class IntLiteral extends LiteralExpr {
 
   private void init(Long value) {
     this.value = value.longValue();
+    type = PrimitiveType.INT;
+  /*   
     if (this.value <= Byte.MAX_VALUE && this.value >= Byte.MIN_VALUE) {
       type = PrimitiveType.TINYINT;
     } else if (this.value <= Short.MAX_VALUE && this.value >= Short.MIN_VALUE) {
@@ -37,7 +39,7 @@ public class IntLiteral extends LiteralExpr {
       Preconditions.checkState(this.value <= Long.MAX_VALUE
           && this.value >= Long.MIN_VALUE);
       type = PrimitiveType.BIGINT;
-    }
+    }*/
   }
 
   public IntLiteral(Long value) {
