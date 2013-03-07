@@ -68,6 +68,13 @@ public class AggregationNode extends PlanNode {
   public AggregateInfo getAggInfo() {
     return aggInfo;
   }
+  /**
+   * During planning we may move this node to be an intermediate node. In that case
+   * we only need to do the finalize in the coord agg node.
+   */
+  public void setNeedsFinalize(boolean needsFinalize) {
+    this.needsFinalize = needsFinalize;
+  }
 
   @Override
   public void setCompactData(boolean on) {
