@@ -211,6 +211,8 @@ public class Planner {
         new PlanNodeId(nodeIdGenerator), inputFragment.getPlanRoot(), false);
     PlanNodeId exchId = mergePlan.getId();
     if (inputFragment.getPlanRoot() instanceof AggregationNode) {
+      // Finalize will happen in the merge fragment instead of the input fragment
+      ((AggregationNode)inputFragment.getPlanRoot()).setNeedsFinalize(false);
       // insert merge aggregation
       AggregationNode aggNode = (AggregationNode) inputFragment.getPlanRoot();
       mergePlan =
@@ -395,7 +397,8 @@ public class Planner {
       // TODO: transfer having predicates
       return aggFragment;
     } else {
-      // place the original aggregation in the child fragment
+      // place the original aggregation in the child fragment and set finalize to false
+      node.setNeedsFinalize(false);
       childFragment.addPlanRoot(node);
       // if there is a limit, we need to transfer it from the pre-aggregation
       // node in the child fragment to the merge aggregation node in the parent
