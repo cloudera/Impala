@@ -361,7 +361,7 @@ class ImpalaShell(cmd.Cmd):
       if self.refresh_after_connect:
         self.cmdqueue.append('refresh')
       if self.default_db:
-        self.cmdqueue.append('use %s' % self.default_db)
+        self.cmdqueue.append('use %s%s' % (self.default_db, ImpalaShell.CMD_DELIM))
       self.__build_default_query_options_dict()
     self.last_query_handle = None
     # In the case that we lost connection while a command was being entered,
