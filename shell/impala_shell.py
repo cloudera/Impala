@@ -912,6 +912,10 @@ if __name__ == "__main__":
     print VERSION_STRING
     sys.exit(0)
 
+  if len(args) != 0:
+    print "Error: Unknown arguments %s" % ", ".join(args)
+    sys.exit(1)
+		
   if options.use_kerberos:
     # The sasl module is bundled with the shell.
     try:
