@@ -144,11 +144,23 @@ class ImpalaShell(cmd.Cmd):
     self.is_interrupted = threading.Event()
     signal.signal(signal.SIGINT, self.__signal_handler)
 
-  def __print_options(self, options):
-    if not options:
+  def __print_options(self):
+    print "Query options (defaults are shown in []):"
+    if self.default_query_options and self.set_query_options:
+      def_opts = self.default_query_options.keys()
+      set_opts = self.set_query_options.keys()
+      # Displayed options should be sorted by default query options.
+      for target_key in sorted(set(def_opts + set_opts), key=(def_opts + set_opts).index):
+        if target_key in set_opts:
+          print '\t%s: %s' % (target_key, self.set_query_options[target_key])
+        else :
+          print '\t%s: [%s]' % (target_key, self.default_query_options[target_key])
+    elif self.default_query_options and not self.set_query_options:
+      print '\n'.join(["\t%s: [%s]" % (k,v) for (k,v) in self.default_query_options.iteritems()])
+    elif not self.default_query_options and self.set_query_options:
+      print '\n'.join(["\t%s: %s" % (k,v) for (k,v) in self.set_query_options.iteritems()])
+    else :
       print '\tNo options available.'
-    else:
-      print '\n'.join(["\t%s: %s" % (k,v) for (k,v) in options.iteritems()])
 
   def __options_to_string_list(self):
     return ["%s=%s" % (k,v) for (k,v) in self.set_query_options.iteritems()]
@@ -285,15 +297,11 @@ class ImpalaShell(cmd.Cmd):
     """
     # TODO: Expand set to allow for setting more than just query options.
     if not self.connected:
-      print "Query options currently set:"
-      self.__print_options(self.set_query_options)
+      self.__print_options()
       print "Connect to an impalad to see the default query options"
       return True
     if len(args) == 0:
-      print "Default query options:"
-      self.__print_options(self.default_query_options)
-      print "Query options currently set:"
-      self.__print_options(self.set_query_options)
+      self.__print_options()
       return True
 
     tokens = args.split("=")
@@ -304,7 +312,7 @@ class ImpalaShell(cmd.Cmd):
     if option_upper not in self.default_query_options.keys():
       print "Unknown query option: %s" % (tokens[0],)
       print "Available query options, with their default values are:"
-      self.__print_options(self.default_query_options)
+      self.__print_options()
       return False
     self.set_query_options[option_upper] = tokens[1]
     self.__print_if_verbose('%s set to %s' % (option_upper, tokens[1]))
