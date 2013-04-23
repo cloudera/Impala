@@ -26,6 +26,7 @@ import socket
 import threading
 from optparse import OptionParser
 import getpass
+import re
 
 from beeswaxd import BeeswaxService
 from beeswaxd.BeeswaxService import QueryState
@@ -189,14 +190,7 @@ class ImpalaShell(cmd.Cmd):
       return 'quit'
     else:
       tokens[0] = tokens[0].lower()
-    if interactive:
-      args = self.__check_for_command_completion(' '.join(tokens).strip())
-      # We escape \n in multiline commands to enable history to be read properly.
-      # As such, some commands will have \n escaped, this takes care of un-escaping them.
-      args = args.rstrip(ImpalaShell.CMD_DELIM).decode('string-escape')
-    else:
-      args = ' '.join(tokens)
-    return args
+    return ' '.join(tokens).decode('string-escape')
 
   def __check_for_command_completion(self, cmd):
     """Check for a delimiter at the end of user input.
@@ -258,9 +252,18 @@ class ImpalaShell(cmd.Cmd):
     self.is_interrupted.set()
 
   def precmd(self, args):
-    # TODO: Add support for multiple commands on the same line.
     self.is_interrupted.clear()
-    return self.sanitise_input(args)
+
+    args = self.__check_for_command_completion(args.strip())
+    if args == str(): return args
+
+    splited_queries = re.split(r'''((?:[^;"']|"[^"]*"|'[^']*')+)''', args)[1::2]
+    splited_queries = map(self.sanitise_input, splited_queries)
+
+    if len(splited_queries) > 1:
+      remain_queries = map(lambda x: str(x)+';', splited_queries[1:])
+      self.cmdqueue.extend(remain_queries)
+    return splited_queries[0]
 
   def postcmd(self, status, args):
     """Hack to make non interactive mode work"""
@@ -817,22 +820,22 @@ def parse_query_text(query_text):
   The semi-colon takes precedence over everything else. As such,
   it's not permitted within a comment, and cannot be escaped.
   """
-  # queries are split by a semi-colon.
-  raw_queries = query_text.split(';')
-  queries = []
-  for raw_query in raw_queries:
-    query = []
-    for line in raw_query.split('\n'):
-      line = line.split(COMMENT_TOKEN)[0].strip()
-      if len(line) > 0:
-        # anything before the comment is legal.
-        query.append(line)
-    queries.append('\n'.join(query))
-  # The last query need not be demilited by a semi-colon.
-  # If it is, get rid of the last element.
-  if len(queries[-1]) == 0:
-    queries = queries[:-1]
-  return queries
+  modified_query_text = []
+  for line in query_text.split('\n'):
+    if COMMENT_TOKEN in line:
+      line = line.split(COMMENT_TOKEN,1)
+      substr = line[0].strip()
+      if len(substr) > 0:
+        if line[1].endswith(";"):
+          modified_query_text.append(substr + ";")
+        else:
+          modified_query_text.append(substr)
+    else:
+      modified_query_text.append(line.strip())
+
+  # queries are split by a semi-colon, NOT quoted semi-colon.
+  queries = re.split(r'''((?:[^;"']|"[^"]*"|'[^']*')+)''', '\n'.join(modified_query_text))[1::2]
+  return map(lambda x:x.strip(), queries)
 
 def execute_queries_non_interactive_mode(options):
   """Run queries in non-interactive mode."""
