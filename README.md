@@ -10,13 +10,23 @@ The rest of this README describes how to build Cloudera Impala from this reposit
 
 ### Installing prerequisite packages
 
-    sudo yum install boost-test boost-program-options libevent-devel automake libtool flex bison gcc-c++ openssl-devel \
-    make cmake doxygen.x86_64 glib-devel boost-devel python-devel bzip2-devel svn libevent-devel cyrus-sasl-devel \
+    sudo yum install automake libtool flex bison gcc-c++ openssl-devel \
+    make cmake doxygen.x86_64 glib2-devel python-devel bzip2-devel subversion libevent-devel cyrus-sasl-devel \
     wget git unzip
 
 *Note:* Impala requires Boost 1.4.2 or later.
 
 *Note:* Ubuntu 12.04 (and later) requires the libevent1-dev package to work with Thrift v0.9
+
+### Install Boost 
+
+    wget http://iweb.dl.sourceforge.net/project/boost/boost/1.42.0/boost_1_42_0.tar.gz
+    tar xzvf boost_1_42_0.tar.gz
+    cd boost_1_42_0
+    ./bootstrap.sh
+    ./bjam link=shared threading=multi
+    sudo ./bjam link=shared threading=multi install
+    
 
 ### Install LLVM
 
@@ -37,12 +47,12 @@ Make sure that the Oracle Java Development Kit 6 is installed (not OpenJDK), and
 
 ### Install Maven
 
-    wget http://www.fightrice.com/mirrors/apache/maven/maven-3/3.0.4/binaries/apache-maven-3.0.4-bin.tar.gz
-    tar xvf apache-maven-3.0.4.tar.gz && sudo mv apache-maven-3.0.4 /usr/local
+    wget http://mirror.cc.columbia.edu/pub/software/apache/maven/maven-3/3.0.5/binaries/apache-maven-3.0.5-bin.tar.gz
+    tar xvf apache-maven-3.0.5-bin.tar.gz && sudo mv apache-maven-3.0.5 /usr/local
    
 Add the following three lines to your .bashrc:
 
-    export M2_HOME=/usr/local/apache-maven-3.0.4
+    export M2_HOME=/usr/local/apache-maven-3.0.5
     export M2=$M2_HOME/bin  
     export PATH=$M2:$PATH 
 
@@ -56,7 +66,7 @@ Confirm by running:
 
 and you should see at least:
 
-    Apache Maven 3.0.4...
+    Apache Maven 3.0.5...
 
 ## Building Cloudera Impala
 
