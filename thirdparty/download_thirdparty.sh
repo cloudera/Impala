@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-if [ "x${IMPALA_HOME}" -eq "x"]; then
+if [ "x${IMPALA_HOME}" == "x" ]; then
   echo "IMPALA_HOME must be set"
   exit 1;
 fi
