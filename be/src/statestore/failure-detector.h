@@ -41,7 +41,7 @@ class FailureDetector {
 
   // Updates the state of a peer according to the most recent heartbeat
   // state. If 'seen' is true, this method indicates that a heartbeat has been
-  // received. If seen is 'false', this method indicates that a heartbeat has
+  // received. If 'seen' is false, this method indicates that a heartbeat has
   // not been received since the last successful heartbeat receipt.
   // This method returns the current state of the updated peer.
   virtual PeerState UpdateHeartbeat(const std::string& peer, bool seen) = 0;
