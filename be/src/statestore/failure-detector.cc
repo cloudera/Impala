@@ -15,6 +15,7 @@
 #include "statestore/failure-detector.h"
 #include <boost/assign.hpp>
 #include "common/logging.h"
+#include <boost/thread/lock_guard.hpp>
 
 using namespace impala;
 using namespace std;

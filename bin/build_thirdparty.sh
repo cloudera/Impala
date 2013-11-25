@@ -113,10 +113,10 @@ if [ $BUILD_ALL -eq 1 ] || [ $BUILD_THRIFT -eq 1 ]; then
   cd ${THRIFT_SRC_DIR}
   build_preamble ${THRIFT_SRC_DIR} "Thrift"
   JAVA_PREFIX=${THRIFT_HOME}/java PY_PREFIX=${THRIFT_HOME}/python \
-    ./configure --with-pic --prefix=${THRIFT_HOME} \
-    --with-php=no --with-java=no --with-perl=no --with-erlang=no \
-    --with-ruby=no --with-haskell=no --with-erlang=no --with-d=no \
-    --with-qt4=no
+      ./configure --with-pic --prefix=${THRIFT_HOME} \
+      --with-php=no --with-java=no --with-perl=no --with-erlang=no \
+      --with-ruby=no --with-haskell=no --with-erlang=no --with-d=no \
+      --with-qt4=no --with-libevent=$LIBEVENT1
   make # Make with -j fails
   make install
   cd ${THRIFT_SRC_DIR}/contrib/fb303
@@ -191,7 +191,7 @@ if [ $BUILD_ALL -eq 1 ] || [ $BUILD_SASL -eq 1 ]; then
     # Disable everything except those protocols needed -- currently just Kerberos.
     # Sasl does not have a --with-pic configuration.
     CFLAGS="-fPIC -DPIC" CXXFLAGS="-fPIC -DPIC" ./configure \
-      --disable-sql --disable-otp  --enable-ldapdb --with-ldap=/usr/ --with-saslauthd=no \
+      --disable-sql --disable-otp --with-saslauthd=no \
       --prefix=$IMPALA_HOME/thirdparty/cyrus-sasl-${IMPALA_CYRUS_SASL_VERSION}/build \
       --enable-static --enable-staticdlopen --enable-alwaystrue
     # the first time you do a make it fails, ignore the error.

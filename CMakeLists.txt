@@ -18,6 +18,9 @@ cmake_minimum_required(VERSION 2.6)
 # generate CTest input files
 enable_testing()
 
+SET(CRYPTO_LIBRARIES /lib64/libcrypto.so.10)
+set(LIBS ${LIBS} ${CRYPTO_LIBRARIES})
+
 # where to find cmake modules
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake_modules")
 
