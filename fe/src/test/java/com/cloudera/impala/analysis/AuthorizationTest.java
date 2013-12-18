@@ -17,7 +17,6 @@ package com.cloudera.impala.analysis;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -65,18 +64,16 @@ public class AuthorizationTest {
   private final static User USER = new User("test_user");
   // The admin_user has ALL privileges on the server.
   private final static User ADMIN_USER = new User("admin_user");
-  private final AnalysisContext analysisContext_;
-  private final AuthorizationConfig authzConfig_;
-  private final Frontend fe_;
 
-  public AuthorizationTest() throws IOException {
-    authzConfig_ = new AuthorizationConfig("server1", AUTHZ_POLICY_FILE,
-        LocalGroupResourceAuthorizationProvider.class.getName());
-    ImpaladCatalog catalog = new ImpaladCatalog(
-        Catalog.CatalogInitStrategy.LAZY, authzConfig_);
-    analysisContext_ = new AnalysisContext(catalog, Catalog.DEFAULT_DB, USER);
-    fe_ = new Frontend(Catalog.CatalogInitStrategy.LAZY, authzConfig_);
-  }
+  private final static AuthorizationConfig authzConfig_ = new AuthorizationConfig(
+      "server1", AUTHZ_POLICY_FILE,
+      LocalGroupResourceAuthorizationProvider.class.getName());
+  private final static ImpaladCatalog catalog_ = new ImpaladCatalog(
+      Catalog.CatalogInitStrategy.LAZY, authzConfig_);
+  private final static AnalysisContext analysisContext_ =
+      new AnalysisContext(catalog_, Catalog.DEFAULT_DB, USER);
+  private final static Frontend fe_ =
+      new Frontend(Catalog.CatalogInitStrategy.LAZY, authzConfig_);
 
   @Test
   public void TestSelect() throws AuthorizationException, AnalysisException {
@@ -933,7 +930,7 @@ public class AuthorizationTest {
     for (User user: users) {
       ImpaladCatalog catalog =
           new ImpaladCatalog(Catalog.CatalogInitStrategy.LAZY, authzConfig_);
-      AnalysisContext context = new AnalysisContext(catalog, Catalog.DEFAULT_DB,
+      AnalysisContext context = new AnalysisContext(catalog_, Catalog.DEFAULT_DB,
           user);
       // Can select from table that user has privileges on.
       AuthzOk(context, "select * from functional.alltypesagg");
@@ -974,15 +971,11 @@ public class AuthorizationTest {
 
   @Test
   public void TestFunction() throws AnalysisException, AuthorizationException {
-    AuthorizationConfig config = new AuthorizationConfig("server1", AUTHZ_POLICY_FILE,
-        LocalGroupResourceAuthorizationProvider.class.getName());
-    ImpaladCatalog catalog = new  ImpaladCatalog(
-        Catalog.CatalogInitStrategy.LAZY, config);
-
     // First try with the less privileged user.
     User currentUser = new User("test_user");
-    AnalysisContext context = new AnalysisContext(catalog, Catalog.DEFAULT_DB,
+    AnalysisContext context = new AnalysisContext(catalog_, Catalog.DEFAULT_DB,
         currentUser);
+
     AuthzError(context, "show functions",
         "User '%s' does not have privileges to access: default", currentUser);
     AuthzOk(context, "show functions in tpch");
@@ -1006,7 +999,7 @@ public class AuthorizationTest {
         "User '%s' does not have privileges to CREATE/DROP functions.", currentUser);
 
     // Admin should be able to do everything
-    AnalysisContext adminContext = new AnalysisContext(catalog, Catalog.DEFAULT_DB,
+    AnalysisContext adminContext = new AnalysisContext(catalog_, Catalog.DEFAULT_DB,
         ADMIN_USER);
     AuthzOk(adminContext, "show functions");
     AuthzOk(adminContext, "show functions in tpch");
@@ -1018,9 +1011,9 @@ public class AuthorizationTest {
     AuthzOk(adminContext, "drop function if exists f()");
 
     // Add default.f(), tpch.f()
-    catalog.addFunction(new Udf(new FunctionName("default", "f"),
+    catalog_.addFunction(new Udf(new FunctionName("default", "f"),
         new ArrayList<PrimitiveType>(), PrimitiveType.INT, null, null));
-    catalog.addFunction(new Udf(new FunctionName("tpch", "f"),
+    catalog_.addFunction(new Udf(new FunctionName("tpch", "f"),
         new ArrayList<PrimitiveType>(), PrimitiveType.INT, null, null));
 
     AuthzError(context, "select default.f()",

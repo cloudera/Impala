@@ -37,7 +37,6 @@ import com.cloudera.impala.catalog.ImpaladCatalog;
 import com.cloudera.impala.catalog.PrimitiveType;
 import com.cloudera.impala.catalog.Table;
 import com.cloudera.impala.catalog.TableLoadingException;
-import com.cloudera.impala.catalog.TableNotFoundException;
 import com.cloudera.impala.catalog.View;
 import com.cloudera.impala.common.AnalysisException;
 import com.cloudera.impala.common.Id;
@@ -1277,6 +1276,9 @@ public class Analyzer {
     try {
       table = getCatalog().getTable(tableName.getDb(),
           tableName.getTbl(), getUser(), privilege);
+      if (table == null) {
+        throw new AnalysisException(TBL_DOES_NOT_EXIST_ERROR_MSG + tableName.toString());
+      }
       if (addAccessEvent) {
         // Add an audit event for this access
         TCatalogObjectType objectType = TCatalogObjectType.TABLE;
@@ -1286,8 +1288,6 @@ public class Analyzer {
       }
     } catch (DatabaseNotFoundException e) {
       throw new AnalysisException(DB_DOES_NOT_EXIST_ERROR_MSG + tableName.getDb());
-    } catch (TableNotFoundException e) {
-      throw new AnalysisException(TBL_DOES_NOT_EXIST_ERROR_MSG + tableName.toString());
     } catch (TableLoadingException e) {
       String errorMsg =
           String.format("Failed to load metadata for table: %s", tableName.toString());

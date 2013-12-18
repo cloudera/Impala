@@ -25,8 +25,6 @@ import java.util.Map;
 
 import junit.framework.Assert;
 
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,7 +44,8 @@ import com.google.common.base.Preconditions;
 
 public class AnalyzerTest {
   protected final static Logger LOG = LoggerFactory.getLogger(AnalyzerTest.class);
-  protected static ImpaladCatalog catalog_;
+  protected static ImpaladCatalog catalog_ = new ImpaladCatalog(
+      Catalog.CatalogInitStrategy.LAZY, AuthorizationConfig.createAuthDisabledConfig());
 
   protected Analyzer analyzer_;
 
@@ -76,17 +75,6 @@ public class AnalyzerTest {
         new User(System.getProperty("user.name")));
     analyzer.setUseHiveColLabels(true);
     return analyzer;
-  }
-
-  @BeforeClass
-  public static void setUp() throws Exception {
-    catalog_ = new ImpaladCatalog(Catalog.CatalogInitStrategy.LAZY,
-        AuthorizationConfig.createAuthDisabledConfig());
-  }
-
-  @AfterClass
-  public static void cleanUp() {
-    catalog_.close();
   }
 
   // Adds a Udf: default.name(args) to the catalog.
@@ -347,6 +335,9 @@ public class AnalyzerTest {
    */
   @Test
   public void TestUnsupportedTypes() throws AuthorizationException {
+    AnalysisError("select dec_col from functional.unsupported_types",
+        "Unsupported type 'DECIMAL' in 'dec_col'.");
+
     // The table metadata should not have been loaded.
     AnalysisError("select * from functional.map_table",
         "Failed to load metadata for table: functional.map_table");
