@@ -531,7 +531,7 @@ inline void HBaseTableScanner::GetFamily(JNIEnv* env, jobject cell,
 inline void HBaseTableScanner::GetQualifier(JNIEnv* env, jobject cell,
     void** data, int* length) {
   int offset = env->CallIntMethod(cell, cell_get_qualifier_offset_id_);
-  *length = env->CallShortMethod(cell, cell_get_qualifier_length_id_);
+  *length = env->CallIntMethod(cell, cell_get_qualifier_length_id_);
   jbyteArray jdata =
       (jbyteArray) env->CallObjectMethod(cell, cell_get_qualifier_array_);
   *data = value_pool_->Allocate(*length);
@@ -542,7 +542,7 @@ inline void HBaseTableScanner::GetQualifier(JNIEnv* env, jobject cell,
 inline void HBaseTableScanner::GetValue(JNIEnv* env, jobject cell,
     void** data, int* length) {
   int offset = env->CallIntMethod(cell, cell_get_value_offset_id_);
-  *length = env->CallShortMethod(cell, cell_get_value_length_id_);
+  *length = env->CallIntMethod(cell, cell_get_value_length_id_);
   jbyteArray jdata =
       (jbyteArray) env->CallObjectMethod(cell, cell_get_value_array_);
   *data = value_pool_->Allocate(*length);
