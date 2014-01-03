@@ -124,7 +124,7 @@ class DataStreamTest : public testing::Test {
   }
 
   virtual void TearDown() {
-    exec_env_.client_cache()->TestShutdown();
+    exec_env_.impalad_client_cache()->TestShutdown();
     StopBackend();
   }
 
