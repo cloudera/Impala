@@ -29,7 +29,7 @@
 #include "runtime/mem-tracker.h"
 #include "runtime/thread-resource-mgr.h"
 #include "statestore/simple-scheduler.h"
-#include "statestore/state-store-subscriber.h"
+#include "statestore/statestore-subscriber.h"
 #include "util/debug-util.h"
 #include "util/default-path-handlers.h"
 #include "util/mem-info.h"
@@ -45,14 +45,14 @@ using namespace std;
 using namespace boost;
 
 DEFINE_bool(use_statestore, true,
-    "Use an external state-store process to manage cluster membership");
+    "Use an external statestore process to manage cluster membership");
 DEFINE_string(catalog_service_host, "localhost",
     "hostname where CatalogService is running");
 DEFINE_bool(enable_webserver, true, "If true, debug webserver is enabled");
 DEFINE_string(state_store_host, "localhost",
-    "hostname where StateStoreService is running");
+    "hostname where StatestoreService is running");
 DEFINE_int32(state_store_subscriber_port, 23000,
-    "port where StateStoreSubscriberService should be exported");
+    "port where StatestoreSubscriberService should be exported");
 DEFINE_int32(num_hdfs_worker_threads, 16,
     "(Advanced) The number of threads in the global HDFS operation pool");
 
@@ -95,11 +95,11 @@ ExecEnv::ExecEnv()
     stringstream subscriber_id;
     subscriber_id << backend_address;
 
-    state_store_subscriber_.reset(new StateStoreSubscriber(subscriber_id.str(),
+    statestore_subscriber_.reset(new StatestoreSubscriber(subscriber_id.str(),
         subscriber_address, statestore_address, metrics_.get()));
 
     scheduler_.reset(
-        new SimpleScheduler(state_store_subscriber_.get(), subscriber_id.str(),
+        new SimpleScheduler(statestore_subscriber_.get(), subscriber_id.str(),
                             backend_address, metrics_.get(), webserver_.get()));
   } else {
     vector<TNetworkAddress> addresses;
@@ -137,12 +137,11 @@ ExecEnv::ExecEnv(const string& hostname, int backend_port, int subscriber_port,
     stringstream ss;
     ss << backend_address;
 
-    state_store_subscriber_.reset(new StateStoreSubscriber(ss.str(), subscriber_address,
+    statestore_subscriber_.reset(new StatestoreSubscriber(ss.str(), subscriber_address,
         statestore_address, metrics_.get()));
 
-    scheduler_.reset(new SimpleScheduler(state_store_subscriber_.get(), ss.str(),
+    scheduler_.reset(new SimpleScheduler(statestore_subscriber_.get(), ss.str(),
         backend_address, metrics_.get(), webserver_.get()));
-
   } else {
     vector<TNetworkAddress> addresses;
     addresses.push_back(MakeNetworkAddress(hostname, backend_port));
@@ -223,8 +222,8 @@ Status ExecEnv::StartServices() {
   if (scheduler_ != NULL) RETURN_IF_ERROR(scheduler_->Init());
 
   // Must happen after all topic registrations / callbacks are done
-  if (state_store_subscriber_.get() != NULL) {
-    Status status = state_store_subscriber_->Start();
+  if (statestore_subscriber_.get() != NULL) {
+    Status status = statestore_subscriber_->Start();
     if (!status.ok()) {
       status.AddErrorMsg("State Store Subscriber did not start up.");
       return status;
