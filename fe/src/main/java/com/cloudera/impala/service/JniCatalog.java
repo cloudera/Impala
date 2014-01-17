@@ -27,12 +27,10 @@ import org.slf4j.LoggerFactory;
 import com.cloudera.impala.catalog.CatalogException;
 import com.cloudera.impala.catalog.CatalogServiceCatalog;
 import com.cloudera.impala.catalog.Function;
-import com.cloudera.impala.catalog.Table;
 import com.cloudera.impala.common.ImpalaException;
 import com.cloudera.impala.common.InternalException;
 import com.cloudera.impala.common.JniUtil;
 import com.cloudera.impala.thrift.TCatalogObject;
-import com.cloudera.impala.thrift.TCatalogUpdateResult;
 import com.cloudera.impala.thrift.TDdlExecRequest;
 import com.cloudera.impala.thrift.TGetAllCatalogObjectsResponse;
 import com.cloudera.impala.thrift.TGetDbsParams;
@@ -41,13 +39,9 @@ import com.cloudera.impala.thrift.TGetTablesParams;
 import com.cloudera.impala.thrift.TGetTablesResult;
 import com.cloudera.impala.thrift.TLogLevel;
 import com.cloudera.impala.thrift.TResetMetadataRequest;
-import com.cloudera.impala.thrift.TResetMetadataResponse;
-import com.cloudera.impala.thrift.TStatus;
-import com.cloudera.impala.thrift.TStatusCode;
 import com.cloudera.impala.thrift.TUniqueId;
 import com.cloudera.impala.thrift.TUpdateCatalogRequest;
 import com.cloudera.impala.util.GlogAppender;
-import com.google.common.base.Preconditions;
 
 /**
  * JNI-callable interface for the CatalogService. The main point is to serialize
@@ -58,7 +52,7 @@ public class JniCatalog {
   private final static TBinaryProtocol.Factory protocolFactory_ =
       new TBinaryProtocol.Factory();
   private final CatalogServiceCatalog catalog_;
-  private final DdlExecutor ddlExecutor_;
+  private final CatalogOpExecutor catalogOpExecutor_;
 
   // A unique identifier for this instance of the Catalog Service.
   private static final TUniqueId catalogServiceId_ = generateId();
@@ -80,7 +74,7 @@ public class JniCatalog {
     } catch (CatalogException e) {
       LOG.error("Error initialializing Catalog. Please run 'invalidate metadata'", e);
     }
-    ddlExecutor_ = new DdlExecutor(catalog_);
+    catalogOpExecutor_ = new CatalogOpExecutor(catalog_);
   }
 
   public static TUniqueId getServiceId() { return catalogServiceId_; }
@@ -103,41 +97,21 @@ public class JniCatalog {
     JniUtil.deserializeThrift(protocolFactory_, params, thriftDdlExecReq);
     TSerializer serializer = new TSerializer(protocolFactory_);
     try {
-      return serializer.serialize(ddlExecutor_.execDdlRequest(params));
+      return serializer.serialize(catalogOpExecutor_.execDdlRequest(params));
     } catch (TException e) {
       throw new InternalException(e.getMessage());
     }
   }
 
   /**
-   * Execute a reset metadata statement.
+   * Execute a reset metadata statement. See comment in CatalogOpExecutor.java.
    */
   public byte[] resetMetadata(byte[] thriftResetMetadataReq)
       throws ImpalaException, TException {
     TResetMetadataRequest req = new TResetMetadataRequest();
     JniUtil.deserializeThrift(protocolFactory_, req, thriftResetMetadataReq);
-    TResetMetadataResponse resp = new TResetMetadataResponse();
-    resp.setResult(new TCatalogUpdateResult());
-    resp.getResult().setCatalog_service_id(getServiceId());
-
-    if (req.isSetTable_name()) {
-      Table resetTable = catalog_.resetTable(req.getTable_name(),
-          req.isIs_refresh());
-      resp.result.setUpdated_catalog_object(
-          DdlExecutor.TableToTCatalogObject(resetTable));
-      resp.getResult().setVersion(
-          resp.getResult().getUpdated_catalog_object().getCatalog_version());
-    } else {
-      // Invalidate the catalog if no table name is provided.
-      Preconditions.checkArgument(!req.isIs_refresh());
-      catalog_.reset();
-      resp.result.setVersion(catalog_.getCatalogVersion());
-    }
-    resp.getResult().setStatus(
-        new TStatus(TStatusCode.OK, new ArrayList<String>()));
-
     TSerializer serializer = new TSerializer(protocolFactory_);
-    return serializer.serialize(resp);
+    return serializer.serialize(catalogOpExecutor_.execResetMetadata(req));
   }
 
   /**
@@ -191,6 +165,6 @@ public class JniCatalog {
     TUpdateCatalogRequest request = new TUpdateCatalogRequest();
     JniUtil.deserializeThrift(protocolFactory_, request, thriftUpdateCatalog);
     TSerializer serializer = new TSerializer(protocolFactory_);
-    return serializer.serialize(ddlExecutor_.updateCatalog(request));
+    return serializer.serialize(catalogOpExecutor_.updateCatalog(request));
   }
 }
