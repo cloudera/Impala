@@ -1,0 +1,24 @@
+From 2dc5075d02e6088b0b3fc30a778432b00d76886b Mon Sep 17 00:00:00 2001
+From: Xuefu Zhang <xzhang@xzlt.(none)>
+Date: Mon, 15 Jul 2013 21:52:53 -0700
+Subject: [PATCH 163/218] CDH-13115: DataNucleus upgrade cause Hive metastore broken
+
+---
+ .../java/org/apache/hadoop/hive/conf/HiveConf.java |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/src/common/src/java/org/apache/hadoop/hive/conf/HiveConf.java b/src/common/src/java/org/apache/hadoop/hive/conf/HiveConf.java
+index cd1483b..4a86361 100644
+--- a/src/common/src/java/org/apache/hadoop/hive/conf/HiveConf.java
++++ b/src/common/src/java/org/apache/hadoop/hive/conf/HiveConf.java
+@@ -330,6 +330,7 @@ public class HiveConf extends Configuration {
+     METASTORE_CACHE_LEVEL2("datanucleus.cache.level2", false),
+     METASTORE_CACHE_LEVEL2_TYPE("datanucleus.cache.level2.type", "none"),
+     METASTORE_IDENTIFIER_FACTORY("datanucleus.identifierFactory", "datanucleus1"),
++    METASTORE_USE_LEGACY_VALUE_STRATEGY("datanucleus.rdbms.useLegacyNativeValueStrategy", true),
+     METASTORE_PLUGIN_REGISTRY_BUNDLE_CHECK("datanucleus.plugin.pluginRegistryBundleCheck", "LOG"),
+     METASTORE_BATCH_RETRIEVE_MAX("hive.metastore.batch.retrieve.max", 300),
+     METASTORE_BATCH_RETRIEVE_TABLE_PARTITION_MAX(
+-- 
+1.7.0.4
+

@@ -1,0 +1,26 @@
+From 45af1bab0e2714937a5af755aecd43c033534cc1 Mon Sep 17 00:00:00 2001
+From: Brock Noland <brock@apache.org>
+Date: Wed, 24 Jul 2013 13:52:43 +0000
+Subject: [PATCH 173/218] HIVE-4876: Beeling help text do not contain -f and -e parameters (Jarek Jarcec Cecho via Brock Noland)
+
+git-svn-id: https://svn.apache.org/repos/asf/hive/trunk@1506555 13f79535-47bb-0310-9956-ffa450edef68
+---
+ .../org/apache/hive/beeline/BeeLine.properties     |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
+
+diff --git a/src/beeline/src/java/org/apache/hive/beeline/BeeLine.properties b/src/beeline/src/java/org/apache/hive/beeline/BeeLine.properties
+index fa02f92..b6650cf 100644
+--- a/src/beeline/src/java/org/apache/hive/beeline/BeeLine.properties
++++ b/src/beeline/src/java/org/apache/hive/beeline/BeeLine.properties
+@@ -141,6 +141,8 @@ cmd-usage: Usage: java org.apache.hive.cli.beeline.BeeLine \n \
+ \  -n <username>                   the username to connect as\n \
+ \  -p <password>                   the password to connect as\n \
+ \  -d <driver class>               the driver class to use\n \
++\  -e <query>                      query that should be executed\n \
++\  -f <file>                       script file that should be executed\n \
+ \  --color=[true/false]            control whether color is used for display\n \
+ \  --showHeader=[true/false]       show column names in query results\n \
+ \  --headerInterval=ROWS;          the interval between which heades are displayed\n \
+-- 
+1.7.0.4
+

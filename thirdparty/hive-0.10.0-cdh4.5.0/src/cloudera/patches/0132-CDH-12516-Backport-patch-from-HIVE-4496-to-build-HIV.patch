@@ -1,0 +1,326 @@
+From ad98b052e4495c692c7c3a60d8dab8533e6f50ed Mon Sep 17 00:00:00 2001
+From: xzhang <xzhang@xzdt.(none)>
+Date: Wed, 5 Jun 2013 06:03:36 -0700
+Subject: [PATCH 132/218] CDH-12516: Backport patch from HIVE-4496 to build HIVE server JDBC on JDK7
+
+---
+ .../apache/hive/jdbc/HiveCallableStatement.java    |   20 +++++++
+ .../java/org/apache/hive/jdbc/HiveConnection.java  |   59 ++++++++++++++-----
+ .../java/org/apache/hive/jdbc/HiveDataSource.java  |    7 ++
+ .../org/apache/hive/jdbc/HiveDatabaseMetaData.java |   21 +++++++
+ jdbc/src/java/org/apache/hive/jdbc/HiveDriver.java |    7 ++
+ .../apache/hive/jdbc/HivePreparedStatement.java    |   10 +++
+ .../org/apache/hive/jdbc/HiveQueryResultSet.java   |    9 +++
+ .../java/org/apache/hive/jdbc/HiveStatement.java   |   10 +++
+ 8 files changed, 127 insertions(+), 16 deletions(-)
+
+diff --git a/src/jdbc/src/java/org/apache/hive/jdbc/HiveCallableStatement.java b/src/jdbc/src/java/org/apache/hive/jdbc/HiveCallableStatement.java
+index a07efca..2bc4317 100644
+--- a/src/jdbc/src/java/org/apache/hive/jdbc/HiveCallableStatement.java
++++ b/src/jdbc/src/java/org/apache/hive/jdbc/HiveCallableStatement.java
+@@ -462,6 +462,16 @@ public class HiveCallableStatement implements java.sql.CallableStatement {
+     throw new SQLException("Method not supported");
+   }
+ 
++  public <T> T getObject(int parameterIndex, Class<T> type) throws SQLException {
++    // TODO JDK 1.7
++    throw new SQLException("Method not supported");
++  }
++
++  public <T> T getObject(String parameterName, Class<T> type) throws SQLException {
++    // TODO JDK 1.7
++    throw new SQLException("Method not supported");
++  }
++
+   /*
+    * (non-Javadoc)
+    *
+@@ -2030,6 +2040,16 @@ public class HiveCallableStatement implements java.sql.CallableStatement {
+     throw new SQLException("Method not supported");
+   }
+ 
++  public void closeOnCompletion() throws SQLException {
++    // JDK 1.7
++    throw new SQLException("Method not supported");
++  }
++
++  public boolean isCloseOnCompletion() throws SQLException {
++    // JDK 1.7
++    throw new SQLException("Method not supported");
++  }
++
+   /*
+    * (non-Javadoc)
+    *
+diff --git a/src/jdbc/src/java/org/apache/hive/jdbc/HiveConnection.java b/src/jdbc/src/java/org/apache/hive/jdbc/HiveConnection.java
+index 504ac67..dd1d780 100644
+--- a/src/jdbc/src/java/org/apache/hive/jdbc/HiveConnection.java
++++ b/src/jdbc/src/java/org/apache/hive/jdbc/HiveConnection.java
+@@ -34,6 +34,7 @@ import java.sql.SQLXML;
+ import java.sql.Savepoint;
+ import java.sql.Statement;
+ import java.sql.Struct;
++import java.util.concurrent.Executor;
+ import java.util.LinkedList;
+ import java.util.List;
+ import java.util.Map;
+@@ -161,27 +162,32 @@ public class HiveConnection implements java.sql.Connection {
+     }
+   }
+ 
+-    private void openSession(String uri) throws SQLException {
+-      TOpenSessionReq openReq = new TOpenSessionReq();
++  private void openSession(String uri) throws SQLException {
++    TOpenSessionReq openReq = new TOpenSessionReq();
+ 
+-      // set the session configuration
+-      // openReq.setConfiguration(null);
++    // set the session configuration
++    // openReq.setConfiguration(null);
+ 
+-      try {
+-        TOpenSessionResp openResp = client.OpenSession(openReq);
++    try {
++      TOpenSessionResp openResp = client.OpenSession(openReq);
+ 
+-        // validate connection
+-        Utils.verifySuccess(openResp.getStatus());
+-        if (!supportedProtocols.contains(openResp.getServerProtocolVersion())) {
+-          throw new TException("Unsupported Hive2 protocol");
+-        }
+-        sessHandle = openResp.getSessionHandle();
+-      } catch (TException e) {
+-        throw new SQLException("Could not establish connection to "
+-            + uri + ": " + e.getMessage(), " 08S01", e);
++      // validate connection
++      Utils.verifySuccess(openResp.getStatus());
++      if (!supportedProtocols.contains(openResp.getServerProtocolVersion())) {
++        throw new TException("Unsupported Hive2 protocol");
+       }
+-      isClosed = false;
++      sessHandle = openResp.getSessionHandle();
++    } catch (TException e) {
++      throw new SQLException("Could not establish connection to "
++          + uri + ": " + e.getMessage(), " 08S01", e);
+     }
++    isClosed = false;
++  }
++
++  public void abort(Executor executor) throws SQLException {
++    // JDK 1.7
++    throw new SQLException("Method not supported");
++  }
+ 
+   /*
+    * (non-Javadoc)
+@@ -402,6 +408,17 @@ public class HiveConnection implements java.sql.Connection {
+     return new HiveDatabaseMetaData(client, sessHandle);
+   }
+ 
++  public int getNetworkTimeout() throws SQLException {
++    // JDK 1.7
++    throw new SQLException("Method not supported");
++  }
++
++
++  public String getSchema() throws SQLException {
++    // JDK 1.7
++    throw new SQLException("Method not supported");
++  }
++
+   /*
+    * (non-Javadoc)
+    *
+@@ -670,6 +687,11 @@ public class HiveConnection implements java.sql.Connection {
+     throw new SQLException("Method not supported");
+   }
+ 
++  public void setNetworkTimeout(Executor executor, int milliseconds) throws SQLException {
++    // JDK 1.7
++    throw new SQLException("Method not supported");
++  }
++
+   /*
+    * (non-Javadoc)
+    *
+@@ -703,6 +725,11 @@ public class HiveConnection implements java.sql.Connection {
+     throw new SQLException("Method not supported");
+   }
+ 
++  public void setSchema(String schema) throws SQLException {
++    // JDK 1.7
++    throw new SQLException("Method not supported");
++  }
++
+   /*
+    * (non-Javadoc)
+    *
+diff --git a/src/jdbc/src/java/org/apache/hive/jdbc/HiveDataSource.java b/src/jdbc/src/java/org/apache/hive/jdbc/HiveDataSource.java
+index 1053485..459f08d 100644
+--- a/src/jdbc/src/java/org/apache/hive/jdbc/HiveDataSource.java
++++ b/src/jdbc/src/java/org/apache/hive/jdbc/HiveDataSource.java
+@@ -21,6 +21,8 @@ package org.apache.hive.jdbc;
+ import java.io.PrintWriter;
+ import java.sql.Connection;
+ import java.sql.SQLException;
++import java.sql.SQLFeatureNotSupportedException;
++import java.util.logging.Logger;
+ 
+ import javax.sql.DataSource;
+ 
+@@ -84,6 +86,11 @@ public class HiveDataSource implements DataSource {
+     throw new SQLException("Method not supported");
+   }
+ 
++  public Logger getParentLogger() throws SQLFeatureNotSupportedException {
++    // JDK 1.7
++    throw new SQLFeatureNotSupportedException("Method not supported");
++  }
++
+   /*
+    * (non-Javadoc)
+    * 
+diff --git a/src/jdbc/src/java/org/apache/hive/jdbc/HiveDatabaseMetaData.java b/src/jdbc/src/java/org/apache/hive/jdbc/HiveDatabaseMetaData.java
+index e740d99..fd9ad6f 100644
+--- a/src/jdbc/src/java/org/apache/hive/jdbc/HiveDatabaseMetaData.java
++++ b/src/jdbc/src/java/org/apache/hive/jdbc/HiveDatabaseMetaData.java
+@@ -141,6 +141,17 @@ public class HiveDatabaseMetaData implements DatabaseMetaData {
+     throw new SQLException("Method not supported");
+   }
+ 
++  public ResultSet getPseudoColumns(String catalog, String schemaPattern,
++      String tableNamePattern, String columnNamePattern) throws SQLException {
++    // JDK 1.7
++    throw new SQLException("Method not supported");
++  }
++
++  public boolean generatedKeyAlwaysReturned() throws SQLException {
++    // JDK 1.7
++    throw new SQLException("Method not supported");
++  }
++
+   /**
+    * Convert a pattern containing JDBC catalog search wildcards into
+    * Java regex patterns.
+@@ -697,6 +708,16 @@ public class HiveDatabaseMetaData implements DatabaseMetaData {
+       public boolean next() throws SQLException {
+         return false;
+       }
++
++      public <T> T getObject(String columnLabel, Class<T> type) throws SQLException {
++        // JDK 1.7
++        throw new SQLException("Method not supported");
++      }
++
++      public <T> T getObject(int columnIndex, Class<T> type) throws SQLException {
++        // JDK 1.7
++        throw new SQLException("Method not supported");
++        }
+     };
+   }
+ 
+diff --git a/src/jdbc/src/java/org/apache/hive/jdbc/HiveDriver.java b/src/jdbc/src/java/org/apache/hive/jdbc/HiveDriver.java
+index 6093070..ca1927e 100644
+--- a/src/jdbc/src/java/org/apache/hive/jdbc/HiveDriver.java
++++ b/src/jdbc/src/java/org/apache/hive/jdbc/HiveDriver.java
+@@ -24,9 +24,11 @@ import java.sql.Connection;
+ import java.sql.Driver;
+ import java.sql.DriverPropertyInfo;
+ import java.sql.SQLException;
++import java.sql.SQLFeatureNotSupportedException;
+ import java.util.Properties;
+ import java.util.jar.Attributes;
+ import java.util.jar.Manifest;
++import java.util.logging.Logger;
+ import java.util.regex.Pattern;
+ /**
+  * HiveDriver.
+@@ -166,6 +168,11 @@ public class HiveDriver implements Driver {
+     return HiveDriver.getMinorDriverVersion();
+   }
+ 
++  public Logger getParentLogger() throws SQLFeatureNotSupportedException {
++    // JDK 1.7
++    throw new SQLFeatureNotSupportedException("Method not supported");
++  }
++
+   public DriverPropertyInfo[] getPropertyInfo(String url, Properties info) throws SQLException {
+     if (info == null) {
+       info = new Properties();
+diff --git a/src/jdbc/src/java/org/apache/hive/jdbc/HivePreparedStatement.java b/src/jdbc/src/java/org/apache/hive/jdbc/HivePreparedStatement.java
+index 3bb8b84..ffa3285 100644
+--- a/src/jdbc/src/java/org/apache/hive/jdbc/HivePreparedStatement.java
++++ b/src/jdbc/src/java/org/apache/hive/jdbc/HivePreparedStatement.java
+@@ -881,6 +881,11 @@ public class HivePreparedStatement implements PreparedStatement {
+     stmtHandle = null;
+   }
+ 
++  public void closeOnCompletion() throws SQLException {
++    // JDK 1.7
++    throw new SQLException("Method not supported");
++  }
++
+   /**
+    *  Closes the prepared statement.
+    *
+@@ -1178,6 +1183,11 @@ public class HivePreparedStatement implements PreparedStatement {
+     return isClosed;
+   }
+ 
++  public boolean isCloseOnCompletion() throws SQLException {
++    //JDK 1.7
++    throw new SQLException("Method not supported");
++  }
++
+   /*
+    * (non-Javadoc)
+    *
+diff --git a/src/jdbc/src/java/org/apache/hive/jdbc/HiveQueryResultSet.java b/src/jdbc/src/java/org/apache/hive/jdbc/HiveQueryResultSet.java
+index f439cf6..d8df2c2 100644
+--- a/src/jdbc/src/java/org/apache/hive/jdbc/HiveQueryResultSet.java
++++ b/src/jdbc/src/java/org/apache/hive/jdbc/HiveQueryResultSet.java
+@@ -339,4 +339,13 @@ public class HiveQueryResultSet extends HiveBaseResultSet {
+ 
+ 
+ 
++  public <T> T getObject(String columnLabel, Class<T> type)  throws SQLException {
++    //JDK 1.7
++    throw new SQLException("Method not supported");
++  }
++
++  public <T> T getObject(int columnIndex, Class<T> type)  throws SQLException {
++    //JDK 1.7
++    throw new SQLException("Method not supported");
++  }
+ }
+diff --git a/src/jdbc/src/java/org/apache/hive/jdbc/HiveStatement.java b/src/jdbc/src/java/org/apache/hive/jdbc/HiveStatement.java
+index cf34edd..3522c30 100644
+--- a/src/jdbc/src/java/org/apache/hive/jdbc/HiveStatement.java
++++ b/src/jdbc/src/java/org/apache/hive/jdbc/HiveStatement.java
+@@ -174,6 +174,11 @@ public class HiveStatement implements java.sql.Statement {
+     isClosed = true;
+   }
+ 
++  public void closeOnCompletion() throws SQLException {
++    // JDK 1.7
++    throw new SQLException("Method not supported");
++  }
++
+   /*
+    * (non-Javadoc)
+    *
+@@ -485,6 +490,11 @@ public class HiveStatement implements java.sql.Statement {
+     return isClosed;
+   }
+ 
++  public boolean isCloseOnCompletion() throws SQLException {
++    // JDK 1.7
++    throw new SQLException("Method not supported");
++  }
++
+   /*
+    * (non-Javadoc)
+    *
+-- 
+1.7.0.4
+

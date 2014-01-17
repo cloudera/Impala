@@ -1,0 +1,25 @@
+From 1757f681872a91592d93e6965cd3c43fcade1d0a Mon Sep 17 00:00:00 2001
+From: xzhang <xzhang@xzdt.(none)>
+Date: Tue, 11 Jun 2013 14:42:42 -0700
+Subject: [PATCH 152/218] Change build.xml to use JDK7
+
+---
+ build.xml |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/build.xml b/src/build.xml
+index c18ec7a..94b5ebf 100644
+--- a/src/build.xml
++++ b/src/build.xml
+@@ -226,7 +226,7 @@
+ 
+   <!-- JVM version validation -->
+   <target name="jvm-check">
+-      <property name="javaVersion" value="1.6"/>
++      <property name="javaVersion" value="1.7"/>
+ 
+       <property name="requiredJavaVersion" value="xx${javaVersion}"/>
+       <property name="currentJavaVersion" value="xx${java.version}"/>
+-- 
+1.7.0.4
+

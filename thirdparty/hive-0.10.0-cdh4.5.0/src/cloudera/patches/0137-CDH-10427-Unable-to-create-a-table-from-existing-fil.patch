@@ -1,0 +1,143 @@
+From 554ef34f2b338bbd17851261343d4857f718b55c Mon Sep 17 00:00:00 2001
+From: xzhang <xzhang@xzdt.(none)>
+Date: Fri, 7 Jun 2013 14:35:38 -0700
+Subject: [PATCH 137/218] CDH-10427 Unable to create a table from existing file if file path has spaces
+
+---
+ data/files/person age.txt                          |    5 ++++
+ .../hadoop/hive/ql/parse/LoadSemanticAnalyzer.java |   23 +++++++++++++++----
+ .../load_hdfs_file_with_space_in_the_name.q        |    9 +++++++
+ .../load_file_with_space_in_the_name.q.out         |   17 ++++++++++++++
+ .../load_hdfs_file_with_space_in_the_name.q.out    |   12 ++++++++++
+ 5 files changed, 61 insertions(+), 5 deletions(-)
+ create mode 100644 data/files/person age.txt
+ create mode 100644 ql/src/test/queries/clientpositive/load_hdfs_file_with_space_in_the_name.q
+ create mode 100644 ql/src/test/results/clientpositive/load_file_with_space_in_the_name.q.out
+ create mode 100644 ql/src/test/results/clientpositive/load_hdfs_file_with_space_in_the_name.q.out
+
+diff --git a/src/data/files/person age.txt b/src/data/files/person age.txt
+new file mode 100644
+index 0000000..c902284
+--- /dev/null
++++ b/src/data/files/person age.txt	
+@@ -0,0 +1,5 @@
++John	23
++Tom	17
++Jim	31
++Boby	9
++Paul	51
+\ No newline at end of file
+diff --git a/src/ql/src/java/org/apache/hadoop/hive/ql/parse/LoadSemanticAnalyzer.java b/src/ql/src/java/org/apache/hadoop/hive/ql/parse/LoadSemanticAnalyzer.java
+index 9400acb..593ab2d 100644
+--- a/src/ql/src/java/org/apache/hadoop/hive/ql/parse/LoadSemanticAnalyzer.java
++++ b/src/ql/src/java/org/apache/hadoop/hive/ql/parse/LoadSemanticAnalyzer.java
+@@ -27,6 +27,8 @@ import java.util.List;
+ import java.util.Map;
+ 
+ import org.antlr.runtime.tree.Tree;
++import org.apache.commons.httpclient.URIException;
++import org.apache.commons.httpclient.util.URIUtil;
+ import org.apache.commons.lang.StringUtils;
+ import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.FileSystem;
+@@ -84,7 +86,7 @@ public class LoadSemanticAnalyzer extends BaseSemanticAnalyzer {
+     // directory
+     if (!path.startsWith("/")) {
+       if (isLocal) {
+-        path = new Path(System.getProperty("user.dir"), path).toUri().toString();
++        path = URIUtil.decode( new Path(System.getProperty("user.dir"), path).toUri().toString() );
+       } else {
+         path = new Path(new Path("/user/" + System.getProperty("user.name")),
+           path).toString();
+@@ -236,8 +238,13 @@ public class LoadSemanticAnalyzer extends BaseSemanticAnalyzer {
+       // that's just a test case.
+       String copyURIStr = ctx.getExternalTmpFileURI(toURI);
+       URI copyURI = URI.create(copyURIStr);
+-      rTask = TaskFactory.get(new CopyWork(fromURI.toString(), copyURIStr),
+-          conf);
++      try {
++        rTask = TaskFactory.get(new CopyWork(URIUtil.decode(fromURI.toString()), copyURIStr),
++            conf);
++      } catch (URIException e) {
++        throw new SemanticException(ErrorMsg.INVALID_PATH.getMsg(fromTree, e
++            .getMessage()), e);
++      }
+       fromURI = copyURI;
+     }
+ 
+@@ -266,8 +273,14 @@ public class LoadSemanticAnalyzer extends BaseSemanticAnalyzer {
+     }
+ 
+ 
+-    LoadTableDesc loadTableWork = new LoadTableDesc(fromURI.toString(),
+-        loadTmpPath, Utilities.getTableDesc(ts.tableHandle), partSpec, isOverWrite);
++    LoadTableDesc loadTableWork;
++    try {
++      loadTableWork = new LoadTableDesc(URIUtil.decode(fromURI.toString()),
++          loadTmpPath, Utilities.getTableDesc(ts.tableHandle), partSpec, isOverWrite);
++    } catch (URIException e1) {
++      throw new SemanticException(ErrorMsg.INVALID_PATH.getMsg(fromTree, e1
++          .getMessage()), e1);
++    }
+ 
+     Task<? extends Serializable> childTask = TaskFactory.get(new MoveWork(getInputs(),
+         getOutputs(), loadTableWork, null, true), conf);
+diff --git a/src/ql/src/test/queries/clientpositive/load_hdfs_file_with_space_in_the_name.q b/src/ql/src/test/queries/clientpositive/load_hdfs_file_with_space_in_the_name.q
+new file mode 100644
+index 0000000..e7eb8d9
+--- /dev/null
++++ b/src/ql/src/test/queries/clientpositive/load_hdfs_file_with_space_in_the_name.q
+@@ -0,0 +1,9 @@
++dfs -mkdir hdfs:///tmp/test/load_file_with_space_in_the_name;
++
++dfs -copyFromLocal ../data/files hdfs:///tmp/test/load_file_with_space_in_the_name;
++
++CREATE TABLE load_file_with_space_in_the_name(name STRING, age INT);
++LOAD DATA INPATH 'hdfs:///tmp/test/load_file_with_space_in_the_name/files/person age.txt' INTO TABLE load_file_with_space_in_the_name;
++
++dfs -rmr hdfs:///tmp/test;
++
+diff --git a/src/ql/src/test/results/clientpositive/load_file_with_space_in_the_name.q.out b/src/ql/src/test/results/clientpositive/load_file_with_space_in_the_name.q.out
+new file mode 100644
+index 0000000..b159114
+--- /dev/null
++++ b/src/ql/src/test/results/clientpositive/load_file_with_space_in_the_name.q.out
+@@ -0,0 +1,17 @@
++PREHOOK: query: -- test for loading into tables with the file with space in the name
++
++
++CREATE TABLE load_file_with_space_in_the_name(name STRING, age INT)
++PREHOOK: type: CREATETABLE
++POSTHOOK: query: -- test for loading into tables with the file with space in the name
++
++
++CREATE TABLE load_file_with_space_in_the_name(name STRING, age INT)
++POSTHOOK: type: CREATETABLE
++POSTHOOK: Output: default@load_file_with_space_in_the_name
++PREHOOK: query: LOAD DATA LOCAL INPATH '../data/files/person age.txt' INTO TABLE load_file_with_space_in_the_name
++PREHOOK: type: LOAD
++PREHOOK: Output: default@load_file_with_space_in_the_name
++POSTHOOK: query: LOAD DATA LOCAL INPATH '../data/files/person age.txt' INTO TABLE load_file_with_space_in_the_name
++POSTHOOK: type: LOAD
++POSTHOOK: Output: default@load_file_with_space_in_the_name
+diff --git a/src/ql/src/test/results/clientpositive/load_hdfs_file_with_space_in_the_name.q.out b/src/ql/src/test/results/clientpositive/load_hdfs_file_with_space_in_the_name.q.out
+new file mode 100644
+index 0000000..1e7fa33
+--- /dev/null
++++ b/src/ql/src/test/results/clientpositive/load_hdfs_file_with_space_in_the_name.q.out
+@@ -0,0 +1,12 @@
++PREHOOK: query: CREATE TABLE load_file_with_space_in_the_name(name STRING, age INT)
++PREHOOK: type: CREATETABLE
++POSTHOOK: query: CREATE TABLE load_file_with_space_in_the_name(name STRING, age INT)
++POSTHOOK: type: CREATETABLE
++POSTHOOK: Output: default@load_file_with_space_in_the_name
++#### A masked pattern was here ####
++PREHOOK: type: LOAD
++PREHOOK: Output: default@load_file_with_space_in_the_name
++#### A masked pattern was here ####
++POSTHOOK: type: LOAD
++POSTHOOK: Output: default@load_file_with_space_in_the_name
++#### A masked pattern was here ####
+-- 
+1.7.0.4
+

@@ -1,0 +1,24 @@
+From d8762888b93b177faa5745ccb44c47ff588f8a07 Mon Sep 17 00:00:00 2001
+From: Brock Noland <brock@cloudera.com>
+Date: Tue, 12 Nov 2013 09:16:43 -0600
+Subject: [PATCH 211/218] CDH-15636 - Fix test failure introduced in CDH-15027 - Hive metastore should further restrict unauthorized user connection
+
+---
+ .../hive/thrift/TestHadoop20SAuthBridge.java       |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/src/shims/src/common-secure/test/org/apache/hadoop/hive/thrift/TestHadoop20SAuthBridge.java b/src/shims/src/common-secure/test/org/apache/hadoop/hive/thrift/TestHadoop20SAuthBridge.java
+index b518963..e39d212 100644
+--- a/src/shims/src/common-secure/test/org/apache/hadoop/hive/thrift/TestHadoop20SAuthBridge.java
++++ b/src/shims/src/common-secure/test/org/apache/hadoop/hive/thrift/TestHadoop20SAuthBridge.java
+@@ -212,6 +212,7 @@ public class TestHadoop20SAuthBridge extends TestCase {
+   public void testSaslWithHiveMetaStore() throws Exception {
+     setup();
+     UserGroupInformation clientUgi = UserGroupInformation.getCurrentUser();
++    setGroupsInConf(clientUgi.getGroupNames(), clientUgi.getShortUserName());
+     obtainTokenAndAddIntoUGI(clientUgi, null);
+     obtainTokenAndAddIntoUGI(clientUgi, "tokenForFooTablePartition");
+   }
+-- 
+1.7.0.4
+

@@ -1,0 +1,151 @@
+From fa27c9671cf53fc6ff53f2a9964c7f0a616a37de Mon Sep 17 00:00:00 2001
+From: xzhang <xzhang@xzdt.(none)>
+Date: Fri, 26 Jul 2013 08:08:17 -0700
+Subject: [PATCH 179/218] CDH-13294: Backport HIVE-4873: Sort candidate functions in case of UDFArgumentException
+
+---
+ .../hadoop/hive/ql/exec/UDFArgumentException.java  |   26 ++++++++++++++++++++
+ .../invalid_cast_from_binary_1.q.out               |    2 +-
+ .../invalid_cast_from_binary_2.q.out               |    2 +-
+ .../invalid_cast_from_binary_3.q.out               |    2 +-
+ .../invalid_cast_from_binary_4.q.out               |    2 +-
+ .../invalid_cast_from_binary_5.q.out               |    2 +-
+ .../invalid_cast_from_binary_6.q.out               |    2 +-
+ .../results/clientnegative/wrong_column_type.q.out |    2 +-
+ .../compiler/errors/invalid_function_param2.q.out  |    2 +-
+ 9 files changed, 34 insertions(+), 8 deletions(-)
+
+diff --git a/src/ql/src/java/org/apache/hadoop/hive/ql/exec/UDFArgumentException.java b/src/ql/src/java/org/apache/hadoop/hive/ql/exec/UDFArgumentException.java
+index 2b1ca02..de2d1d9 100644
+--- a/src/ql/src/java/org/apache/hadoop/hive/ql/exec/UDFArgumentException.java
++++ b/src/ql/src/java/org/apache/hadoop/hive/ql/exec/UDFArgumentException.java
+@@ -21,6 +21,8 @@ package org.apache.hadoop.hive.ql.exec;
+ import java.lang.reflect.Method;
+ import java.lang.reflect.Type;
+ import java.util.ArrayList;
++import java.util.Collections;
++import java.util.Comparator;
+ import java.util.List;
+ 
+ import org.apache.hadoop.hive.ql.parse.SemanticException;
+@@ -72,6 +74,8 @@ public class UDFArgumentException extends SemanticException {
+     StringBuilder sb = new StringBuilder();
+     sb.append(message);
+     if (methods != null) {
++      // Sort the methods before omitting them.
++      sortMethods(methods);
+       sb.append(". Possible choices: ");
+       for (Method m: methods) {
+         Type[] types = m.getGenericParameterTypes();
+@@ -89,6 +93,28 @@ public class UDFArgumentException extends SemanticException {
+     return sb.toString();
+   }
+   
++  private static void sortMethods(List<Method> methods) {
++    Collections.sort( methods, new Comparator<Method>(){
++
++      @Override
++      public int compare(Method m1, Method m2) {
++        int result = m1.getName().compareTo(m2.getName());
++        if (result != 0)
++          return result;
++        Type[] types1 = m1.getGenericParameterTypes();
++        Type[] types2 = m2.getGenericParameterTypes();
++        for (int i = 0; i < types1.length && i < types2.length; i++) {
++          String type1 = ObjectInspectorUtils.getTypeNameFromJavaClass(types1[i]);
++          String type2 = ObjectInspectorUtils.getTypeNameFromJavaClass(types2[i]);
++          if ((result = type1.compareTo(type2)) != 0)
++            return result;
++        }
++        return types1.length - types2.length;
++      }
++
++    });
++  }
++  
+   /**
+    * The UDF or UDAF class that has the ambiguity.
+    */
+diff --git a/src/ql/src/test/results/clientnegative/invalid_cast_from_binary_1.q.out b/src/ql/src/test/results/clientnegative/invalid_cast_from_binary_1.q.out
+index fdd013a..015a704 100644
+--- a/src/ql/src/test/results/clientnegative/invalid_cast_from_binary_1.q.out
++++ b/src/ql/src/test/results/clientnegative/invalid_cast_from_binary_1.q.out
+@@ -3,4 +3,4 @@ PREHOOK: type: CREATETABLE
+ POSTHOOK: query: create table tbl (a binary)
+ POSTHOOK: type: CREATETABLE
+ POSTHOOK: Output: default@tbl
+-FAILED: SemanticException Line 0:-1 Wrong arguments 'a': No matching method for class org.apache.hadoop.hive.ql.udf.UDFToInteger with (binary). Possible choices: _FUNC_(void)  _FUNC_(boolean)  _FUNC_(tinyint)  _FUNC_(smallint)  _FUNC_(bigint)  _FUNC_(float)  _FUNC_(double)  _FUNC_(string)  _FUNC_(timestamp)  _FUNC_(decimal)  
++FAILED: SemanticException Line 0:-1 Wrong arguments 'a': No matching method for class org.apache.hadoop.hive.ql.udf.UDFToInteger with (binary). Possible choices: _FUNC_(bigint)  _FUNC_(boolean)  _FUNC_(decimal)  _FUNC_(double)  _FUNC_(float)  _FUNC_(smallint)  _FUNC_(string)  _FUNC_(timestamp)  _FUNC_(tinyint)  _FUNC_(void)  
+diff --git a/src/ql/src/test/results/clientnegative/invalid_cast_from_binary_2.q.out b/src/ql/src/test/results/clientnegative/invalid_cast_from_binary_2.q.out
+index f23283b..a8c6b88 100644
+--- a/src/ql/src/test/results/clientnegative/invalid_cast_from_binary_2.q.out
++++ b/src/ql/src/test/results/clientnegative/invalid_cast_from_binary_2.q.out
+@@ -3,4 +3,4 @@ PREHOOK: type: CREATETABLE
+ POSTHOOK: query: create table tbl (a binary)
+ POSTHOOK: type: CREATETABLE
+ POSTHOOK: Output: default@tbl
+-FAILED: SemanticException Line 0:-1 Wrong arguments 'a': No matching method for class org.apache.hadoop.hive.ql.udf.UDFToByte with (binary). Possible choices: _FUNC_(void)  _FUNC_(boolean)  _FUNC_(smallint)  _FUNC_(int)  _FUNC_(bigint)  _FUNC_(float)  _FUNC_(double)  _FUNC_(string)  _FUNC_(timestamp)  _FUNC_(decimal)  
++FAILED: SemanticException Line 0:-1 Wrong arguments 'a': No matching method for class org.apache.hadoop.hive.ql.udf.UDFToByte with (binary). Possible choices: _FUNC_(bigint)  _FUNC_(boolean)  _FUNC_(decimal)  _FUNC_(double)  _FUNC_(float)  _FUNC_(int)  _FUNC_(smallint)  _FUNC_(string)  _FUNC_(timestamp)  _FUNC_(void)  
+diff --git a/src/ql/src/test/results/clientnegative/invalid_cast_from_binary_3.q.out b/src/ql/src/test/results/clientnegative/invalid_cast_from_binary_3.q.out
+index 3cf06b3..d3247e3 100644
+--- a/src/ql/src/test/results/clientnegative/invalid_cast_from_binary_3.q.out
++++ b/src/ql/src/test/results/clientnegative/invalid_cast_from_binary_3.q.out
+@@ -3,4 +3,4 @@ PREHOOK: type: CREATETABLE
+ POSTHOOK: query: create table tbl (a binary)
+ POSTHOOK: type: CREATETABLE
+ POSTHOOK: Output: default@tbl
+-FAILED: SemanticException Line 0:-1 Wrong arguments 'a': No matching method for class org.apache.hadoop.hive.ql.udf.UDFToShort with (binary). Possible choices: _FUNC_(void)  _FUNC_(boolean)  _FUNC_(tinyint)  _FUNC_(int)  _FUNC_(bigint)  _FUNC_(float)  _FUNC_(double)  _FUNC_(string)  _FUNC_(timestamp)  _FUNC_(decimal)  
++FAILED: SemanticException Line 0:-1 Wrong arguments 'a': No matching method for class org.apache.hadoop.hive.ql.udf.UDFToShort with (binary). Possible choices: _FUNC_(bigint)  _FUNC_(boolean)  _FUNC_(decimal)  _FUNC_(double)  _FUNC_(float)  _FUNC_(int)  _FUNC_(string)  _FUNC_(timestamp)  _FUNC_(tinyint)  _FUNC_(void)  
+diff --git a/src/ql/src/test/results/clientnegative/invalid_cast_from_binary_4.q.out b/src/ql/src/test/results/clientnegative/invalid_cast_from_binary_4.q.out
+index 3789cc2..c48186a 100644
+--- a/src/ql/src/test/results/clientnegative/invalid_cast_from_binary_4.q.out
++++ b/src/ql/src/test/results/clientnegative/invalid_cast_from_binary_4.q.out
+@@ -3,4 +3,4 @@ PREHOOK: type: CREATETABLE
+ POSTHOOK: query: create table tbl (a binary)
+ POSTHOOK: type: CREATETABLE
+ POSTHOOK: Output: default@tbl
+-FAILED: SemanticException Line 0:-1 Wrong arguments 'a': No matching method for class org.apache.hadoop.hive.ql.udf.UDFToLong with (binary). Possible choices: _FUNC_(void)  _FUNC_(boolean)  _FUNC_(tinyint)  _FUNC_(smallint)  _FUNC_(int)  _FUNC_(bigint)  _FUNC_(float)  _FUNC_(double)  _FUNC_(string)  _FUNC_(timestamp)  _FUNC_(decimal)  
++FAILED: SemanticException Line 0:-1 Wrong arguments 'a': No matching method for class org.apache.hadoop.hive.ql.udf.UDFToLong with (binary). Possible choices: _FUNC_(bigint)  _FUNC_(boolean)  _FUNC_(decimal)  _FUNC_(double)  _FUNC_(float)  _FUNC_(int)  _FUNC_(smallint)  _FUNC_(string)  _FUNC_(timestamp)  _FUNC_(tinyint)  _FUNC_(void)  
+diff --git a/src/ql/src/test/results/clientnegative/invalid_cast_from_binary_5.q.out b/src/ql/src/test/results/clientnegative/invalid_cast_from_binary_5.q.out
+index 55a776d..bc3719c 100644
+--- a/src/ql/src/test/results/clientnegative/invalid_cast_from_binary_5.q.out
++++ b/src/ql/src/test/results/clientnegative/invalid_cast_from_binary_5.q.out
+@@ -3,4 +3,4 @@ PREHOOK: type: CREATETABLE
+ POSTHOOK: query: create table tbl (a binary)
+ POSTHOOK: type: CREATETABLE
+ POSTHOOK: Output: default@tbl
+-FAILED: SemanticException Line 0:-1 Wrong arguments 'a': No matching method for class org.apache.hadoop.hive.ql.udf.UDFToFloat with (binary). Possible choices: _FUNC_(void)  _FUNC_(boolean)  _FUNC_(tinyint)  _FUNC_(smallint)  _FUNC_(int)  _FUNC_(bigint)  _FUNC_(double)  _FUNC_(string)  _FUNC_(timestamp)  _FUNC_(decimal)  
++FAILED: SemanticException Line 0:-1 Wrong arguments 'a': No matching method for class org.apache.hadoop.hive.ql.udf.UDFToFloat with (binary). Possible choices: _FUNC_(bigint)  _FUNC_(boolean)  _FUNC_(decimal)  _FUNC_(double)  _FUNC_(int)  _FUNC_(smallint)  _FUNC_(string)  _FUNC_(timestamp)  _FUNC_(tinyint)  _FUNC_(void)  
+diff --git a/src/ql/src/test/results/clientnegative/invalid_cast_from_binary_6.q.out b/src/ql/src/test/results/clientnegative/invalid_cast_from_binary_6.q.out
+index afd92e7..19456ee 100644
+--- a/src/ql/src/test/results/clientnegative/invalid_cast_from_binary_6.q.out
++++ b/src/ql/src/test/results/clientnegative/invalid_cast_from_binary_6.q.out
+@@ -3,4 +3,4 @@ PREHOOK: type: CREATETABLE
+ POSTHOOK: query: create table tbl (a binary)
+ POSTHOOK: type: CREATETABLE
+ POSTHOOK: Output: default@tbl
+-FAILED: SemanticException Line 0:-1 Wrong arguments 'a': No matching method for class org.apache.hadoop.hive.ql.udf.UDFToDouble with (binary). Possible choices: _FUNC_(void)  _FUNC_(boolean)  _FUNC_(tinyint)  _FUNC_(smallint)  _FUNC_(int)  _FUNC_(bigint)  _FUNC_(float)  _FUNC_(string)  _FUNC_(timestamp)  _FUNC_(decimal)  
++FAILED: SemanticException Line 0:-1 Wrong arguments 'a': No matching method for class org.apache.hadoop.hive.ql.udf.UDFToDouble with (binary). Possible choices: _FUNC_(bigint)  _FUNC_(boolean)  _FUNC_(decimal)  _FUNC_(float)  _FUNC_(int)  _FUNC_(smallint)  _FUNC_(string)  _FUNC_(timestamp)  _FUNC_(tinyint)  _FUNC_(void)  
+diff --git a/src/ql/src/test/results/clientnegative/wrong_column_type.q.out b/src/ql/src/test/results/clientnegative/wrong_column_type.q.out
+index d5dd66b..37a2ffc 100644
+--- a/src/ql/src/test/results/clientnegative/wrong_column_type.q.out
++++ b/src/ql/src/test/results/clientnegative/wrong_column_type.q.out
+@@ -3,4 +3,4 @@ PREHOOK: type: CREATETABLE
+ POSTHOOK: query: CREATE TABLE dest1(a float)
+ POSTHOOK: type: CREATETABLE
+ POSTHOOK: Output: default@dest1
+-FAILED: NoMatchingMethodException No matching method for class org.apache.hadoop.hive.ql.udf.UDFToFloat with (array<double>). Possible choices: _FUNC_(void)  _FUNC_(boolean)  _FUNC_(tinyint)  _FUNC_(smallint)  _FUNC_(int)  _FUNC_(bigint)  _FUNC_(double)  _FUNC_(string)  _FUNC_(timestamp)  _FUNC_(decimal)  
++FAILED: NoMatchingMethodException No matching method for class org.apache.hadoop.hive.ql.udf.UDFToFloat with (array<double>). Possible choices: _FUNC_(bigint)  _FUNC_(boolean)  _FUNC_(decimal)  _FUNC_(double)  _FUNC_(int)  _FUNC_(smallint)  _FUNC_(string)  _FUNC_(timestamp)  _FUNC_(tinyint)  _FUNC_(void)  
+diff --git a/src/ql/src/test/results/compiler/errors/invalid_function_param2.q.out b/src/ql/src/test/results/compiler/errors/invalid_function_param2.q.out
+index 89d3037..889b71c 100644
+--- a/src/ql/src/test/results/compiler/errors/invalid_function_param2.q.out
++++ b/src/ql/src/test/results/compiler/errors/invalid_function_param2.q.out
+@@ -1,2 +1,2 @@
+ Semantic Exception: 
+-Line 2:36 Wrong arguments ''abc'': No matching method for class org.apache.hadoop.hive.ql.udf.UDFSubstr with (string, string). Possible choices: _FUNC_(string, int, int)  _FUNC_(string, int)  _FUNC_(binary, int, int)  _FUNC_(binary, int)  
+\ No newline at end of file
++Line 2:36 Wrong arguments ''abc'': No matching method for class org.apache.hadoop.hive.ql.udf.UDFSubstr with (string, string). Possible choices: _FUNC_(binary, int)  _FUNC_(binary, int, int)  _FUNC_(string, int)  _FUNC_(string, int, int)  
+\ No newline at end of file
+-- 
+1.7.0.4
+

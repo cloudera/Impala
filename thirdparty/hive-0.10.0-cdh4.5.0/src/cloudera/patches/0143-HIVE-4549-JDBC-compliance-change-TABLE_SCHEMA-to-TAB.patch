@@ -1,0 +1,69 @@
+From 48216c8f8b6bf00210a87849e0e325aee5c59a84 Mon Sep 17 00:00:00 2001
+From: Navis Ryu <navis@apache.org>
+Date: Tue, 11 Jun 2013 02:25:15 +0000
+Subject: [PATCH 143/218] HIVE-4549 : JDBC compliance change TABLE_SCHEMA to TABLE_SCHEM (Prasad Mujumdar via Navis)
+
+git-svn-id: https://svn.apache.org/repos/asf/hive/trunk@1491676 13f79535-47bb-0310-9956-ffa450edef68
+---
+ .../test/org/apache/hive/jdbc/TestJdbcDriver2.java |   10 +++++++++-
+ .../service/cli/operation/GetSchemasOperation.java |    2 +-
+ .../service/cli/operation/GetTablesOperation.java  |    2 +-
+ 3 files changed, 11 insertions(+), 3 deletions(-)
+
+diff --git a/src/jdbc/src/test/org/apache/hive/jdbc/TestJdbcDriver2.java b/src/jdbc/src/test/org/apache/hive/jdbc/TestJdbcDriver2.java
+index bbbe0e4..047d27b 100644
+--- a/src/jdbc/src/test/org/apache/hive/jdbc/TestJdbcDriver2.java
++++ b/src/jdbc/src/test/org/apache/hive/jdbc/TestJdbcDriver2.java
+@@ -665,6 +665,14 @@ public class TestJdbcDriver2 extends TestCase {
+ 
+     for (String checkPattern: tests.keySet()) {
+       ResultSet rs = (ResultSet)con.getMetaData().getTables("default", null, checkPattern, null);
++      ResultSetMetaData resMeta = rs.getMetaData();
++      assertEquals(5, resMeta.getColumnCount());
++      assertEquals("TABLE_CAT", resMeta.getColumnName(1));
++      assertEquals("TABLE_SCHEM", resMeta.getColumnName(2));
++      assertEquals("TABLE_NAME", resMeta.getColumnName(3));
++      assertEquals("TABLE_TYPE", resMeta.getColumnName(4));
++      assertEquals("REMARKS", resMeta.getColumnName(5));
++
+       int cnt = 0;
+       while (rs.next()) {
+         String resultTableName = rs.getString("TABLE_NAME");
+@@ -706,7 +714,7 @@ public class TestJdbcDriver2 extends TestCase {
+     ResultSet rs = (ResultSet)con.getMetaData().getSchemas();
+     ResultSetMetaData resMeta = rs.getMetaData();
+     assertEquals(2, resMeta.getColumnCount());
+-    assertEquals("TABLE_SCHEMA", resMeta.getColumnName(1));
++    assertEquals("TABLE_SCHEM", resMeta.getColumnName(1));
+     assertEquals("TABLE_CATALOG", resMeta.getColumnName(2));
+ 
+     assertTrue(rs.next());
+diff --git a/src/service/src/java/org/apache/hive/service/cli/operation/GetSchemasOperation.java b/src/service/src/java/org/apache/hive/service/cli/operation/GetSchemasOperation.java
+index e26bdb4..746e8ce 100644
+--- a/src/service/src/java/org/apache/hive/service/cli/operation/GetSchemasOperation.java
++++ b/src/service/src/java/org/apache/hive/service/cli/operation/GetSchemasOperation.java
+@@ -41,7 +41,7 @@ public class GetSchemasOperation extends MetadataOperation {
+   private final String schemaName;
+ 
+   private static final TableSchema RESULT_SET_SCHEMA = new TableSchema()
+-  .addStringColumn("TABLE_SCHEMA", "Schema name.")
++  .addStringColumn("TABLE_SCHEM", "Schema name.")
+   .addStringColumn("TABLE_CATALOG", "Catalog name.");
+ 
+   private RowSet rowSet;
+diff --git a/src/service/src/java/org/apache/hive/service/cli/operation/GetTablesOperation.java b/src/service/src/java/org/apache/hive/service/cli/operation/GetTablesOperation.java
+index 5335234..5fe77bf 100644
+--- a/src/service/src/java/org/apache/hive/service/cli/operation/GetTablesOperation.java
++++ b/src/service/src/java/org/apache/hive/service/cli/operation/GetTablesOperation.java
+@@ -49,7 +49,7 @@ public class GetTablesOperation extends MetadataOperation {
+ 
+   private static final TableSchema RESULT_SET_SCHEMA = new TableSchema()
+   .addStringColumn("TABLE_CAT", "Catalog name. NULL if not applicable.")
+-  .addStringColumn("TABLE_SCHEMA", "Schema name.")
++  .addStringColumn("TABLE_SCHEM", "Schema name.")
+   .addStringColumn("TABLE_NAME", "Table name.")
+   .addStringColumn("TABLE_TYPE", "The table type, e.g. \"TABLE\", \"VIEW\", etc.")
+   .addStringColumn("REMARKS", "Comments about the table.");
+-- 
+1.7.0.4
+

@@ -1,0 +1,30 @@
+From 099853588add658f45ddd7c4db8420b0eac963f3 Mon Sep 17 00:00:00 2001
+From: Namit Jain <namit@apache.org>
+Date: Sat, 22 Dec 2012 06:30:35 +0000
+Subject: [PATCH 181/218] HIVE-3826 Rollbacks and retries of drops cause
+ org.datanucleus.exceptions.NucleusObjectNotFoundException: No such database row)
+ (Kevin Wilfong via namit)
+
+git-svn-id: https://svn.apache.org/repos/asf/hive/trunk@1425247 13f79535-47bb-0310-9956-ffa450edef68
+---
+ .../apache/hadoop/hive/metastore/ObjectStore.java  |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
+
+diff --git a/src/metastore/src/java/org/apache/hadoop/hive/metastore/ObjectStore.java b/src/metastore/src/java/org/apache/hadoop/hive/metastore/ObjectStore.java
+index d44f5ab..846f18d 100644
+--- a/src/metastore/src/java/org/apache/hadoop/hive/metastore/ObjectStore.java
++++ b/src/metastore/src/java/org/apache/hadoop/hive/metastore/ObjectStore.java
+@@ -371,6 +371,10 @@ public class ObjectStore implements RawStore, Configurable {
+       transactionStatus = TXN_STATUS.ROLLBACK;
+       // could already be rolled back
+       currentTransaction.rollback();
++      // remove all detached objects from the cache, since the transaction is
++      // being rolled back they are no longer relevant, and this prevents them
++      // from reattaching in future transactions
++      pm.evictAll();
+     }
+   }
+ 
+-- 
+1.7.0.4
+

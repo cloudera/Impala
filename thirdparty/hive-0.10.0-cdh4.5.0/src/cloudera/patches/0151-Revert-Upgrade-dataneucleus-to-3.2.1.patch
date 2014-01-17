@@ -1,0 +1,147 @@
+From f2400e4af7cb4e0403d49c6d405b68a0a0a72a9d Mon Sep 17 00:00:00 2001
+From: xzhang <xzhang@xzdt.(none)>
+Date: Tue, 11 Jun 2013 14:41:26 -0700
+Subject: [PATCH 151/218] Revert "Upgrade dataneucleus to 3.2.1"
+
+This reverts commit e31d573d7ec06ad9c875304f903023d4855dd628.
+---
+ .../java/org/apache/hadoop/hive/conf/HiveConf.java |    4 ++--
+ conf/hive-default.xml.template                     |    6 +++---
+ ivy/libraries.properties                           |    8 ++++----
+ metastore/build.xml                                |    2 +-
+ metastore/ivy.xml                                  |   11 +++++------
+ ql/ivy.xml                                         |    2 ++
+ .../org/apache/hadoop/hive/ql/exec/Utilities.java  |    4 ++--
+ 7 files changed, 19 insertions(+), 18 deletions(-)
+
+diff --git a/src/common/src/java/org/apache/hadoop/hive/conf/HiveConf.java b/src/common/src/java/org/apache/hadoop/hive/conf/HiveConf.java
+index 80ed014..cb57c11 100644
+--- a/src/common/src/java/org/apache/hadoop/hive/conf/HiveConf.java
++++ b/src/common/src/java/org/apache/hadoop/hive/conf/HiveConf.java
+@@ -329,7 +329,7 @@ public class HiveConf extends Configuration {
+     METASTORE_TRANSACTION_ISOLATION("datanucleus.transactionIsolation", "read-committed"),
+     METASTORE_CACHE_LEVEL2("datanucleus.cache.level2", false),
+     METASTORE_CACHE_LEVEL2_TYPE("datanucleus.cache.level2.type", "none"),
+-    METASTORE_IDENTIFIER_FACTORY("datanucleus.identifierFactory", "datanucleus1"),
++    METASTORE_IDENTIFIER_FACTORY("datanucleus.identifierFactory", "datanucleus"),
+     METASTORE_PLUGIN_REGISTRY_BUNDLE_CHECK("datanucleus.plugin.pluginRegistryBundleCheck", "LOG"),
+     METASTORE_BATCH_RETRIEVE_MAX("hive.metastore.batch.retrieve.max", 300),
+     METASTORE_BATCH_RETRIEVE_TABLE_PARTITION_MAX(
+@@ -357,7 +357,7 @@ public class HiveConf extends Configuration {
+     METASTORE_CONNECTION_DRIVER("javax.jdo.option.ConnectionDriverName",
+         "org.apache.derby.jdbc.EmbeddedDriver"),
+     METASTORE_MANAGER_FACTORY_CLASS("javax.jdo.PersistenceManagerFactoryClass",
+-        "org.datanucleus.api.jdo.JDOPersistenceManagerFactory"),
++        "org.datanucleus.jdo.JDOPersistenceManagerFactory"),
+     METASTORE_DETACH_ALL_ON_COMMIT("javax.jdo.option.DetachAllOnCommit", true),
+     METASTORE_NON_TRANSACTIONAL_READ("javax.jdo.option.NonTransactionalRead", true),
+     METASTORE_CONNECTION_USER_NAME("javax.jdo.option.ConnectionUserName", "APP"),
+diff --git a/src/conf/hive-default.xml.template b/src/conf/hive-default.xml.template
+index d69cdb1..04bb6b6 100644
+--- a/src/conf/hive-default.xml.template
++++ b/src/conf/hive-default.xml.template
+@@ -133,7 +133,7 @@
+ 
+ <property>
+   <name>javax.jdo.PersistenceManagerFactoryClass</name>
+-  <value>org.datanucleus.api.jdo.JDOPersistenceManagerFactory</value>
++  <value>org.datanucleus.jdo.JDOPersistenceManagerFactory</value>
+   <description>class implementing the jdo persistence</description>
+ </property>
+ 
+@@ -229,8 +229,8 @@
+ 
+ <property>
+   <name>datanucleus.identifierFactory</name>
+-  <value>datanucleus1</value>
+-  <description>Name of the identifier factory to use when generating table/column names etc. 'datanucleus1' is used for backward compatibility with DataNucleus v1</description>
++  <value>datanucleus</value>
++  <description>Name of the identifier factory to use when generating table/column names etc. 'datanucleus' is used for backward compatibility</description>
+ </property>
+ 
+ <property>
+diff --git a/src/ivy/libraries.properties b/src/ivy/libraries.properties
+index 4e2b364..501e859 100644
+--- a/src/ivy/libraries.properties
++++ b/src/ivy/libraries.properties
+@@ -24,10 +24,10 @@ antlr.version=3.4
+ antlr-runtime.version=3.4
+ asm.version=3.1
+ avro.version=1.7.3
+-datanucleus-api-jdo.version=3.2.1
+-datanucleus-core.version=3.2.1
+-datanucleus-enhancer.version=3.1.1
+-datanucleus-rdbms.version=3.2.1
++datanucleus-connectionpool.version=2.0.3
++datanucleus-core.version=2.0.3-ZD5977-CDH5293
++datanucleus-enhancer.version=2.0.3
++datanucleus-rdbms.version=2.0.3
+ checkstyle.version=5.0
+ findbugs.version=1.3.9
+ commons-cli.version=1.2
+diff --git a/src/metastore/build.xml b/src/metastore/build.xml
+index 949a800..23806ad 100755
+--- a/src/metastore/build.xml
++++ b/src/metastore/build.xml
+@@ -87,7 +87,7 @@
+   <target name="model-enhance" depends="model-compile" unless="enhanceModel.notRequired" >
+     <echo message="Project: ${ant.project.name}"/>
+     <taskdef name="datanucleusenhancer"
+-                classname="org.datanucleus.enhancer.EnhancerTask">
++                classname="org.datanucleus.enhancer.tools.EnhancerTask">
+        <classpath refid="classpath"/>
+    </taskdef>
+ 
+diff --git a/src/metastore/ivy.xml b/src/metastore/ivy.xml
+index fa09347..1e42550 100644
+--- a/src/metastore/ivy.xml
++++ b/src/metastore/ivy.xml
+@@ -43,12 +43,11 @@
+       <exclude org="org.apache.geronimo.specs" module="geronimo-jta_1.1_spec"/>
+     </dependency>
+     <dependency org="commons-pool" name="commons-pool" rev="${commons-pool.version}"/>
+-    <dependency org="org.datanucleus" name="datanucleus-api-jdo" rev="${datanucleus-api-jdo.version}">
+-        <exclude org="javax.jdo" module="jdo2-api"/>
+-        <exclude org="junit" module="junit"/>
+-        <exclude org="log4j" module="log4j"/>
+-    </dependency>
+-    <dependency org="org.datanucleus" name="datanucleus-core" rev="${datanucleus-core.version}"
++    <dependency org="org.datanucleus" name="datanucleus-connectionpool" rev="${datanucleus-connectionpool.version}"
++                transitive="false"/>
++     <dependency org="org.datanucleus" name="datanucleus-core" rev="${datanucleus-core.version}"
++                transitive="false"/>
++    <dependency org="org.datanucleus" name="datanucleus-enhancer" rev="${datanucleus-enhancer.version}"
+                 transitive="false"/>
+     <dependency org="org.datanucleus" name="datanucleus-rdbms" rev="${datanucleus-rdbms.version}"
+                 transitive="false"/>
+diff --git a/src/ql/ivy.xml b/src/ql/ivy.xml
+index dcb98ff..6707feb 100644
+--- a/src/ql/ivy.xml
++++ b/src/ql/ivy.xml
+@@ -71,6 +71,8 @@
+     <dependency org="com.googlecode.javaewah" name="JavaEWAH" rev="${javaewah.version}"/>
+     <dependency org="org.codehaus.jackson" name="jackson-mapper-asl" rev="${jackson.version}"/>
+ 
++    <dependency org="org.datanucleus" name="datanucleus-connectionpool" rev="${datanucleus-connectionpool.version}"
++                transitive="false"/>
+     <dependency org="org.datanucleus" name="datanucleus-core" rev="${datanucleus-core.version}"
+                 transitive="false"/>
+     <dependency org="org.datanucleus" name="datanucleus-enhancer" rev="${datanucleus-enhancer.version}"
+diff --git a/src/ql/src/java/org/apache/hadoop/hive/ql/exec/Utilities.java b/src/ql/src/java/org/apache/hadoop/hive/ql/exec/Utilities.java
+index d73d597..8619877 100644
+--- a/src/ql/src/java/org/apache/hadoop/hive/ql/exec/Utilities.java
++++ b/src/ql/src/java/org/apache/hadoop/hive/ql/exec/Utilities.java
+@@ -469,8 +469,8 @@ public final class Utilities {
+     e.setPersistenceDelegate(GroupByDesc.Mode.class, new EnumDelegate());
+     e.setPersistenceDelegate(Operator.ProgressCounter.class, new EnumDelegate());
+ 
+-    e.setPersistenceDelegate(org.datanucleus.store.types.backed.Map.class, new MapDelegate());
+-    e.setPersistenceDelegate(org.datanucleus.store.types.backed.List.class, new ListDelegate());
++    e.setPersistenceDelegate(org.datanucleus.sco.backed.Map.class, new MapDelegate());
++    e.setPersistenceDelegate(org.datanucleus.sco.backed.List.class, new ListDelegate());
+ 
+     e.writeObject(plan);
+     e.close();
+-- 
+1.7.0.4
+

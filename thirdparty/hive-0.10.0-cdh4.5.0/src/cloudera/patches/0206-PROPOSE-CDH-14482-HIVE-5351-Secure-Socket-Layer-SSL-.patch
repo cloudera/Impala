@@ -1,0 +1,1002 @@
+From 9c5b4ab1ebfefb47ace7af3b09373306e5ace1fb Mon Sep 17 00:00:00 2001
+From: Prasad Mujumdar <prasadm@cloudera.com>
+Date: Wed, 23 Oct 2013 14:14:35 -0700
+Subject: [PATCH 206/218] PROPOSE CDH-14482: HIVE-5351: Secure-Socket-Layer (SSL) support for HiveServer2
+
+---
+ .../java/org/apache/hadoop/hive/conf/HiveConf.java |    7 +-
+ data/files/keystore.jks                            |  Bin 0 -> 2248 bytes
+ data/files/truststore.jks                          |  Bin 0 -> 958 bytes
+ eclipse-templates/TestJdbcMiniHS2.launchtemplate   |   44 +++++
+ jdbc/ivy.xml                                       |    2 +
+ .../java/org/apache/hive/jdbc/HiveConnection.java  |   39 +++-
+ .../org/apache/hive/jdbc/TestJdbcWithMiniHS2.java  |   68 +++++++
+ jdbc/src/test/org/apache/hive/jdbc/TestSSL.java    |  202 ++++++++++++++++++++
+ .../hive/jdbc/miniHS2/AbstarctHiveService.java     |  111 +++++++++++
+ .../test/org/apache/hive/jdbc/miniHS2/MiniHS2.java |  102 ++++++++++
+ .../apache/hive/jdbc/miniHS2/TestHiveServer2.java  |   51 +++++
+ .../hadoop/hive/metastore/HiveMetaStore.java       |    5 +-
+ .../apache/hive/service/auth/HiveAuthFactory.java  |   54 +++++-
+ .../hive/service/cli/thrift/ThriftCLIService.java  |   14 ++-
+ .../apache/hadoop/hive/shims/Hadoop20Shims.java    |    4 +
+ 15 files changed, 687 insertions(+), 16 deletions(-)
+ create mode 100644 data/files/keystore.jks
+ create mode 100644 data/files/truststore.jks
+ create mode 100644 eclipse-templates/TestJdbcMiniHS2.launchtemplate
+ create mode 100644 jdbc/src/test/org/apache/hive/jdbc/TestJdbcWithMiniHS2.java
+ create mode 100644 jdbc/src/test/org/apache/hive/jdbc/TestSSL.java
+ create mode 100644 jdbc/src/test/org/apache/hive/jdbc/miniHS2/AbstarctHiveService.java
+ create mode 100644 jdbc/src/test/org/apache/hive/jdbc/miniHS2/MiniHS2.java
+ create mode 100644 jdbc/src/test/org/apache/hive/jdbc/miniHS2/TestHiveServer2.java
+
+diff --git a/src/common/src/java/org/apache/hadoop/hive/conf/HiveConf.java b/src/common/src/java/org/apache/hadoop/hive/conf/HiveConf.java
+index 0cd5386..9cafc64 100644
+--- a/src/common/src/java/org/apache/hadoop/hive/conf/HiveConf.java
++++ b/src/common/src/java/org/apache/hadoop/hive/conf/HiveConf.java
+@@ -706,6 +706,9 @@ public class HiveConf extends Configuration {
+     HIVE_SERVER2_IN_MEM_LOGGING("hive.server2.in.mem.logging", true),
+     HIVE_SERVER2_IN_MEM_LOG_SIZE("hive.server2.in.mem.log.size", 128 * 1024),
+     HIVE_SERVER2_SESSION_HOOK("hive.server2.session.hook", ""),
++    HIVE_SERVER2_USE_SSL("hive.server2.enable.SSL", false),
++    HIVE_SERVER2_SSL_KEYSTORE_PATH("hive.server2.keystore.path", ""),
++    HIVE_SERVER2_SSL_KEYSTORE_PASSWORD("hive.server2.keystore.password", ""),
+     HIVE_SERVER2_AUTHZ_EXTERNAL_EXEC("hive.server2.authorization.external.exec", true),
+     HIVE_SERVER2_ALLOW_USER_SUBSTITUTION("hive.server2.allow.user.substitution", true),
+     HIVE_SERVER2_TABLE_TYPE_MAPPING("hive.server2.table.type.mapping", "HIVE"),
+@@ -730,8 +733,8 @@ public class HiveConf extends Configuration {
+     HIVEOPTLISTBUCKETING("hive.optimize.listbucketing", false),
+ 
+     HIVE_CURRENT_DB("hive.current.db", "default"),
+-    
+-    // Allow TCP Keep alive socket option for for HiveServer or a maximum timeout for the socket.  
++
++    // Allow TCP Keep alive socket option for for HiveServer or a maximum timeout for the socket.
+     SERVER_READ_SOCKET_TIMEOUT("hive.server.read.socket.timeout", 10),
+     SERVER_TCP_KEEP_ALIVE("hive.server.tcp.keepalive", true),
+ 
+diff --git a/src/data/files/keystore.jks b/src/data/files/keystore.jks
+new file mode 100644
+index 0000000000000000000000000000000000000000..469d8a543a4d2a94535996ceee2a24891699b1cc
+GIT binary patch
+literal 2248
+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
+Js_3iE{{opy;Gh5i
+
+literal 0
+HcmV?d00001
+
+diff --git a/src/data/files/truststore.jks b/src/data/files/truststore.jks
+new file mode 100644
+index 0000000000000000000000000000000000000000..9c5d703fba6c8c23bf6ee8f431d6d0fc35bf9ee1
+GIT binary patch
+literal 958
+zcmezO_TO6u1_mY|W(3n58JT6NSt&`$Kmo_cw>h&JSR?dI4J;WLm}?E1m@5sMm=YH-
+zGchtTu|(`Q<22x9<J4;NX#38~$jHsgV31=dV8F-59LmBb%pRJTotIyp2NU7I5Mf7%
+z@B<A3>f#b+b1X<q&PX-nHQ)vba0|0|03Bo~Vju+KG7ED<<P|`o1`6W5hQ@{lM#cuF
+zCg#S5Q4;({hK9xlmPVFP0Xn;<iBSnTKp0sWn41{+84Q{jxtN+585#CW^64*|``tXJ
+zZhq9Bol2j)g4Kegj*A`VU4Hx9JeJk^+?T~}JUa4y>MYS;eE$kI*1xT_?4P^!=i2W-
+zyJjwX`0LZ`EpGo)7W*$232|(3Zb(~yXS2qJB_2{OndQnS9>`7C+Rb<*ihs?Glec*?
+zd{;DWY~Z+j`K5>9`Mpt27qumo4?RA+W4mU-?xp=3{(KI6Jb8M^F4e71SJt@{ueqnY
+zCc^K>uCq5P)8GGpw$W?nD%RC`6Am?n@jqO()9~5bo-?mIm@B^QjFE1(3uc;-AotQF
+z*nLmO%oQI6Ec3P=o02kP^Xb!}$9UJ2Fs$kce03oA@HZ#sDg1%A4OQc9q!PVU9Qs-c
+z(qx&K85tNCD;mff$O2<imXAe@Ma1IctWIv%DHh9SwDotN*>G2LJL^K^Km?{LU?4Iw
+z2>&Vxlqi|Ipv+tTNYSaf{TVS?&61f~-_AZ_`)*r#ab~g?kD>aJ7T4&HR^P2mTfaFx
+ztJk@c7^?dwYxkOE-*>NgXJ8vM-Ni&~zr}z5Hn;wMd7sWXNoJ*|$~GKZ=^OpIdDFtr
+zO$X{MR?M2hI6bP~&x=>pA+vAqsbfJt_p0-Lhl<HL6j--Do$Y3Cy)WbLw5o;Y|4hH6
+zX7~N&ln1|O2x+Ryd0f8xv0eT3xi_~&+I{;A?{1A+mRzs-XIo!>w9L8EnSGOvrrqy3
+zuGOiU*<9}OezjzQn~R*M#z|54jGYR*S6W|u-j(%s(gE?cSE{VHzp@ElcOWOn@!THU
+i+jZwF3Yv86jpP{Duj5kx`QB$`i><QrQ7dtWk9z<h!)<^7
+
+literal 0
+HcmV?d00001
+
+diff --git a/src/eclipse-templates/TestJdbcMiniHS2.launchtemplate b/src/eclipse-templates/TestJdbcMiniHS2.launchtemplate
+new file mode 100644
+index 0000000..537ba12
+--- /dev/null
++++ b/src/eclipse-templates/TestJdbcMiniHS2.launchtemplate
+@@ -0,0 +1,44 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<!--
++  Licensed to the Apache Software Foundation (ASF) under one
++  or more contributor license agreements.  See the NOTICE file
++  distributed with this work for additional information
++  regarding copyright ownership.  The ASF licenses this file
++  to you under the Apache License, Version 2.0 (the
++  "License"); you may not use this file except in compliance
++  with the License.  You may obtain a copy of the License at
++ 
++      http://www.apache.org/licenses/LICENSE-2.0
++ 
++  Unless required by applicable law or agreed to in writing, software
++  distributed under the License is distributed on an "AS IS" BASIS,
++  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++  See the License for the specific language governing permissions and
++  limitations under the License.
++--> 
++<launchConfiguration type="org.eclipse.jdt.junit.launchconfig">
++  <booleanAttribute key="org.eclipse.debug.core.appendEnvironmentVariables" value="false"/>
++  <mapAttribute key="org.eclipse.debug.core.environmentVariables">
++    <mapEntry key="JAVA_HOME" value="${system_property:java.home}"/>
++    <mapEntry key="HIVE_HADOOP_TEST_CLASSPATH" value="@HIVE_HADOOP_TEST_CLASSPATH@"/>
++  </mapAttribute>
++  <stringAttribute key="org.eclipse.jdt.junit.CONTAINER" value=""/>
++  <booleanAttribute key="org.eclipse.jdt.junit.KEEPRUNNING_ATTR" value="false"/>
++  <stringAttribute key="org.eclipse.jdt.junit.TESTNAME" value=""/>
++  <stringAttribute key="org.eclipse.jdt.junit.TEST_KIND" value="org.eclipse.jdt.junit.loader.junit4"/>
++  <listAttribute key="org.eclipse.jdt.launching.CLASSPATH">
++    <listEntry value="&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;&#10;&lt;runtimeClasspathEntry containerPath=&quot;org.eclipse.jdt.launching.JRE_CONTAINER&quot; javaProject=&quot;@PROJECT@&quot; path=&quot;1&quot; type=&quot;4&quot;/&gt;&#10;"/>
++    <listEntry value="&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;&#10;&lt;runtimeClasspathEntry internalArchive=&quot;/@PROJECT@/build/metastore/hive-metastore-@HIVE_VERSION@.jar&quot; path=&quot;3&quot; type=&quot;2&quot;/&gt;&#10;"/>
++    <listEntry value="&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;&#10;&lt;runtimeClasspathEntry internalArchive=&quot;/@PROJECT@/metastore/src/model&quot; path=&quot;3&quot; type=&quot;2&quot;/&gt;&#10;"/>
++    <listEntry value="&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;&#10;&lt;runtimeClasspathEntry internalArchive=&quot;/@PROJECT@/data/conf&quot; path=&quot;3&quot; type=&quot;2&quot;/&gt;&#10;"/>
++    <listEntry value="&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;&#10;&lt;runtimeClasspathEntry id=&quot;org.eclipse.jdt.launching.classpathentry.defaultClasspath&quot;&gt;&#10;&lt;memento exportedEntriesOnly=&quot;false&quot; project=&quot;@PROJECT@&quot;/&gt;&#10;&lt;/runtimeClasspathEntry&gt;&#10;"/>
++    <listEntry value="&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;&#10;&lt;runtimeClasspathEntry internalArchive=&quot;/@PROJECT@/conf&quot; path=&quot;3&quot; type=&quot;2&quot;/&gt;&#10;"/>
++  </listAttribute>
++  <booleanAttribute key="org.eclipse.jdt.launching.DEFAULT_CLASSPATH" value="false"/>
++  <stringAttribute key="org.eclipse.jdt.launching.MAIN_TYPE" value="org.apache.hive.jdbc.TestJdbcWithMiniHS2"/>
++  <stringAttribute key="org.eclipse.jdt.launching.PROJECT_ATTR" value="@PROJECT@"/>
++  <stringAttribute key="org.eclipse.jdt.launching.VM_ARGUMENTS"
++                   value="@JVM_ARGS@ -Dhive.root.logger=INFO,console -Dhadoop.bin.path=@HADOOP_BIN_PATH@ -Dtest.tmp.dir=&quot;${workspace_loc:@PROJECT@}/build/ql/tmp&quot; -Dbuild.dir=&quot;${workspace_loc:@PROJECT@}/build/ql&quot; -Dbuild.dir.hive=&quot;${workspace_loc:@PROJECT@}/build&quot; -Dversion=&quot;@HIVE_VERSION@&quot; -Dtest.warehouse.dir=&quot;${workspace_loc:@PROJECT@}/build/ql/test/data/warehouse&quot;"/>
++  <stringAttribute key="org.eclipse.jdt.launching.WORKING_DIRECTORY" value="${workspace_loc:@PROJECT@}/ql"/>
++</launchConfiguration>
++
+diff --git a/src/jdbc/ivy.xml b/src/jdbc/ivy.xml
+index cb76d07..d663851 100644
+--- a/src/jdbc/ivy.xml
++++ b/src/jdbc/ivy.xml
+@@ -33,6 +33,8 @@
+                 transitive="false"/>
+     <dependency org="commons-logging" name="commons-logging" rev="${commons-logging.version}"
+                 transitive="false"/>
++    <dependency org="org.apache.hive" name="hive-service" rev="${version}"
++                conf="test->default" />
+ 
+     <!-- MR1 dependency -->
+     <dependency org="org.apache.hadoop" name="hadoop-core"
+diff --git a/src/jdbc/src/java/org/apache/hive/jdbc/HiveConnection.java b/src/jdbc/src/java/org/apache/hive/jdbc/HiveConnection.java
+index f1ec2cd..202df2f 100644
+--- a/src/jdbc/src/java/org/apache/hive/jdbc/HiveConnection.java
++++ b/src/jdbc/src/java/org/apache/hive/jdbc/HiveConnection.java
+@@ -25,6 +25,7 @@ import java.sql.CallableStatement;
+ import java.sql.Clob;
+ import java.sql.Connection;
+ import java.sql.DatabaseMetaData;
++import java.sql.DriverManager;
+ import java.sql.NClob;
+ import java.sql.PreparedStatement;
+ import java.sql.ResultSet;
+@@ -68,7 +69,6 @@ import org.apache.hive.service.cli.thrift.TSessionHandle;
+ import org.apache.thrift.TException;
+ import org.apache.thrift.protocol.TBinaryProtocol;
+ import org.apache.thrift.protocol.TProtocol;
+-import org.apache.thrift.transport.TSocket;
+ import org.apache.thrift.transport.TTransport;
+ import org.apache.thrift.transport.TTransportException;
+ 
+@@ -86,6 +86,10 @@ public class HiveConnection implements java.sql.Connection {
+   private static final String HIVE_AUTH_PASSWD = "password";
+   private static final String HIVE_ANONYMOUS_USER = "anonymous";
+   private static final String HIVE_ANONYMOUS_PASSWD = "anonymous";
++  private static final String HIVE_USE_SSL = "ssl";
++  private static final String HIVE_SSL_TRUST_STORE = "sslTrustStore";
++  private static final String HIVE_SSL_TRUST_STORE_PASSWORD = "trustStorePassword";
++  private static final int HIVE_CONNECTION_TIMEOUT = 5;
+ 
+   private TTransport transport;
+   private TCLIService.Iface client;
+@@ -93,11 +97,13 @@ public class HiveConnection implements java.sql.Connection {
+   private SQLWarning warningChain = null;
+   private TSessionHandle sessHandle = null;
+   private final List<TProtocolVersion> supportedProtocols = new LinkedList<TProtocolVersion>();
++  private int loginTimeout = HIVE_CONNECTION_TIMEOUT;
+   /**
+    * TODO: - parse uri (use java.net.URI?).
+    */
+   public HiveConnection(String uri, Properties info) throws SQLException {
+     Utils.JdbcConnectionParams connParams;
++    loginTimeout = DriverManager.getLoginTimeout();
+     try {
+       connParams = Utils.parseURL(uri);
+     } catch (IllegalArgumentException e) {
+@@ -148,12 +154,11 @@ public class HiveConnection implements java.sql.Connection {
+ 
+   private void openTransport(String uri, String host, int port, Map<String, String> sessConf )
+       throws SQLException {
+-    transport = new TSocket(host, port);
+ 
+     // handle secure connection if specified
+-    if (!sessConf.containsKey(HIVE_AUTH_TYPE)
+-        || !sessConf.get(HIVE_AUTH_TYPE).equals(HIVE_AUTH_SIMPLE)){
+-      try {
++    try {
++      if (!sessConf.containsKey(HIVE_AUTH_TYPE)
++        || !sessConf.get(HIVE_AUTH_TYPE).equals(HIVE_AUTH_SIMPLE)) {
+         String tokenStr;
+         if (sessConf.containsKey(HIVE_AUTH_PRINCIPAL)) {
+           Map<String, String> saslProps = new HashMap<String, String>();
+@@ -181,12 +186,30 @@ public class HiveConnection implements java.sql.Connection {
+           if ((passwd == null) || passwd.isEmpty()) {
+             passwd = HIVE_ANONYMOUS_PASSWD;
+           }
++          String useSslStr = sessConf.get(HIVE_USE_SSL);
++          if ("true".equalsIgnoreCase(useSslStr)) {
++            String sslTrustStore = sessConf.get(HIVE_SSL_TRUST_STORE);
++            String sslTrustStorePassword = sessConf.get(HIVE_SSL_TRUST_STORE_PASSWORD);
++            if (sslTrustStore == null || sslTrustStore.isEmpty()) {
++              transport = HiveAuthFactory.getSSLSocket(host, port, loginTimeout);
++            } else {
++              transport = HiveAuthFactory.getSSLSocket(host, port, loginTimeout,
++                  sslTrustStore, sslTrustStorePassword);
++            }
++          } else {
++            transport = HiveAuthFactory.getSocketTransport(host, port);
++          }
+           transport = PlainSaslHelper.getPlainTransport(userName, passwd, transport);
+         }
+-      } catch (SaslException e) {
+-        throw new SQLException("Could not establish secure connection to "
+-                  + uri + ": " + e.getMessage(), " 08S01", e);
++      } else {
++        transport = HiveAuthFactory.getSocketTransport(host, port);
+       }
++    } catch (SaslException e) {
++      throw new SQLException("Could not establish secure connection to "
++                + uri + ": " + e.getMessage(), " 08S01", e);
++    } catch (TTransportException e) {
++      throw new SQLException("Could not create connection to "
++          + uri + ": " + e.getMessage(), " 08S01", e);
+     }
+ 
+     TProtocol protocol = new TBinaryProtocol(transport);
+diff --git a/src/jdbc/src/test/org/apache/hive/jdbc/TestJdbcWithMiniHS2.java b/src/jdbc/src/test/org/apache/hive/jdbc/TestJdbcWithMiniHS2.java
+new file mode 100644
+index 0000000..0f0bf03
+--- /dev/null
++++ b/src/jdbc/src/test/org/apache/hive/jdbc/TestJdbcWithMiniHS2.java
+@@ -0,0 +1,68 @@
++package org.apache.hive.jdbc;
++
++  import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertTrue;
++
++import java.sql.Connection;
++import java.sql.DriverManager;
++import java.sql.ResultSet;
++import java.sql.Statement;
++
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.hive.conf.HiveConf;
++import org.apache.hive.jdbc.miniHS2.MiniHS2;
++import org.junit.After;
++import org.junit.Before;
++import org.junit.BeforeClass;
++import org.junit.Test;
++
++  public class TestJdbcWithMiniHS2 {
++    private static MiniHS2 miniHS2 = null;
++    private static Path dataFilePath;
++
++    private Connection hs2Conn = null;
++
++    @BeforeClass
++    public static void beforeTest() throws Exception {
++      Class.forName(MiniHS2.getJdbcDriverName());
++      HiveConf conf = new HiveConf();
++      miniHS2 = new MiniHS2(conf);
++      String dataFileDir = conf.get("test.data.files").replace('\\', '/')
++          .replace("c:", "");
++      dataFilePath = new Path(dataFileDir, "kv1.txt");
++    }
++
++    @Before
++    public void setUp() throws Exception {
++      miniHS2.start();
++      hs2Conn = DriverManager.getConnection(miniHS2.getJdbcURL(), System.getProperty("user.name"), "bar");
++      hs2Conn.createStatement().execute("set hive.support.concurrency = false");
++    }
++
++    @After
++    public void tearDown() throws Exception {
++      hs2Conn.close();
++      miniHS2.stop();
++    }
++
++    @Test
++    public void testConnection() throws Exception {
++      String tableName = "testTab1";
++      Statement stmt = hs2Conn.createStatement();
++
++      // create table
++      stmt.execute("DROP TABLE IF EXISTS " + tableName);
++      stmt.execute("CREATE TABLE " + tableName
++          + " (under_col INT COMMENT 'the under column', value STRING) COMMENT ' test table'");
++
++      // load data
++      stmt.execute("load data local inpath '"
++          + dataFilePath.toString() + "' into table " + tableName);
++
++      ResultSet res = stmt.executeQuery("SELECT * FROM " + tableName);
++      assertTrue(res.next());
++      assertEquals("val_238", res.getString(2));
++      res.close();
++      stmt.close();
++    }
++}
+diff --git a/src/jdbc/src/test/org/apache/hive/jdbc/TestSSL.java b/src/jdbc/src/test/org/apache/hive/jdbc/TestSSL.java
+new file mode 100644
+index 0000000..28ca764
+--- /dev/null
++++ b/src/jdbc/src/test/org/apache/hive/jdbc/TestSSL.java
+@@ -0,0 +1,202 @@
++package org.apache.hive.jdbc;
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.fail;
++
++import java.io.File;
++import java.sql.Connection;
++import java.sql.DriverManager;
++import java.sql.ResultSet;
++import java.sql.SQLException;
++import java.sql.Statement;
++
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.hive.conf.HiveConf;
++import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
++import org.apache.hive.jdbc.miniHS2.MiniHS2;
++import org.junit.After;
++import org.junit.Before;
++import org.junit.BeforeClass;
++import org.junit.Test;
++
++public class TestSSL {
++  private static final String KEY_STORE_NAME = "keystore.jks";
++  private static final String TRUST_STORE_NAME = "truststore.jks";
++  private static final String KEY_STORE_PASSWORD = "HiveJdbc";
++  private static final String JAVA_TRUST_STORE_PROP = "javax.net.ssl.trustStore";
++  private static final String JAVA_TRUST_STORE_PASS_PROP = "javax.net.ssl.trustStorePassword";
++
++  private MiniHS2 miniHS2 = null;
++  private static HiveConf conf = new HiveConf();
++  private Connection hs2Conn = null;
++  private String dataFileDir = conf.get("test.data.files");
++
++  @BeforeClass
++  public static void beforeTest() throws Exception {
++    Class.forName(MiniHS2.getJdbcDriverName());
++  }
++
++  @Before
++  public void setUp() throws Exception {
++    DriverManager.setLoginTimeout(0);
++    if (!System.getProperty("test.data.files", "").isEmpty()) {
++      dataFileDir = System.getProperty("test.data.files");
++    }
++    dataFileDir = dataFileDir.replace('\\', '/').replace("c:", "");
++    miniHS2 = new MiniHS2(conf);
++  }
++
++  @After
++  public void tearDown() throws Exception {
++    if (hs2Conn != null) {
++      hs2Conn.close();
++    }
++    if (miniHS2 != null && miniHS2.isStarted()) {
++      miniHS2.stop();
++    }
++    System.clearProperty(JAVA_TRUST_STORE_PROP);
++    System.clearProperty(JAVA_TRUST_STORE_PASS_PROP);
++  }
++
++  /***
++   * Test SSL client with non-SSL server fails
++   * @throws Exception
++   */
++  @Test
++  public void testInvalidConfig() throws Exception {
++    miniHS2.start();
++    DriverManager.setLoginTimeout(4);
++    try {
++      hs2Conn = DriverManager.getConnection(miniHS2.getJdbcURL() + ";ssl=true;sslTrustStore=" +
++          dataFileDir + File.separator + TRUST_STORE_NAME + ";trustStorePassword=" +
++          KEY_STORE_PASSWORD, System.getProperty("user.name"), "bar");
++      fail("SSL connection should fail with NON-SSL server");
++    } catch (SQLException e) {
++      // expected error
++      assertEquals("08S01", e.getSQLState().trim());
++    }
++
++    System.setProperty(JAVA_TRUST_STORE_PROP, dataFileDir + File.separator + TRUST_STORE_NAME );
++    System.setProperty(JAVA_TRUST_STORE_PASS_PROP, KEY_STORE_PASSWORD);
++    try {
++      hs2Conn = DriverManager.getConnection(miniHS2.getJdbcURL() + ";ssl=true",
++          System.getProperty("user.name"), "bar");
++      fail("SSL connection should fail with NON-SSL server");
++    } catch (SQLException e) {
++      // expected error
++      assertEquals("08S01", e.getSQLState().trim());
++    }
++
++  }
++
++  /***
++   * Test non-SSL client with SSL server fails
++   * @throws Exception
++   */
++  @Test
++  public void testConnectionMismatch() throws Exception {
++    miniHS2.setConfProperty(ConfVars.HIVE_SERVER2_USE_SSL.varname, "true");
++    miniHS2.setConfProperty(ConfVars.HIVE_SERVER2_SSL_KEYSTORE_PASSWORD.varname, "");
++    miniHS2.start();
++    try {
++      hs2Conn = DriverManager.getConnection(miniHS2.getJdbcURL(), System.getProperty("user.name"), "bar");
++      fail("NON SSL connection should fail with SSL server");
++    } catch (SQLException e) {
++      // expected error
++      assertEquals("08S01", e.getSQLState().trim());
++    }
++
++    try {
++      hs2Conn = DriverManager.getConnection(miniHS2.getJdbcURL()+ ";ssl=false",
++          System.getProperty("user.name"), "bar");
++      fail("NON SSL connection should fail with SSL server");
++    } catch (SQLException e) {
++      // expected error
++      assertEquals("08S01", e.getSQLState().trim());
++    }
++
++  }
++
++  /***
++   * Test SSL client connection to SSL server
++   * @throws Exception
++   */
++  @Test
++  public void testSSLConnectionWithURL() throws Exception {
++    // Start HS2 with SSL
++    startSslSever();
++
++    // make SSL connection
++    hs2Conn = DriverManager.getConnection(miniHS2.getJdbcURL() + ";ssl=true;sslTrustStore=" +
++        dataFileDir + File.separator + TRUST_STORE_NAME + ";trustStorePassword=" +
++        KEY_STORE_PASSWORD, System.getProperty("user.name"), "bar");
++
++    hs2Conn.close();
++  }
++
++  /***
++   * Test SSL client connection to SSL server
++   * @throws Exception
++   */
++  @Test
++  public void testSSLConnectionWithProperty() throws Exception {
++    // Start HS2 with SSL
++    startSslSever();
++
++    System.setProperty(JAVA_TRUST_STORE_PROP, dataFileDir + File.separator + TRUST_STORE_NAME );
++    System.setProperty(JAVA_TRUST_STORE_PASS_PROP, KEY_STORE_PASSWORD);
++    // make SSL connection
++    hs2Conn = DriverManager.getConnection(miniHS2.getJdbcURL() + ";ssl=true",
++        System.getProperty("user.name"), "bar");
++
++    hs2Conn.close();
++  }
++
++  /**
++   * Start HS2 in SSL mode, open a SSL connection and fetch data
++   * @throws Exception
++   */
++  @Test
++  public void testSSLFetch() throws Exception {
++    // Start HS2 with SSL
++    startSslSever();
++
++    // make SSL connection
++    hs2Conn = DriverManager.getConnection(miniHS2.getJdbcURL() + ";ssl=true;sslTrustStore=" +
++        dataFileDir + File.separator + TRUST_STORE_NAME + ";trustStorePassword=" +
++        KEY_STORE_PASSWORD, System.getProperty("user.name"), "bar");
++
++    String tableName = "sslTab";
++    Statement stmt = hs2Conn.createStatement();
++    Path dataFilePath = new Path(dataFileDir, "kv1.txt");
++
++    stmt.execute("set hive.support.concurrency = false");
++
++    stmt.execute("drop table if exists " + tableName);
++    stmt.execute("create table " + tableName
++        + " (under_col int comment 'the under column', value string)");
++
++    // load data
++    stmt.execute("load data local inpath '"
++        + dataFilePath.toString() + "' into table " + tableName);
++
++    ResultSet res = stmt.executeQuery("SELECT * FROM " + tableName);
++    int rowCount = 0;
++    while (res.next()) {
++      ++rowCount;
++      assertEquals("val_" + res.getInt(1), res.getString(2));
++    }
++
++    // read result over SSL
++    assertEquals(500, rowCount);
++  }
++
++  private void startSslSever () throws Exception {
++    miniHS2.setConfProperty(ConfVars.HIVE_SERVER2_USE_SSL.varname, "true");
++    miniHS2.setConfProperty(ConfVars.HIVE_SERVER2_SSL_KEYSTORE_PATH.varname,
++        dataFileDir + File.separator +  KEY_STORE_NAME);
++    miniHS2.setConfProperty(ConfVars.HIVE_SERVER2_SSL_KEYSTORE_PASSWORD.varname,
++        KEY_STORE_PASSWORD);
++    miniHS2.start();
++  }
++
++}
+diff --git a/src/jdbc/src/test/org/apache/hive/jdbc/miniHS2/AbstarctHiveService.java b/src/jdbc/src/test/org/apache/hive/jdbc/miniHS2/AbstarctHiveService.java
+new file mode 100644
+index 0000000..1d0bf3b
+--- /dev/null
++++ b/src/jdbc/src/test/org/apache/hive/jdbc/miniHS2/AbstarctHiveService.java
+@@ -0,0 +1,111 @@
++package org.apache.hive.jdbc.miniHS2;
++
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.hive.conf.HiveConf;
++import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
++
++/***
++ * Base class for Hive service
++ * AbstarctHiveService.
++ *
++ */
++public abstract class AbstarctHiveService {
++  private HiveConf hiveConf = null;
++  private String hostname;
++  private int port;
++  private boolean startedHiveService = false;
++
++  public AbstarctHiveService(HiveConf hiveConf, String hostname, int port) {
++    this.hiveConf = hiveConf;
++    this.hostname = hostname;
++    this.port = port;
++  }
++
++  /**
++   * Get Hive conf
++   * @return
++   */
++  public HiveConf getHiveConf() {
++    return hiveConf;
++  }
++
++  /**
++   * Get config property
++   * @param propertyKey
++   * @return
++   */
++  public String getConfProperty(String propertyKey) {
++    return hiveConf.get(propertyKey);
++  }
++
++  /**
++   * Set config property
++   * @param propertyKey
++   * @param propertyValue
++   */
++  public void setConfProperty(String propertyKey, String propertyValue) {
++    System.setProperty(propertyKey, propertyValue);
++    hiveConf.set(propertyKey, propertyValue);
++  }
++
++  /**
++   * Retrieve warehouse directory
++   * @return
++   */
++  public Path getWareHouseDir() {
++    return new Path(hiveConf.getVar(ConfVars.METASTOREWAREHOUSE));
++  }
++
++  public void setWareHouseDir(String wareHouseURI) {
++    verifyNotStarted();
++    System.setProperty(ConfVars.METASTOREWAREHOUSE.varname, wareHouseURI);
++    hiveConf.setVar(ConfVars.METASTOREWAREHOUSE, wareHouseURI);
++  }
++
++  /**
++   * Set service host
++   * @param hostName
++   */
++  public void setHost(String hostName) {
++    this.hostname = hostName;
++  }
++
++  // get service host
++  protected String getHost() {
++    return hostname;
++  }
++
++  /**
++   * Set service port #
++   * @param portNum
++   */
++  public void setPort(int portNum) {
++    this.port = portNum;
++  }
++
++  // get service port#
++  protected int getPort() {
++    return port;
++  }
++
++  public boolean isStarted() {
++    return startedHiveService;
++  }
++
++  protected void setStarted(boolean hiveServiceStatus) {
++    this.startedHiveService =  hiveServiceStatus;
++  }
++
++  protected void verifyStarted() {
++    if (!isStarted()) {
++      throw new IllegalStateException("HS2 is not running");
++    }
++  }
++
++  protected void verifyNotStarted() {
++    if (isStarted()) {
++      throw new IllegalStateException("HS2 alreadyrunning");
++    }
++  }
++
++}
+diff --git a/src/jdbc/src/test/org/apache/hive/jdbc/miniHS2/MiniHS2.java b/src/jdbc/src/test/org/apache/hive/jdbc/miniHS2/MiniHS2.java
+new file mode 100644
+index 0000000..9c4d1c4
+--- /dev/null
++++ b/src/jdbc/src/test/org/apache/hive/jdbc/miniHS2/MiniHS2.java
+@@ -0,0 +1,102 @@
++package org.apache.hive.jdbc.miniHS2;
++
++import java.io.File;
++import java.io.IOException;
++import java.util.concurrent.TimeoutException;
++import java.util.concurrent.atomic.AtomicLong;
++
++import org.apache.commons.io.FileUtils;
++import org.apache.hadoop.hive.conf.HiveConf;
++import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
++import org.apache.hadoop.hive.metastore.HiveMetaStore;
++import org.apache.hadoop.hive.metastore.MetaStoreUtils;
++import org.apache.hive.service.Service;
++import org.apache.hive.service.cli.CLIServiceClient;
++import org.apache.hive.service.cli.HiveSQLException;
++import org.apache.hive.service.cli.SessionHandle;
++import org.apache.hive.service.cli.thrift.ThriftCLIService;
++import org.apache.hive.service.cli.thrift.ThriftCLIServiceClient;
++import org.apache.hive.service.server.HiveServer2;
++
++import com.google.common.io.Files;
++
++public class MiniHS2 extends AbstarctHiveService {
++  private static final String driverName = "org.apache.hive.jdbc.HiveDriver";
++  private HiveServer2 hiveServer2 = null;
++  private final File baseDir;
++  private static final AtomicLong hs2Counter = new AtomicLong();
++
++  public MiniHS2(HiveConf hiveConf) throws IOException {
++    super(hiveConf, "localhost", MetaStoreUtils.findFreePort());
++    baseDir =  Files.createTempDir();
++    setWareHouseDir("file://" + baseDir.getPath() + File.separator + "warehouse");
++    String metaStoreURL =  "jdbc:derby:" + baseDir.getAbsolutePath() + File.separator + "test_metastore-" +
++        hs2Counter.incrementAndGet() + ";create=true";
++
++    System.setProperty(HiveConf.ConfVars.METASTORECONNECTURLKEY.varname, metaStoreURL);
++    hiveConf.setVar(HiveConf.ConfVars.METASTORECONNECTURLKEY, metaStoreURL);
++    hiveConf.setVar(ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST, getHost());
++    hiveConf.setIntVar(ConfVars.HIVE_SERVER2_THRIFT_PORT, getPort());
++    HiveMetaStore.HMSHandler.resetDefaultDBFlag();
++  }
++
++  public void start() throws Exception {
++    hiveServer2 = new HiveServer2();
++    hiveServer2.init(getHiveConf());
++    hiveServer2.start();
++    waitForStartup();
++    setStarted(true);
++  }
++
++  public void stop() {
++    verifyStarted();
++    hiveServer2.stop();
++    setStarted(false);
++    FileUtils.deleteQuietly(baseDir);
++  }
++
++  public CLIServiceClient getServiceClient() {
++    verifyStarted();
++    return getServiceClientInternal();
++  }
++
++  public CLIServiceClient getServiceClientInternal() {
++    for (Service service : hiveServer2.getServices()) {
++      if (service instanceof ThriftCLIService) {
++        return new ThriftCLIServiceClient((ThriftCLIService)service);
++      }
++    }
++    throw new IllegalStateException("HS2 not running Thrift service");
++  }
++
++  public String getJdbcURL() {
++    return "jdbc:hive2://" + getHost() + ":" + getPort() + "/default";
++  }
++
++  public static String getJdbcDriverName() {
++    return driverName;
++  }
++
++  private void waitForStartup() throws Exception {
++    int waitTime = 0;
++    long startupTimeout = 1000L * 1000000000L;
++    CLIServiceClient hs2Client = getServiceClientInternal();
++    SessionHandle sessionHandle = null;
++    do {
++      Thread.sleep(500L);
++      waitTime += 500L;
++      if (waitTime > startupTimeout) {
++        throw new TimeoutException("Couldn't access new HiveServer: " + getJdbcURL());
++      }
++      try {
++        sessionHandle = hs2Client.openSession("foo", "bar");
++      } catch (HiveSQLException e) {
++        // service not started yet
++        continue;
++      }
++      hs2Client.closeSession(sessionHandle);
++      break;
++    } while (true);
++  }
++
++}
+diff --git a/src/jdbc/src/test/org/apache/hive/jdbc/miniHS2/TestHiveServer2.java b/src/jdbc/src/test/org/apache/hive/jdbc/miniHS2/TestHiveServer2.java
+new file mode 100644
+index 0000000..3cba38e
+--- /dev/null
++++ b/src/jdbc/src/test/org/apache/hive/jdbc/miniHS2/TestHiveServer2.java
+@@ -0,0 +1,51 @@
++package org.apache.hive.jdbc.miniHS2;
++
++import static org.junit.Assert.assertFalse;
++
++import java.io.IOException;
++import java.util.HashMap;
++import java.util.Map;
++
++import org.apache.hadoop.hive.conf.HiveConf;
++import org.apache.hive.service.cli.CLIServiceClient;
++import org.apache.hive.service.cli.OperationHandle;
++import org.apache.hive.service.cli.RowSet;
++import org.apache.hive.service.cli.SessionHandle;
++import org.junit.After;
++import org.junit.Before;
++import org.junit.BeforeClass;
++import org.junit.Test;
++
++public class TestHiveServer2 {
++
++  private static MiniHS2 miniHS2 = null;
++  private Map<String, String> confOverlay;
++
++  @BeforeClass
++  public static void beforeTest() throws IOException {
++    miniHS2 = new MiniHS2(new HiveConf());
++  }
++
++  @Before
++  public void setUp() throws Exception {
++    miniHS2.start();
++    confOverlay = new HashMap<String, String>();
++  }
++
++  @After
++  public void tearDown() {
++    miniHS2.stop();
++  }
++
++  @Test
++  public void testConnection() throws Exception {
++    String tabName = "testTab1";
++    CLIServiceClient serviceClient = miniHS2.getServiceClient();
++    SessionHandle sessHandle = serviceClient.openSession("foo", "bar");
++    serviceClient.executeStatement(sessHandle, "DROP TABLE IF EXISTS tab", confOverlay);
++    serviceClient.executeStatement(sessHandle, "CREATE TABLE " + tabName + " (id INT)", confOverlay);
++    OperationHandle opHandle = serviceClient.executeStatement(sessHandle, "SHOW TABLES", confOverlay);
++    RowSet rowSet = serviceClient.fetchResults(opHandle);
++    assertFalse(rowSet.getSize() == 0);
++  }
++}
+diff --git a/src/metastore/src/java/org/apache/hadoop/hive/metastore/HiveMetaStore.java b/src/metastore/src/java/org/apache/hadoop/hive/metastore/HiveMetaStore.java
+index 56de6d6..15bbca7 100644
+--- a/src/metastore/src/java/org/apache/hadoop/hive/metastore/HiveMetaStore.java
++++ b/src/metastore/src/java/org/apache/hadoop/hive/metastore/HiveMetaStore.java
+@@ -273,6 +273,10 @@ public class HiveMetaStore extends ThriftHiveMetastore {
+       return threadLocalId.get();
+     }
+ 
++    public static void resetDefaultDBFlag() {
++      createDefaultDB = false;
++    }
++
+     public HMSHandler(String name) throws MetaException {
+       super(name);
+       hiveConf = new HiveConf(this.getClass());
+@@ -4011,7 +4015,6 @@ public class HiveMetaStore extends ThriftHiveMetastore {
+   }
+ 
+ 
+-
+   /**
+    * Discard a current delegation token.
+    *
+diff --git a/src/service/src/java/org/apache/hive/service/auth/HiveAuthFactory.java b/src/service/src/java/org/apache/hive/service/auth/HiveAuthFactory.java
+index 0c95810..8120e04 100644
+--- a/src/service/src/java/org/apache/hive/service/auth/HiveAuthFactory.java
++++ b/src/service/src/java/org/apache/hive/service/auth/HiveAuthFactory.java
+@@ -18,6 +18,12 @@
+ package org.apache.hive.service.auth;
+ 
+ import java.io.IOException;
++import java.net.InetAddress;
++import java.net.InetSocketAddress;
++import java.net.UnknownHostException;
++import java.text.MessageFormat;
++import java.util.HashMap;
++import java.util.Map;
+ 
+ import javax.security.auth.login.LoginException;
+ import javax.security.sasl.Sasl;
+@@ -29,15 +35,15 @@ import org.apache.hadoop.hive.thrift.HadoopThriftAuthBridge;
+ import org.apache.hive.service.cli.HiveSQLException;
+ import org.apache.hive.service.cli.thrift.ThriftCLIService;
+ import org.apache.thrift.TProcessorFactory;
++import org.apache.thrift.transport.TSSLTransportFactory;
++import org.apache.thrift.transport.TServerSocket;
++import org.apache.thrift.transport.TSocket;
++import org.apache.thrift.transport.TTransport;
+ import org.apache.thrift.transport.TTransportException;
+ import org.apache.thrift.transport.TTransportFactory;
+ import org.slf4j.Logger;
+ import org.slf4j.LoggerFactory;
+ 
+-import java.text.MessageFormat;
+-import java.util.HashMap;
+-import java.util.Map;
+-
+ public class HiveAuthFactory {
+   private static final Logger LOG = LoggerFactory.getLogger(HiveAuthFactory.class);
+ 
+@@ -210,4 +216,44 @@ public class HiveAuthFactory {
+ 
+   }
+ 
++  public static TTransport getSocketTransport(String host, int port)
++      throws TTransportException {
++    return new TSocket(host, port);
++  }
++
++  public static TTransport getSSLSocket(String host, int port, int loginTimeout)
++      throws TTransportException {
++    return TSSLTransportFactory.getClientSocket(host, port, loginTimeout);
++  }
++
++  public static TTransport getSSLSocket(String host, int port, int loginTimeout,
++      String trustStorePath, String trustStorePassWord) throws TTransportException {
++    TSSLTransportFactory.TSSLTransportParameters params =
++        new TSSLTransportFactory.TSSLTransportParameters();
++    params.setTrustStore(trustStorePath, trustStorePassWord);
++    params.requireClientAuth(true);
++    return TSSLTransportFactory.getClientSocket(host, port, loginTimeout, params);
++  }
++
++  public static TServerSocket getServerSocket(String hiveHost, int portNum)
++      throws TTransportException {
++    InetSocketAddress serverAddress = null;
++    if (hiveHost != null && !hiveHost.isEmpty()) {
++      serverAddress = new InetSocketAddress(hiveHost, portNum);
++    } else {
++      serverAddress = new  InetSocketAddress(portNum);
++    }
++    return new TServerSocket(serverAddress );
++  }
++
++  public static TServerSocket getServerSSLSocket(String hiveHost, int portNum,
++      String keyStorePath, String keyStorePassWord) throws TTransportException, UnknownHostException {
++    TSSLTransportFactory.TSSLTransportParameters params =
++        new TSSLTransportFactory.TSSLTransportParameters();
++    params.setKeyStore(keyStorePath, keyStorePassWord);
++
++    return TSSLTransportFactory.getServerSocket(portNum, 10000,
++        InetAddress.getByName(hiveHost), params);
++  }
++
+ }
+diff --git a/src/service/src/java/org/apache/hive/service/cli/thrift/ThriftCLIService.java b/src/service/src/java/org/apache/hive/service/cli/thrift/ThriftCLIService.java
+index 9e8da87..0ec60d4 100644
+--- a/src/service/src/java/org/apache/hive/service/cli/thrift/ThriftCLIService.java
++++ b/src/service/src/java/org/apache/hive/service/cli/thrift/ThriftCLIService.java
+@@ -502,7 +502,19 @@ public class ThriftCLIService extends AbstractService implements TCLIService.Ifa
+       requestTimeout = hiveConf.getIntVar(ConfVars.HIVE_SERVER2_THRIFT_LOGIN_TIMEOUT);
+ 
+ 
+-      TThreadPoolServer.Args sargs = new TThreadPoolServer.Args(new TServerSocket(serverAddress))
++      TServerSocket serverSocket = null;
++      if (!hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_USE_SSL)) {
++        serverSocket = HiveAuthFactory.getServerSocket(hiveHost, portNum);
++      } else {
++        String keyStorePath = hiveConf.getVar(ConfVars.HIVE_SERVER2_SSL_KEYSTORE_PATH).trim();
++        if (keyStorePath.isEmpty()) {
++          throw new IllegalArgumentException(ConfVars.HIVE_SERVER2_SSL_KEYSTORE_PATH.varname +
++              " Not configured for SSL connection");
++        }
++        serverSocket = HiveAuthFactory.getServerSSLSocket(hiveHost, portNum,
++            keyStorePath, hiveConf.getVar(ConfVars.HIVE_SERVER2_SSL_KEYSTORE_PASSWORD));
++      }
++      TThreadPoolServer.Args sargs = new TThreadPoolServer.Args(serverSocket)
+       .processorFactory(processorFactory)
+       .transportFactory(transportFactory)
+       .protocolFactory(new TBinaryProtocol.Factory())
+diff --git a/src/shims/src/0.20/java/org/apache/hadoop/hive/shims/Hadoop20Shims.java b/src/shims/src/0.20/java/org/apache/hadoop/hive/shims/Hadoop20Shims.java
+index a6be13e..06c0217 100644
+--- a/src/shims/src/0.20/java/org/apache/hadoop/hive/shims/Hadoop20Shims.java
++++ b/src/shims/src/0.20/java/org/apache/hadoop/hive/shims/Hadoop20Shims.java
+@@ -556,6 +556,10 @@ public class Hadoop20Shims implements HadoopShims {
+ 
+   @Override
+   public UserGroupInformation createRemoteUser(String userName, List<String> groupNames) {
++    if (groupNames.isEmpty()) {
++      groupNames = new ArrayList<String>();
++      groupNames.add(userName);
++    }
+     return new UnixUserGroupInformation(userName, groupNames.toArray(new String[0]));
+   }
+ 
+-- 
+1.7.0.4
+

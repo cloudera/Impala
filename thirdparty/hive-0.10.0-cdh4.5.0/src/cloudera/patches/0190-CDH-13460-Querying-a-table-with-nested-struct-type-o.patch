@@ -1,0 +1,53 @@
+From 1fe6a6d9af75b83de0f5790730b6ae12238cd065 Mon Sep 17 00:00:00 2001
+From: Chaoyu Tang <ctang@cloudera.com>
+Date: Wed, 7 Aug 2013 22:46:09 -0400
+Subject: [PATCH 190/218] CDH-13460:Querying a table with nested struct type over JSON data results in errors
+
+---
+ .../hadoop/hive/serde2/lazy/LazySimpleSerDe.java   |    9 ++++++---
+ 1 files changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/src/serde/src/java/org/apache/hadoop/hive/serde2/lazy/LazySimpleSerDe.java b/src/serde/src/java/org/apache/hadoop/hive/serde2/lazy/LazySimpleSerDe.java
+index d0fcb00..b05f096 100644
+--- a/src/serde/src/java/org/apache/hadoop/hive/serde2/lazy/LazySimpleSerDe.java
++++ b/src/serde/src/java/org/apache/hadoop/hive/serde2/lazy/LazySimpleSerDe.java
+@@ -19,6 +19,7 @@
+ package org.apache.hadoop.hive.serde2.lazy;
+ 
+ import java.io.IOException;
++import java.util.ArrayList;
+ import java.util.Arrays;
+ import java.util.List;
+ import java.util.Map;
+@@ -35,11 +36,11 @@ import org.apache.hadoop.hive.serde2.SerDeStats;
+ import org.apache.hadoop.hive.serde2.objectinspector.ListObjectInspector;
+ import org.apache.hadoop.hive.serde2.objectinspector.MapObjectInspector;
+ import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
++import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector.Category;
+ import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector;
+ import org.apache.hadoop.hive.serde2.objectinspector.StructField;
+ import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
+ import org.apache.hadoop.hive.serde2.objectinspector.UnionObjectInspector;
+-import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector.Category;
+ import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory;
+ import org.apache.hadoop.hive.serde2.typeinfo.StructTypeInfo;
+ import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
+@@ -538,11 +539,13 @@ public class LazySimpleSerDe implements SerDe {
+       if (list == null) {
+         out.write(nullSequence.getBytes(), 0, nullSequence.getLength());
+       } else {
+-        for (int i = 0; i < list.size(); i++) {
++        List<Object> structFieldDataList = new ArrayList<Object>();
++        structFieldDataList.addAll(list);
++        for (int i = 0; i < structFieldDataList.size(); i++) {
+           if (i > 0) {
+             out.write(separator);
+           }
+-          serialize(out, list.get(i), fields.get(i).getFieldObjectInspector(),
++          serialize(out, structFieldDataList.get(i), fields.get(i).getFieldObjectInspector(),
+               separators, level + 1, nullSequence, escaped, escapeChar,
+               needsEscape);
+         }
+-- 
+1.7.0.4
+

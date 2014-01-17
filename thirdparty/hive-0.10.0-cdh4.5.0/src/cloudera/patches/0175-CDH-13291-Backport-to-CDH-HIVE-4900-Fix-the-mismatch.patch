@@ -1,0 +1,67 @@
+From 84ca585428f4ca9defbc409d3ab45b5b05213df4 Mon Sep 17 00:00:00 2001
+From: xzhang <xzhang@xzdt.(none)>
+Date: Thu, 25 Jul 2013 21:58:33 -0700
+Subject: [PATCH 175/218] CDH-13291: Backport to CDH: HIVE-4900: Fix the mismatched column names in package.jdo
+
+---
+ metastore/src/model/package.jdo |   16 +++++++++++-----
+ 1 files changed, 11 insertions(+), 5 deletions(-)
+
+diff --git a/src/metastore/src/model/package.jdo b/src/metastore/src/model/package.jdo
+index 40f6564..73d04f6 100644
+--- a/src/metastore/src/model/package.jdo
++++ b/src/metastore/src/model/package.jdo
+@@ -57,13 +57,13 @@
+ 
+     <class name="MFieldSchema" embedded-only="true" table="TYPE_FIELDS" detachable="true">
+       <field name="name">
+-        <column name="FIELD_NAME" length="128" jdbc-type="VARCHAR"/>
++        <column name="FNAME" length="128" jdbc-type="VARCHAR"/>
+       </field>
+       <field name="type" >
+-        <column name="FIELD_TYPE" length="4000" jdbc-type="VARCHAR" allows-null="false"/>
++        <column name="FTYPE" length="4000" jdbc-type="VARCHAR" allows-null="false"/>
+       </field>
+       <field name="comment" >
+-        <column name="COMMENT" length="4000" jdbc-type="VARCHAR" allows-null="true"/>
++        <column name="FCOMMENT" length="4000" jdbc-type="VARCHAR" allows-null="true"/>
+       </field>
+     </class>
+ 
+@@ -91,10 +91,13 @@
+           <embedded>
+             <field name="name">
+               <column name="FIELD_NAME" length="128" jdbc-type="VARCHAR"/>
+-              </field>
++            </field>
+             <field name="type">
+               <column name="FIELD_TYPE" length="767" jdbc-type="VARCHAR"  allows-null="false"/>
+             </field>
++            <field name="comment" >
++              <column name="COMMENT" length="256" jdbc-type="VARCHAR" allows-null="true"/>
++            </field>
+           </embedded>
+         </element>
+       </field>
+@@ -201,7 +204,7 @@
+ 
+     <class name="MOrder" embedded-only="true" table="SORT_ORDER" detachable="true">
+       <field name="col">
+-        <column name="COLUMN_NAME" length="128" jdbc-type="VARCHAR"/>
++        <column name="COL_NAME" length="128" jdbc-type="VARCHAR"/>
+       </field>
+       <field name="order">
+         <column name="ORDER" jdbc-type="INTEGER"  allows-null="false"/>
+@@ -228,6 +231,9 @@
+             <field name="type">
+               <column name="TYPE_NAME" length="4000" jdbc-type="VARCHAR"  allows-null="false"/>
+             </field>
++            <field name="comment">
++              <column name="COMMENT" length="256" jdbc-type="VARCHAR" allows-null="true"/>
++            </field>
+           </embedded>
+         </element>
+       </field>
+-- 
+1.7.0.4
+

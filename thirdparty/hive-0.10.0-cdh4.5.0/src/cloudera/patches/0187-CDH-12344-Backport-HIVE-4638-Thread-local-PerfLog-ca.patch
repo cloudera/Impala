@@ -1,0 +1,133 @@
+From a72fd352021b8183435d731d9660ee426cec83bc Mon Sep 17 00:00:00 2001
+From: Ashutosh Chauhan <hashutosh@apache.org>
+Date: Fri, 2 Aug 2013 04:58:34 +0000
+Subject: [PATCH 187/218] CDH-12344 : Backport HIVE-4638 : Thread local PerfLog can get shared by multiple hiveserver2 sessions (Prasad Mujumdar via Ashutosh Chauhan)
+
+git-svn-id: https://svn.apache.org/repos/asf/hive/trunk@1509544 13f79535-47bb-0310-9956-ffa450edef68
+---
+ .../org/apache/hadoop/hive/ql/log/PerfLogger.java  |   26 +++++--------------
+ .../hadoop/hive/ql/session/SessionState.java       |   26 ++++++++++++++++++++
+ 2 files changed, 33 insertions(+), 19 deletions(-)
+
+diff --git a/src/ql/src/java/org/apache/hadoop/hive/ql/log/PerfLogger.java b/src/ql/src/java/org/apache/hadoop/hive/ql/log/PerfLogger.java
+index c77eb88..340fbf4 100644
+--- a/src/ql/src/java/org/apache/hadoop/hive/ql/log/PerfLogger.java
++++ b/src/ql/src/java/org/apache/hadoop/hive/ql/log/PerfLogger.java
+@@ -23,11 +23,8 @@ import java.util.Map;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+-import org.apache.hadoop.hive.conf.HiveConf;
+-import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
+ import org.apache.hadoop.hive.ql.QueryPlan;
+ import org.apache.hadoop.hive.ql.session.SessionState;
+-import org.apache.hadoop.util.ReflectionUtils;
+ 
+ /**
+  * PerfLogger.
+@@ -55,7 +52,7 @@ public class PerfLogger {
+ 
+   static final private Log LOG = LogFactory.getLog(PerfLogger.class.getName());
+ 
+-  protected PerfLogger() {
++  public PerfLogger() {
+     // Use getPerfLogger to get an instance of PerfLogger
+   }
+ 
+@@ -68,26 +65,17 @@ public class PerfLogger {
+    *
+    * Use resetPerfLogger to require a new instance.  Useful at the beginning of execution.
+    *
+-   * @return  Tries to return an instance of the class whose name is configured in
+-   *          hive.exec.perf.logger, but if it can't it just returns an instance of
+-   *          the base PerfLogger class
++   * @return Session perflogger if there's a sessionstate, otherwise return the thread local instance
+    */
+   public static PerfLogger getPerfLogger(boolean resetPerfLogger) {
+-    if (perfLogger.get() == null || resetPerfLogger) {
+-      if (SessionState.get() == null) {
++    if (SessionState.get() == null) {
++      if (perfLogger.get() == null || resetPerfLogger) {
+         perfLogger.set(new PerfLogger());
+-      } else {
+-        HiveConf conf = SessionState.get().getConf();
+-        try {
+-          perfLogger.set((PerfLogger) ReflectionUtils.newInstance(conf.getClassByName(
+-              conf.getVar(ConfVars.HIVE_PERF_LOGGER)), conf));
+-        } catch (ClassNotFoundException e) {
+-          LOG.error("Performance Logger Class not found:" + e.getMessage());
+-          perfLogger.set(new PerfLogger());
+-        }
+       }
++      return perfLogger.get();
++    } else {
++      return SessionState.get().getPerfLogger(resetPerfLogger);
+     }
+-    return perfLogger.get();
+   }
+ 
+   /**
+diff --git a/src/ql/src/java/org/apache/hadoop/hive/ql/session/SessionState.java b/src/ql/src/java/org/apache/hadoop/hive/ql/session/SessionState.java
+index fb15981..7217a3c 100644
+--- a/src/ql/src/java/org/apache/hadoop/hive/ql/session/SessionState.java
++++ b/src/ql/src/java/org/apache/hadoop/hive/ql/session/SessionState.java
+@@ -42,18 +42,21 @@ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.hive.conf.HiveConf;
++import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
+ import org.apache.hadoop.hive.ql.MapRedStats;
+ import org.apache.hadoop.hive.ql.exec.FunctionInfo;
+ import org.apache.hadoop.hive.ql.exec.FunctionRegistry;
+ import org.apache.hadoop.hive.ql.exec.Utilities;
+ import org.apache.hadoop.hive.ql.history.HiveHistory;
+ import org.apache.hadoop.hive.ql.metadata.Hive;
++import org.apache.hadoop.hive.ql.log.PerfLogger;
+ import org.apache.hadoop.hive.ql.metadata.HiveException;
+ import org.apache.hadoop.hive.ql.metadata.HiveUtils;
+ import org.apache.hadoop.hive.ql.plan.HiveOperation;
+ import org.apache.hadoop.hive.ql.security.HiveAuthenticationProvider;
+ import org.apache.hadoop.hive.ql.security.authorization.HiveAuthorizationProvider;
+ import org.apache.hadoop.hive.ql.util.DosToUnix;
++import org.apache.hadoop.util.ReflectionUtils;
+ 
+ /**
+  * SessionState encapsulates common data associated with a session.
+@@ -143,6 +146,8 @@ public class SessionState {
+ 
+   private String currentDB;
+ 
++  private PerfLogger perfLogger;
++
+   /**
+    * Get the lineage state stored in this session.
+    *
+@@ -789,4 +794,25 @@ public class SessionState {
+       LOG.info("Error removing session resource dir " + resourceDir, e);
+     }
+   }
++
++  /**
++   * @param resetPerfLogger
++   * @return  Tries to return an instance of the class whose name is configured in
++   *          hive.exec.perf.logger, but if it can't it just returns an instance of
++   *          the base PerfLogger class
++
++   */
++  public PerfLogger getPerfLogger(boolean resetPerfLogger) {
++    if ((perfLogger == null) || resetPerfLogger) {
++      try {
++        perfLogger = (PerfLogger) ReflectionUtils.newInstance(conf.getClassByName(
++            conf.getVar(ConfVars.HIVE_PERF_LOGGER)), conf);
++      } catch (ClassNotFoundException e) {
++        LOG.error("Performance Logger Class not found:" + e.getMessage());
++        perfLogger = new PerfLogger();
++      }
++    }
++    return perfLogger;
++  }
++
+ }
+-- 
+1.7.0.4
+

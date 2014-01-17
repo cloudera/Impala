@@ -1,0 +1,26 @@
+From 4d7e0c37af866c4ecfb598b599c507ab7cba7730 Mon Sep 17 00:00:00 2001
+From: Brock Noland <brock@apache.org>
+Date: Tue, 4 Jun 2013 16:52:56 -0700
+Subject: [PATCH 130/218] CLOUDERA-BUILD: CDH-12514 Hive test doesn't copy target byte code properties
+
+---
+ build.xml |    3 +++
+ 1 files changed, 3 insertions(+), 0 deletions(-)
+
+diff --git a/src/build.xml b/src/build.xml
+index 2a9fdc9..c18ec7a 100644
+--- a/src/build.xml
++++ b/src/build.xml
+@@ -151,6 +151,9 @@
+       <subant target="@{target}">
+ 	<property name="thrift.home" value="${thrift.home}"/>
+         <property name="build.dir.hive" location="${build.dir.hive}"/>
++        <property name="sourceJavaVersion" value="${sourceJavaVersion}" />
++        <property name="targetJavaVersion" value="${targetJavaVersion}" />
++        <property name="javaBootClasspath" value="${javaBootClasspath}" />
+         <filelist dir="." files="ql/build.xml,contrib/build.xml,hbase-handler/build.xml,hwi/build.xml,jdbc/build.xml,metastore/build.xml,odbc/build.xml,serde/build.xml,service/build.xml"/>
+       </subant>
+     </sequential>
+-- 
+1.7.0.4
+

@@ -1,0 +1,70 @@
+From edc4a258a783cabddf9d89b1bb3f224f55dbd91a Mon Sep 17 00:00:00 2001
+From: xzhang <xzhang@xzdt.(none)>
+Date: Thu, 6 Jun 2013 21:05:42 -0700
+Subject: [PATCH 134/218] Revert "hack to build test case with jdk7"
+
+This reverts commit f1191a8eb146ee251d2dd5e76f2caa068f36f32c.
+---
+ build.properties |    2 +-
+ build.xml        |   11 ++++++++++-
+ 2 files changed, 11 insertions(+), 2 deletions(-)
+
+diff --git a/src/build.properties b/src/build.properties
+index 39d1e43..58935a1 100644
+--- a/src/build.properties
++++ b/src/build.properties
+@@ -20,7 +20,7 @@ version=0.10.0-cdh4.4.0-SNAPSHOT
+ year=2011
+ 
+ javac.debug=on
+-javac.version=1.7
++javac.version=1.6
+ javac.optimize=on
+ javac.deprecation=off
+ javac.args=
+diff --git a/src/build.xml b/src/build.xml
+index 84227c7..c18ec7a 100644
+--- a/src/build.xml
++++ b/src/build.xml
+@@ -151,6 +151,9 @@
+       <subant target="@{target}">
+ 	<property name="thrift.home" value="${thrift.home}"/>
+         <property name="build.dir.hive" location="${build.dir.hive}"/>
++        <property name="sourceJavaVersion" value="${sourceJavaVersion}" />
++        <property name="targetJavaVersion" value="${targetJavaVersion}" />
++        <property name="javaBootClasspath" value="${javaBootClasspath}" />
+         <filelist dir="." files="ql/build.xml,contrib/build.xml,hbase-handler/build.xml,hwi/build.xml,jdbc/build.xml,metastore/build.xml,odbc/build.xml,serde/build.xml,service/build.xml"/>
+       </subant>
+     </sequential>
+@@ -184,6 +187,9 @@
+       <subant target="@{target}">
+         <property name="build.dir.hive" location="${build.dir.hive}"/>
+         <property name="is-offline" value="${is-offline}"/>
++        <property name="sourceJavaVersion" value="${sourceJavaVersion}" />
++        <property name="targetJavaVersion" value="${targetJavaVersion}" />
++        <property name="javaBootClasspath" value="${javaBootClasspath}" />
+         <filelist dir="." files="shims/build.xml,common/build.xml,serde/build.xml,metastore/build.xml,ql/build.xml,contrib/build.xml,service/build.xml,cli/build.xml,jdbc/build.xml,beeline/build.xml,hwi/build.xml,hbase-handler/build.xml,pdk/build.xml,builtins/build.xml,testutils/build.xml"/>
+       </subant>
+     </sequential>
+@@ -220,7 +226,7 @@
+ 
+   <!-- JVM version validation -->
+   <target name="jvm-check">
+-      <property name="javaVersion" value="1.7"/>
++      <property name="javaVersion" value="1.6"/>
+ 
+       <property name="requiredJavaVersion" value="xx${javaVersion}"/>
+       <property name="currentJavaVersion" value="xx${java.version}"/>
+@@ -377,6 +383,9 @@
+         <ant antfile="@{file}" target="test" inheritAll="false" inheritRefs="true">
+           <property name="build.dir.hive" location="${build.dir.hive}"/>
+           <property name="is-offline" value="${is-offline}"/>
++          <property name="sourceJavaVersion" value="${sourceJavaVersion}" />
++          <property name="targetJavaVersion" value="${targetJavaVersion}" />
++          <property name="javaBootClasspath" value="${javaBootClasspath}" />
+         </ant>
+       </sequential>
+     </for>
+-- 
+1.7.0.4
+

@@ -1,0 +1,2265 @@
+From 3cb629608d2fdce7da0fc2125826e190da1dd262 Mon Sep 17 00:00:00 2001
+From: Namit Jain <namit@apache.org>
+Date: Tue, 26 Mar 2013 04:36:42 +0000
+Subject: [PATCH 145/218] Backport:HIVE-4219 explain dependency does not capture the input table
+
+---
+ .../hive/ql/optimizer/SimpleFetchOptimizer.java    |    4 +-
+ .../queries/clientpositive/explain_dependency2.q   |   31 ++++++++
+ .../clientnegative/alter_partition_offline.q.out   |    2 +
+ .../results/clientnegative/protectmode_part.q.out  |    6 ++
+ ql/src/test/results/clientpositive/alter3.q.out    |    8 ++
+ ql/src/test/results/clientpositive/alter5.q.out    |    4 +
+ .../alter_partition_protect_mode.q.out             |    4 +
+ .../clientpositive/alter_rename_partition.q.out    |   12 +++
+ ql/src/test/results/clientpositive/escape1.q.out   |  Bin 108776 -> 108841 bytes
+ ql/src/test/results/clientpositive/escape2.q.out   |  Bin 832276 -> 832341 bytes
+ .../clientpositive/exim_02_00_part_empty.q.out     |    2 +
+ .../test/results/clientpositive/exim_02_part.q.out |    2 +
+ .../results/clientpositive/exim_04_all_part.q.out  |    2 +
+ .../clientpositive/exim_04_evolved_parts.q.out     |    2 +
+ .../results/clientpositive/exim_05_some_part.q.out |    2 +
+ .../results/clientpositive/exim_06_one_part.q.out  |    2 +
+ .../exim_07_all_part_over_nonoverlap.q.out         |    2 +
+ .../exim_09_part_spec_nonoverlap.q.out             |    2 +
+ .../clientpositive/exim_15_external_part.q.out     |    6 ++
+ .../clientpositive/exim_16_part_external.q.out     |    4 +
+ .../clientpositive/exim_17_part_managed.q.out      |    4 +
+ .../clientpositive/exim_18_part_external.q.out     |    4 +
+ .../exim_19_00_part_external_location.q.out        |    4 +
+ .../exim_19_part_external_location.q.out           |    4 +
+ .../exim_20_part_managed_location.q.out            |    4 +
+ .../exim_23_import_part_authsuccess.q.out          |    2 +
+ .../clientpositive/explain_dependency2.q.out       |   73 ++++++++++++++++++++
+ .../clientpositive/filter_join_breaktask2.q.out    |    8 ++
+ ql/src/test/results/clientpositive/groupby11.q.out |    4 +
+ .../test/results/clientpositive/index_bitmap.q.out |    2 +
+ .../results/clientpositive/index_compact.q.out     |    2 +
+ ql/src/test/results/clientpositive/input12.q.out   |    2 +
+ .../results/clientpositive/input12_hadoop20.q.out  |    2 +
+ ql/src/test/results/clientpositive/input13.q.out   |    2 +
+ ql/src/test/results/clientpositive/input28.q.out   |    2 +
+ .../test/results/clientpositive/input_part0.q.out  |    2 +
+ .../test/results/clientpositive/input_part10.q.out |    2 +
+ .../test/results/clientpositive/input_part3.q.out  |    2 +
+ .../test/results/clientpositive/input_part4.q.out  |    2 +
+ .../test/results/clientpositive/input_part8.q.out  |    2 +
+ .../results/clientpositive/insertexternal1.q.out   |    2 +
+ .../results/clientpositive/load_dyn_part1.q.out    |    4 +
+ .../results/clientpositive/load_dyn_part10.q.out   |    2 +
+ .../results/clientpositive/load_dyn_part11.q.out   |    4 +
+ .../results/clientpositive/load_dyn_part12.q.out   |    2 +
+ .../results/clientpositive/load_dyn_part13.q.out   |    2 +
+ .../results/clientpositive/load_dyn_part3.q.out    |    2 +
+ .../results/clientpositive/load_dyn_part4.q.out    |    4 +
+ .../results/clientpositive/load_dyn_part5.q.out    |    4 +
+ .../results/clientpositive/load_dyn_part6.q.out    |    4 +
+ .../results/clientpositive/load_dyn_part7.q.out    |    2 +
+ .../results/clientpositive/load_dyn_part8.q.out    |    2 +
+ .../results/clientpositive/load_dyn_part9.q.out    |    2 +
+ ql/src/test/results/clientpositive/loadpart1.q.out |   10 +++
+ ql/src/test/results/clientpositive/merge4.q.out    |    6 ++
+ ql/src/test/results/clientpositive/mi.q.out        |    4 +
+ .../test/results/clientpositive/nonmr_fetch.q.out  |   14 ++++
+ .../test/results/clientpositive/null_column.q.out  |    2 +
+ .../partition_wise_fileformat10.q.out              |    4 +
+ .../partition_wise_fileformat11.q.out              |    6 ++
+ .../partition_wise_fileformat12.q.out              |    8 ++
+ .../partition_wise_fileformat2.q.out               |    4 +
+ .../results/clientpositive/ppd_multi_insert.q.out  |    4 +
+ .../results/clientpositive/ppr_pushdown2.q.out     |   22 ++++++
+ .../results/clientpositive/ppr_pushdown3.q.out     |    2 +
+ .../test/results/clientpositive/protectmode.q.out  |    8 ++
+ ql/src/test/results/clientpositive/stats0.q.out    |    4 +
+ ql/src/test/results/clientpositive/stats3.q.out    |   10 +++
+ ql/src/test/results/clientpositive/stats4.q.out    |    4 +
+ 69 files changed, 373 insertions(+), 1 deletions(-)
+ create mode 100644 ql/src/test/queries/clientpositive/explain_dependency2.q
+ create mode 100644 ql/src/test/results/clientpositive/explain_dependency2.q.out
+
+diff --git a/src/ql/src/java/org/apache/hadoop/hive/ql/optimizer/SimpleFetchOptimizer.java b/src/ql/src/java/org/apache/hadoop/hive/ql/optimizer/SimpleFetchOptimizer.java
+index 2dfe338..f7c1e61 100644
+--- a/src/ql/src/java/org/apache/hadoop/hive/ql/optimizer/SimpleFetchOptimizer.java
++++ b/src/ql/src/java/org/apache/hadoop/hive/ql/optimizer/SimpleFetchOptimizer.java
+@@ -217,7 +217,9 @@ public class SimpleFetchOptimizer implements Transform {
+         listP.add(partition.getPartitionPath().toString());
+         partP.add(Utilities.getPartitionDesc(partition));
+       }
+-      TableDesc table = Utilities.getTableDesc(partsList.getSourceTable());
++      Table sourceTable = partsList.getSourceTable();
++      inputs.add(new ReadEntity(sourceTable));
++      TableDesc table = Utilities.getTableDesc(sourceTable);
+       FetchWork work = new FetchWork(listP, partP, table);
+       if (!work.getPartDesc().isEmpty()) {
+         PartitionDesc part0 = work.getPartDesc().get(0);
+diff --git a/src/ql/src/test/queries/clientpositive/explain_dependency2.q b/src/ql/src/test/queries/clientpositive/explain_dependency2.q
+new file mode 100644
+index 0000000..88d4464
+--- /dev/null
++++ b/src/ql/src/test/queries/clientpositive/explain_dependency2.q
+@@ -0,0 +1,31 @@
++-- This test is used for testing EXPLAIN DEPENDENCY command
++
++-- select from a table which does not involve a map-reduce job
++EXPLAIN DEPENDENCY SELECT * FROM src;
++
++-- select from a table which involves a map-reduce job
++EXPLAIN DEPENDENCY SELECT count(*) FROM src;
++
++-- select from a partitioned table which does not involve a map-reduce job
++-- and some partitions are being selected
++EXPLAIN DEPENDENCY SELECT * FROM srcpart where ds is not null;
++
++-- select from a partitioned table which does not involve a map-reduce job
++-- and none of the partitions are being selected
++EXPLAIN DEPENDENCY SELECT * FROM srcpart where ds = '1';
++
++-- select from a partitioned table which involves a map-reduce job
++-- and some partitions are being selected
++EXPLAIN DEPENDENCY SELECT count(*) FROM srcpart where ds is not null;
++
++-- select from a partitioned table which involves a map-reduce job
++-- and none of the partitions are being selected
++EXPLAIN DEPENDENCY SELECT count(*) FROM srcpart where ds = '1';
++
++create table tstsrcpart like srcpart;
++
++-- select from a partitioned table with no partitions which does not involve a map-reduce job
++EXPLAIN DEPENDENCY SELECT * FROM tstsrcpart where ds is not null;
++
++-- select from a partitioned table with no partitions which involves a map-reduce job
++EXPLAIN DEPENDENCY SELECT count(*) FROM tstsrcpart where ds is not null;
+diff --git a/src/ql/src/test/results/clientnegative/alter_partition_offline.q.out b/src/ql/src/test/results/clientnegative/alter_partition_offline.q.out
+index 4354947..cc9816f 100644
+--- a/src/ql/src/test/results/clientnegative/alter_partition_offline.q.out
++++ b/src/ql/src/test/results/clientnegative/alter_partition_offline.q.out
+@@ -35,11 +35,13 @@ POSTHOOK: Output: default@alter_part_offline@year=1996/month=10
+ POSTHOOK: Output: default@alter_part_offline@year=1996/month=12
+ PREHOOK: query: select * from alter_part_offline where year = '1996'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@alter_part_offline
+ PREHOOK: Input: default@alter_part_offline@year=1996/month=10
+ PREHOOK: Input: default@alter_part_offline@year=1996/month=12
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from alter_part_offline where year = '1996'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@alter_part_offline
+ POSTHOOK: Input: default@alter_part_offline@year=1996/month=10
+ POSTHOOK: Input: default@alter_part_offline@year=1996/month=12
+ #### A masked pattern was here ####
+diff --git a/src/ql/src/test/results/clientnegative/protectmode_part.q.out b/src/ql/src/test/results/clientnegative/protectmode_part.q.out
+index 408eee1..3d3c736 100644
+--- a/src/ql/src/test/results/clientnegative/protectmode_part.q.out
++++ b/src/ql/src/test/results/clientnegative/protectmode_part.q.out
+@@ -27,18 +27,22 @@ POSTHOOK: Input: default@tbl_protectmode3
+ POSTHOOK: Output: default@tbl_protectmode3@p=p2
+ PREHOOK: query: select * from tbl_protectmode3 where p='p1'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@tbl_protectmode3
+ PREHOOK: Input: default@tbl_protectmode3@p=p1
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from tbl_protectmode3 where p='p1'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@tbl_protectmode3
+ POSTHOOK: Input: default@tbl_protectmode3@p=p1
+ #### A masked pattern was here ####
+ PREHOOK: query: select * from tbl_protectmode3 where p='p2'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@tbl_protectmode3
+ PREHOOK: Input: default@tbl_protectmode3@p=p2
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from tbl_protectmode3 where p='p2'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@tbl_protectmode3
+ POSTHOOK: Input: default@tbl_protectmode3@p=p2
+ #### A masked pattern was here ####
+ PREHOOK: query: alter table tbl_protectmode3 partition (p='p1') enable offline
+@@ -52,10 +56,12 @@ POSTHOOK: Input: default@tbl_protectmode3@p=p1
+ POSTHOOK: Output: default@tbl_protectmode3@p=p1
+ PREHOOK: query: select * from tbl_protectmode3 where p='p2'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@tbl_protectmode3
+ PREHOOK: Input: default@tbl_protectmode3@p=p2
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from tbl_protectmode3 where p='p2'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@tbl_protectmode3
+ POSTHOOK: Input: default@tbl_protectmode3@p=p2
+ #### A masked pattern was here ####
+ FAILED: SemanticException [Error 10113]: Query against an offline table or partition Table tbl_protectmode3 Partition p=p1
+diff --git a/src/ql/src/test/results/clientpositive/alter3.q.out b/src/ql/src/test/results/clientpositive/alter3.q.out
+index 5f3b0b4..287873d 100644
+--- a/src/ql/src/test/results/clientpositive/alter3.q.out
++++ b/src/ql/src/test/results/clientpositive/alter3.q.out
+@@ -30,10 +30,12 @@ POSTHOOK: Output: default@alter3@pcol1=test_part%3A/pcol2=test_part%3A
+ POSTHOOK: Lineage: alter3 PARTITION(pcol1=test_part:,pcol2=test_part:).col1 SIMPLE [(alter3_src)alter3_src.FieldSchema(name:col1, type:string, comment:null), ]
+ PREHOOK: query: select * from alter3 where pcol1='test_part:' and pcol2='test_part:'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@alter3
+ PREHOOK: Input: default@alter3@pcol1=test_part%3A/pcol2=test_part%3A
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from alter3 where pcol1='test_part:' and pcol2='test_part:'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@alter3
+ POSTHOOK: Input: default@alter3@pcol1=test_part%3A/pcol2=test_part%3A
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: alter3 PARTITION(pcol1=test_part:,pcol2=test_part:).col1 SIMPLE [(alter3_src)alter3_src.FieldSchema(name:col1, type:string, comment:null), ]
+@@ -75,10 +77,12 @@ pcol2	string
+ #### A masked pattern was here ####
+ PREHOOK: query: select * from alter3_renamed where pcol1='test_part:' and pcol2='test_part:'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@alter3_renamed
+ PREHOOK: Input: default@alter3_renamed@pcol1=test_part%3A/pcol2=test_part%3A
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from alter3_renamed where pcol1='test_part:' and pcol2='test_part:'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@alter3_renamed
+ POSTHOOK: Input: default@alter3_renamed@pcol1=test_part%3A/pcol2=test_part%3A
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: alter3 PARTITION(pcol1=test_part:,pcol2=test_part:).col1 SIMPLE [(alter3_src)alter3_src.FieldSchema(name:col1, type:string, comment:null), ]
+@@ -234,10 +238,12 @@ POSTHOOK: Lineage: alter3 PARTITION(pcol1=test_part:,pcol2=test_part:).col1 SIMP
+ POSTHOOK: Lineage: alter3_like PARTITION(pcol1=test_part:,pcol2=test_part:).col1 SIMPLE [(alter3_src)alter3_src.FieldSchema(name:col1, type:string, comment:null), ]
+ PREHOOK: query: SELECT * FROM alter3 WHERE pcol1='test_part:' AND pcol2='test_part:'
+ PREHOOK: type: QUERY
++PREHOOK: Input: alter3_db@alter3
+ PREHOOK: Input: alter3_db@alter3@pcol1=test_part%3A/pcol2=test_part%3A
+ #### A masked pattern was here ####
+ POSTHOOK: query: SELECT * FROM alter3 WHERE pcol1='test_part:' AND pcol2='test_part:'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: alter3_db@alter3
+ POSTHOOK: Input: alter3_db@alter3@pcol1=test_part%3A/pcol2=test_part%3A
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: alter3 PARTITION(pcol1=test_part:,pcol2=test_part:).col1 SIMPLE [(alter3_src)alter3_src.FieldSchema(name:col1, type:string, comment:null), ]
+@@ -287,10 +293,12 @@ pcol2	string
+ #### A masked pattern was here ####
+ PREHOOK: query: SELECT * FROM alter3_renamed WHERE pcol1='test_part:' AND pcol2='test_part:'
+ PREHOOK: type: QUERY
++PREHOOK: Input: alter3_db@alter3_renamed
+ PREHOOK: Input: alter3_db@alter3_renamed@pcol1=test_part%3A/pcol2=test_part%3A
+ #### A masked pattern was here ####
+ POSTHOOK: query: SELECT * FROM alter3_renamed WHERE pcol1='test_part:' AND pcol2='test_part:'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: alter3_db@alter3_renamed
+ POSTHOOK: Input: alter3_db@alter3_renamed@pcol1=test_part%3A/pcol2=test_part%3A
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: alter3 PARTITION(pcol1=test_part:,pcol2=test_part:).col1 SIMPLE [(alter3_src)alter3_src.FieldSchema(name:col1, type:string, comment:null), ]
+diff --git a/src/ql/src/test/results/clientpositive/alter5.q.out b/src/ql/src/test/results/clientpositive/alter5.q.out
+index e60e7ca..13cbe1b 100644
+--- a/src/ql/src/test/results/clientpositive/alter5.q.out
++++ b/src/ql/src/test/results/clientpositive/alter5.q.out
+@@ -56,10 +56,12 @@ POSTHOOK: Output: default@alter5@dt=a
+ POSTHOOK: Lineage: alter5 PARTITION(dt=a).col1 SIMPLE [(alter5_src)alter5_src.FieldSchema(name:col1, type:string, comment:null), ]
+ PREHOOK: query: select * from alter5 where dt='a'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@alter5
+ PREHOOK: Input: default@alter5@dt=a
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from alter5 where dt='a'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@alter5
+ POSTHOOK: Input: default@alter5@dt=a
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: alter5 PARTITION(dt=a).col1 SIMPLE [(alter5_src)alter5_src.FieldSchema(name:col1, type:string, comment:null), ]
+@@ -178,10 +180,12 @@ POSTHOOK: Lineage: alter5 PARTITION(dt=a).col1 SIMPLE [(alter5_src)alter5_src.Fi
+ POSTHOOK: Lineage: alter5 PARTITION(dt=a).col1 SIMPLE [(alter5_src)alter5_src.FieldSchema(name:col1, type:string, comment:null), ]
+ PREHOOK: query: select * from alter5 where dt='a'
+ PREHOOK: type: QUERY
++PREHOOK: Input: alter5_db@alter5
+ PREHOOK: Input: alter5_db@alter5@dt=a
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from alter5 where dt='a'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: alter5_db@alter5
+ POSTHOOK: Input: alter5_db@alter5@dt=a
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: alter5 PARTITION(dt=a).col1 SIMPLE [(alter5_src)alter5_src.FieldSchema(name:col1, type:string, comment:null), ]
+diff --git a/src/ql/src/test/results/clientpositive/alter_partition_protect_mode.q.out b/src/ql/src/test/results/clientpositive/alter_partition_protect_mode.q.out
+index 1ec5fdb..45cfe20 100644
+--- a/src/ql/src/test/results/clientpositive/alter_partition_protect_mode.q.out
++++ b/src/ql/src/test/results/clientpositive/alter_partition_protect_mode.q.out
+@@ -51,11 +51,13 @@ POSTHOOK: Output: default@alter_part_protect_mode@year=1996/month=10
+ POSTHOOK: Output: default@alter_part_protect_mode@year=1996/month=12
+ PREHOOK: query: select * from alter_part_protect_mode where year = '1996'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@alter_part_protect_mode
+ PREHOOK: Input: default@alter_part_protect_mode@year=1996/month=10
+ PREHOOK: Input: default@alter_part_protect_mode@year=1996/month=12
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from alter_part_protect_mode where year = '1996'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@alter_part_protect_mode
+ POSTHOOK: Input: default@alter_part_protect_mode@year=1996/month=10
+ POSTHOOK: Input: default@alter_part_protect_mode@year=1996/month=12
+ #### A masked pattern was here ####
+@@ -91,10 +93,12 @@ POSTHOOK: Input: default@alter_part_protect_mode@year=1995/month=09
+ POSTHOOK: Output: default@alter_part_protect_mode@year=1995/month=09
+ PREHOOK: query: select * from alter_part_protect_mode where year = '1995'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@alter_part_protect_mode
+ PREHOOK: Input: default@alter_part_protect_mode@year=1995/month=09
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from alter_part_protect_mode where year = '1995'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@alter_part_protect_mode
+ POSTHOOK: Input: default@alter_part_protect_mode@year=1995/month=09
+ #### A masked pattern was here ####
+ 1	11	1995	09
+diff --git a/src/ql/src/test/results/clientpositive/alter_rename_partition.q.out b/src/ql/src/test/results/clientpositive/alter_rename_partition.q.out
+index 10223b5..c6fa3f9 100644
+--- a/src/ql/src/test/results/clientpositive/alter_rename_partition.q.out
++++ b/src/ql/src/test/results/clientpositive/alter_rename_partition.q.out
+@@ -47,10 +47,12 @@ POSTHOOK: Output: default@alter_rename_partition@pcol1=old_part1%3A/pcol2=old_pa
+ POSTHOOK: Lineage: alter_rename_partition PARTITION(pcol1=old_part1:,pcol2=old_part2:).col1 SIMPLE [(alter_rename_partition_src)alter_rename_partition_src.FieldSchema(name:col1, type:string, comment:null), ]
+ PREHOOK: query: select * from alter_rename_partition where pcol1='old_part1:' and pcol2='old_part2:'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@alter_rename_partition
+ PREHOOK: Input: default@alter_rename_partition@pcol1=old_part1%3A/pcol2=old_part2%3A
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from alter_rename_partition where pcol1='old_part1:' and pcol2='old_part2:'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@alter_rename_partition
+ POSTHOOK: Input: default@alter_rename_partition@pcol1=old_part1%3A/pcol2=old_part2%3A
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: alter_rename_partition PARTITION(pcol1=old_part1:,pcol2=old_part2:).col1 SIMPLE [(alter_rename_partition_src)alter_rename_partition_src.FieldSchema(name:col1, type:string, comment:null), ]
+@@ -79,17 +81,21 @@ POSTHOOK: Lineage: alter_rename_partition PARTITION(pcol1=old_part1:,pcol2=old_p
+ pcol1=new_part1%3A/pcol2=new_part2%3A
+ PREHOOK: query: select * from alter_rename_partition where pcol1='old_part1:' and pcol2='old_part2:'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@alter_rename_partition
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from alter_rename_partition where pcol1='old_part1:' and pcol2='old_part2:'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@alter_rename_partition
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: alter_rename_partition PARTITION(pcol1=old_part1:,pcol2=old_part2:).col1 SIMPLE [(alter_rename_partition_src)alter_rename_partition_src.FieldSchema(name:col1, type:string, comment:null), ]
+ PREHOOK: query: select * from alter_rename_partition where pcol1='new_part1:' and pcol2='new_part2:'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@alter_rename_partition
+ PREHOOK: Input: default@alter_rename_partition@pcol1=new_part1%3A/pcol2=new_part2%3A
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from alter_rename_partition where pcol1='new_part1:' and pcol2='new_part2:'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@alter_rename_partition
+ POSTHOOK: Input: default@alter_rename_partition@pcol1=new_part1%3A/pcol2=new_part2%3A
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: alter_rename_partition PARTITION(pcol1=old_part1:,pcol2=old_part2:).col1 SIMPLE [(alter_rename_partition_src)alter_rename_partition_src.FieldSchema(name:col1, type:string, comment:null), ]
+@@ -182,10 +188,12 @@ POSTHOOK: Lineage: alter_rename_partition PARTITION(pcol1=old_part1:,pcol2=old_p
+ POSTHOOK: Lineage: alter_rename_partition PARTITION(pcol1=old_part1:,pcol2=old_part2:).col1 SIMPLE [(alter_rename_partition_src)alter_rename_partition_src.FieldSchema(name:col1, type:string, comment:null), ]
+ PREHOOK: query: SELECT * FROM alter_rename_partition WHERE pcol1='old_part1:' AND pcol2='old_part2:'
+ PREHOOK: type: QUERY
++PREHOOK: Input: alter_rename_partition_db@alter_rename_partition
+ PREHOOK: Input: alter_rename_partition_db@alter_rename_partition@pcol1=old_part1%3A/pcol2=old_part2%3A
+ #### A masked pattern was here ####
+ POSTHOOK: query: SELECT * FROM alter_rename_partition WHERE pcol1='old_part1:' AND pcol2='old_part2:'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: alter_rename_partition_db@alter_rename_partition
+ POSTHOOK: Input: alter_rename_partition_db@alter_rename_partition@pcol1=old_part1%3A/pcol2=old_part2%3A
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: alter_rename_partition PARTITION(pcol1=old_part1:,pcol2=old_part2:).col1 SIMPLE [(alter_rename_partition_src)alter_rename_partition_src.FieldSchema(name:col1, type:string, comment:null), ]
+@@ -217,18 +225,22 @@ POSTHOOK: Lineage: alter_rename_partition PARTITION(pcol1=old_part1:,pcol2=old_p
+ pcol1=new_part1%3A/pcol2=new_part2%3A
+ PREHOOK: query: SELECT * FROM alter_rename_partition WHERE pcol1='old_part1:' and pcol2='old_part2:'
+ PREHOOK: type: QUERY
++PREHOOK: Input: alter_rename_partition_db@alter_rename_partition
+ #### A masked pattern was here ####
+ POSTHOOK: query: SELECT * FROM alter_rename_partition WHERE pcol1='old_part1:' and pcol2='old_part2:'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: alter_rename_partition_db@alter_rename_partition
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: alter_rename_partition PARTITION(pcol1=old_part1:,pcol2=old_part2:).col1 SIMPLE [(alter_rename_partition_src)alter_rename_partition_src.FieldSchema(name:col1, type:string, comment:null), ]
+ POSTHOOK: Lineage: alter_rename_partition PARTITION(pcol1=old_part1:,pcol2=old_part2:).col1 SIMPLE [(alter_rename_partition_src)alter_rename_partition_src.FieldSchema(name:col1, type:string, comment:null), ]
+ PREHOOK: query: SELECT * FROM alter_rename_partition WHERE pcol1='new_part1:' and pcol2='new_part2:'
+ PREHOOK: type: QUERY
++PREHOOK: Input: alter_rename_partition_db@alter_rename_partition
+ PREHOOK: Input: alter_rename_partition_db@alter_rename_partition@pcol1=new_part1%3A/pcol2=new_part2%3A
+ #### A masked pattern was here ####
+ POSTHOOK: query: SELECT * FROM alter_rename_partition WHERE pcol1='new_part1:' and pcol2='new_part2:'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: alter_rename_partition_db@alter_rename_partition
+ POSTHOOK: Input: alter_rename_partition_db@alter_rename_partition@pcol1=new_part1%3A/pcol2=new_part2%3A
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: alter_rename_partition PARTITION(pcol1=old_part1:,pcol2=old_part2:).col1 SIMPLE [(alter_rename_partition_src)alter_rename_partition_src.FieldSchema(name:col1, type:string, comment:null), ]
+diff --git a/src/ql/src/test/results/clientpositive/escape1.q.out b/src/ql/src/test/results/clientpositive/escape1.q.out
+index 95ada2e1ad616d83e718a0ea426aab404e789e47..6c6ea1cab915fb2916bdc7171ba8b908ac6202d1 100644
+GIT binary patch
+delta 44
+zcmV+{0Mq~I(FUo~2C&SElmGq-lkANllPmuVliN=rvt>Wg6_bnw4YNvBB{j3<)dSNL
+Ctrigg
+
+delta 52
+zcmZ2^iS5Njwhd>xCN~IiPtN(zJ^8l3;^dkCxi=Ts9}}J2!^%6^E7Srcxp`gaL6gmD
+I*O)H@0F}8H%m4rY
+
+diff --git a/src/ql/src/test/results/clientpositive/escape2.q.out b/src/ql/src/test/results/clientpositive/escape2.q.out
+index b7d3e603a7d4bc615c17b8d4230feb12d628f836..df54dd7d1ae880afb549d43b54918d6772219c12 100644
+GIT binary patch
+delta 93
+zcmbR8%;@SfqYa<Brrl@c+H7YpCpLL~m%wDMg{IRB6d1WDpNUYMyzW2G<_Do$O`5r{
+mwR2x%1Y#y2W(HywAZ7((HXvpPVh$kY1Y)l3+}F4{?*agMF(y?2
+
+delta 71
+zcmccm%xKCpqYa<BCU4;6+pN%SFV@_!u)Sd+BM>tIF*6Xe05K~NvjH(X5OV-AClGT1
+MG57X{g*;aU0jqi+y8r+H
+
+diff --git a/src/ql/src/test/results/clientpositive/exim_02_00_part_empty.q.out b/src/ql/src/test/results/clientpositive/exim_02_00_part_empty.q.out
+index d8d840a..0ab9e7d 100644
+--- a/src/ql/src/test/results/clientpositive/exim_02_00_part_empty.q.out
++++ b/src/ql/src/test/results/clientpositive/exim_02_00_part_empty.q.out
+@@ -63,9 +63,11 @@ partitionColumns:struct partition_columns { string emp_country, string emp_state
+ #### A masked pattern was here ####
+ PREHOOK: query: select * from exim_employee
+ PREHOOK: type: QUERY
++PREHOOK: Input: importer@exim_employee
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from exim_employee
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: importer@exim_employee
+ #### A masked pattern was here ####
+ PREHOOK: query: drop table exim_employee
+ PREHOOK: type: DROPTABLE
+diff --git a/src/ql/src/test/results/clientpositive/exim_02_part.q.out b/src/ql/src/test/results/clientpositive/exim_02_part.q.out
+index 104a1d6..208a4bc 100644
+--- a/src/ql/src/test/results/clientpositive/exim_02_part.q.out
++++ b/src/ql/src/test/results/clientpositive/exim_02_part.q.out
+@@ -80,10 +80,12 @@ minFileSize:11
+ #### A masked pattern was here ####
+ PREHOOK: query: select * from exim_employee
+ PREHOOK: type: QUERY
++PREHOOK: Input: importer@exim_employee
+ PREHOOK: Input: importer@exim_employee@emp_country=in/emp_state=tn
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from exim_employee
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: importer@exim_employee
+ POSTHOOK: Input: importer@exim_employee@emp_country=in/emp_state=tn
+ #### A masked pattern was here ####
+ 1	in	tn
+diff --git a/src/ql/src/test/results/clientpositive/exim_04_all_part.q.out b/src/ql/src/test/results/clientpositive/exim_04_all_part.q.out
+index 6a3acb3..363bea2 100644
+--- a/src/ql/src/test/results/clientpositive/exim_04_all_part.q.out
++++ b/src/ql/src/test/results/clientpositive/exim_04_all_part.q.out
+@@ -116,6 +116,7 @@ minFileSize:11
+ #### A masked pattern was here ####
+ PREHOOK: query: select * from exim_employee
+ PREHOOK: type: QUERY
++PREHOOK: Input: importer@exim_employee
+ PREHOOK: Input: importer@exim_employee@emp_country=in/emp_state=ka
+ PREHOOK: Input: importer@exim_employee@emp_country=in/emp_state=tn
+ PREHOOK: Input: importer@exim_employee@emp_country=us/emp_state=ka
+@@ -123,6 +124,7 @@ PREHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from exim_employee
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: importer@exim_employee
+ POSTHOOK: Input: importer@exim_employee@emp_country=in/emp_state=ka
+ POSTHOOK: Input: importer@exim_employee@emp_country=in/emp_state=tn
+ POSTHOOK: Input: importer@exim_employee@emp_country=us/emp_state=ka
+diff --git a/src/ql/src/test/results/clientpositive/exim_04_evolved_parts.q.out b/src/ql/src/test/results/clientpositive/exim_04_evolved_parts.q.out
+index e510833..4715dd5 100644
+--- a/src/ql/src/test/results/clientpositive/exim_04_evolved_parts.q.out
++++ b/src/ql/src/test/results/clientpositive/exim_04_evolved_parts.q.out
+@@ -156,11 +156,13 @@ minFileSize:0
+ #### A masked pattern was here ####
+ PREHOOK: query: select * from exim_employee
+ PREHOOK: type: QUERY
++PREHOOK: Input: importer@exim_employee
+ PREHOOK: Input: importer@exim_employee@emp_country=in/emp_state=ka
+ PREHOOK: Input: importer@exim_employee@emp_country=in/emp_state=tn
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from exim_employee
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: importer@exim_employee
+ POSTHOOK: Input: importer@exim_employee@emp_country=in/emp_state=ka
+ POSTHOOK: Input: importer@exim_employee@emp_country=in/emp_state=tn
+ #### A masked pattern was here ####
+diff --git a/src/ql/src/test/results/clientpositive/exim_05_some_part.q.out b/src/ql/src/test/results/clientpositive/exim_05_some_part.q.out
+index 2ab36ee..6857350 100644
+--- a/src/ql/src/test/results/clientpositive/exim_05_some_part.q.out
++++ b/src/ql/src/test/results/clientpositive/exim_05_some_part.q.out
+@@ -110,11 +110,13 @@ minFileSize:11
+ #### A masked pattern was here ####
+ PREHOOK: query: select * from exim_employee
+ PREHOOK: type: QUERY
++PREHOOK: Input: importer@exim_employee
+ PREHOOK: Input: importer@exim_employee@emp_country=in/emp_state=ka
+ PREHOOK: Input: importer@exim_employee@emp_country=us/emp_state=ka
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from exim_employee
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: importer@exim_employee
+ POSTHOOK: Input: importer@exim_employee@emp_country=in/emp_state=ka
+ POSTHOOK: Input: importer@exim_employee@emp_country=us/emp_state=ka
+ #### A masked pattern was here ####
+diff --git a/src/ql/src/test/results/clientpositive/exim_06_one_part.q.out b/src/ql/src/test/results/clientpositive/exim_06_one_part.q.out
+index b300543..0534e8d 100644
+--- a/src/ql/src/test/results/clientpositive/exim_06_one_part.q.out
++++ b/src/ql/src/test/results/clientpositive/exim_06_one_part.q.out
+@@ -107,10 +107,12 @@ minFileSize:11
+ #### A masked pattern was here ####
+ PREHOOK: query: select * from exim_employee
+ PREHOOK: type: QUERY
++PREHOOK: Input: importer@exim_employee
+ PREHOOK: Input: importer@exim_employee@emp_country=in/emp_state=ka
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from exim_employee
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: importer@exim_employee
+ POSTHOOK: Input: importer@exim_employee@emp_country=in/emp_state=ka
+ #### A masked pattern was here ####
+ 1	in	ka
+diff --git a/src/ql/src/test/results/clientpositive/exim_07_all_part_over_nonoverlap.q.out b/src/ql/src/test/results/clientpositive/exim_07_all_part_over_nonoverlap.q.out
+index 2decb91..0bcbe00 100644
+--- a/src/ql/src/test/results/clientpositive/exim_07_all_part_over_nonoverlap.q.out
++++ b/src/ql/src/test/results/clientpositive/exim_07_all_part_over_nonoverlap.q.out
+@@ -121,6 +121,7 @@ emp_state	string	free-form text
+ #### A masked pattern was here ####
+ PREHOOK: query: select * from exim_employee
+ PREHOOK: type: QUERY
++PREHOOK: Input: importer@exim_employee
+ PREHOOK: Input: importer@exim_employee@emp_country=in/emp_state=ka
+ PREHOOK: Input: importer@exim_employee@emp_country=in/emp_state=tn
+ PREHOOK: Input: importer@exim_employee@emp_country=us/emp_state=al
+@@ -129,6 +130,7 @@ PREHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from exim_employee
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: importer@exim_employee
+ POSTHOOK: Input: importer@exim_employee@emp_country=in/emp_state=ka
+ POSTHOOK: Input: importer@exim_employee@emp_country=in/emp_state=tn
+ POSTHOOK: Input: importer@exim_employee@emp_country=us/emp_state=al
+diff --git a/src/ql/src/test/results/clientpositive/exim_09_part_spec_nonoverlap.q.out b/src/ql/src/test/results/clientpositive/exim_09_part_spec_nonoverlap.q.out
+index 47ce26c..47868ad 100644
+--- a/src/ql/src/test/results/clientpositive/exim_09_part_spec_nonoverlap.q.out
++++ b/src/ql/src/test/results/clientpositive/exim_09_part_spec_nonoverlap.q.out
+@@ -127,12 +127,14 @@ emp_state	string	free text
+ #### A masked pattern was here ####
+ PREHOOK: query: select * from exim_employee
+ PREHOOK: type: QUERY
++PREHOOK: Input: importer@exim_employee
+ PREHOOK: Input: importer@exim_employee@emp_country=in/emp_state=ka
+ PREHOOK: Input: importer@exim_employee@emp_country=in/emp_state=tn
+ PREHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from exim_employee
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: importer@exim_employee
+ POSTHOOK: Input: importer@exim_employee@emp_country=in/emp_state=ka
+ POSTHOOK: Input: importer@exim_employee@emp_country=in/emp_state=tn
+ POSTHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+diff --git a/src/ql/src/test/results/clientpositive/exim_15_external_part.q.out b/src/ql/src/test/results/clientpositive/exim_15_external_part.q.out
+index 98a3700..83e2e33 100644
+--- a/src/ql/src/test/results/clientpositive/exim_15_external_part.q.out
++++ b/src/ql/src/test/results/clientpositive/exim_15_external_part.q.out
+@@ -132,12 +132,14 @@ emp_state	string	free text
+ #### A masked pattern was here ####
+ PREHOOK: query: select * from exim_employee
+ PREHOOK: type: QUERY
++PREHOOK: Input: importer@exim_employee
+ PREHOOK: Input: importer@exim_employee@emp_country=in/emp_state=ka
+ PREHOOK: Input: importer@exim_employee@emp_country=in/emp_state=tn
+ PREHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from exim_employee
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: importer@exim_employee
+ POSTHOOK: Input: importer@exim_employee@emp_country=in/emp_state=ka
+ POSTHOOK: Input: importer@exim_employee@emp_country=in/emp_state=tn
+ POSTHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+@@ -163,12 +165,14 @@ POSTHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+ #### A masked pattern was here ####
+ PREHOOK: query: select * from exim_employee
+ PREHOOK: type: QUERY
++PREHOOK: Input: importer@exim_employee
+ PREHOOK: Input: importer@exim_employee@emp_country=in/emp_state=ka
+ PREHOOK: Input: importer@exim_employee@emp_country=in/emp_state=tn
+ PREHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from exim_employee
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: importer@exim_employee
+ POSTHOOK: Input: importer@exim_employee@emp_country=in/emp_state=ka
+ POSTHOOK: Input: importer@exim_employee@emp_country=in/emp_state=tn
+ POSTHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+@@ -188,12 +192,14 @@ POSTHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+ #### A masked pattern was here ####
+ PREHOOK: query: select * from exim_employee
+ PREHOOK: type: QUERY
++PREHOOK: Input: importer@exim_employee
+ PREHOOK: Input: importer@exim_employee@emp_country=in/emp_state=ka
+ PREHOOK: Input: importer@exim_employee@emp_country=in/emp_state=tn
+ PREHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from exim_employee
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: importer@exim_employee
+ POSTHOOK: Input: importer@exim_employee@emp_country=in/emp_state=ka
+ POSTHOOK: Input: importer@exim_employee@emp_country=in/emp_state=tn
+ POSTHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+diff --git a/src/ql/src/test/results/clientpositive/exim_16_part_external.q.out b/src/ql/src/test/results/clientpositive/exim_16_part_external.q.out
+index a96a324..7d328cd 100644
+--- a/src/ql/src/test/results/clientpositive/exim_16_part_external.q.out
++++ b/src/ql/src/test/results/clientpositive/exim_16_part_external.q.out
+@@ -142,10 +142,12 @@ minFileSize:11
+ #### A masked pattern was here ####
+ PREHOOK: query: select * from exim_employee
+ PREHOOK: type: QUERY
++PREHOOK: Input: importer@exim_employee
+ PREHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from exim_employee
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: importer@exim_employee
+ POSTHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+ #### A masked pattern was here ####
+ 1	us	tn
+@@ -157,10 +159,12 @@ POSTHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+ #### A masked pattern was here ####
+ PREHOOK: query: select * from exim_employee
+ PREHOOK: type: QUERY
++PREHOOK: Input: importer@exim_employee
+ PREHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from exim_employee
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: importer@exim_employee
+ POSTHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+ #### A masked pattern was here ####
+ PREHOOK: query: drop table exim_employee
+diff --git a/src/ql/src/test/results/clientpositive/exim_17_part_managed.q.out b/src/ql/src/test/results/clientpositive/exim_17_part_managed.q.out
+index c3e3a3e..3f1cc25 100644
+--- a/src/ql/src/test/results/clientpositive/exim_17_part_managed.q.out
++++ b/src/ql/src/test/results/clientpositive/exim_17_part_managed.q.out
+@@ -166,11 +166,13 @@ minFileSize:0
+ #### A masked pattern was here ####
+ PREHOOK: query: select * from exim_employee
+ PREHOOK: type: QUERY
++PREHOOK: Input: importer@exim_employee
+ PREHOOK: Input: importer@exim_employee@emp_country=us/emp_state=ap
+ PREHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from exim_employee
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: importer@exim_employee
+ POSTHOOK: Input: importer@exim_employee@emp_country=us/emp_state=ap
+ POSTHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+ #### A masked pattern was here ####
+@@ -183,11 +185,13 @@ POSTHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+ #### A masked pattern was here ####
+ PREHOOK: query: select * from exim_employee
+ PREHOOK: type: QUERY
++PREHOOK: Input: importer@exim_employee
+ PREHOOK: Input: importer@exim_employee@emp_country=us/emp_state=ap
+ PREHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from exim_employee
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: importer@exim_employee
+ POSTHOOK: Input: importer@exim_employee@emp_country=us/emp_state=ap
+ POSTHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+ #### A masked pattern was here ####
+diff --git a/src/ql/src/test/results/clientpositive/exim_18_part_external.q.out b/src/ql/src/test/results/clientpositive/exim_18_part_external.q.out
+index ceeb342..f3c1038 100644
+--- a/src/ql/src/test/results/clientpositive/exim_18_part_external.q.out
++++ b/src/ql/src/test/results/clientpositive/exim_18_part_external.q.out
+@@ -131,10 +131,12 @@ minFileSize:11
+ 
+ PREHOOK: query: select * from exim_employee
+ PREHOOK: type: QUERY
++PREHOOK: Input: importer@exim_employee
+ PREHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from exim_employee
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: importer@exim_employee
+ POSTHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+ #### A masked pattern was here ####
+ 1	us	tn
+@@ -146,10 +148,12 @@ POSTHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+ #### A masked pattern was here ####
+ PREHOOK: query: select * from exim_employee
+ PREHOOK: type: QUERY
++PREHOOK: Input: importer@exim_employee
+ PREHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from exim_employee
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: importer@exim_employee
+ POSTHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+ #### A masked pattern was here ####
+ PREHOOK: query: drop table exim_employee
+diff --git a/src/ql/src/test/results/clientpositive/exim_19_00_part_external_location.q.out b/src/ql/src/test/results/clientpositive/exim_19_00_part_external_location.q.out
+index fc59807..5839625 100644
+--- a/src/ql/src/test/results/clientpositive/exim_19_00_part_external_location.q.out
++++ b/src/ql/src/test/results/clientpositive/exim_19_00_part_external_location.q.out
+@@ -131,11 +131,13 @@ minFileSize:23
+ #### A masked pattern was here ####
+ PREHOOK: query: select * from exim_employee
+ PREHOOK: type: QUERY
++PREHOOK: Input: importer@exim_employee
+ PREHOOK: Input: importer@exim_employee@emp_country=in/emp_state=ka
+ PREHOOK: Input: importer@exim_employee@emp_country=in/emp_state=tn
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from exim_employee
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: importer@exim_employee
+ POSTHOOK: Input: importer@exim_employee@emp_country=in/emp_state=ka
+ POSTHOOK: Input: importer@exim_employee@emp_country=in/emp_state=tn
+ #### A masked pattern was here ####
+@@ -154,11 +156,13 @@ POSTHOOK: Input: importer@exim_employee@emp_country=in/emp_state=tn
+ #### A masked pattern was here ####
+ PREHOOK: query: select * from exim_employee
+ PREHOOK: type: QUERY
++PREHOOK: Input: importer@exim_employee
+ PREHOOK: Input: importer@exim_employee@emp_country=in/emp_state=ka
+ PREHOOK: Input: importer@exim_employee@emp_country=in/emp_state=tn
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from exim_employee
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: importer@exim_employee
+ POSTHOOK: Input: importer@exim_employee@emp_country=in/emp_state=ka
+ POSTHOOK: Input: importer@exim_employee@emp_country=in/emp_state=tn
+ #### A masked pattern was here ####
+diff --git a/src/ql/src/test/results/clientpositive/exim_19_part_external_location.q.out b/src/ql/src/test/results/clientpositive/exim_19_part_external_location.q.out
+index 86a3ea6..05ba6ef 100644
+--- a/src/ql/src/test/results/clientpositive/exim_19_part_external_location.q.out
++++ b/src/ql/src/test/results/clientpositive/exim_19_part_external_location.q.out
+@@ -135,10 +135,12 @@ minFileSize:11
+ #### A masked pattern was here ####
+ PREHOOK: query: select * from exim_employee
+ PREHOOK: type: QUERY
++PREHOOK: Input: importer@exim_employee
+ PREHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from exim_employee
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: importer@exim_employee
+ POSTHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+ #### A masked pattern was here ####
+ 1	us	tn
+@@ -150,10 +152,12 @@ POSTHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+ #### A masked pattern was here ####
+ PREHOOK: query: select * from exim_employee
+ PREHOOK: type: QUERY
++PREHOOK: Input: importer@exim_employee
+ PREHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from exim_employee
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: importer@exim_employee
+ POSTHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+ #### A masked pattern was here ####
+ PREHOOK: query: drop table exim_employee
+diff --git a/src/ql/src/test/results/clientpositive/exim_20_part_managed_location.q.out b/src/ql/src/test/results/clientpositive/exim_20_part_managed_location.q.out
+index b1ba7e0..85ac4f1 100644
+--- a/src/ql/src/test/results/clientpositive/exim_20_part_managed_location.q.out
++++ b/src/ql/src/test/results/clientpositive/exim_20_part_managed_location.q.out
+@@ -135,10 +135,12 @@ minFileSize:11
+ #### A masked pattern was here ####
+ PREHOOK: query: select * from exim_employee
+ PREHOOK: type: QUERY
++PREHOOK: Input: importer@exim_employee
+ PREHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from exim_employee
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: importer@exim_employee
+ POSTHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+ #### A masked pattern was here ####
+ 1	us	tn
+@@ -150,10 +152,12 @@ POSTHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+ #### A masked pattern was here ####
+ PREHOOK: query: select * from exim_employee
+ PREHOOK: type: QUERY
++PREHOOK: Input: importer@exim_employee
+ PREHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from exim_employee
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: importer@exim_employee
+ POSTHOOK: Input: importer@exim_employee@emp_country=us/emp_state=tn
+ #### A masked pattern was here ####
+ PREHOOK: query: drop table exim_employee
+diff --git a/src/ql/src/test/results/clientpositive/exim_23_import_part_authsuccess.q.out b/src/ql/src/test/results/clientpositive/exim_23_import_part_authsuccess.q.out
+index 729056d..f8dd286 100644
+--- a/src/ql/src/test/results/clientpositive/exim_23_import_part_authsuccess.q.out
++++ b/src/ql/src/test/results/clientpositive/exim_23_import_part_authsuccess.q.out
+@@ -79,10 +79,12 @@ POSTHOOK: Output: importer@exim_employee
+ POSTHOOK: Output: importer@exim_employee@emp_country=in/emp_state=tn
+ PREHOOK: query: select * from exim_employee
+ PREHOOK: type: QUERY
++PREHOOK: Input: importer@exim_employee
+ PREHOOK: Input: importer@exim_employee@emp_country=in/emp_state=tn
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from exim_employee
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: importer@exim_employee
+ POSTHOOK: Input: importer@exim_employee@emp_country=in/emp_state=tn
+ #### A masked pattern was here ####
+ 1	in	tn
+diff --git a/src/ql/src/test/results/clientpositive/explain_dependency2.q.out b/src/ql/src/test/results/clientpositive/explain_dependency2.q.out
+new file mode 100644
+index 0000000..d99a71a
+--- /dev/null
++++ b/src/ql/src/test/results/clientpositive/explain_dependency2.q.out
+@@ -0,0 +1,73 @@
++PREHOOK: query: -- This test is used for testing EXPLAIN DEPENDENCY command
++
++-- select from a table which does not involve a map-reduce job
++EXPLAIN DEPENDENCY SELECT * FROM src
++PREHOOK: type: QUERY
++POSTHOOK: query: -- This test is used for testing EXPLAIN DEPENDENCY command
++
++-- select from a table which does not involve a map-reduce job
++EXPLAIN DEPENDENCY SELECT * FROM src
++POSTHOOK: type: QUERY
++{"input_partitions":[],"input_tables":[{"tablename":"default@src","tabletype":"MANAGED_TABLE"}]}
++PREHOOK: query: -- select from a table which involves a map-reduce job
++EXPLAIN DEPENDENCY SELECT count(*) FROM src
++PREHOOK: type: QUERY
++POSTHOOK: query: -- select from a table which involves a map-reduce job
++EXPLAIN DEPENDENCY SELECT count(*) FROM src
++POSTHOOK: type: QUERY
++{"input_partitions":[],"input_tables":[{"tablename":"default@src","tabletype":"MANAGED_TABLE"}]}
++PREHOOK: query: -- select from a partitioned table which does not involve a map-reduce job
++-- and some partitions are being selected
++EXPLAIN DEPENDENCY SELECT * FROM srcpart where ds is not null
++PREHOOK: type: QUERY
++POSTHOOK: query: -- select from a partitioned table which does not involve a map-reduce job
++-- and some partitions are being selected
++EXPLAIN DEPENDENCY SELECT * FROM srcpart where ds is not null
++POSTHOOK: type: QUERY
++{"input_partitions":[{"partitionName":"default@srcpart@ds=2008-04-08/hr=11"},{"partitionName":"default@srcpart@ds=2008-04-08/hr=12"},{"partitionName":"default@srcpart@ds=2008-04-09/hr=11"},{"partitionName":"default@srcpart@ds=2008-04-09/hr=12"}],"input_tables":[{"tablename":"default@srcpart","tabletype":"MANAGED_TABLE"}]}
++PREHOOK: query: -- select from a partitioned table which does not involve a map-reduce job
++-- and none of the partitions are being selected
++EXPLAIN DEPENDENCY SELECT * FROM srcpart where ds = '1'
++PREHOOK: type: QUERY
++POSTHOOK: query: -- select from a partitioned table which does not involve a map-reduce job
++-- and none of the partitions are being selected
++EXPLAIN DEPENDENCY SELECT * FROM srcpart where ds = '1'
++POSTHOOK: type: QUERY
++{"input_partitions":[],"input_tables":[{"tablename":"default@srcpart","tabletype":"MANAGED_TABLE"}]}
++PREHOOK: query: -- select from a partitioned table which involves a map-reduce job
++-- and some partitions are being selected
++EXPLAIN DEPENDENCY SELECT count(*) FROM srcpart where ds is not null
++PREHOOK: type: QUERY
++POSTHOOK: query: -- select from a partitioned table which involves a map-reduce job
++-- and some partitions are being selected
++EXPLAIN DEPENDENCY SELECT count(*) FROM srcpart where ds is not null
++POSTHOOK: type: QUERY
++{"input_partitions":[{"partitionName":"default@srcpart@ds=2008-04-08/hr=11"},{"partitionName":"default@srcpart@ds=2008-04-08/hr=12"},{"partitionName":"default@srcpart@ds=2008-04-09/hr=11"},{"partitionName":"default@srcpart@ds=2008-04-09/hr=12"}],"input_tables":[{"tablename":"default@srcpart","tabletype":"MANAGED_TABLE"}]}
++PREHOOK: query: -- select from a partitioned table which involves a map-reduce job
++-- and none of the partitions are being selected
++EXPLAIN DEPENDENCY SELECT count(*) FROM srcpart where ds = '1'
++PREHOOK: type: QUERY
++POSTHOOK: query: -- select from a partitioned table which involves a map-reduce job
++-- and none of the partitions are being selected
++EXPLAIN DEPENDENCY SELECT count(*) FROM srcpart where ds = '1'
++POSTHOOK: type: QUERY
++{"input_partitions":[],"input_tables":[{"tablename":"default@srcpart","tabletype":"MANAGED_TABLE"}]}
++PREHOOK: query: create table tstsrcpart like srcpart
++PREHOOK: type: CREATETABLE
++POSTHOOK: query: create table tstsrcpart like srcpart
++POSTHOOK: type: CREATETABLE
++POSTHOOK: Output: default@tstsrcpart
++PREHOOK: query: -- select from a partitioned table with no partitions which does not involve a map-reduce job
++EXPLAIN DEPENDENCY SELECT * FROM tstsrcpart where ds is not null
++PREHOOK: type: QUERY
++POSTHOOK: query: -- select from a partitioned table with no partitions which does not involve a map-reduce job
++EXPLAIN DEPENDENCY SELECT * FROM tstsrcpart where ds is not null
++POSTHOOK: type: QUERY
++{"input_partitions":[],"input_tables":[{"tablename":"default@tstsrcpart","tabletype":"MANAGED_TABLE"}]}
++PREHOOK: query: -- select from a partitioned table with no partitions which involves a map-reduce job
++EXPLAIN DEPENDENCY SELECT count(*) FROM tstsrcpart where ds is not null
++PREHOOK: type: QUERY
++POSTHOOK: query: -- select from a partitioned table with no partitions which involves a map-reduce job
++EXPLAIN DEPENDENCY SELECT count(*) FROM tstsrcpart where ds is not null
++POSTHOOK: type: QUERY
++{"input_partitions":[],"input_tables":[{"tablename":"default@tstsrcpart","tabletype":"MANAGED_TABLE"}]}
+diff --git a/src/ql/src/test/results/clientpositive/filter_join_breaktask2.q.out b/src/ql/src/test/results/clientpositive/filter_join_breaktask2.q.out
+index 08065ea..d8bff1d 100644
+--- a/src/ql/src/test/results/clientpositive/filter_join_breaktask2.q.out
++++ b/src/ql/src/test/results/clientpositive/filter_join_breaktask2.q.out
+@@ -252,10 +252,12 @@ POSTHOOK: Lineage: t4 PARTITION(ds=2010-04-17).c83 EXPRESSION []
+ POSTHOOK: Lineage: t4 PARTITION(ds=2010-04-17).c9 SIMPLE []
+ PREHOOK: query: select * from T2
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@t2
+ PREHOOK: Input: default@t2@ds=2010-04-17
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from T2
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@t2
+ POSTHOOK: Input: default@t2@ds=2010-04-17
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: t1 PARTITION(ds=2010-04-17).c1 SIMPLE []
+@@ -381,10 +383,12 @@ POSTHOOK: Lineage: t4 PARTITION(ds=2010-04-17).c9 SIMPLE []
+ 5	name	NULL	2	kavin	NULL	9	c	8	0	0	7	1	2	0	3	2	NULL	1	NULL	3	2	0	0	5	10	2010-04-17
+ PREHOOK: query: select * from T1
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@t1
+ PREHOOK: Input: default@t1@ds=2010-04-17
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from T1
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@t1
+ POSTHOOK: Input: default@t1@ds=2010-04-17
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: t1 PARTITION(ds=2010-04-17).c1 SIMPLE []
+@@ -510,10 +514,12 @@ POSTHOOK: Lineage: t4 PARTITION(ds=2010-04-17).c9 SIMPLE []
+ 5	1	1	1	0	0	4	2010-04-17
+ PREHOOK: query: select * from T3
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@t3
+ PREHOOK: Input: default@t3@ds=2010-04-17
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from T3
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@t3
+ POSTHOOK: Input: default@t3@ds=2010-04-17
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: t1 PARTITION(ds=2010-04-17).c1 SIMPLE []
+@@ -639,10 +645,12 @@ POSTHOOK: Lineage: t4 PARTITION(ds=2010-04-17).c9 SIMPLE []
+ 4	5	0	2010-04-17
+ PREHOOK: query: select * from T4
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@t4
+ PREHOOK: Input: default@t4@ds=2010-04-17
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from T4
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@t4
+ POSTHOOK: Input: default@t4@ds=2010-04-17
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: t1 PARTITION(ds=2010-04-17).c1 SIMPLE []
+diff --git a/src/ql/src/test/results/clientpositive/groupby11.q.out b/src/ql/src/test/results/clientpositive/groupby11.q.out
+index 7328494..ff8f0b5 100644
+--- a/src/ql/src/test/results/clientpositive/groupby11.q.out
++++ b/src/ql/src/test/results/clientpositive/groupby11.q.out
+@@ -259,10 +259,12 @@ POSTHOOK: Lineage: dest2 PARTITION(ds=111).val1 EXPRESSION [(src)src.FieldSchema
+ POSTHOOK: Lineage: dest2 PARTITION(ds=111).val2 EXPRESSION [(src)src.FieldSchema(name:key, type:string, comment:default), ]
+ PREHOOK: query: SELECT * from dest1
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@dest1
+ PREHOOK: Input: default@dest1@ds=111
+ #### A masked pattern was here ####
+ POSTHOOK: query: SELECT * from dest1
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@dest1
+ POSTHOOK: Input: default@dest1@ds=111
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: dest1 PARTITION(ds=111).key SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
+@@ -582,10 +584,12 @@ val_97	2	1	111
+ val_98	2	1	111
+ PREHOOK: query: SELECT * from dest2
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@dest2
+ PREHOOK: Input: default@dest2@ds=111
+ #### A masked pattern was here ####
+ POSTHOOK: query: SELECT * from dest2
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@dest2
+ POSTHOOK: Input: default@dest2@ds=111
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: dest1 PARTITION(ds=111).key SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
+diff --git a/src/ql/src/test/results/clientpositive/index_bitmap.q.out b/src/ql/src/test/results/clientpositive/index_bitmap.q.out
+index 55699f0..84edcca 100644
+--- a/src/ql/src/test/results/clientpositive/index_bitmap.q.out
++++ b/src/ql/src/test/results/clientpositive/index_bitmap.q.out
+@@ -220,6 +220,7 @@ POSTHOOK: Lineage: default__srcpart_srcpart_index_proj__ PARTITION(ds=2008-04-09
+ POSTHOOK: Lineage: default__srcpart_srcpart_index_proj__ PARTITION(ds=2008-04-09,hr=12).key SIMPLE [(srcpart)srcpart.FieldSchema(name:key, type:string, comment:default), ]
+ PREHOOK: query: SELECT x.* FROM default__srcpart_srcpart_index_proj__ x
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@default__srcpart_srcpart_index_proj__
+ PREHOOK: Input: default@default__srcpart_srcpart_index_proj__@ds=2008-04-08/hr=11
+ PREHOOK: Input: default@default__srcpart_srcpart_index_proj__@ds=2008-04-08/hr=12
+ PREHOOK: Input: default@default__srcpart_srcpart_index_proj__@ds=2008-04-09/hr=11
+@@ -227,6 +228,7 @@ PREHOOK: Input: default@default__srcpart_srcpart_index_proj__@ds=2008-04-09/hr=1
+ #### A masked pattern was here ####
+ POSTHOOK: query: SELECT x.* FROM default__srcpart_srcpart_index_proj__ x
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@default__srcpart_srcpart_index_proj__
+ POSTHOOK: Input: default@default__srcpart_srcpart_index_proj__@ds=2008-04-08/hr=11
+ POSTHOOK: Input: default@default__srcpart_srcpart_index_proj__@ds=2008-04-08/hr=12
+ POSTHOOK: Input: default@default__srcpart_srcpart_index_proj__@ds=2008-04-09/hr=11
+diff --git a/src/ql/src/test/results/clientpositive/index_compact.q.out b/src/ql/src/test/results/clientpositive/index_compact.q.out
+index 2d3aa6b..ddcd2d4 100644
+--- a/src/ql/src/test/results/clientpositive/index_compact.q.out
++++ b/src/ql/src/test/results/clientpositive/index_compact.q.out
+@@ -200,6 +200,7 @@ POSTHOOK: Lineage: default__srcpart_srcpart_index_proj__ PARTITION(ds=2008-04-09
+ POSTHOOK: Lineage: default__srcpart_srcpart_index_proj__ PARTITION(ds=2008-04-09,hr=12).key SIMPLE [(srcpart)srcpart.FieldSchema(name:key, type:string, comment:default), ]
+ PREHOOK: query: SELECT x.* FROM default__srcpart_srcpart_index_proj__ x
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@default__srcpart_srcpart_index_proj__
+ PREHOOK: Input: default@default__srcpart_srcpart_index_proj__@ds=2008-04-08/hr=11
+ PREHOOK: Input: default@default__srcpart_srcpart_index_proj__@ds=2008-04-08/hr=12
+ PREHOOK: Input: default@default__srcpart_srcpart_index_proj__@ds=2008-04-09/hr=11
+@@ -207,6 +208,7 @@ PREHOOK: Input: default@default__srcpart_srcpart_index_proj__@ds=2008-04-09/hr=1
+ #### A masked pattern was here ####
+ POSTHOOK: query: SELECT x.* FROM default__srcpart_srcpart_index_proj__ x
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@default__srcpart_srcpart_index_proj__
+ POSTHOOK: Input: default@default__srcpart_srcpart_index_proj__@ds=2008-04-08/hr=11
+ POSTHOOK: Input: default@default__srcpart_srcpart_index_proj__@ds=2008-04-08/hr=12
+ POSTHOOK: Input: default@default__srcpart_srcpart_index_proj__@ds=2008-04-09/hr=11
+diff --git a/src/ql/src/test/results/clientpositive/input12.q.out b/src/ql/src/test/results/clientpositive/input12.q.out
+index e4bdf24..c7645f4 100644
+--- a/src/ql/src/test/results/clientpositive/input12.q.out
++++ b/src/ql/src/test/results/clientpositive/input12.q.out
+@@ -544,10 +544,12 @@ POSTHOOK: Lineage: dest3 PARTITION(ds=2008-04-08,hr=12).key EXPRESSION [(src)src
+ 169	val_169
+ PREHOOK: query: SELECT dest3.* FROM dest3
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@dest3
+ PREHOOK: Input: default@dest3@ds=2008-04-08/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: query: SELECT dest3.* FROM dest3
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@dest3
+ POSTHOOK: Input: default@dest3@ds=2008-04-08/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: dest1.key EXPRESSION [(src)src.FieldSchema(name:key, type:string, comment:default), ]
+diff --git a/src/ql/src/test/results/clientpositive/input12_hadoop20.q.out b/src/ql/src/test/results/clientpositive/input12_hadoop20.q.out
+index b071f90..fe17fed 100644
+--- a/src/ql/src/test/results/clientpositive/input12_hadoop20.q.out
++++ b/src/ql/src/test/results/clientpositive/input12_hadoop20.q.out
+@@ -544,10 +544,12 @@ POSTHOOK: Lineage: dest3 PARTITION(ds=2008-04-08,hr=12).key EXPRESSION [(src)src
+ 169	val_169
+ PREHOOK: query: SELECT dest3.* FROM dest3
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@dest3
+ PREHOOK: Input: default@dest3@ds=2008-04-08/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: query: SELECT dest3.* FROM dest3
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@dest3
+ POSTHOOK: Input: default@dest3@ds=2008-04-08/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: dest1.key EXPRESSION [(src)src.FieldSchema(name:key, type:string, comment:default), ]
+diff --git a/src/ql/src/test/results/clientpositive/input13.q.out b/src/ql/src/test/results/clientpositive/input13.q.out
+index 76b9097..52fbaf9 100644
+--- a/src/ql/src/test/results/clientpositive/input13.q.out
++++ b/src/ql/src/test/results/clientpositive/input13.q.out
+@@ -610,10 +610,12 @@ POSTHOOK: Lineage: dest3 PARTITION(ds=2008-04-08,hr=12).key EXPRESSION [(src)src
+ 169	val_169
+ PREHOOK: query: SELECT dest3.* FROM dest3
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@dest3
+ PREHOOK: Input: default@dest3@ds=2008-04-08/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: query: SELECT dest3.* FROM dest3
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@dest3
+ POSTHOOK: Input: default@dest3@ds=2008-04-08/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: dest1.key EXPRESSION [(src)src.FieldSchema(name:key, type:string, comment:default), ]
+diff --git a/src/ql/src/test/results/clientpositive/input28.q.out b/src/ql/src/test/results/clientpositive/input28.q.out
+index 461c736..51a1853 100644
+--- a/src/ql/src/test/results/clientpositive/input28.q.out
++++ b/src/ql/src/test/results/clientpositive/input28.q.out
+@@ -28,10 +28,12 @@ POSTHOOK: Lineage: tst PARTITION(d=2009-01-01).a SIMPLE [(tst)tst.FieldSchema(na
+ POSTHOOK: Lineage: tst PARTITION(d=2009-01-01).b SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
+ PREHOOK: query: select * from tst where tst.d='2009-01-01'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@tst
+ PREHOOK: Input: default@tst@d=2009-01-01
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from tst where tst.d='2009-01-01'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@tst
+ POSTHOOK: Input: default@tst@d=2009-01-01
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: tst PARTITION(d=2009-01-01).a SIMPLE [(tst)tst.FieldSchema(name:a, type:string, comment:null), ]
+diff --git a/src/ql/src/test/results/clientpositive/input_part0.q.out b/src/ql/src/test/results/clientpositive/input_part0.q.out
+index 0d42436..ba0cb9c 100644
+--- a/src/ql/src/test/results/clientpositive/input_part0.q.out
++++ b/src/ql/src/test/results/clientpositive/input_part0.q.out
+@@ -33,11 +33,13 @@ STAGE PLANS:
+ 
+ PREHOOK: query: SELECT x.* FROM SRCPART x WHERE x.ds = '2008-04-08'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@srcpart
+ PREHOOK: Input: default@srcpart@ds=2008-04-08/hr=11
+ PREHOOK: Input: default@srcpart@ds=2008-04-08/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: query: SELECT x.* FROM SRCPART x WHERE x.ds = '2008-04-08'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@srcpart
+ POSTHOOK: Input: default@srcpart@ds=2008-04-08/hr=11
+ POSTHOOK: Input: default@srcpart@ds=2008-04-08/hr=12
+ #### A masked pattern was here ####
+diff --git a/src/ql/src/test/results/clientpositive/input_part10.q.out b/src/ql/src/test/results/clientpositive/input_part10.q.out
+index 73c689b..a146a9c 100644
+--- a/src/ql/src/test/results/clientpositive/input_part10.q.out
++++ b/src/ql/src/test/results/clientpositive/input_part10.q.out
+@@ -115,10 +115,12 @@ ts	string
+ #### A masked pattern was here ####
+ PREHOOK: query: SELECT * FROM part_special WHERE ds='2008 04 08' AND ts = '10:11:12=455'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@part_special
+ PREHOOK: Input: default@part_special@ds=2008 04 08/ts=10%3A11%3A12%3D455
+ #### A masked pattern was here ####
+ POSTHOOK: query: SELECT * FROM part_special WHERE ds='2008 04 08' AND ts = '10:11:12=455'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@part_special
+ POSTHOOK: Input: default@part_special@ds=2008 04 08/ts=10%3A11%3A12%3D455
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: part_special PARTITION(ds=2008 04 08,ts=10:11:12=455).a SIMPLE []
+diff --git a/src/ql/src/test/results/clientpositive/input_part3.q.out b/src/ql/src/test/results/clientpositive/input_part3.q.out
+index b54d01b..3fc1b84 100644
+--- a/src/ql/src/test/results/clientpositive/input_part3.q.out
++++ b/src/ql/src/test/results/clientpositive/input_part3.q.out
+@@ -33,10 +33,12 @@ STAGE PLANS:
+ 
+ PREHOOK: query: SELECT x.* FROM SRCPART x WHERE x.ds = '2008-04-08' and x.hr = 11
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@srcpart
+ PREHOOK: Input: default@srcpart@ds=2008-04-08/hr=11
+ #### A masked pattern was here ####
+ POSTHOOK: query: SELECT x.* FROM SRCPART x WHERE x.ds = '2008-04-08' and x.hr = 11
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@srcpart
+ POSTHOOK: Input: default@srcpart@ds=2008-04-08/hr=11
+ #### A masked pattern was here ####
+ 238	val_238	2008-04-08	11
+diff --git a/src/ql/src/test/results/clientpositive/input_part4.q.out b/src/ql/src/test/results/clientpositive/input_part4.q.out
+index 87fd523..7efa2ae 100644
+--- a/src/ql/src/test/results/clientpositive/input_part4.q.out
++++ b/src/ql/src/test/results/clientpositive/input_part4.q.out
+@@ -37,7 +37,9 @@ STAGE PLANS:
+ 
+ PREHOOK: query: SELECT x.* FROM SRCPART x WHERE x.ds = '2008-04-08' and x.hr = 15
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@srcpart
+ #### A masked pattern was here ####
+ POSTHOOK: query: SELECT x.* FROM SRCPART x WHERE x.ds = '2008-04-08' and x.hr = 15
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@srcpart
+ #### A masked pattern was here ####
+diff --git a/src/ql/src/test/results/clientpositive/input_part8.q.out b/src/ql/src/test/results/clientpositive/input_part8.q.out
+index 8d01562..d28535e 100644
+--- a/src/ql/src/test/results/clientpositive/input_part8.q.out
++++ b/src/ql/src/test/results/clientpositive/input_part8.q.out
+@@ -34,11 +34,13 @@ STAGE PLANS:
+ 
+ PREHOOK: query: SELECT x.* FROM SRCPART x WHERE ds = '2008-04-08' LIMIT 10
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@srcpart
+ PREHOOK: Input: default@srcpart@ds=2008-04-08/hr=11
+ PREHOOK: Input: default@srcpart@ds=2008-04-08/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: query: SELECT x.* FROM SRCPART x WHERE ds = '2008-04-08' LIMIT 10
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@srcpart
+ POSTHOOK: Input: default@srcpart@ds=2008-04-08/hr=11
+ POSTHOOK: Input: default@srcpart@ds=2008-04-08/hr=12
+ #### A masked pattern was here ####
+diff --git a/src/ql/src/test/results/clientpositive/insertexternal1.q.out b/src/ql/src/test/results/clientpositive/insertexternal1.q.out
+index 22dcb0c..d96a593 100644
+--- a/src/ql/src/test/results/clientpositive/insertexternal1.q.out
++++ b/src/ql/src/test/results/clientpositive/insertexternal1.q.out
+@@ -22,10 +22,12 @@ POSTHOOK: Lineage: texternal PARTITION(insertdate=2008-01-01).key SIMPLE [(src)s
+ POSTHOOK: Lineage: texternal PARTITION(insertdate=2008-01-01).val SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
+ PREHOOK: query: select * from texternal where insertdate='2008-01-01'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@texternal
+ PREHOOK: Input: default@texternal@insertdate=2008-01-01
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from texternal where insertdate='2008-01-01'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@texternal
+ POSTHOOK: Input: default@texternal@insertdate=2008-01-01
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: texternal PARTITION(insertdate=2008-01-01).key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
+diff --git a/src/ql/src/test/results/clientpositive/load_dyn_part1.q.out b/src/ql/src/test/results/clientpositive/load_dyn_part1.q.out
+index e93f0c9..43d0c70 100644
+--- a/src/ql/src/test/results/clientpositive/load_dyn_part1.q.out
++++ b/src/ql/src/test/results/clientpositive/load_dyn_part1.q.out
+@@ -285,11 +285,13 @@ ds=2008-12-31/hr=11
+ ds=2008-12-31/hr=12
+ PREHOOK: query: select * from nzhang_part1 where ds is not null and hr is not null
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@nzhang_part1
+ PREHOOK: Input: default@nzhang_part1@ds=2008-04-08/hr=11
+ PREHOOK: Input: default@nzhang_part1@ds=2008-04-08/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from nzhang_part1 where ds is not null and hr is not null
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@nzhang_part1
+ POSTHOOK: Input: default@nzhang_part1@ds=2008-04-08/hr=11
+ POSTHOOK: Input: default@nzhang_part1@ds=2008-04-08/hr=12
+ #### A masked pattern was here ####
+@@ -1303,11 +1305,13 @@ POSTHOOK: Lineage: nzhang_part2 PARTITION(ds=2008-12-31,hr=12).value SIMPLE [(sr
+ 97	val_97	2008-04-08	12
+ PREHOOK: query: select * from nzhang_part2 where ds is not null and hr is not null
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@nzhang_part2
+ PREHOOK: Input: default@nzhang_part2@ds=2008-12-31/hr=11
+ PREHOOK: Input: default@nzhang_part2@ds=2008-12-31/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from nzhang_part2 where ds is not null and hr is not null
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@nzhang_part2
+ POSTHOOK: Input: default@nzhang_part2@ds=2008-12-31/hr=11
+ POSTHOOK: Input: default@nzhang_part2@ds=2008-12-31/hr=12
+ #### A masked pattern was here ####
+diff --git a/src/ql/src/test/results/clientpositive/load_dyn_part10.q.out b/src/ql/src/test/results/clientpositive/load_dyn_part10.q.out
+index 254dce4..d3a0601 100644
+--- a/src/ql/src/test/results/clientpositive/load_dyn_part10.q.out
++++ b/src/ql/src/test/results/clientpositive/load_dyn_part10.q.out
+@@ -110,11 +110,13 @@ ds=2008-12-31/hr=11
+ ds=2008-12-31/hr=12
+ PREHOOK: query: select * from nzhang_part10 where ds is not null and hr is not null
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@nzhang_part10
+ PREHOOK: Input: default@nzhang_part10@ds=2008-12-31/hr=11
+ PREHOOK: Input: default@nzhang_part10@ds=2008-12-31/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from nzhang_part10 where ds is not null and hr is not null
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@nzhang_part10
+ POSTHOOK: Input: default@nzhang_part10@ds=2008-12-31/hr=11
+ POSTHOOK: Input: default@nzhang_part10@ds=2008-12-31/hr=12
+ #### A masked pattern was here ####
+diff --git a/src/ql/src/test/results/clientpositive/load_dyn_part11.q.out b/src/ql/src/test/results/clientpositive/load_dyn_part11.q.out
+index 50913c7..60cb20d 100644
+--- a/src/ql/src/test/results/clientpositive/load_dyn_part11.q.out
++++ b/src/ql/src/test/results/clientpositive/load_dyn_part11.q.out
+@@ -44,10 +44,12 @@ POSTHOOK: Lineage: nzhang_part PARTITION(ds=2010-03-03,hr=12).key SIMPLE [(srcpa
+ POSTHOOK: Lineage: nzhang_part PARTITION(ds=2010-03-03,hr=12).value SIMPLE [(srcpart)srcpart.FieldSchema(name:value, type:string, comment:default), ]
+ PREHOOK: query: select * from nzhang_part where ds = '2010-03-03' and hr = '11'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@nzhang_part
+ PREHOOK: Input: default@nzhang_part@ds=2010-03-03/hr=11
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from nzhang_part where ds = '2010-03-03' and hr = '11'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@nzhang_part
+ POSTHOOK: Input: default@nzhang_part@ds=2010-03-03/hr=11
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: nzhang_part PARTITION(ds=2010-03-03,hr=11).key SIMPLE [(srcpart)srcpart.FieldSchema(name:key, type:string, comment:default), ]
+@@ -1056,10 +1058,12 @@ POSTHOOK: Lineage: nzhang_part PARTITION(ds=2010-03-03,hr=12).value SIMPLE [(src
+ 97	val_97	2010-03-03	11
+ PREHOOK: query: select * from nzhang_part where ds = '2010-03-03' and hr = '12'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@nzhang_part
+ PREHOOK: Input: default@nzhang_part@ds=2010-03-03/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from nzhang_part where ds = '2010-03-03' and hr = '12'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@nzhang_part
+ POSTHOOK: Input: default@nzhang_part@ds=2010-03-03/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: nzhang_part PARTITION(ds=2010-03-03,hr=11).key SIMPLE [(srcpart)srcpart.FieldSchema(name:key, type:string, comment:default), ]
+diff --git a/src/ql/src/test/results/clientpositive/load_dyn_part12.q.out b/src/ql/src/test/results/clientpositive/load_dyn_part12.q.out
+index e763cc6..34d2aa9 100644
+--- a/src/ql/src/test/results/clientpositive/load_dyn_part12.q.out
++++ b/src/ql/src/test/results/clientpositive/load_dyn_part12.q.out
+@@ -54,11 +54,13 @@ ds=2010-03-03/hr=22
+ ds=2010-03-03/hr=24
+ PREHOOK: query: select * from nzhang_part12 where ds is not null and hr is not null
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@nzhang_part12
+ PREHOOK: Input: default@nzhang_part12@ds=2010-03-03/hr=22
+ PREHOOK: Input: default@nzhang_part12@ds=2010-03-03/hr=24
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from nzhang_part12 where ds is not null and hr is not null
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@nzhang_part12
+ POSTHOOK: Input: default@nzhang_part12@ds=2010-03-03/hr=22
+ POSTHOOK: Input: default@nzhang_part12@ds=2010-03-03/hr=24
+ #### A masked pattern was here ####
+diff --git a/src/ql/src/test/results/clientpositive/load_dyn_part13.q.out b/src/ql/src/test/results/clientpositive/load_dyn_part13.q.out
+index 8824ecf..110e8ee 100644
+--- a/src/ql/src/test/results/clientpositive/load_dyn_part13.q.out
++++ b/src/ql/src/test/results/clientpositive/load_dyn_part13.q.out
+@@ -182,11 +182,13 @@ ds=2010-03-03/hr=22
+ ds=2010-03-03/hr=33
+ PREHOOK: query: select * from nzhang_part13 where ds is not null and hr is not null
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@nzhang_part13
+ PREHOOK: Input: default@nzhang_part13@ds=2010-03-03/hr=22
+ PREHOOK: Input: default@nzhang_part13@ds=2010-03-03/hr=33
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from nzhang_part13 where ds is not null and hr is not null
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@nzhang_part13
+ POSTHOOK: Input: default@nzhang_part13@ds=2010-03-03/hr=22
+ POSTHOOK: Input: default@nzhang_part13@ds=2010-03-03/hr=33
+ #### A masked pattern was here ####
+diff --git a/src/ql/src/test/results/clientpositive/load_dyn_part3.q.out b/src/ql/src/test/results/clientpositive/load_dyn_part3.q.out
+index 77d3d8f..6a6f94e 100644
+--- a/src/ql/src/test/results/clientpositive/load_dyn_part3.q.out
++++ b/src/ql/src/test/results/clientpositive/load_dyn_part3.q.out
+@@ -108,6 +108,7 @@ POSTHOOK: Lineage: nzhang_part3 PARTITION(ds=2008-04-09,hr=12).key SIMPLE [(srcp
+ POSTHOOK: Lineage: nzhang_part3 PARTITION(ds=2008-04-09,hr=12).value SIMPLE [(srcpart)srcpart.FieldSchema(name:value, type:string, comment:default), ]
+ PREHOOK: query: select * from nzhang_part3 where ds is not null and hr is not null
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@nzhang_part3
+ PREHOOK: Input: default@nzhang_part3@ds=2008-04-08/hr=11
+ PREHOOK: Input: default@nzhang_part3@ds=2008-04-08/hr=12
+ PREHOOK: Input: default@nzhang_part3@ds=2008-04-09/hr=11
+@@ -115,6 +116,7 @@ PREHOOK: Input: default@nzhang_part3@ds=2008-04-09/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from nzhang_part3 where ds is not null and hr is not null
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@nzhang_part3
+ POSTHOOK: Input: default@nzhang_part3@ds=2008-04-08/hr=11
+ POSTHOOK: Input: default@nzhang_part3@ds=2008-04-08/hr=12
+ POSTHOOK: Input: default@nzhang_part3@ds=2008-04-09/hr=11
+diff --git a/src/ql/src/test/results/clientpositive/load_dyn_part4.q.out b/src/ql/src/test/results/clientpositive/load_dyn_part4.q.out
+index 11f0120..9bee9d0 100644
+--- a/src/ql/src/test/results/clientpositive/load_dyn_part4.q.out
++++ b/src/ql/src/test/results/clientpositive/load_dyn_part4.q.out
+@@ -141,12 +141,14 @@ ds=2008-04-09/hr=11
+ ds=2008-04-09/hr=12
+ PREHOOK: query: select * from nzhang_part4 where ds='2008-04-08' and hr is not null
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@nzhang_part4
+ PREHOOK: Input: default@nzhang_part4@ds=2008-04-08/hr=11
+ PREHOOK: Input: default@nzhang_part4@ds=2008-04-08/hr=12
+ PREHOOK: Input: default@nzhang_part4@ds=2008-04-08/hr=existing_value
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from nzhang_part4 where ds='2008-04-08' and hr is not null
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@nzhang_part4
+ POSTHOOK: Input: default@nzhang_part4@ds=2008-04-08/hr=11
+ POSTHOOK: Input: default@nzhang_part4@ds=2008-04-08/hr=12
+ POSTHOOK: Input: default@nzhang_part4@ds=2008-04-08/hr=existing_value
+@@ -1663,6 +1665,7 @@ POSTHOOK: Lineage: nzhang_part4 PARTITION(ds=2008-04-09,hr=12).value SIMPLE [(sr
+ 97	val_97	2008-04-08	existing_value
+ PREHOOK: query: select * from nzhang_part4 where ds is not null and hr is not null
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@nzhang_part4
+ PREHOOK: Input: default@nzhang_part4@ds=2008-04-08/hr=11
+ PREHOOK: Input: default@nzhang_part4@ds=2008-04-08/hr=12
+ PREHOOK: Input: default@nzhang_part4@ds=2008-04-08/hr=existing_value
+@@ -1671,6 +1674,7 @@ PREHOOK: Input: default@nzhang_part4@ds=2008-04-09/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from nzhang_part4 where ds is not null and hr is not null
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@nzhang_part4
+ POSTHOOK: Input: default@nzhang_part4@ds=2008-04-08/hr=11
+ POSTHOOK: Input: default@nzhang_part4@ds=2008-04-08/hr=12
+ POSTHOOK: Input: default@nzhang_part4@ds=2008-04-08/hr=existing_value
+diff --git a/src/ql/src/test/results/clientpositive/load_dyn_part5.q.out b/src/ql/src/test/results/clientpositive/load_dyn_part5.q.out
+index 8bdc266..3c20c9d 100644
+--- a/src/ql/src/test/results/clientpositive/load_dyn_part5.q.out
++++ b/src/ql/src/test/results/clientpositive/load_dyn_part5.q.out
+@@ -1313,10 +1313,12 @@ value=val_97
+ value=val_98
+ PREHOOK: query: select * from nzhang_part5 where value='val_0'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@nzhang_part5
+ PREHOOK: Input: default@nzhang_part5@value=val_0
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from nzhang_part5 where value='val_0'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@nzhang_part5
+ POSTHOOK: Input: default@nzhang_part5@value=val_0
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: nzhang_part5 PARTITION(value=val_0).key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
+@@ -1633,10 +1635,12 @@ POSTHOOK: Lineage: nzhang_part5 PARTITION(value=val_9).key SIMPLE [(src)src.Fiel
+ 0	val_0
+ PREHOOK: query: select * from nzhang_part5 where value='val_2'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@nzhang_part5
+ PREHOOK: Input: default@nzhang_part5@value=val_2
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from nzhang_part5 where value='val_2'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@nzhang_part5
+ POSTHOOK: Input: default@nzhang_part5@value=val_2
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: nzhang_part5 PARTITION(value=val_0).key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
+diff --git a/src/ql/src/test/results/clientpositive/load_dyn_part6.q.out b/src/ql/src/test/results/clientpositive/load_dyn_part6.q.out
+index 4fe23b2..79a8520 100644
+--- a/src/ql/src/test/results/clientpositive/load_dyn_part6.q.out
++++ b/src/ql/src/test/results/clientpositive/load_dyn_part6.q.out
+@@ -44,10 +44,12 @@ POSTHOOK: Lineage: nzhang_part6 PARTITION(ds=2010-03-03,hr=12).key SIMPLE [(srcp
+ POSTHOOK: Lineage: nzhang_part6 PARTITION(ds=2010-03-03,hr=12).value SIMPLE [(srcpart)srcpart.FieldSchema(name:value, type:string, comment:default), ]
+ PREHOOK: query: select * from nzhang_part6 where ds = '2010-03-03' and hr = '11'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@nzhang_part6
+ PREHOOK: Input: default@nzhang_part6@ds=2010-03-03/hr=11
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from nzhang_part6 where ds = '2010-03-03' and hr = '11'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@nzhang_part6
+ POSTHOOK: Input: default@nzhang_part6@ds=2010-03-03/hr=11
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: nzhang_part6 PARTITION(ds=2010-03-03,hr=11).key SIMPLE [(srcpart)srcpart.FieldSchema(name:key, type:string, comment:default), ]
+@@ -1056,10 +1058,12 @@ POSTHOOK: Lineage: nzhang_part6 PARTITION(ds=2010-03-03,hr=12).value SIMPLE [(sr
+ 97	val_97	2010-03-03	11
+ PREHOOK: query: select * from nzhang_part6 where ds = '2010-03-03' and hr = '12'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@nzhang_part6
+ PREHOOK: Input: default@nzhang_part6@ds=2010-03-03/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from nzhang_part6 where ds = '2010-03-03' and hr = '12'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@nzhang_part6
+ POSTHOOK: Input: default@nzhang_part6@ds=2010-03-03/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: nzhang_part6 PARTITION(ds=2010-03-03,hr=11).key SIMPLE [(srcpart)srcpart.FieldSchema(name:key, type:string, comment:default), ]
+diff --git a/src/ql/src/test/results/clientpositive/load_dyn_part7.q.out b/src/ql/src/test/results/clientpositive/load_dyn_part7.q.out
+index 9d48f40..afb8c5a 100644
+--- a/src/ql/src/test/results/clientpositive/load_dyn_part7.q.out
++++ b/src/ql/src/test/results/clientpositive/load_dyn_part7.q.out
+@@ -42,10 +42,12 @@ POSTHOOK: Lineage: nzhang_part7 PARTITION(ds=2010-03-03,hr=12).value SIMPLE [(sr
+ ds=2010-03-03/hr=12
+ PREHOOK: query: select * from nzhang_part7 where ds is not null and hr is not null
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@nzhang_part7
+ PREHOOK: Input: default@nzhang_part7@ds=2010-03-03/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from nzhang_part7 where ds is not null and hr is not null
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@nzhang_part7
+ POSTHOOK: Input: default@nzhang_part7@ds=2010-03-03/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: nzhang_part7 PARTITION(ds=2010-03-03,hr=12).key SIMPLE [(srcpart)srcpart.FieldSchema(name:key, type:string, comment:default), ]
+diff --git a/src/ql/src/test/results/clientpositive/load_dyn_part8.q.out b/src/ql/src/test/results/clientpositive/load_dyn_part8.q.out
+index a86966f..a1b59b8 100644
+--- a/src/ql/src/test/results/clientpositive/load_dyn_part8.q.out
++++ b/src/ql/src/test/results/clientpositive/load_dyn_part8.q.out
+@@ -435,6 +435,7 @@ ds=2008-12-31/hr=11
+ ds=2008-12-31/hr=12
+ PREHOOK: query: select * from nzhang_part8 where ds is not null and hr is not null
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@nzhang_part8
+ PREHOOK: Input: default@nzhang_part8@ds=2008-04-08/hr=11
+ PREHOOK: Input: default@nzhang_part8@ds=2008-04-08/hr=12
+ PREHOOK: Input: default@nzhang_part8@ds=2008-12-31/hr=11
+@@ -442,6 +443,7 @@ PREHOOK: Input: default@nzhang_part8@ds=2008-12-31/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from nzhang_part8 where ds is not null and hr is not null
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@nzhang_part8
+ POSTHOOK: Input: default@nzhang_part8@ds=2008-04-08/hr=11
+ POSTHOOK: Input: default@nzhang_part8@ds=2008-04-08/hr=12
+ POSTHOOK: Input: default@nzhang_part8@ds=2008-12-31/hr=11
+diff --git a/src/ql/src/test/results/clientpositive/load_dyn_part9.q.out b/src/ql/src/test/results/clientpositive/load_dyn_part9.q.out
+index 003eb83..bf8d400 100644
+--- a/src/ql/src/test/results/clientpositive/load_dyn_part9.q.out
++++ b/src/ql/src/test/results/clientpositive/load_dyn_part9.q.out
+@@ -112,11 +112,13 @@ ds=2008-04-08/hr=11
+ ds=2008-04-08/hr=12
+ PREHOOK: query: select * from nzhang_part9 where ds is not null and hr is not null
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@nzhang_part9
+ PREHOOK: Input: default@nzhang_part9@ds=2008-04-08/hr=11
+ PREHOOK: Input: default@nzhang_part9@ds=2008-04-08/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from nzhang_part9 where ds is not null and hr is not null
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@nzhang_part9
+ POSTHOOK: Input: default@nzhang_part9@ds=2008-04-08/hr=11
+ POSTHOOK: Input: default@nzhang_part9@ds=2008-04-08/hr=12
+ #### A masked pattern was here ####
+diff --git a/src/ql/src/test/results/clientpositive/loadpart1.q.out b/src/ql/src/test/results/clientpositive/loadpart1.q.out
+index ad18640..a1fd2f3 100644
+--- a/src/ql/src/test/results/clientpositive/loadpart1.q.out
++++ b/src/ql/src/test/results/clientpositive/loadpart1.q.out
+@@ -25,10 +25,12 @@ POSTHOOK: Output: default@hive_test_dst@pcol1=test_part/pcol2=test_Part
+ POSTHOOK: Lineage: hive_test_dst PARTITION(pcol1=test_part,pcol2=test_Part).col1 SIMPLE [(hive_test_src)hive_test_src.FieldSchema(name:col1, type:string, comment:null), ]
+ PREHOOK: query: select * from hive_test_dst where pcol1='test_part' and pcol2='test_Part'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@hive_test_dst
+ PREHOOK: Input: default@hive_test_dst@pcol1=test_part/pcol2=test_Part
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from hive_test_dst where pcol1='test_part' and pcol2='test_Part'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@hive_test_dst
+ POSTHOOK: Input: default@hive_test_dst@pcol1=test_part/pcol2=test_Part
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: hive_test_dst PARTITION(pcol1=test_part,pcol2=test_Part).col1 SIMPLE [(hive_test_src)hive_test_src.FieldSchema(name:col1, type:string, comment:null), ]
+@@ -50,18 +52,22 @@ POSTHOOK: Lineage: hive_test_dst PARTITION(pcol1=test_part,pcol2=test_Part).col1
+ POSTHOOK: Lineage: hive_test_dst PARTITION(pcol1=test_part,pcol2=test_Part).col1 SIMPLE [(hive_test_src)hive_test_src.FieldSchema(name:col1, type:string, comment:null), ]
+ PREHOOK: query: select * from hive_test_dst where pcol1='test_part' and pcol2='test_part'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@hive_test_dst
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from hive_test_dst where pcol1='test_part' and pcol2='test_part'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@hive_test_dst
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: hive_test_dst PARTITION(pcol1=test_part,pcol2=test_Part).col1 SIMPLE [(hive_test_src)hive_test_src.FieldSchema(name:col1, type:string, comment:null), ]
+ POSTHOOK: Lineage: hive_test_dst PARTITION(pcol1=test_part,pcol2=test_Part).col1 SIMPLE [(hive_test_src)hive_test_src.FieldSchema(name:col1, type:string, comment:null), ]
+ PREHOOK: query: select * from hive_test_dst where pcol1='test_part'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@hive_test_dst
+ PREHOOK: Input: default@hive_test_dst@pcol1=test_part/pcol2=test_Part
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from hive_test_dst where pcol1='test_part'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@hive_test_dst
+ POSTHOOK: Input: default@hive_test_dst@pcol1=test_part/pcol2=test_Part
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: hive_test_dst PARTITION(pcol1=test_part,pcol2=test_Part).col1 SIMPLE [(hive_test_src)hive_test_src.FieldSchema(name:col1, type:string, comment:null), ]
+@@ -74,17 +80,21 @@ POSTHOOK: Lineage: hive_test_dst PARTITION(pcol1=test_part,pcol2=test_Part).col1
+ 6	test_part	test_Part
+ PREHOOK: query: select * from hive_test_dst where pcol1='test_part' and pcol2='test_part'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@hive_test_dst
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from hive_test_dst where pcol1='test_part' and pcol2='test_part'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@hive_test_dst
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: hive_test_dst PARTITION(pcol1=test_part,pcol2=test_Part).col1 SIMPLE [(hive_test_src)hive_test_src.FieldSchema(name:col1, type:string, comment:null), ]
+ POSTHOOK: Lineage: hive_test_dst PARTITION(pcol1=test_part,pcol2=test_Part).col1 SIMPLE [(hive_test_src)hive_test_src.FieldSchema(name:col1, type:string, comment:null), ]
+ PREHOOK: query: select * from hive_test_dst where pcol1='test_Part'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@hive_test_dst
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from hive_test_dst where pcol1='test_Part'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@hive_test_dst
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: hive_test_dst PARTITION(pcol1=test_part,pcol2=test_Part).col1 SIMPLE [(hive_test_src)hive_test_src.FieldSchema(name:col1, type:string, comment:null), ]
+ POSTHOOK: Lineage: hive_test_dst PARTITION(pcol1=test_part,pcol2=test_Part).col1 SIMPLE [(hive_test_src)hive_test_src.FieldSchema(name:col1, type:string, comment:null), ]
+diff --git a/src/ql/src/test/results/clientpositive/merge4.q.out b/src/ql/src/test/results/clientpositive/merge4.q.out
+index 2633a63..312f2ab 100644
+--- a/src/ql/src/test/results/clientpositive/merge4.q.out
++++ b/src/ql/src/test/results/clientpositive/merge4.q.out
+@@ -124,11 +124,13 @@ POSTHOOK: Lineage: nzhang_part PARTITION(ds=2010-08-15,hr=12).key SIMPLE [(srcpa
+ POSTHOOK: Lineage: nzhang_part PARTITION(ds=2010-08-15,hr=12).value SIMPLE [(srcpart)srcpart.FieldSchema(name:value, type:string, comment:default), ]
+ PREHOOK: query: select * from nzhang_part
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@nzhang_part
+ PREHOOK: Input: default@nzhang_part@ds=2010-08-15/hr=11
+ PREHOOK: Input: default@nzhang_part@ds=2010-08-15/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from nzhang_part
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@nzhang_part
+ POSTHOOK: Input: default@nzhang_part@ds=2010-08-15/hr=11
+ POSTHOOK: Input: default@nzhang_part@ds=2010-08-15/hr=12
+ #### A masked pattern was here ####
+@@ -1260,11 +1262,13 @@ POSTHOOK: Lineage: nzhang_part PARTITION(ds=2010-08-15,hr=12).key SIMPLE [(srcpa
+ POSTHOOK: Lineage: nzhang_part PARTITION(ds=2010-08-15,hr=12).value SIMPLE [(srcpart)srcpart.FieldSchema(name:value, type:string, comment:default), ]
+ PREHOOK: query: select * from nzhang_part
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@nzhang_part
+ PREHOOK: Input: default@nzhang_part@ds=2010-08-15/hr=11
+ PREHOOK: Input: default@nzhang_part@ds=2010-08-15/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from nzhang_part
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@nzhang_part
+ POSTHOOK: Input: default@nzhang_part@ds=2010-08-15/hr=11
+ POSTHOOK: Input: default@nzhang_part@ds=2010-08-15/hr=12
+ #### A masked pattern was here ####
+@@ -3014,10 +3018,12 @@ ds=2010-08-15/hr=12
+ ds=2010-08-15/hr=file,
+ PREHOOK: query: select * from nzhang_part where hr = 'file,'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@nzhang_part
+ PREHOOK: Input: default@nzhang_part@ds=2010-08-15/hr=file,
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from nzhang_part where hr = 'file,'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@nzhang_part
+ POSTHOOK: Input: default@nzhang_part@ds=2010-08-15/hr=file,
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: nzhang_part PARTITION(ds=2010-08-15,hr=11).key SIMPLE [(srcpart)srcpart.FieldSchema(name:key, type:string, comment:default), ]
+diff --git a/src/ql/src/test/results/clientpositive/mi.q.out b/src/ql/src/test/results/clientpositive/mi.q.out
+index 8de6cf7..b1831d5 100644
+--- a/src/ql/src/test/results/clientpositive/mi.q.out
++++ b/src/ql/src/test/results/clientpositive/mi.q.out
+@@ -60,10 +60,12 @@ POSTHOOK: Lineage: nzhang_t2 PARTITION(ds=2008-04-08,hr=12).value SIMPLE [(srcpa
+ ds=2008-04-08/hr=12
+ PREHOOK: query: select * from nzhang_t1
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@nzhang_t1
+ PREHOOK: Input: default@nzhang_t1@ds=2008-04-08/hr=11
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from nzhang_t1
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@nzhang_t1
+ POSTHOOK: Input: default@nzhang_t1@ds=2008-04-08/hr=11
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: nzhang_t1 PARTITION(ds=2008-04-08,hr=11).key SIMPLE [(srcpart)srcpart.FieldSchema(name:key, type:string, comment:default), ]
+@@ -572,10 +574,12 @@ POSTHOOK: Lineage: nzhang_t2 PARTITION(ds=2008-04-08,hr=12).value SIMPLE [(srcpa
+ 97	val_97	2008-04-08	11
+ PREHOOK: query: select * from nzhang_t2
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@nzhang_t2
+ PREHOOK: Input: default@nzhang_t2@ds=2008-04-08/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from nzhang_t2
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@nzhang_t2
+ POSTHOOK: Input: default@nzhang_t2@ds=2008-04-08/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: nzhang_t1 PARTITION(ds=2008-04-08,hr=11).key SIMPLE [(srcpart)srcpart.FieldSchema(name:key, type:string, comment:default), ]
+diff --git a/src/ql/src/test/results/clientpositive/nonmr_fetch.q.out b/src/ql/src/test/results/clientpositive/nonmr_fetch.q.out
+index 1fc6eae..a835b93 100644
+--- a/src/ql/src/test/results/clientpositive/nonmr_fetch.q.out
++++ b/src/ql/src/test/results/clientpositive/nonmr_fetch.q.out
+@@ -80,10 +80,12 @@ STAGE PLANS:
+ 
+ PREHOOK: query: select * from srcpart where ds='2008-04-08' AND hr='11' limit 10
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@srcpart
+ PREHOOK: Input: default@srcpart@ds=2008-04-08/hr=11
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from srcpart where ds='2008-04-08' AND hr='11' limit 10
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@srcpart
+ POSTHOOK: Input: default@srcpart@ds=2008-04-08/hr=11
+ #### A masked pattern was here ####
+ 238	val_238	2008-04-08	11
+@@ -370,10 +372,12 @@ STAGE PLANS:
+ 
+ PREHOOK: query: select * from srcpart where ds='2008-04-08' AND hr='11' limit 10
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@srcpart
+ PREHOOK: Input: default@srcpart@ds=2008-04-08/hr=11
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from srcpart where ds='2008-04-08' AND hr='11' limit 10
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@srcpart
+ POSTHOOK: Input: default@srcpart@ds=2008-04-08/hr=11
+ #### A masked pattern was here ####
+ 238	val_238	2008-04-08	11
+@@ -514,10 +518,12 @@ STAGE PLANS:
+ 
+ PREHOOK: query: select key from srcpart where ds='2008-04-08' AND hr='11' limit 10
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@srcpart
+ PREHOOK: Input: default@srcpart@ds=2008-04-08/hr=11
+ #### A masked pattern was here ####
+ POSTHOOK: query: select key from srcpart where ds='2008-04-08' AND hr='11' limit 10
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@srcpart
+ POSTHOOK: Input: default@srcpart@ds=2008-04-08/hr=11
+ #### A masked pattern was here ####
+ 238
+@@ -626,6 +632,7 @@ STAGE PLANS:
+ 
+ PREHOOK: query: select *, BLOCK__OFFSET__INSIDE__FILE from srcpart where key < 10 limit 30
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@srcpart
+ PREHOOK: Input: default@srcpart@ds=2008-04-08/hr=11
+ PREHOOK: Input: default@srcpart@ds=2008-04-08/hr=12
+ PREHOOK: Input: default@srcpart@ds=2008-04-09/hr=11
+@@ -633,6 +640,7 @@ PREHOOK: Input: default@srcpart@ds=2008-04-09/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: query: select *, BLOCK__OFFSET__INSIDE__FILE from srcpart where key < 10 limit 30
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@srcpart
+ POSTHOOK: Input: default@srcpart@ds=2008-04-08/hr=11
+ POSTHOOK: Input: default@srcpart@ds=2008-04-08/hr=12
+ POSTHOOK: Input: default@srcpart@ds=2008-04-09/hr=11
+@@ -757,6 +765,7 @@ STAGE PLANS:
+ 
+ PREHOOK: query: select *, BLOCK__OFFSET__INSIDE__FILE from srcpart TABLESAMPLE (BUCKET 1 OUT OF 40 ON key)
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@srcpart
+ PREHOOK: Input: default@srcpart@ds=2008-04-08/hr=11
+ PREHOOK: Input: default@srcpart@ds=2008-04-08/hr=12
+ PREHOOK: Input: default@srcpart@ds=2008-04-09/hr=11
+@@ -764,6 +773,7 @@ PREHOOK: Input: default@srcpart@ds=2008-04-09/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: query: select *, BLOCK__OFFSET__INSIDE__FILE from srcpart TABLESAMPLE (BUCKET 1 OUT OF 40 ON key)
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@srcpart
+ POSTHOOK: Input: default@srcpart@ds=2008-04-08/hr=11
+ POSTHOOK: Input: default@srcpart@ds=2008-04-08/hr=12
+ POSTHOOK: Input: default@srcpart@ds=2008-04-09/hr=11
+@@ -871,6 +881,7 @@ STAGE PLANS:
+ 
+ PREHOOK: query: select *, BLOCK__OFFSET__INSIDE__FILE from srcpart TABLESAMPLE (0.25 PERCENT)
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@srcpart
+ PREHOOK: Input: default@srcpart@ds=2008-04-08/hr=11
+ PREHOOK: Input: default@srcpart@ds=2008-04-08/hr=12
+ PREHOOK: Input: default@srcpart@ds=2008-04-09/hr=11
+@@ -878,6 +889,7 @@ PREHOOK: Input: default@srcpart@ds=2008-04-09/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: query: select *, BLOCK__OFFSET__INSIDE__FILE from srcpart TABLESAMPLE (0.25 PERCENT)
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@srcpart
+ POSTHOOK: Input: default@srcpart@ds=2008-04-08/hr=11
+ POSTHOOK: Input: default@srcpart@ds=2008-04-08/hr=12
+ POSTHOOK: Input: default@srcpart@ds=2008-04-09/hr=11
+@@ -928,11 +940,13 @@ STAGE PLANS:
+ 
+ PREHOOK: query: select key, value, BLOCK__OFFSET__INSIDE__FILE from srcpart where ds="2008-04-09" AND rand() > 1
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@srcpart
+ PREHOOK: Input: default@srcpart@ds=2008-04-09/hr=11
+ PREHOOK: Input: default@srcpart@ds=2008-04-09/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: query: select key, value, BLOCK__OFFSET__INSIDE__FILE from srcpart where ds="2008-04-09" AND rand() > 1
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@srcpart
+ POSTHOOK: Input: default@srcpart@ds=2008-04-09/hr=11
+ POSTHOOK: Input: default@srcpart@ds=2008-04-09/hr=12
+ #### A masked pattern was here ####
+diff --git a/src/ql/src/test/results/clientpositive/null_column.q.out b/src/ql/src/test/results/clientpositive/null_column.q.out
+index 263be3b..3c57a36 100644
+--- a/src/ql/src/test/results/clientpositive/null_column.q.out
++++ b/src/ql/src/test/results/clientpositive/null_column.q.out
+@@ -134,10 +134,12 @@ POSTHOOK: Lineage: tt_b.a EXPRESSION []
+ POSTHOOK: Lineage: tt_b.b EXPRESSION []
+ PREHOOK: query: select * from temp_null2 where ds is not null
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@temp_null2
+ PREHOOK: Input: default@temp_null2@ds=2010-04-01
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from temp_null2 where ds is not null
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@temp_null2
+ POSTHOOK: Input: default@temp_null2@ds=2010-04-01
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: temp_null2 PARTITION(ds=2010-04-01).key SIMPLE []
+diff --git a/src/ql/src/test/results/clientpositive/partition_wise_fileformat10.q.out b/src/ql/src/test/results/clientpositive/partition_wise_fileformat10.q.out
+index 4417e19..390338c 100644
+--- a/src/ql/src/test/results/clientpositive/partition_wise_fileformat10.q.out
++++ b/src/ql/src/test/results/clientpositive/partition_wise_fileformat10.q.out
+@@ -17,10 +17,12 @@ POSTHOOK: Lineage: prt PARTITION(dt=1).key SIMPLE [(src)src.FieldSchema(name:key
+ POSTHOOK: Lineage: prt PARTITION(dt=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
+ PREHOOK: query: select * from prt where dt is not null
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@prt
+ PREHOOK: Input: default@prt@dt=1
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from prt where dt is not null
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@prt
+ POSTHOOK: Input: default@prt@dt=1
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: prt PARTITION(dt=1).key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
+@@ -67,10 +69,12 @@ POSTHOOK: Lineage: prt PARTITION(dt=1).value SIMPLE [(src)src.FieldSchema(name:v
+ 476.0	val_238
+ PREHOOK: query: select * from prt where dt is not null
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@prt
+ PREHOOK: Input: default@prt@dt=1
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from prt where dt is not null
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@prt
+ POSTHOOK: Input: default@prt@dt=1
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: prt PARTITION(dt=1).key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
+diff --git a/src/ql/src/test/results/clientpositive/partition_wise_fileformat11.q.out b/src/ql/src/test/results/clientpositive/partition_wise_fileformat11.q.out
+index 1774a90..a0325c8 100644
+--- a/src/ql/src/test/results/clientpositive/partition_wise_fileformat11.q.out
++++ b/src/ql/src/test/results/clientpositive/partition_wise_fileformat11.q.out
+@@ -25,10 +25,12 @@ POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).key SIMPLE [(src)s
+ POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
+ PREHOOK: query: select * from partition_test_partitioned where dt is not null
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@partition_test_partitioned
+ PREHOOK: Input: default@partition_test_partitioned@dt=1
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from partition_test_partitioned where dt is not null
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@partition_test_partitioned
+ POSTHOOK: Input: default@partition_test_partitioned@dt=1
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
+@@ -75,10 +77,12 @@ POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).value SIMPLE [(src
+ 476	val_238
+ PREHOOK: query: select * from partition_test_partitioned where dt is not null
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@partition_test_partitioned
+ PREHOOK: Input: default@partition_test_partitioned@dt=1
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from partition_test_partitioned where dt is not null
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@partition_test_partitioned
+ POSTHOOK: Input: default@partition_test_partitioned@dt=1
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
+@@ -111,10 +115,12 @@ POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).value SIMPLE [(src
+ 476	val_238
+ PREHOOK: query: select * from partition_test_partitioned where dt is not null
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@partition_test_partitioned
+ PREHOOK: Input: default@partition_test_partitioned@dt=1
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from partition_test_partitioned where dt is not null
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@partition_test_partitioned
+ POSTHOOK: Input: default@partition_test_partitioned@dt=1
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
+diff --git a/src/ql/src/test/results/clientpositive/partition_wise_fileformat12.q.out b/src/ql/src/test/results/clientpositive/partition_wise_fileformat12.q.out
+index b107ecd..256bf1b 100644
+--- a/src/ql/src/test/results/clientpositive/partition_wise_fileformat12.q.out
++++ b/src/ql/src/test/results/clientpositive/partition_wise_fileformat12.q.out
+@@ -25,10 +25,12 @@ POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).key SIMPLE [(src)s
+ POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
+ PREHOOK: query: select * from partition_test_partitioned where dt is not null
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@partition_test_partitioned
+ PREHOOK: Input: default@partition_test_partitioned@dt=1
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from partition_test_partitioned where dt is not null
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@partition_test_partitioned
+ POSTHOOK: Input: default@partition_test_partitioned@dt=1
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
+@@ -75,10 +77,12 @@ POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).value SIMPLE [(src
+ 476	val_238
+ PREHOOK: query: select * from partition_test_partitioned where dt is not null
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@partition_test_partitioned
+ PREHOOK: Input: default@partition_test_partitioned@dt=1
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from partition_test_partitioned where dt is not null
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@partition_test_partitioned
+ POSTHOOK: Input: default@partition_test_partitioned@dt=1
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
+@@ -131,11 +135,13 @@ POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=2).value SIMPLE [(src
+ 194	val_97
+ PREHOOK: query: select * from partition_test_partitioned where dt is not null
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@partition_test_partitioned
+ PREHOOK: Input: default@partition_test_partitioned@dt=1
+ PREHOOK: Input: default@partition_test_partitioned@dt=2
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from partition_test_partitioned where dt is not null
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@partition_test_partitioned
+ POSTHOOK: Input: default@partition_test_partitioned@dt=1
+ POSTHOOK: Input: default@partition_test_partitioned@dt=2
+ #### A masked pattern was here ####
+@@ -191,12 +197,14 @@ POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=3).value2 SIMPLE [(sr
+ 400	val_200	val_200
+ PREHOOK: query: select * from partition_test_partitioned where dt is not null
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@partition_test_partitioned
+ PREHOOK: Input: default@partition_test_partitioned@dt=1
+ PREHOOK: Input: default@partition_test_partitioned@dt=2
+ PREHOOK: Input: default@partition_test_partitioned@dt=3
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from partition_test_partitioned where dt is not null
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@partition_test_partitioned
+ POSTHOOK: Input: default@partition_test_partitioned@dt=1
+ POSTHOOK: Input: default@partition_test_partitioned@dt=2
+ POSTHOOK: Input: default@partition_test_partitioned@dt=3
+diff --git a/src/ql/src/test/results/clientpositive/partition_wise_fileformat2.q.out b/src/ql/src/test/results/clientpositive/partition_wise_fileformat2.q.out
+index 1856824..221a89d 100644
+--- a/src/ql/src/test/results/clientpositive/partition_wise_fileformat2.q.out
++++ b/src/ql/src/test/results/clientpositive/partition_wise_fileformat2.q.out
+@@ -110,12 +110,14 @@ STAGE PLANS:
+ 
+ PREHOOK: query: select * from partition_test_partitioned where dt >=100 and dt <= 102
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@partition_test_partitioned
+ PREHOOK: Input: default@partition_test_partitioned@dt=100
+ PREHOOK: Input: default@partition_test_partitioned@dt=101
+ PREHOOK: Input: default@partition_test_partitioned@dt=102
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from partition_test_partitioned where dt >=100 and dt <= 102
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@partition_test_partitioned
+ POSTHOOK: Input: default@partition_test_partitioned@dt=100
+ POSTHOOK: Input: default@partition_test_partitioned@dt=101
+ POSTHOOK: Input: default@partition_test_partitioned@dt=102
+@@ -240,12 +242,14 @@ STAGE PLANS:
+ 
+ PREHOOK: query: select * from partition_test_partitioned where dt >=100 and dt <= 102
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@partition_test_partitioned
+ PREHOOK: Input: default@partition_test_partitioned@dt=100
+ PREHOOK: Input: default@partition_test_partitioned@dt=101
+ PREHOOK: Input: default@partition_test_partitioned@dt=102
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from partition_test_partitioned where dt >=100 and dt <= 102
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@partition_test_partitioned
+ POSTHOOK: Input: default@partition_test_partitioned@dt=100
+ POSTHOOK: Input: default@partition_test_partitioned@dt=101
+ POSTHOOK: Input: default@partition_test_partitioned@dt=102
+diff --git a/src/ql/src/test/results/clientpositive/ppd_multi_insert.q.out b/src/ql/src/test/results/clientpositive/ppd_multi_insert.q.out
+index 851ddff..18328a8 100644
+--- a/src/ql/src/test/results/clientpositive/ppd_multi_insert.q.out
++++ b/src/ql/src/test/results/clientpositive/ppd_multi_insert.q.out
+@@ -635,10 +635,12 @@ POSTHOOK: Lineage: mi3 PARTITION(ds=2008-04-08,hr=12).key EXPRESSION [(src)a.Fie
+ 199	val_199
+ PREHOOK: query: SELECT mi3.* FROM mi3
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@mi3
+ PREHOOK: Input: default@mi3@ds=2008-04-08/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: query: SELECT mi3.* FROM mi3
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@mi3
+ POSTHOOK: Input: default@mi3@ds=2008-04-08/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: mi1.key EXPRESSION [(src)a.FieldSchema(name:key, type:string, comment:default), ]
+@@ -1957,10 +1959,12 @@ POSTHOOK: Lineage: mi3 PARTITION(ds=2008-04-08,hr=12).key EXPRESSION [(src)a.Fie
+ 199	val_199
+ PREHOOK: query: SELECT mi3.* FROM mi3
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@mi3
+ PREHOOK: Input: default@mi3@ds=2008-04-08/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: query: SELECT mi3.* FROM mi3
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@mi3
+ POSTHOOK: Input: default@mi3@ds=2008-04-08/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: mi1.key EXPRESSION [(src)a.FieldSchema(name:key, type:string, comment:default), ]
+diff --git a/src/ql/src/test/results/clientpositive/ppr_pushdown2.q.out b/src/ql/src/test/results/clientpositive/ppr_pushdown2.q.out
+index 15952db..aef4e4e 100644
+--- a/src/ql/src/test/results/clientpositive/ppr_pushdown2.q.out
++++ b/src/ql/src/test/results/clientpositive/ppr_pushdown2.q.out
+@@ -24,10 +24,12 @@ POSTHOOK: Lineage: ppr_test PARTITION(ds=22).key SIMPLE []
+ POSTHOOK: Lineage: ppr_test PARTITION(ds=2).key SIMPLE []
+ PREHOOK: query: select * from ppr_test where ds = '2'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@ppr_test
+ PREHOOK: Input: default@ppr_test@ds=2
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from ppr_test where ds = '2'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@ppr_test
+ POSTHOOK: Input: default@ppr_test@ds=2
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: ppr_test PARTITION(ds=22).key SIMPLE []
+@@ -35,10 +37,12 @@ POSTHOOK: Lineage: ppr_test PARTITION(ds=2).key SIMPLE []
+ 2	2
+ PREHOOK: query: select * from ppr_test where ds = '22'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@ppr_test
+ PREHOOK: Input: default@ppr_test@ds=22
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from ppr_test where ds = '22'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@ppr_test
+ POSTHOOK: Input: default@ppr_test@ds=22
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: ppr_test PARTITION(ds=22).key SIMPLE []
+@@ -76,10 +80,12 @@ POSTHOOK: Lineage: ppr_test2 PARTITION(ds=1,s=2).key SIMPLE []
+ POSTHOOK: Lineage: ppr_test2 PARTITION(ds=2,s=1).key SIMPLE []
+ PREHOOK: query: select * from ppr_test2 where s = '1'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@ppr_test2
+ PREHOOK: Input: default@ppr_test2@ds=2/s=1
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from ppr_test2 where s = '1'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@ppr_test2
+ POSTHOOK: Input: default@ppr_test2@ds=2/s=1
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: ppr_test PARTITION(ds=22).key SIMPLE []
+@@ -89,10 +95,12 @@ POSTHOOK: Lineage: ppr_test2 PARTITION(ds=2,s=1).key SIMPLE []
+ 2	2	1
+ PREHOOK: query: select * from ppr_test2 where ds = '1'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@ppr_test2
+ PREHOOK: Input: default@ppr_test2@ds=1/s=2
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from ppr_test2 where ds = '1'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@ppr_test2
+ POSTHOOK: Input: default@ppr_test2@ds=1/s=2
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: ppr_test PARTITION(ds=22).key SIMPLE []
+@@ -153,10 +161,12 @@ POSTHOOK: Lineage: ppr_test3 PARTITION(col=1,ol=2,l=1).key SIMPLE []
+ POSTHOOK: Lineage: ppr_test3 PARTITION(col=1,ol=2,l=3).key SIMPLE []
+ PREHOOK: query: select * from ppr_test3 where l = '1'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@ppr_test3
+ PREHOOK: Input: default@ppr_test3@col=1/ol=2/l=1
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from ppr_test3 where l = '1'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@ppr_test3
+ POSTHOOK: Input: default@ppr_test3@col=1/ol=2/l=1
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: ppr_test PARTITION(ds=22).key SIMPLE []
+@@ -169,10 +179,12 @@ POSTHOOK: Lineage: ppr_test3 PARTITION(col=1,ol=2,l=3).key SIMPLE []
+ 3	1	2	1
+ PREHOOK: query: select * from ppr_test3 where l = '2'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@ppr_test3
+ PREHOOK: Input: default@ppr_test3@col=1/ol=1/l=2
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from ppr_test3 where l = '2'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@ppr_test3
+ POSTHOOK: Input: default@ppr_test3@col=1/ol=1/l=2
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: ppr_test PARTITION(ds=22).key SIMPLE []
+@@ -185,10 +197,12 @@ POSTHOOK: Lineage: ppr_test3 PARTITION(col=1,ol=2,l=3).key SIMPLE []
+ 2	1	1	2
+ PREHOOK: query: select * from ppr_test3 where ol = '1'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@ppr_test3
+ PREHOOK: Input: default@ppr_test3@col=1/ol=1/l=2
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from ppr_test3 where ol = '1'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@ppr_test3
+ POSTHOOK: Input: default@ppr_test3@col=1/ol=1/l=2
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: ppr_test PARTITION(ds=22).key SIMPLE []
+@@ -201,11 +215,13 @@ POSTHOOK: Lineage: ppr_test3 PARTITION(col=1,ol=2,l=3).key SIMPLE []
+ 2	1	1	2
+ PREHOOK: query: select * from ppr_test3 where ol = '2'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@ppr_test3
+ PREHOOK: Input: default@ppr_test3@col=1/ol=2/l=1
+ PREHOOK: Input: default@ppr_test3@col=1/ol=2/l=3
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from ppr_test3 where ol = '2'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@ppr_test3
+ POSTHOOK: Input: default@ppr_test3@col=1/ol=2/l=1
+ POSTHOOK: Input: default@ppr_test3@col=1/ol=2/l=3
+ #### A masked pattern was here ####
+@@ -220,12 +236,14 @@ POSTHOOK: Lineage: ppr_test3 PARTITION(col=1,ol=2,l=3).key SIMPLE []
+ 1	1	2	3
+ PREHOOK: query: select * from ppr_test3 where col = '1'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@ppr_test3
+ PREHOOK: Input: default@ppr_test3@col=1/ol=1/l=2
+ PREHOOK: Input: default@ppr_test3@col=1/ol=2/l=1
+ PREHOOK: Input: default@ppr_test3@col=1/ol=2/l=3
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from ppr_test3 where col = '1'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@ppr_test3
+ POSTHOOK: Input: default@ppr_test3@col=1/ol=1/l=2
+ POSTHOOK: Input: default@ppr_test3@col=1/ol=2/l=1
+ POSTHOOK: Input: default@ppr_test3@col=1/ol=2/l=3
+@@ -242,10 +260,12 @@ POSTHOOK: Lineage: ppr_test3 PARTITION(col=1,ol=2,l=3).key SIMPLE []
+ 1	1	2	3
+ PREHOOK: query: select * from ppr_test3 where ol = '2' and l = '1'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@ppr_test3
+ PREHOOK: Input: default@ppr_test3@col=1/ol=2/l=1
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from ppr_test3 where ol = '2' and l = '1'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@ppr_test3
+ POSTHOOK: Input: default@ppr_test3@col=1/ol=2/l=1
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: ppr_test PARTITION(ds=22).key SIMPLE []
+@@ -258,10 +278,12 @@ POSTHOOK: Lineage: ppr_test3 PARTITION(col=1,ol=2,l=3).key SIMPLE []
+ 3	1	2	1
+ PREHOOK: query: select * from ppr_test3 where col='1' and ol = '2' and l = '1'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@ppr_test3
+ PREHOOK: Input: default@ppr_test3@col=1/ol=2/l=1
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from ppr_test3 where col='1' and ol = '2' and l = '1'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@ppr_test3
+ POSTHOOK: Input: default@ppr_test3@col=1/ol=2/l=1
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: ppr_test PARTITION(ds=22).key SIMPLE []
+diff --git a/src/ql/src/test/results/clientpositive/ppr_pushdown3.q.out b/src/ql/src/test/results/clientpositive/ppr_pushdown3.q.out
+index ac4cdc5..ed5337e 100644
+--- a/src/ql/src/test/results/clientpositive/ppr_pushdown3.q.out
++++ b/src/ql/src/test/results/clientpositive/ppr_pushdown3.q.out
+@@ -132,6 +132,7 @@ STAGE PLANS:
+ 
+ PREHOOK: query: select * from srcpart
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@srcpart
+ PREHOOK: Input: default@srcpart@ds=2008-04-08/hr=11
+ PREHOOK: Input: default@srcpart@ds=2008-04-08/hr=12
+ PREHOOK: Input: default@srcpart@ds=2008-04-09/hr=11
+@@ -139,6 +140,7 @@ PREHOOK: Input: default@srcpart@ds=2008-04-09/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from srcpart
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@srcpart
+ POSTHOOK: Input: default@srcpart@ds=2008-04-08/hr=11
+ POSTHOOK: Input: default@srcpart@ds=2008-04-08/hr=12
+ POSTHOOK: Input: default@srcpart@ds=2008-04-09/hr=11
+diff --git a/src/ql/src/test/results/clientpositive/protectmode.q.out b/src/ql/src/test/results/clientpositive/protectmode.q.out
+index c67e06c..4f8837f 100644
+--- a/src/ql/src/test/results/clientpositive/protectmode.q.out
++++ b/src/ql/src/test/results/clientpositive/protectmode.q.out
+@@ -111,18 +111,22 @@ POSTHOOK: type: ALTERTABLE_DROPPARTS
+ POSTHOOK: Input: default@tbl2
+ PREHOOK: query: select * from tbl2 where p='p1'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@tbl2
+ PREHOOK: Input: default@tbl2@p=p1
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from tbl2 where p='p1'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@tbl2
+ POSTHOOK: Input: default@tbl2@p=p1
+ #### A masked pattern was here ####
+ PREHOOK: query: select * from tbl2 where p='p2'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@tbl2
+ PREHOOK: Input: default@tbl2@p=p2
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from tbl2 where p='p2'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@tbl2
+ POSTHOOK: Input: default@tbl2@p=p2
+ #### A masked pattern was here ####
+ PREHOOK: query: alter table tbl2 partition (p='p1') enable offline
+@@ -216,10 +220,12 @@ p	string
+ #### A masked pattern was here ####
+ PREHOOK: query: select * from tbl2 where p='p2'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@tbl2
+ PREHOOK: Input: default@tbl2@p=p2
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from tbl2 where p='p2'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@tbl2
+ POSTHOOK: Input: default@tbl2@p=p2
+ #### A masked pattern was here ####
+ PREHOOK: query: select col from tbl2 where p='p2'
+@@ -251,10 +257,12 @@ p	string
+ #### A masked pattern was here ####
+ PREHOOK: query: select * from tbl2 where p='p1'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@tbl2
+ PREHOOK: Input: default@tbl2@p=p1
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from tbl2 where p='p1'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@tbl2
+ POSTHOOK: Input: default@tbl2@p=p1
+ #### A masked pattern was here ####
+ PREHOOK: query: select col from tbl2 where p='p1'
+diff --git a/src/ql/src/test/results/clientpositive/stats0.q.out b/src/ql/src/test/results/clientpositive/stats0.q.out
+index b934f0a..d12a4e9 100644
+--- a/src/ql/src/test/results/clientpositive/stats0.q.out
++++ b/src/ql/src/test/results/clientpositive/stats0.q.out
+@@ -755,10 +755,12 @@ POSTHOOK: Lineage: stats_partitioned PARTITION(ds=1).value SIMPLE [(src)src.Fiel
+ ds=1
+ PREHOOK: query: select * from stats_partitioned where ds is not null
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@stats_partitioned
+ PREHOOK: Input: default@stats_partitioned@ds=1
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from stats_partitioned where ds is not null
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@stats_partitioned
+ POSTHOOK: Input: default@stats_partitioned@ds=1
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: stats_non_partitioned.key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
+@@ -2306,10 +2308,12 @@ POSTHOOK: Lineage: stats_partitioned PARTITION(ds=1).value SIMPLE [(src)src.Fiel
+ ds=1
+ PREHOOK: query: select * from stats_partitioned where ds is not null
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@stats_partitioned
+ PREHOOK: Input: default@stats_partitioned@ds=1
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from stats_partitioned where ds is not null
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@stats_partitioned
+ POSTHOOK: Input: default@stats_partitioned@ds=1
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: stats_non_partitioned.key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
+diff --git a/src/ql/src/test/results/clientpositive/stats3.q.out b/src/ql/src/test/results/clientpositive/stats3.q.out
+index 64d97a9..6636415 100644
+--- a/src/ql/src/test/results/clientpositive/stats3.q.out
++++ b/src/ql/src/test/results/clientpositive/stats3.q.out
+@@ -111,10 +111,12 @@ POSTHOOK: Output: default@hive_test_dst@pcol1=test_part/pcol2=test_Part
+ POSTHOOK: Lineage: hive_test_dst PARTITION(pcol1=test_part,pcol2=test_Part).col1 SIMPLE [(hive_test_src)hive_test_src.FieldSchema(name:col1, type:string, comment:null), ]
+ PREHOOK: query: select * from hive_test_dst where pcol1='test_part' and pcol2='test_Part'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@hive_test_dst
+ PREHOOK: Input: default@hive_test_dst@pcol1=test_part/pcol2=test_Part
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from hive_test_dst where pcol1='test_part' and pcol2='test_Part'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@hive_test_dst
+ POSTHOOK: Input: default@hive_test_dst@pcol1=test_part/pcol2=test_Part
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: hive_test_dst PARTITION(pcol1=test_part,pcol2=test_Part).col1 SIMPLE [(hive_test_src)hive_test_src.FieldSchema(name:col1, type:string, comment:null), ]
+@@ -148,9 +150,11 @@ POSTHOOK: Lineage: hive_test_dst PARTITION(pcol1=test_part,pcol2=test_Part).col1
+ POSTHOOK: Lineage: hive_test_dst PARTITION(pcol1=test_part,pcol2=test_Part).col1 SIMPLE [(hive_test_src)hive_test_src.FieldSchema(name:col1, type:string, comment:null), ]
+ PREHOOK: query: select * from hive_test_dst where pcol1='test_part' and pcol2='test_part'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@hive_test_dst
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from hive_test_dst where pcol1='test_part' and pcol2='test_part'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@hive_test_dst
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: hive_test_dst PARTITION(pcol1=test_part,pcol2=test_Part).col1 SIMPLE [(hive_test_src)hive_test_src.FieldSchema(name:col1, type:string, comment:null), ]
+ POSTHOOK: Lineage: hive_test_dst PARTITION(pcol1=test_part,pcol2=test_Part).col1 SIMPLE [(hive_test_src)hive_test_src.FieldSchema(name:col1, type:string, comment:null), ]
+@@ -169,10 +173,12 @@ POSTHOOK: Lineage: hive_test_dst PARTITION(pcol1=test_part,pcol2=test_Part).col1
+ 6
+ PREHOOK: query: select * from hive_test_dst where pcol1='test_part'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@hive_test_dst
+ PREHOOK: Input: default@hive_test_dst@pcol1=test_part/pcol2=test_Part
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from hive_test_dst where pcol1='test_part'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@hive_test_dst
+ POSTHOOK: Input: default@hive_test_dst@pcol1=test_part/pcol2=test_Part
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: hive_test_dst PARTITION(pcol1=test_part,pcol2=test_Part).col1 SIMPLE [(hive_test_src)hive_test_src.FieldSchema(name:col1, type:string, comment:null), ]
+@@ -185,17 +191,21 @@ POSTHOOK: Lineage: hive_test_dst PARTITION(pcol1=test_part,pcol2=test_Part).col1
+ 6	test_part	test_Part
+ PREHOOK: query: select * from hive_test_dst where pcol1='test_part' and pcol2='test_part'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@hive_test_dst
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from hive_test_dst where pcol1='test_part' and pcol2='test_part'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@hive_test_dst
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: hive_test_dst PARTITION(pcol1=test_part,pcol2=test_Part).col1 SIMPLE [(hive_test_src)hive_test_src.FieldSchema(name:col1, type:string, comment:null), ]
+ POSTHOOK: Lineage: hive_test_dst PARTITION(pcol1=test_part,pcol2=test_Part).col1 SIMPLE [(hive_test_src)hive_test_src.FieldSchema(name:col1, type:string, comment:null), ]
+ PREHOOK: query: select * from hive_test_dst where pcol1='test_Part'
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@hive_test_dst
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from hive_test_dst where pcol1='test_Part'
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@hive_test_dst
+ #### A masked pattern was here ####
+ POSTHOOK: Lineage: hive_test_dst PARTITION(pcol1=test_part,pcol2=test_Part).col1 SIMPLE [(hive_test_src)hive_test_src.FieldSchema(name:col1, type:string, comment:null), ]
+ POSTHOOK: Lineage: hive_test_dst PARTITION(pcol1=test_part,pcol2=test_Part).col1 SIMPLE [(hive_test_src)hive_test_src.FieldSchema(name:col1, type:string, comment:null), ]
+diff --git a/src/ql/src/test/results/clientpositive/stats4.q.out b/src/ql/src/test/results/clientpositive/stats4.q.out
+index 272e83f..ea9343f 100644
+--- a/src/ql/src/test/results/clientpositive/stats4.q.out
++++ b/src/ql/src/test/results/clientpositive/stats4.q.out
+@@ -283,11 +283,13 @@ ds=2008-12-31/hr=11
+ ds=2008-12-31/hr=12
+ PREHOOK: query: select * from nzhang_part1 where ds is not null and hr is not null
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@nzhang_part1
+ PREHOOK: Input: default@nzhang_part1@ds=2008-04-08/hr=11
+ PREHOOK: Input: default@nzhang_part1@ds=2008-04-08/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from nzhang_part1 where ds is not null and hr is not null
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@nzhang_part1
+ POSTHOOK: Input: default@nzhang_part1@ds=2008-04-08/hr=11
+ POSTHOOK: Input: default@nzhang_part1@ds=2008-04-08/hr=12
+ #### A masked pattern was here ####
+@@ -1301,11 +1303,13 @@ POSTHOOK: Lineage: nzhang_part2 PARTITION(ds=2008-12-31,hr=12).value SIMPLE [(sr
+ 97	val_97	2008-04-08	12
+ PREHOOK: query: select * from nzhang_part2 where ds is not null and hr is not null
+ PREHOOK: type: QUERY
++PREHOOK: Input: default@nzhang_part2
+ PREHOOK: Input: default@nzhang_part2@ds=2008-12-31/hr=11
+ PREHOOK: Input: default@nzhang_part2@ds=2008-12-31/hr=12
+ #### A masked pattern was here ####
+ POSTHOOK: query: select * from nzhang_part2 where ds is not null and hr is not null
+ POSTHOOK: type: QUERY
++POSTHOOK: Input: default@nzhang_part2
+ POSTHOOK: Input: default@nzhang_part2@ds=2008-12-31/hr=11
+ POSTHOOK: Input: default@nzhang_part2@ds=2008-12-31/hr=12
+ #### A masked pattern was here ####
+-- 
+1.7.0.4
+

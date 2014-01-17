@@ -1,0 +1,94 @@
+From f0f2fe704142f3ccf482f8de8beafa32cbeb6db4 Mon Sep 17 00:00:00 2001
+From: Ashutosh Chauhan <hashutosh@apache.org>
+Date: Sun, 31 Mar 2013 03:45:19 +0000
+Subject: [PATCH 144/218] HIVE-4122 : Queries fail if timestamp data not in expected format (Prasad Mujumdar via Ashutosh Chauhan)
+
+git-svn-id: https://svn.apache.org/repos/asf/hive/trunk@1462874 13f79535-47bb-0310-9956-ffa450edef68
+---
+ .../test/queries/clientpositive/timestamp_null.q   |    7 ++++
+ .../results/clientpositive/timestamp_null.q.out    |   33 ++++++++++++++++++++
+ .../hadoop/hive/serde2/lazy/LazyTimestamp.java     |   11 +++++--
+ 3 files changed, 48 insertions(+), 3 deletions(-)
+ create mode 100644 ql/src/test/queries/clientpositive/timestamp_null.q
+ create mode 100644 ql/src/test/results/clientpositive/timestamp_null.q.out
+
+diff --git a/src/ql/src/test/queries/clientpositive/timestamp_null.q b/src/ql/src/test/queries/clientpositive/timestamp_null.q
+new file mode 100644
+index 0000000..efd5bc4
+--- /dev/null
++++ b/src/ql/src/test/queries/clientpositive/timestamp_null.q
+@@ -0,0 +1,7 @@
++DROP TABLE IF EXISTS timestamp_null;
++CREATE TABLE timestamp_null (t1 TIMESTAMP);
++LOAD DATA LOCAL INPATH '../data/files/test.dat' OVERWRITE INTO TABLE timestamp_null;
++
++SELECT * FROM timestamp_null LIMIT 1;
++
++SELECT t1 FROM timestamp_null LIMIT 1;
+diff --git a/src/ql/src/test/results/clientpositive/timestamp_null.q.out b/src/ql/src/test/results/clientpositive/timestamp_null.q.out
+new file mode 100644
+index 0000000..d21b880
+--- /dev/null
++++ b/src/ql/src/test/results/clientpositive/timestamp_null.q.out
+@@ -0,0 +1,33 @@
++PREHOOK: query: DROP TABLE IF EXISTS timestamp_null
++PREHOOK: type: DROPTABLE
++POSTHOOK: query: DROP TABLE IF EXISTS timestamp_null
++POSTHOOK: type: DROPTABLE
++PREHOOK: query: CREATE TABLE timestamp_null (t1 TIMESTAMP)
++PREHOOK: type: CREATETABLE
++POSTHOOK: query: CREATE TABLE timestamp_null (t1 TIMESTAMP)
++POSTHOOK: type: CREATETABLE
++POSTHOOK: Output: default@timestamp_null
++PREHOOK: query: LOAD DATA LOCAL INPATH '../data/files/test.dat' OVERWRITE INTO TABLE timestamp_null
++PREHOOK: type: LOAD
++PREHOOK: Output: default@timestamp_null
++POSTHOOK: query: LOAD DATA LOCAL INPATH '../data/files/test.dat' OVERWRITE INTO TABLE timestamp_null
++POSTHOOK: type: LOAD
++POSTHOOK: Output: default@timestamp_null
++PREHOOK: query: SELECT * FROM timestamp_null LIMIT 1
++PREHOOK: type: QUERY
++PREHOOK: Input: default@timestamp_null
++#### A masked pattern was here ####
++POSTHOOK: query: SELECT * FROM timestamp_null LIMIT 1
++POSTHOOK: type: QUERY
++POSTHOOK: Input: default@timestamp_null
++#### A masked pattern was here ####
++NULL
++PREHOOK: query: SELECT t1 FROM timestamp_null LIMIT 1
++PREHOOK: type: QUERY
++PREHOOK: Input: default@timestamp_null
++#### A masked pattern was here ####
++POSTHOOK: query: SELECT t1 FROM timestamp_null LIMIT 1
++POSTHOOK: type: QUERY
++POSTHOOK: Input: default@timestamp_null
++#### A masked pattern was here ####
++NULL
+diff --git a/src/serde/src/java/org/apache/hadoop/hive/serde2/lazy/LazyTimestamp.java b/src/serde/src/java/org/apache/hadoop/hive/serde2/lazy/LazyTimestamp.java
+index 7dc738a..71ed865 100644
+--- a/src/serde/src/java/org/apache/hadoop/hive/serde2/lazy/LazyTimestamp.java
++++ b/src/serde/src/java/org/apache/hadoop/hive/serde2/lazy/LazyTimestamp.java
+@@ -66,12 +66,17 @@ public class LazyTimestamp extends LazyPrimitive<LazyTimestampObjectInspector, T
+       s = "";
+     }
+ 
+-    Timestamp t;
++    Timestamp t = null;
+     if (s.compareTo("NULL") == 0) {
+-      t = null;
++      isNull = true;
+       logExceptionMessage(bytes, start, length, "TIMESTAMP");
+     } else {
+-      t = Timestamp.valueOf(s);
++      try {
++        t = Timestamp.valueOf(s);
++      } catch (IllegalArgumentException e) {
++        isNull = true;
++        logExceptionMessage(bytes, start, length, "TIMESTAMP");
++      }
+     }
+     data.set(t);
+   }
+-- 
+1.7.0.4
+

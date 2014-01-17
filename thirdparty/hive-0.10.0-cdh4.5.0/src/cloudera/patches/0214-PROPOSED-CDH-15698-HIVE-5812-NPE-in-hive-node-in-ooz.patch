@@ -1,0 +1,25 @@
+From a8fb077110da1450a31502824e04a446100f4169 Mon Sep 17 00:00:00 2001
+From: Prasad Mujumdar <prasadm@cloudera.com>
+Date: Fri, 15 Nov 2013 16:36:47 -0800
+Subject: [PATCH 214/218] PROPOSED CDH-15698 : HIVE-5812 - NPE in hive node in oozie to hive server2 test on secure cluster
+
+---
+ .../java/org/apache/hive/jdbc/HiveConnection.java  |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/jdbc/src/java/org/apache/hive/jdbc/HiveConnection.java b/src/jdbc/src/java/org/apache/hive/jdbc/HiveConnection.java
+index 95017a6..08320e7 100644
+--- a/src/jdbc/src/java/org/apache/hive/jdbc/HiveConnection.java
++++ b/src/jdbc/src/java/org/apache/hive/jdbc/HiveConnection.java
+@@ -177,7 +177,7 @@ public class HiveConnection implements java.sql.Connection {
+                   HiveAuthFactory.getSocketTransport(host, port, loginTimeout), saslProps);
+         } else if ((tokenStr = getClientDelegationToken(sessConf)) != null) {
+           transport = KerberosSaslHelper.getTokenTransport(tokenStr,
+-                  host, transport);
++                  host, HiveAuthFactory.getSocketTransport(host, port, loginTimeout));
+         } else {
+           String userName = sessConf.get(HIVE_AUTH_USER);
+           if ((userName == null) || userName.isEmpty()) {
+-- 
+1.7.0.4
+

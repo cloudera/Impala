@@ -1,0 +1,14 @@
+SUMMARY 12/26/2013 - Hive cdh4-0.10.0_4.5.0_patch219
+PATCH JIRA: https://jira.cloudera.com/browse/PATCH-219
+This patch is built on top of cdh4-0.10.0_4.5.0_patch205 and add a fix to Hive Metastore
+
+PATCH-219:
+===================================================================================================
+DISTRO-557:Backport HIVE-5524 - Unwanted delay in getting Hive metastore connection with METASTORE_CLIENT_CONNECT_RETRY_DELAY
+
+PATCH-205:
+===================================================================================================
+CDH-15853: Querying avro table with empty partition folders raises exceptions
+
+Base Branch:
+CDH4.5.0-release

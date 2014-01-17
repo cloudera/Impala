@@ -1,0 +1,65 @@
+From 361e8de76033b82ac4bbaf4a72d1a6477aa79aec Mon Sep 17 00:00:00 2001
+From: Brock Noland <brock@apache.org>
+Date: Tue, 4 Jun 2013 14:29:47 -0700
+Subject: [PATCH 128/218] CLOUDERA-BUILD: CDH-12509: Hive - compile-test doesn't respect byte code target
+
+---
+ build-common.xml |   11 +++++++----
+ shims/build.xml  |    5 +++--
+ 2 files changed, 10 insertions(+), 6 deletions(-)
+
+diff --git a/src/build-common.xml b/src/build-common.xml
+index 48b862a..c23f687 100644
+--- a/src/build-common.xml
++++ b/src/build-common.xml
+@@ -355,6 +355,7 @@
+   <!-- target to compile tests -->
+   <target name="compile-test" depends="compile,ivy-retrieve-test,set-test-classpath">
+     <echo message="Project: ${ant.project.name}"/>
++    <echo message="JDK source: ${sourceJavaVersion}, target: ${targetJavaVersion}, bootclasspath: ${javaBootClasspath}"/>
+     <javac
+      encoding="${build.encoding}"
+      srcdir="${test.src.dir}"
+@@ -363,8 +364,9 @@
+      destdir="${test.build.classes}"
+      debug="${javac.debug}"
+      optimize="${javac.optimize}"
+-     target="${javac.version}"
+-     source="${javac.version}"
++     source="${sourceJavaVersion}"
++     target="${targetJavaVersion}"
++     bootclasspath="${javaBootClasspath}"
+      deprecation="${javac.deprecation}"
+      includeantruntime="false">
+       <compilerarg line="${javac.args} ${javac.args.warnings}" />
+@@ -377,8 +379,9 @@
+      destdir="${test.build.classes}"
+      debug="${javac.debug}"
+      optimize="${javac.optimize}"
+-     target="${javac.version}"
+-     source="${javac.version}"
++     source="${sourceJavaVersion}"
++     target="${targetJavaVersion}"
++     bootclasspath="${javaBootClasspath}"
+      deprecation="${javac.deprecation}"
+      includeantruntime="false">
+       <compilerarg line="${javac.args} ${javac.args.warnings}" />
+diff --git a/src/shims/build.xml b/src/shims/build.xml
+index 0aaa8be..8fc5c37 100644
+--- a/src/shims/build.xml
++++ b/src/shims/build.xml
+@@ -103,8 +103,9 @@ to call at top-level: ant deploy-contrib compile-core-test
+          destdir="${test.build.classes}"
+          debug="${javac.debug}"
+          optimize="${javac.optimize}"
+-         target="${javac.version}"
+-         source="${javac.version}"
++         source="${sourceJavaVersion}"
++         target="${targetJavaVersion}"
++         bootclasspath="${javaBootClasspath}"
+          deprecation="${javac.deprecation}"
+          includeantruntime="false">
+           <compilerarg line="${javac.args} ${javac.args.warnings}" />
+-- 
+1.7.0.4
+

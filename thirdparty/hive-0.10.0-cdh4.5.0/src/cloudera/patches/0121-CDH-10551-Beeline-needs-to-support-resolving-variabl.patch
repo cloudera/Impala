@@ -1,0 +1,51 @@
+From d9191bab153986bd11c31b33f47fd4171ef021d6 Mon Sep 17 00:00:00 2001
+From: xzhang <xzhang@xzdt.(none)>
+Date: Thu, 23 May 2013 10:08:56 -0700
+Subject: [PATCH 121/218] CDH-10551 Beeline needs to support resolving variables; Ported patch from HIVE-4568
+
+---
+ .../src/java/org/apache/hive/beeline/BeeLine.java  |    4 +++-
+ .../hadoop/hive/ql/parse/VariableSubstitution.java |    5 ++++-
+ 2 files changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/src/beeline/src/java/org/apache/hive/beeline/BeeLine.java b/src/beeline/src/java/org/apache/hive/beeline/BeeLine.java
+index aeb1e8b..126651a 100644
+--- a/src/beeline/src/java/org/apache/hive/beeline/BeeLine.java
++++ b/src/beeline/src/java/org/apache/hive/beeline/BeeLine.java
+@@ -98,6 +98,8 @@ import jline.ConsoleReader;
+ import jline.FileNameCompletor;
+ import jline.SimpleCompletor;
+ 
++import org.apache.hadoop.hive.conf.HiveConf;
++import org.apache.hadoop.hive.ql.parse.VariableSubstitution;
+ 
+ /**
+  * A console SQL shell with command completion.
+@@ -751,7 +753,7 @@ public class BeeLine {
+       return true;
+     }
+ 
+-    line = line.trim();
++    line = new VariableSubstitution().substitute(new HiveConf(BeeLine.class), line.trim());
+ 
+     // save it to the current script, if any
+     if (scriptOutputFile != null) {
+diff --git a/src/ql/src/java/org/apache/hadoop/hive/ql/parse/VariableSubstitution.java b/src/ql/src/java/org/apache/hadoop/hive/ql/parse/VariableSubstitution.java
+index f292944..bf42710 100644
+--- a/src/ql/src/java/org/apache/hadoop/hive/ql/parse/VariableSubstitution.java
++++ b/src/ql/src/java/org/apache/hadoop/hive/ql/parse/VariableSubstitution.java
+@@ -55,7 +55,10 @@ public class VariableSubstitution {
+       if(var.startsWith(SetProcessor.HIVEVAR_PREFIX)){
+         val =  SessionState.get().getHiveVariables().get(var.substring(SetProcessor.HIVEVAR_PREFIX.length()));
+       } else {
+-        val = SessionState.get().getHiveVariables().get(var);
++        SessionState ss = SessionState.get();
++        if( ss != null ) {
++            val = ss.getHiveVariables().get(var);
++        }
+       }
+     }
+     return val;
+-- 
+1.7.0.4
+

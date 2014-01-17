@@ -1,0 +1,49 @@
+From ee1477b0d2f8ab2c82c08038036fc424163a296a Mon Sep 17 00:00:00 2001
+From: Brock Noland <brock@cloudera.com>
+Date: Thu, 12 Sep 2013 10:13:55 -0500
+Subject: [PATCH 201/218] CDH-14171 - Backport HIVE-5181 - Constructor for DelegationTokenInformation changed in HDFS-4680 which we use in HiveDelegationTokenSupport
+
+---
+ .../delegation/HiveDelegationTokenSupport.java     |   18 ++++++++++++++----
+ 1 files changed, 14 insertions(+), 4 deletions(-)
+
+diff --git a/src/shims/src/common-secure/java/org/apache/hadoop/security/token/delegation/HiveDelegationTokenSupport.java b/src/shims/src/common-secure/java/org/apache/hadoop/security/token/delegation/HiveDelegationTokenSupport.java
+index 6b39a14..ecaf40d 100644
+--- a/src/shims/src/common-secure/java/org/apache/hadoop/security/token/delegation/HiveDelegationTokenSupport.java
++++ b/src/shims/src/common-secure/java/org/apache/hadoop/security/token/delegation/HiveDelegationTokenSupport.java
+@@ -41,6 +41,12 @@ public final class HiveDelegationTokenSupport {
+       WritableUtils.writeVInt(out, token.password.length);
+       out.write(token.password);
+       out.writeLong(token.renewDate);
++      if(token.getTrackingId() == null) {
++        out.writeByte((byte)0);
++      } else {
++        out.writeByte((byte)1);
++        out.writeUTF(token.getTrackingId());
++      }
+       out.flush();
+       return bos.toByteArray();
+     } catch (IOException ex) {
+@@ -51,11 +57,15 @@ public final class HiveDelegationTokenSupport {
+   public static DelegationTokenInformation decodeDelegationTokenInformation(byte[] tokenBytes)
+       throws IOException {
+     DataInputStream in = new DataInputStream(new ByteArrayInputStream(tokenBytes));
+-    DelegationTokenInformation token = new DelegationTokenInformation(0, null);
+     int len = WritableUtils.readVInt(in);
+-    token.password = new byte[len];
+-    in.readFully(token.password);
+-    token.renewDate = in.readLong();
++    byte[] password = new byte[len];
++    in.readFully(password);
++    long renewDate = in.readLong();
++    String trackingId = null;
++    if(in.readByte() == (byte)1) {
++      trackingId = in.readUTF();
++    }
++    DelegationTokenInformation token = new DelegationTokenInformation(renewDate, password, trackingId);
+     return token;
+   }
+ 
+-- 
+1.7.0.4
+

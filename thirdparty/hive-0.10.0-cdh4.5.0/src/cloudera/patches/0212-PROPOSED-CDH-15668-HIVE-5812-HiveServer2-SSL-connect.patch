@@ -1,0 +1,71 @@
+From 6820afffa8ded1cfe7bf7e60e443635a6ae0cb8f Mon Sep 17 00:00:00 2001
+From: Prasad Mujumdar <prasadm@cloudera.com>
+Date: Tue, 12 Nov 2013 23:17:25 -0800
+Subject: [PATCH 212/218] PROPOSED CDH-15668: HIVE-5812 - HiveServer2 SSL connection transport binds to loopback address by default
+
+---
+ .../java/org/apache/hive/jdbc/HiveConnection.java  |   13 ++++++++++++-
+ .../apache/hive/service/auth/HiveAuthFactory.java  |    9 +++++++--
+ 2 files changed, 19 insertions(+), 3 deletions(-)
+
+diff --git a/src/jdbc/src/java/org/apache/hive/jdbc/HiveConnection.java b/src/jdbc/src/java/org/apache/hive/jdbc/HiveConnection.java
+index f3fa03d..95017a6 100644
+--- a/src/jdbc/src/java/org/apache/hive/jdbc/HiveConnection.java
++++ b/src/jdbc/src/java/org/apache/hive/jdbc/HiveConnection.java
+@@ -43,6 +43,7 @@ import java.util.Map;
+ import java.util.Map.Entry;
+ import java.util.Properties;
+ import java.util.concurrent.Executor;
++import java.util.concurrent.TimeUnit;
+ 
+ import javax.security.sasl.Sasl;
+ import javax.security.sasl.SaslException;
+@@ -102,7 +103,7 @@ public class HiveConnection implements java.sql.Connection {
+    */
+   public HiveConnection(String uri, Properties info) throws SQLException {
+     Utils.JdbcConnectionParams connParams;
+-    loginTimeout = DriverManager.getLoginTimeout();
++    setupLoginTimeout();
+     try {
+       connParams = Utils.parseURL(uri);
+     } catch (IllegalArgumentException e) {
+@@ -264,6 +265,16 @@ public class HiveConnection implements java.sql.Connection {
+     isClosed = false;
+   }
+ 
++  // copy loginTimeout from driver manager. Thrift timeout needs to be in millis
++  private void setupLoginTimeout() {
++    long timeOut = TimeUnit.SECONDS.toMillis(DriverManager.getLoginTimeout());
++    if (timeOut > Integer.MAX_VALUE) {
++      loginTimeout = Integer.MAX_VALUE;
++    } else {
++      loginTimeout = (int) timeOut;
++    }
++  }
++
+   public void abort(Executor executor) throws SQLException {
+     // JDK 1.7
+     throw new SQLException("Method not supported");
+diff --git a/src/service/src/java/org/apache/hive/service/auth/HiveAuthFactory.java b/src/service/src/java/org/apache/hive/service/auth/HiveAuthFactory.java
+index edd56d6..dc49f2c 100644
+--- a/src/service/src/java/org/apache/hive/service/auth/HiveAuthFactory.java
++++ b/src/service/src/java/org/apache/hive/service/auth/HiveAuthFactory.java
+@@ -252,8 +252,13 @@ public class HiveAuthFactory {
+         new TSSLTransportFactory.TSSLTransportParameters();
+     params.setKeyStore(keyStorePath, keyStorePassWord);
+ 
+-    return TSSLTransportFactory.getServerSocket(portNum, 10000,
+-        InetAddress.getByName(hiveHost), params);
++    InetAddress serverAddress;
++    if (hiveHost == null || hiveHost.isEmpty()) {
++      serverAddress = InetAddress.getLocalHost();
++    } else {
++      serverAddress = InetAddress.getByName(hiveHost);
++    }
++    return TSSLTransportFactory.getServerSocket(portNum, 10000, serverAddress, params);
+   }
+ 
+ }
+-- 
+1.7.0.4
+

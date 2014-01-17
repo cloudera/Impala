@@ -1,0 +1,75 @@
+From c6d6ff803a3f744d8caeab277c552671baac920e Mon Sep 17 00:00:00 2001
+From: Prasad Mujumdar <prasadm@cloudera.com>
+Date: Sat, 9 Nov 2013 17:08:58 -0800
+Subject: [PATCH 209/218] PROPOSE CDH-14482: HIVE-5351: Secure-Socket-Layer (SSL) support for HiveServer2. Fix for kerberos issue
+
+---
+ .../java/org/apache/hive/jdbc/HiveConnection.java  |   10 +++++-----
+ .../apache/hive/service/auth/HiveAuthFactory.java  |    4 ++--
+ 2 files changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/src/jdbc/src/java/org/apache/hive/jdbc/HiveConnection.java b/src/jdbc/src/java/org/apache/hive/jdbc/HiveConnection.java
+index 202df2f..f3fa03d 100644
+--- a/src/jdbc/src/java/org/apache/hive/jdbc/HiveConnection.java
++++ b/src/jdbc/src/java/org/apache/hive/jdbc/HiveConnection.java
+@@ -89,7 +89,6 @@ public class HiveConnection implements java.sql.Connection {
+   private static final String HIVE_USE_SSL = "ssl";
+   private static final String HIVE_SSL_TRUST_STORE = "sslTrustStore";
+   private static final String HIVE_SSL_TRUST_STORE_PASSWORD = "trustStorePassword";
+-  private static final int HIVE_CONNECTION_TIMEOUT = 5;
+ 
+   private TTransport transport;
+   private TCLIService.Iface client;
+@@ -97,7 +96,7 @@ public class HiveConnection implements java.sql.Connection {
+   private SQLWarning warningChain = null;
+   private TSessionHandle sessHandle = null;
+   private final List<TProtocolVersion> supportedProtocols = new LinkedList<TProtocolVersion>();
+-  private int loginTimeout = HIVE_CONNECTION_TIMEOUT;
++  private int loginTimeout = 0;
+   /**
+    * TODO: - parse uri (use java.net.URI?).
+    */
+@@ -173,7 +172,8 @@ public class HiveConnection implements java.sql.Connection {
+           saslProps.put(Sasl.QOP, saslQOP.toString());
+           saslProps.put(Sasl.SERVER_AUTH, "true");
+           transport = KerberosSaslHelper.getKerberosTransport(
+-                  sessConf.get(HIVE_AUTH_PRINCIPAL), host, transport, saslProps);
++                  sessConf.get(HIVE_AUTH_PRINCIPAL), host,
++                  HiveAuthFactory.getSocketTransport(host, port, loginTimeout), saslProps);
+         } else if ((tokenStr = getClientDelegationToken(sessConf)) != null) {
+           transport = KerberosSaslHelper.getTokenTransport(tokenStr,
+                   host, transport);
+@@ -197,12 +197,12 @@ public class HiveConnection implements java.sql.Connection {
+                   sslTrustStore, sslTrustStorePassword);
+             }
+           } else {
+-            transport = HiveAuthFactory.getSocketTransport(host, port);
++            transport = HiveAuthFactory.getSocketTransport(host, port, loginTimeout);
+           }
+           transport = PlainSaslHelper.getPlainTransport(userName, passwd, transport);
+         }
+       } else {
+-        transport = HiveAuthFactory.getSocketTransport(host, port);
++        transport = HiveAuthFactory.getSocketTransport(host, port, loginTimeout);
+       }
+     } catch (SaslException e) {
+       throw new SQLException("Could not establish secure connection to "
+diff --git a/src/service/src/java/org/apache/hive/service/auth/HiveAuthFactory.java b/src/service/src/java/org/apache/hive/service/auth/HiveAuthFactory.java
+index 8120e04..edd56d6 100644
+--- a/src/service/src/java/org/apache/hive/service/auth/HiveAuthFactory.java
++++ b/src/service/src/java/org/apache/hive/service/auth/HiveAuthFactory.java
+@@ -216,9 +216,9 @@ public class HiveAuthFactory {
+ 
+   }
+ 
+-  public static TTransport getSocketTransport(String host, int port)
++  public static TTransport getSocketTransport(String host, int port, int loginTimeout)
+       throws TTransportException {
+-    return new TSocket(host, port);
++    return new TSocket(host, port, loginTimeout);
+   }
+ 
+   public static TTransport getSSLSocket(String host, int port, int loginTimeout)
+-- 
+1.7.0.4
+

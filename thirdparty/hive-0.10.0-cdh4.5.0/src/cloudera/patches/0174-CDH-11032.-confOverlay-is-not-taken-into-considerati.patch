@@ -1,0 +1,181 @@
+From f34ef67072df9f6ee74cb116f3b6787e9abae0b7 Mon Sep 17 00:00:00 2001
+From: Shreepadma Venugopalan <shreepadma@cloudera.com>
+Date: Wed, 24 Jul 2013 11:13:36 -0700
+Subject: [PATCH 174/218] CDH-11032. confOverlay is not taken into consideration in an TExecuteStatementReq()
+
+---
+ .../hive/service/cli/operation/Operation.java      |    2 +-
+ .../hive/service/cli/operation/SQLOperation.java   |   24 ++++++--
+ .../apache/hive/service/cli/CLIServiceTest.java    |   61 ++++++++++++++++++++
+ .../service/cli/TestEmbeddedThriftCLIService.java  |    6 +--
+ 4 files changed, 82 insertions(+), 11 deletions(-)
+
+diff --git a/src/service/src/java/org/apache/hive/service/cli/operation/Operation.java b/src/service/src/java/org/apache/hive/service/cli/operation/Operation.java
+index 97ab208..c44f462 100644
+--- a/src/service/src/java/org/apache/hive/service/cli/operation/Operation.java
++++ b/src/service/src/java/org/apache/hive/service/cli/operation/Operation.java
+@@ -37,7 +37,7 @@ public abstract class Operation {
+   private final HiveSession parentSession;
+   private OperationState state = OperationState.INITIALIZED;
+   private final OperationHandle opHandle;
+-  private HiveConf configuration;
++  private HiveConf configuration = null;
+   public static final Log LOG = LogFactory.getLog(Operation.class.getName());
+   public static final long DEFAULT_FETCH_MAX_ROWS = 100;
+   protected boolean hasResultSet;
+diff --git a/src/service/src/java/org/apache/hive/service/cli/operation/SQLOperation.java b/src/service/src/java/org/apache/hive/service/cli/operation/SQLOperation.java
+index 8a6af9a..39d7e5a 100644
+--- a/src/service/src/java/org/apache/hive/service/cli/operation/SQLOperation.java
++++ b/src/service/src/java/org/apache/hive/service/cli/operation/SQLOperation.java
+@@ -73,17 +73,31 @@ public class SQLOperation extends ExecuteStatementOperation {
+   // Compile the current statement
+   @Override
+   public void prepare() throws HiveSQLException {
+-    prepare(null);
++    HiveConf queryConf = getParentSession().getHiveConf();
++    // If there are query specific settings to overlay, then create a copy of config
++    if (confOverlay != null && confOverlay.size() > 0) {
++      queryConf = new HiveConf(queryConf );
++    }
++    prepare(queryConf);
+   }
+ 
+   // Compile the current statement with the give configuration
+   @Override
+-  public void prepare(HiveConf conf) throws HiveSQLException {
++  public void prepare(HiveConf queryConf) throws HiveSQLException {
++    assert (queryConf != null);
+     setState(OperationState.RUNNING);
+-    HiveConf queryConf = conf;
+-    if (queryConf == null) {
+-      queryConf = getParentSession().getHiveConf();
++    // apply query specific configs
++    if (confOverlay != null) {
++      for (Map.Entry<String, String> confEntry : confOverlay.entrySet()) {
++        try {
++          queryConf.verifyAndSet(confEntry.getKey(), confEntry.getValue());
++        } catch (IllegalArgumentException e) {
++          throw new HiveSQLException("Error applying statement specific settings", e);
++        }
++      }
+     }
++    setConfiguration(queryConf);
++
+     driver = new Driver(queryConf, getParentSession().getIpAddress(),
+                             getParentSession().getUsername());
+     // In Hive server mode, we are not able to retry in the FetchTask
+diff --git a/src/service/src/test/org/apache/hive/service/cli/CLIServiceTest.java b/src/service/src/test/org/apache/hive/service/cli/CLIServiceTest.java
+index 6742f1a..6a18629 100644
+--- a/src/service/src/test/org/apache/hive/service/cli/CLIServiceTest.java
++++ b/src/service/src/test/org/apache/hive/service/cli/CLIServiceTest.java
+@@ -23,7 +23,13 @@ import static org.junit.Assert.assertNotNull;
+ 
+ import java.util.Collections;
+ import java.util.HashMap;
++import java.util.Map;
+ 
++import org.apache.hive.service.Service;
++import org.apache.hive.service.cli.operation.Operation;
++import org.apache.hive.service.cli.session.HiveSession;
++import org.apache.hive.service.cli.session.SessionManager;
++import org.apache.hive.service.cli.thrift.EmbeddedThriftCLIService;
+ import org.junit.After;
+ import org.junit.Before;
+ import org.junit.Test;
+@@ -34,7 +40,15 @@ import org.junit.Test;
+  */
+ public abstract class CLIServiceTest {
+ 
++  // Wrapper class to expose the CLIService
++  public static class EmbeddedCLIServiceForTest extends EmbeddedThriftCLIService {
++    public CLIService getCliService() {
++      return cliService;
++    }
++  }
++
+   protected static CLIServiceClient client;
++  protected static EmbeddedCLIServiceForTest service;
+ 
+   /**
+    * @throws java.lang.Exception
+@@ -113,4 +127,51 @@ public abstract class CLIServiceTest {
+ 
+     client.closeSession(sessionHandle);
+   }
++
++  /**
++   * Test per statement configuration overlay
++   * @throws Exception
++   */
++  @Test
++  public void testConfOverlay() throws Exception {
++    SessionHandle sessionHandle = client.openSession("tom", "password", new HashMap<String, String>());
++    assertNotNull(sessionHandle);
++    String statement = "show databases";
++    Map <String, String> confOverlay = new HashMap<String, String>();
++
++    // set a pass a property to operation and check if its set the query config
++    confOverlay.put("test.foo", "bar");
++    OperationHandle opHandle = client.executeStatement(sessionHandle, statement, confOverlay);
++    assertNotNull(opHandle);
++    Operation sqlOperation = getOperationFromHandle(opHandle);
++    assertNotNull(sqlOperation.getConfiguration());
++    assertEquals("bar", sqlOperation.getConfiguration().get("test.foo"));
++    client.closeOperation(opHandle);
++
++    client.closeSession(sessionHandle);
++  }
++
++  // extract the session manager from CLI Service
++  protected SessionManager getSessionManager()
++      throws HiveSQLException {
++    SessionManager sessionManager = null;
++    for (Service hiveService : service.getCliService().getServices()) {
++      if (hiveService instanceof SessionManager ) {
++        sessionManager = (SessionManager)hiveService;
++      }
++    }
++    assertNotNull(sessionManager);
++    return sessionManager;
++  }
++
++  protected HiveSession getSessionFromHandle(SessionHandle sessionHandle)
++      throws HiveSQLException {
++    return getSessionManager().getSession(sessionHandle);
++  }
++
++  protected Operation getOperationFromHandle(OperationHandle opHandle)
++      throws HiveSQLException {
++    return getSessionManager().getOperationManager().getOperation(opHandle);
++  }
++
+ }
+diff --git a/src/service/src/test/org/apache/hive/service/cli/TestEmbeddedThriftCLIService.java b/src/service/src/test/org/apache/hive/service/cli/TestEmbeddedThriftCLIService.java
+index 423bbcd..2cd9df6 100644
+--- a/src/service/src/test/org/apache/hive/service/cli/TestEmbeddedThriftCLIService.java
++++ b/src/service/src/test/org/apache/hive/service/cli/TestEmbeddedThriftCLIService.java
+@@ -18,8 +18,6 @@
+ 
+ package org.apache.hive.service.cli;
+ 
+-import org.apache.hive.service.cli.thrift.EmbeddedThriftCLIService;
+-import org.apache.hive.service.cli.thrift.ThriftCLIService;
+ import org.apache.hive.service.cli.thrift.ThriftCLIServiceClient;
+ import org.junit.After;
+ import org.junit.Before;
+@@ -31,11 +29,9 @@ import org.junit.BeforeClass;
+  */
+ public class TestEmbeddedThriftCLIService extends CLIServiceTest {
+ 
+-  private static  ThriftCLIService service;
+-
+   @BeforeClass
+   public static void setUpBeforeClass() throws Exception {
+-    service = new EmbeddedThriftCLIService();
++    service = new CLIServiceTest.EmbeddedCLIServiceForTest();
+     client = new ThriftCLIServiceClient(service);
+   }
+ 
+-- 
+1.7.0.4
+

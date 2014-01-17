@@ -1,0 +1,64 @@
+From 1e7520259718453dc5211dd0636823e5ae3a733b Mon Sep 17 00:00:00 2001
+From: Ashutosh Chauhan <hashutosh@apache.org>
+Date: Mon, 1 Jul 2013 17:24:33 +0000
+Subject: [PATCH 194/218] HIVE-4757 : LazyTimestamp goes into irretrievable NULL mode once inited with NULL once (Gopal V via Ashutosh Chauhan)
+
+git-svn-id: https://svn.apache.org/repos/asf/hive/trunk@1498577 13f79535-47bb-0310-9956-ffa450edef68
+---
+ .../hadoop/hive/serde2/lazy/LazyTimestamp.java     |    1 +
+ .../hadoop/hive/serde2/lazy/TestLazyPrimitive.java |   20 ++++++++++++++++++++
+ 2 files changed, 21 insertions(+), 0 deletions(-)
+
+diff --git a/src/serde/src/java/org/apache/hadoop/hive/serde2/lazy/LazyTimestamp.java b/src/serde/src/java/org/apache/hadoop/hive/serde2/lazy/LazyTimestamp.java
+index 71ed865..27895c5 100644
+--- a/src/serde/src/java/org/apache/hadoop/hive/serde2/lazy/LazyTimestamp.java
++++ b/src/serde/src/java/org/apache/hadoop/hive/serde2/lazy/LazyTimestamp.java
+@@ -73,6 +73,7 @@ public class LazyTimestamp extends LazyPrimitive<LazyTimestampObjectInspector, T
+     } else {
+       try {
+         t = Timestamp.valueOf(s);
++        isNull = false;
+       } catch (IllegalArgumentException e) {
+         isNull = true;
+         logExceptionMessage(bytes, start, length, "TIMESTAMP");
+diff --git a/src/serde/src/test/org/apache/hadoop/hive/serde2/lazy/TestLazyPrimitive.java b/src/serde/src/test/org/apache/hadoop/hive/serde2/lazy/TestLazyPrimitive.java
+index 4a82f95..3cb10af 100644
+--- a/src/serde/src/test/org/apache/hadoop/hive/serde2/lazy/TestLazyPrimitive.java
++++ b/src/serde/src/test/org/apache/hadoop/hive/serde2/lazy/TestLazyPrimitive.java
+@@ -17,6 +17,8 @@
+  */
+ package org.apache.hadoop.hive.serde2.lazy;
+ 
++import java.sql.Timestamp;
++
+ import junit.framework.TestCase;
+ 
+ import org.apache.hadoop.hive.serde2.ByteStream;
+@@ -388,6 +390,24 @@ public class TestLazyPrimitive extends TestCase {
+     assertEquals(new BytesWritable(new byte[] {}), ba.getWritableObject());
+   }
+ 
++  public void testLazyTimestamp() throws Throwable {
++    LazyTimestamp t = new LazyTimestamp(LazyPrimitiveObjectInspectorFactory.LAZY_TIMESTAMP_OBJECT_INSPECTOR);
++    String nullDate = "NULL";
++    byte[] nullBytes = nullDate.getBytes();
++    initLazyObject(t, nullBytes, 0, nullBytes.length);
++    assertEquals(true, t.isNull);
++    String sampleDate = "2013-02-12 21:04:58";
++    byte[] good2013 = sampleDate.getBytes();
++    initLazyObject(t, good2013, 0, good2013.length);
++    assertEquals(false, t.isNull);
++    assertEquals(Timestamp.valueOf(sampleDate),
++        t.getWritableObject().getTimestamp());
++    String badDate = "2013-02-12 21:04:XX";
++    byte[] bad2013 = badDate.getBytes();
++    initLazyObject(t, bad2013, 0, bad2013.length);
++    assertEquals(true, t.isNull);
++  }
++
+   public void testLazyIntegerWrite() throws Throwable {
+     try {
+       ByteStream.Output out = new ByteStream.Output();
+-- 
+1.7.0.4
+

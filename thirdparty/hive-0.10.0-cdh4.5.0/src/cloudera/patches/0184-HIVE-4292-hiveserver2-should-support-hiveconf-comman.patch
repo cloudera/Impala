@@ -1,0 +1,185 @@
+From 88efa350960d698b4accfbc55d35e60cc73d9882 Mon Sep 17 00:00:00 2001
+From: Ashutosh Chauhan <hashutosh@apache.org>
+Date: Sat, 6 Apr 2013 03:05:18 +0000
+Subject: [PATCH 184/218] HIVE-4292 : hiveserver2 should support -hiveconf commandline parameter (Thejas Nair via Ashutosh Chauhan)
+
+git-svn-id: https://svn.apache.org/repos/asf/hive/trunk@1465169 13f79535-47bb-0310-9956-ffa450edef68
+---
+ .../apache/hive/service/server/HiveServer2.java    |    5 +
+ .../service/server/ServerOptionsProcessor.java     |   85 ++++++++++++++++++++
+ .../service/server/TestServerOptionsProcessor.java |   55 +++++++++++++
+ 3 files changed, 145 insertions(+), 0 deletions(-)
+ create mode 100644 service/src/java/org/apache/hive/service/server/ServerOptionsProcessor.java
+ create mode 100644 service/src/test/org/apache/hive/service/server/TestServerOptionsProcessor.java
+
+diff --git a/src/service/src/java/org/apache/hive/service/server/HiveServer2.java b/src/service/src/java/org/apache/hive/service/server/HiveServer2.java
+index d28890b..3ad60ab 100644
+--- a/src/service/src/java/org/apache/hive/service/server/HiveServer2.java
++++ b/src/service/src/java/org/apache/hive/service/server/HiveServer2.java
+@@ -81,6 +81,11 @@ public class HiveServer2 extends CompositeService {
+ 
+     HiveStringUtils.startupShutdownMessage(HiveServer2.class, args, LOG);
+     try {
++      ServerOptionsProcessor oproc = new ServerOptionsProcessor("hiveserver2");
++      if (!oproc.process(args)) {
++        LOG.fatal("Error starting HiveServer2 with given arguments");
++        System.exit(-1);
++      }
+       HiveConf hiveConf = new HiveConf();
+       HiveServer2 server = new HiveServer2();
+       server.init(hiveConf);
+diff --git a/src/service/src/java/org/apache/hive/service/server/ServerOptionsProcessor.java b/src/service/src/java/org/apache/hive/service/server/ServerOptionsProcessor.java
+new file mode 100644
+index 0000000..fed9df2
+--- /dev/null
++++ b/src/service/src/java/org/apache/hive/service/server/ServerOptionsProcessor.java
+@@ -0,0 +1,85 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hive.service.server;
++
++import java.util.Properties;
++
++import org.apache.commons.cli.GnuParser;
++import org.apache.commons.cli.HelpFormatter;
++import org.apache.commons.cli.Option;
++import org.apache.commons.cli.OptionBuilder;
++import org.apache.commons.cli.Options;
++import org.apache.commons.cli.ParseException;
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++
++/**
++ * ServerOptionsProcessor.
++ * Process arguments given to servers (-hiveconf property=value)
++ * Set properties in System properties
++ */
++public class ServerOptionsProcessor {
++  protected static final Log LOG = LogFactory.getLog(ServerOptionsProcessor.class.getName());
++  private final Options options = new Options();
++  private org.apache.commons.cli.CommandLine commandLine;
++  private final String serverName;
++
++
++  @SuppressWarnings("static-access")
++  public ServerOptionsProcessor(String serverName) {
++    this.serverName = serverName;
++    // -hiveconf x=y
++    options.addOption(OptionBuilder
++        .withValueSeparator()
++        .hasArgs(2)
++        .withArgName("property=value")
++        .withLongOpt("hiveconf")
++        .withDescription("Use value for given property")
++        .create());
++
++    options.addOption(new Option("H", "help", false, "Print help information"));
++
++  }
++
++  public boolean process(String[] argv) {
++    try {
++      commandLine = new GnuParser().parse(options, argv);
++      if (commandLine.hasOption('H')) {
++        printUsage();
++        return false;
++      }
++      //get hiveconf param values and set the System property values
++      Properties confProps = commandLine.getOptionProperties("hiveconf");
++      for (String propKey : confProps.stringPropertyNames()) {
++        LOG.debug("Setting " + propKey + "=" + confProps.getProperty(propKey) + ";");
++        System.setProperty(propKey, confProps.getProperty(propKey));
++      }
++    } catch (ParseException e) {
++      System.err.println(e.getMessage());
++      printUsage();
++      return false;
++    }
++    return true;
++  }
++
++  private void printUsage() {
++    new HelpFormatter().printHelp(serverName, options);
++  }
++
++}
+diff --git a/src/service/src/test/org/apache/hive/service/server/TestServerOptionsProcessor.java b/src/service/src/test/org/apache/hive/service/server/TestServerOptionsProcessor.java
+new file mode 100644
+index 0000000..1aea0b8
+--- /dev/null
++++ b/src/service/src/test/org/apache/hive/service/server/TestServerOptionsProcessor.java
+@@ -0,0 +1,55 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hive.service.server;
++
++import org.junit.Assert;
++import org.junit.Test;
++
++/**
++ * Test ServerOptionsProcessor
++ *
++ */
++public class TestServerOptionsProcessor {
++
++  @Test
++  public void test() {
++    ServerOptionsProcessor optProcessor = new ServerOptionsProcessor("HiveServer2");
++    final String key = "testkey";
++    final String value = "value123";
++    String []args = {"-hiveconf", key + "=" + value};
++
++    Assert.assertEquals(
++        "checking system property before processing options",
++        null,
++        System.getProperty(key));
++
++
++    boolean isSuccess = optProcessor.process(args);
++    Assert.assertTrue("options processor result", isSuccess);
++    Assert.assertEquals(
++        "checking system property after processing options",
++        value,
++        System.getProperty(key));
++
++
++
++
++  }
++
++}
+-- 
+1.7.0.4
+

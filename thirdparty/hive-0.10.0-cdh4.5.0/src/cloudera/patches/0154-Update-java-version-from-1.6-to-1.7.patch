@@ -1,0 +1,31 @@
+From 356b553e5e3772a07c841d9ee6a733183ded76d7 Mon Sep 17 00:00:00 2001
+From: xzhang <xzhang@xzdt.(none)>
+Date: Fri, 14 Jun 2013 16:01:37 -0700
+Subject: [PATCH 154/218] Update java version from 1.6 to 1.7
+
+---
+ build.properties |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
+
+diff --git a/src/build.properties b/src/build.properties
+index 58935a1..baa5864 100644
+--- a/src/build.properties
++++ b/src/build.properties
+@@ -20,12 +20,13 @@ version=0.10.0-cdh4.4.0-SNAPSHOT
+ year=2011
+ 
+ javac.debug=on
+-javac.version=1.6
++javac.version=1.7
+ javac.optimize=on
+ javac.deprecation=off
+ javac.args=
+ javac.args.warnings=
+ 
++#hadoop.mirror=http://172.22.0.232
+ hadoop.mirror=http://mirror.facebook.net/facebook/hive-deps
+ hadoop.mirror2=http://archive.cloudera.com/hive-deps
+ 
+-- 
+1.7.0.4
+

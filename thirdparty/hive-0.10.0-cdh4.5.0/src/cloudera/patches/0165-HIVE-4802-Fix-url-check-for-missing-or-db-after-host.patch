@@ -1,0 +1,64 @@
+From e022f9b439cf0130f7d3bb24f1e7911992534f61 Mon Sep 17 00:00:00 2001
+From: Ashutosh Chauhan <hashutosh@apache.org>
+Date: Mon, 8 Jul 2013 14:52:50 +0000
+Subject: [PATCH 165/218] HIVE-4802 : Fix url check for missing / or /<db> after hostname in jdb uri (Thejas Nair via Ashutosh Chauhan)
+
+git-svn-id: https://svn.apache.org/repos/asf/hive/trunk@1500781 13f79535-47bb-0310-9956-ffa450edef68
+---
+ jdbc/src/java/org/apache/hive/jdbc/Utils.java      |   10 ++++++++++
+ .../test/org/apache/hive/jdbc/TestJdbcDriver2.java |   18 ++++++++++++++++++
+ 2 files changed, 28 insertions(+), 0 deletions(-)
+
+diff --git a/src/jdbc/src/java/org/apache/hive/jdbc/Utils.java b/src/jdbc/src/java/org/apache/hive/jdbc/Utils.java
+index ed57295..4c5d90a 100644
+--- a/src/jdbc/src/java/org/apache/hive/jdbc/Utils.java
++++ b/src/jdbc/src/java/org/apache/hive/jdbc/Utils.java
+@@ -193,6 +193,16 @@ public class Utils {
+     }
+     URI jdbcURI = URI.create(uri.substring(URI_JDBC_PREFIX.length()));
+ 
++    //Check to prevent unintentional use of embedded mode. A missing "/" can
++    // to separate the 'path' portion of URI can result in this.
++    //The missing "/" common typo while using secure mode, eg of such url -
++    // jdbc:hive2://localhost:10000;principal=hive/HiveServer2Host@YOUR-REALM.COM
++    if((jdbcURI.getAuthority() != null) && (jdbcURI.getHost()==null)){
++       throw new IllegalArgumentException("Bad URL format. Hostname not found "
++           + " in authority part of the url: " + jdbcURI.getAuthority()
++           + ". Are you missing a '/' after the hostname ?");
++    }
++
+     connParams.setHost(jdbcURI.getHost());
+     if (connParams.getHost() == null) {
+       connParams.setEmbeddedMode(true);
+diff --git a/src/jdbc/src/test/org/apache/hive/jdbc/TestJdbcDriver2.java b/src/jdbc/src/test/org/apache/hive/jdbc/TestJdbcDriver2.java
+index 047d27b..d695d81 100644
+--- a/src/jdbc/src/test/org/apache/hive/jdbc/TestJdbcDriver2.java
++++ b/src/jdbc/src/test/org/apache/hive/jdbc/TestJdbcDriver2.java
+@@ -199,6 +199,24 @@ public class TestJdbcDriver2 extends TestCase {
+         expectedException);
+   }
+ 
++  public void testBadURL() throws Exception {
++    checkBadUrl("jdbc:hive2://localhost:10000;principal=test");
++    checkBadUrl("jdbc:hive2://localhost:10000;" +
++    		"principal=hive/HiveServer2Host@YOUR-REALM.COM");
++    checkBadUrl("jdbc:hive2://localhost:10000test");
++  }
++
++
++  private void checkBadUrl(String url) throws SQLException {
++    try{
++      DriverManager.getConnection(url, "", "");
++      fail("should have thrown IllegalArgumentException but did not ");
++    }catch(IllegalArgumentException i){
++      assertTrue(i.getMessage().contains("Bad URL format. Hostname not found "
++          + " in authority part of the url"));
++    }
++  }
++
+   public void testDataTypes2() throws Exception {
+     Statement stmt = con.createStatement();
+ 
+-- 
+1.7.0.4
+

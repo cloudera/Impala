@@ -1,0 +1,48 @@
+From 5ef3f71f2822641b1f487f29b58cb8c355aa572c Mon Sep 17 00:00:00 2001
+From: xzhang <xzhang@xzdt.(none)>
+Date: Thu, 25 Jul 2013 22:30:58 -0700
+Subject: [PATCH 177/218] CDH-13182: Fix test failure for testNegativeCliDriver_fs_default_name1/2 caused by JDK7 upgrade *** Patch backported from HIVe-4899
+
+---
+ ql/src/java/org/apache/hadoop/hive/ql/Driver.java  |    9 ++++++++-
+ .../results/clientnegative/fs_default_name1.q.out  |    2 +-
+ .../results/clientnegative/fs_default_name2.q.out  |    2 +-
+ 3 files changed, 10 insertions(+), 3 deletions(-)
+
+diff --git a/src/ql/src/java/org/apache/hadoop/hive/ql/Driver.java b/src/ql/src/java/org/apache/hadoop/hive/ql/Driver.java
+index a2fad60..9e73e5b 100644
+--- a/src/ql/src/java/org/apache/hadoop/hive/ql/Driver.java
++++ b/src/ql/src/java/org/apache/hadoop/hive/ql/Driver.java
+@@ -529,7 +529,14 @@ public class Driver implements CommandProcessor {
+       if (error != ErrorMsg.GENERIC_ERROR) {
+         errorMessage += " [Error "  + error.getErrorCode()  + "]:";
+       }
+-      errorMessage += " " + e.getMessage();
++
++      // HIVE-4889
++      if ((e instanceof IllegalArgumentException) && e.getMessage() == null && e.getCause() != null) {
++        errorMessage += " " + e.getCause().getMessage();
++      } else {
++        errorMessage += " " + e.getMessage();
++      }
++
+       SQLState = error.getSQLState();
+       console.printError(errorMessage, "\n"
+           + org.apache.hadoop.util.StringUtils.stringifyException(e));
+diff --git a/src/ql/src/test/results/clientnegative/fs_default_name1.q.out b/src/ql/src/test/results/clientnegative/fs_default_name1.q.out
+index 571a70d..97477ee 100644
+--- a/src/ql/src/test/results/clientnegative/fs_default_name1.q.out
++++ b/src/ql/src/test/results/clientnegative/fs_default_name1.q.out
+@@ -1 +1 @@
+-FAILED: IllegalArgumentException null
++FAILED: IllegalArgumentException Illegal character in scheme name at index 0: 'http://www.example.com
+diff --git a/src/ql/src/test/results/clientnegative/fs_default_name2.q.out b/src/ql/src/test/results/clientnegative/fs_default_name2.q.out
+index 571a70d..97477ee 100644
+--- a/src/ql/src/test/results/clientnegative/fs_default_name2.q.out
++++ b/src/ql/src/test/results/clientnegative/fs_default_name2.q.out
+@@ -1 +1 @@
+-FAILED: IllegalArgumentException null
++FAILED: IllegalArgumentException Illegal character in scheme name at index 0: 'http://www.example.com
+-- 
+1.7.0.4
+

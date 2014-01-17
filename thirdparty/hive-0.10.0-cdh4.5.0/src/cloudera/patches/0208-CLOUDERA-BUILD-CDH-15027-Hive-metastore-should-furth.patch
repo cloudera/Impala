@@ -1,0 +1,26 @@
+From c7786defa93228e2ef2a99c0e1cb665d520b4214 Mon Sep 17 00:00:00 2001
+From: Prasad Mujumdar <prasadm@cloudera.com>
+Date: Tue, 5 Nov 2013 09:53:53 -0800
+Subject: [PATCH 208/218] CLOUDERA-BUILD CDH-15027: Hive metastore should further restrict unauthorized user connection
+
+---
+ .../hive/thrift/HadoopThriftAuthBridge20S.java     |    3 +++
+ 1 files changed, 3 insertions(+), 0 deletions(-)
+
+diff --git a/src/shims/src/common-secure/java/org/apache/hadoop/hive/thrift/HadoopThriftAuthBridge20S.java b/src/shims/src/common-secure/java/org/apache/hadoop/hive/thrift/HadoopThriftAuthBridge20S.java
+index 9670d0a..0570498 100644
+--- a/src/shims/src/common-secure/java/org/apache/hadoop/hive/thrift/HadoopThriftAuthBridge20S.java
++++ b/src/shims/src/common-secure/java/org/apache/hadoop/hive/thrift/HadoopThriftAuthBridge20S.java
+@@ -577,6 +577,9 @@ import org.apache.thrift.transport.TTransportFactory;
+            if (useProxy) {
+              clientUgi = UserGroupInformation.createProxyUser(
+                endUser, UserGroupInformation.getLoginUser());
++             // ensure that metastore user has privilege to impersonate the requesting user
++             ProxyUsers.authorize(clientUgi,
++                 getRemoteAddress().getHostAddress(), null);
+              remoteUser.set(clientUgi.getShortUserName());
+              return clientUgi.doAs(new PrivilegedExceptionAction<Boolean>() {
+                  public Boolean run() {
+-- 
+1.7.0.4
+

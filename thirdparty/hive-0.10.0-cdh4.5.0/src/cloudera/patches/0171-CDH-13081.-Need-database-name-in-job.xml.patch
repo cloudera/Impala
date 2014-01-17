@@ -1,0 +1,88 @@
+From 1a6c0633fb308bc3acf8ec390b21b0a84a54df58 Mon Sep 17 00:00:00 2001
+From: Shreepadma Venugopalan <shreepadma@cloudera.com>
+Date: Tue, 23 Jul 2013 13:37:02 -0700
+Subject: [PATCH 171/218] CDH-13081. Need database name in job.xml
+
+---
+ ql/src/test/queries/clientpositive/dbconf.q     |   17 +++++++++
+ ql/src/test/results/clientpositive/dbconf.q.out |   44 +++++++++++++++++++++++
+ 2 files changed, 61 insertions(+), 0 deletions(-)
+ create mode 100644 ql/src/test/queries/clientpositive/dbconf.q
+ create mode 100644 ql/src/test/results/clientpositive/dbconf.q.out
+
+diff --git a/src/ql/src/test/queries/clientpositive/dbconf.q b/src/ql/src/test/queries/clientpositive/dbconf.q
+new file mode 100644
+index 0000000..804e3d5
+--- /dev/null
++++ b/src/ql/src/test/queries/clientpositive/dbconf.q
+@@ -0,0 +1,17 @@
++set hive.current.db;
++
++DROP DATABASE IF EXISTS db_name1;
++CREATE DATABASE db_name1; 
++USE db_name1; 
++set hive.current.db;
++USE default;
++set hive.current.db;
++
++DROP DATABASE IF EXISTS db_name2;
++CREATE DATABASE db_name2; 
++USE db_name2; 
++set hive.current.db;
++
++USE default;
++DROP DATABASE IF EXISTS db_name1;
++DROP DATABASE IF EXISTS db_name2;
+diff --git a/src/ql/src/test/results/clientpositive/dbconf.q.out b/src/ql/src/test/results/clientpositive/dbconf.q.out
+new file mode 100644
+index 0000000..92df3ed
+--- /dev/null
++++ b/src/ql/src/test/results/clientpositive/dbconf.q.out
+@@ -0,0 +1,44 @@
++hive.current.db=default
++PREHOOK: query: DROP DATABASE IF EXISTS db_name1
++PREHOOK: type: DROPDATABASE
++POSTHOOK: query: DROP DATABASE IF EXISTS db_name1
++POSTHOOK: type: DROPDATABASE
++PREHOOK: query: CREATE DATABASE db_name1
++PREHOOK: type: CREATEDATABASE
++POSTHOOK: query: CREATE DATABASE db_name1
++POSTHOOK: type: CREATEDATABASE
++PREHOOK: query: USE db_name1
++PREHOOK: type: SWITCHDATABASE
++POSTHOOK: query: USE db_name1
++POSTHOOK: type: SWITCHDATABASE
++hive.current.db=db_name1
++PREHOOK: query: USE default
++PREHOOK: type: SWITCHDATABASE
++POSTHOOK: query: USE default
++POSTHOOK: type: SWITCHDATABASE
++hive.current.db=default
++PREHOOK: query: DROP DATABASE IF EXISTS db_name2
++PREHOOK: type: DROPDATABASE
++POSTHOOK: query: DROP DATABASE IF EXISTS db_name2
++POSTHOOK: type: DROPDATABASE
++PREHOOK: query: CREATE DATABASE db_name2
++PREHOOK: type: CREATEDATABASE
++POSTHOOK: query: CREATE DATABASE db_name2
++POSTHOOK: type: CREATEDATABASE
++PREHOOK: query: USE db_name2
++PREHOOK: type: SWITCHDATABASE
++POSTHOOK: query: USE db_name2
++POSTHOOK: type: SWITCHDATABASE
++hive.current.db=db_name2
++PREHOOK: query: USE default
++PREHOOK: type: SWITCHDATABASE
++POSTHOOK: query: USE default
++POSTHOOK: type: SWITCHDATABASE
++PREHOOK: query: DROP DATABASE IF EXISTS db_name1
++PREHOOK: type: DROPDATABASE
++POSTHOOK: query: DROP DATABASE IF EXISTS db_name1
++POSTHOOK: type: DROPDATABASE
++PREHOOK: query: DROP DATABASE IF EXISTS db_name2
++PREHOOK: type: DROPDATABASE
++POSTHOOK: query: DROP DATABASE IF EXISTS db_name2
++POSTHOOK: type: DROPDATABASE
+-- 
+1.7.0.4
+

@@ -1,0 +1,30 @@
+From 3a57a5f27791aa1cef124f5e5da4a98b8c220c87 Mon Sep 17 00:00:00 2001
+From: Prasad Mujumdar <prasadm@cloudera.com>
+Date: Fri, 15 Nov 2013 10:44:43 -0800
+Subject: [PATCH 213/218] PROPOSED CDH-15731 : HIVE-5812 - SSL support for HS2: java.net.SocketException: Broken pipe
+
+---
+ .../apache/hive/service/auth/HiveAuthFactory.java  |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/service/src/java/org/apache/hive/service/auth/HiveAuthFactory.java b/src/service/src/java/org/apache/hive/service/auth/HiveAuthFactory.java
+index dc49f2c..d613810 100644
+--- a/src/service/src/java/org/apache/hive/service/auth/HiveAuthFactory.java
++++ b/src/service/src/java/org/apache/hive/service/auth/HiveAuthFactory.java
+@@ -254,11 +254,11 @@ public class HiveAuthFactory {
+ 
+     InetAddress serverAddress;
+     if (hiveHost == null || hiveHost.isEmpty()) {
+-      serverAddress = InetAddress.getLocalHost();
++      serverAddress = null;
+     } else {
+       serverAddress = InetAddress.getByName(hiveHost);
+     }
+-    return TSSLTransportFactory.getServerSocket(portNum, 10000, serverAddress, params);
++    return TSSLTransportFactory.getServerSocket(portNum, 0, serverAddress, params);
+   }
+ 
+ }
+-- 
+1.7.0.4
+

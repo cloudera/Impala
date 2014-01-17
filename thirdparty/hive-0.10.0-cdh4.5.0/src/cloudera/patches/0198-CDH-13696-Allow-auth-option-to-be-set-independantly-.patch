@@ -1,0 +1,102 @@
+From 94aae5f9e2fa2c15bf35916a257abfa17a0921db Mon Sep 17 00:00:00 2001
+From: Prasad Mujumdar <prasadm@cloudera.com>
+Date: Wed, 21 Aug 2013 01:07:10 -0700
+Subject: [PATCH 198/218] CDH-13696: Allow auth option to be set independantly of other connection options
+
+---
+ .../src/java/org/apache/hive/beeline/BeeLine.java  |    1 +
+ .../java/org/apache/hive/beeline/BeeLineOpts.java  |    9 +++++++++
+ .../src/java/org/apache/hive/beeline/Commands.java |   15 +++++++++++----
+ 3 files changed, 21 insertions(+), 4 deletions(-)
+
+diff --git a/src/beeline/src/java/org/apache/hive/beeline/BeeLine.java b/src/beeline/src/java/org/apache/hive/beeline/BeeLine.java
+index 20c6d98..6c4b6b6 100644
+--- a/src/beeline/src/java/org/apache/hive/beeline/BeeLine.java
++++ b/src/beeline/src/java/org/apache/hive/beeline/BeeLine.java
+@@ -554,6 +554,7 @@ public class BeeLine {
+         user = args[i++ + 1];
+       } else if (args[i].equals("-a")) {
+         auth = args[i++ + 1];
++        getOpts().setAuthType(auth);
+       } else if (args[i].equals("-p")) {
+         pass = args[i++ + 1];
+       } else if (args[i].equals("-u")) {
+diff --git a/src/beeline/src/java/org/apache/hive/beeline/BeeLineOpts.java b/src/beeline/src/java/org/apache/hive/beeline/BeeLineOpts.java
+index 84f2828..cdcf7cd 100644
+--- a/src/beeline/src/java/org/apache/hive/beeline/BeeLineOpts.java
++++ b/src/beeline/src/java/org/apache/hive/beeline/BeeLineOpts.java
+@@ -101,6 +101,7 @@ class BeeLineOpts implements Completor {
+   private String historyFile = new File(saveDir(), "history").getAbsolutePath();
+ 
+   private String scriptFile = null;
++  private String authType = null;
+ 
+   public BeeLineOpts(BeeLine beeLine, Properties props) {
+     this.beeLine = beeLine;
+@@ -443,4 +444,12 @@ class BeeLineOpts implements Completor {
+   public File getPropertiesFile() {
+     return rcFile;
+   }
++
++  public String getAuthType() {
++    return authType ;
++  }
++
++  public void setAuthType(String authType) {
++    this.authType = authType;
++  }
+ }
+diff --git a/src/beeline/src/java/org/apache/hive/beeline/Commands.java b/src/beeline/src/java/org/apache/hive/beeline/Commands.java
+index 7bdd20c..d46a4fc 100644
+--- a/src/beeline/src/java/org/apache/hive/beeline/Commands.java
++++ b/src/beeline/src/java/org/apache/hive/beeline/Commands.java
+@@ -864,7 +864,7 @@ public class Commands {
+ 
+ 
+   public boolean connect(String line) throws Exception {
+-    String example = "Usage: connect <url> <username> <password> [driver] [auth]"
++    String example = "Usage: connect <url> <username> <password> [driver]"
+         + BeeLine.getSeparator();
+ 
+     String[] parts = beeLine.split(line);
+@@ -895,9 +895,6 @@ public class Commands {
+     if (pass != null) {
+       props.setProperty("password", pass);
+     }
+-    if (auth != null) {
+-      props.setProperty("auth", auth);
+-    }
+ 
+     return connect(props);
+   }
+@@ -945,6 +942,7 @@ public class Commands {
+         "javax.jdo.option.ConnectionPassword",
+         "ConnectionPassword",
+     });
++    String auth = getProperty(props, new String[] {"auth"});
+ 
+     if (url == null || url.length() == 0) {
+       return beeLine.error("Property \"url\" is required");
+@@ -960,10 +958,19 @@ public class Commands {
+     if (username == null) {
+       username = beeLine.getConsoleReader().readLine("Enter username for " + url + ": ");
+     }
++    props.setProperty("user", username);
+     if (password == null) {
+       password = beeLine.getConsoleReader().readLine("Enter password for " + url + ": ",
+           new Character('*'));
+     }
++    props.setProperty("password", password);
++
++    if (auth == null) {
++      auth = beeLine.getOpts().getAuthType();
++    }
++    if (auth != null) {
++      props.setProperty("auth", auth);
++    }
+ 
+     try {
+       beeLine.getDatabaseConnections().setConnection(
+-- 
+1.7.0.4
+

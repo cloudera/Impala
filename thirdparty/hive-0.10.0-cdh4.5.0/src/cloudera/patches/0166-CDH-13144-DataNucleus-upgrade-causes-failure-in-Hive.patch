@@ -1,0 +1,53 @@
+From 4b5a9cb7fa9534e0340fa00e185baac90da737b9 Mon Sep 17 00:00:00 2001
+From: Jarek Jarcec Cecho <jarcec@apache.org>
+Date: Fri, 19 Jul 2013 08:10:00 -0700
+Subject: [PATCH 166/218] CDH-13144: DataNucleus upgrade causes failure in Hive
+
+---
+ metastore/src/model/package.jdo |   12 +++++++-----
+ 1 files changed, 7 insertions(+), 5 deletions(-)
+
+diff --git a/src/metastore/src/model/package.jdo b/src/metastore/src/model/package.jdo
+index a84d2bf..40f6564 100644
+--- a/src/metastore/src/model/package.jdo
++++ b/src/metastore/src/model/package.jdo
+@@ -57,13 +57,13 @@
+ 
+     <class name="MFieldSchema" embedded-only="true" table="TYPE_FIELDS" detachable="true">
+       <field name="name">
+-        <column name="FNAME" length="128" jdbc-type="VARCHAR"/>
++        <column name="FIELD_NAME" length="128" jdbc-type="VARCHAR"/>
+       </field>
+       <field name="type" >
+-        <column name="FTYPE" length="4000" jdbc-type="VARCHAR" allows-null="false"/>
++        <column name="FIELD_TYPE" length="4000" jdbc-type="VARCHAR" allows-null="false"/>
+       </field>
+       <field name="comment" >
+-        <column name="FCOMMENT" length="4000" jdbc-type="VARCHAR" allows-null="true"/>
++        <column name="COMMENT" length="4000" jdbc-type="VARCHAR" allows-null="true"/>
+       </field>
+     </class>
+ 
+@@ -201,7 +201,7 @@
+ 
+     <class name="MOrder" embedded-only="true" table="SORT_ORDER" detachable="true">
+       <field name="col">
+-        <column name="COL_NAME" length="128" jdbc-type="VARCHAR"/>
++        <column name="COLUMN_NAME" length="128" jdbc-type="VARCHAR"/>
+       </field>
+       <field name="order">
+         <column name="ORDER" jdbc-type="INTEGER"  allows-null="false"/>
+@@ -262,7 +262,9 @@
+       <field name="outputFormat">
+         <column name="OUTPUT_FORMAT" length="4000" jdbc-type="VARCHAR"/>
+       </field>
+-      <field name="isCompressed"/>
++      <field name="isCompressed">
++        <column name="IS_COMPRESSED"/>
++      </field>
+       <field name="isStoredAsSubDirectories">
+         <column name="IS_STOREDASSUBDIRECTORIES"/>
+       </field>
+-- 
+1.7.0.4
+

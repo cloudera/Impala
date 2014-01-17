@@ -1,0 +1,61 @@
+From a4378fee15d04f042cb7ec208e208b83e8731ce6 Mon Sep 17 00:00:00 2001
+From: Ashutosh Chauhan <hashutosh@apache.org>
+Date: Mon, 17 Jun 2013 17:57:52 +0000
+Subject: [PATCH 169/218] HIVE-4707 : Support configurable domain name for HiveServer2 LDAP authentication using Active Directory (Prasad Mujumdar via Ashutosh Chauhan)
+
+git-svn-id: https://svn.apache.org/repos/asf/hive/trunk@1493860 13f79535-47bb-0310-9956-ffa450edef68
+---
+ .../java/org/apache/hadoop/hive/conf/HiveConf.java |    1 +
+ .../auth/LdapAuthenticationProviderImpl.java       |   12 ++++++++++--
+ 2 files changed, 11 insertions(+), 2 deletions(-)
+
+diff --git a/src/common/src/java/org/apache/hadoop/hive/conf/HiveConf.java b/src/common/src/java/org/apache/hadoop/hive/conf/HiveConf.java
+index 4a86361..c73baa8 100644
+--- a/src/common/src/java/org/apache/hadoop/hive/conf/HiveConf.java
++++ b/src/common/src/java/org/apache/hadoop/hive/conf/HiveConf.java
+@@ -699,6 +699,7 @@ public class HiveConf extends Configuration {
+     HIVE_SERVER2_PLAIN_LDAP_URL("hive.server2.authentication.ldap.url", null),
+     HIVE_SERVER2_PLAIN_LDAP_BASEDN("hive.server2.authentication.ldap.baseDN", null),
+     HIVE_SERVER2_KERBEROS_IMPERSONATION("hive.server2.enable.impersonation", false),
++    HIVE_SERVER2_PLAIN_LDAP_DOMAIN("hive.server2.authentication.ldap.Domain", null),
+     HIVE_SERVER2_CUSTOM_AUTHENTICATION_CLASS("hive.server2.custom.authentication.class", null),
+     HIVE_SERVER2_BLOCKING_QUERY("hive.server2.blocking.query", true),
+     HIVE_SERVER2_IN_MEM_LOGGING("hive.server2.in.mem.logging", true),
+diff --git a/src/service/src/java/org/apache/hive/service/auth/LdapAuthenticationProviderImpl.java b/src/service/src/java/org/apache/hive/service/auth/LdapAuthenticationProviderImpl.java
+index 3919827..85abba7 100644
+--- a/src/service/src/java/org/apache/hive/service/auth/LdapAuthenticationProviderImpl.java
++++ b/src/service/src/java/org/apache/hive/service/auth/LdapAuthenticationProviderImpl.java
+@@ -29,13 +29,15 @@ import org.apache.hadoop.hive.conf.HiveConf;
+ 
+ public class LdapAuthenticationProviderImpl implements PasswdAuthenticationProvider {
+ 
+-  String ldapURL;
+-  String baseDN;
++  private final String ldapURL;
++  private final String baseDN;
++  private final String ldapDomain;
+ 
+   LdapAuthenticationProviderImpl () {
+     HiveConf conf = new HiveConf();
+     this.ldapURL = conf.getVar(HiveConf.ConfVars.HIVE_SERVER2_PLAIN_LDAP_URL);
+     this.baseDN = conf.getVar(HiveConf.ConfVars.HIVE_SERVER2_PLAIN_LDAP_BASEDN);
++    this.ldapDomain = conf.getVar(HiveConf.ConfVars.HIVE_SERVER2_PLAIN_LDAP_DOMAIN);
+   }
+ 
+   @Override
+@@ -46,6 +48,12 @@ public class LdapAuthenticationProviderImpl implements PasswdAuthenticationProvi
+     env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory");
+     env.put(Context.PROVIDER_URL, ldapURL);
+ 
++    //  If the domain is supplied, then append it. LDAP providers like Active Directory
++    // use a fully qualified user name like foo@bar.com.
++    if (ldapDomain != null) {
++      user  = user + "@" + ldapDomain;
++    }
++
+     // setup the security principal
+     String bindDN;
+     if (baseDN != null) {
+-- 
+1.7.0.4
+

@@ -1,0 +1,242 @@
+From 32af9b1f701080ead22a0a75341c2a65f8d38edc Mon Sep 17 00:00:00 2001
+From: Prasad Mujumdar <prasadm@cloudera.com>
+Date: Thu, 11 Jul 2013 16:23:05 -0700
+Subject: [PATCH 157/218] CDH-13058: HiveServer2 secure impersonation executing some of the operation without proper client ugi context
+
+---
+ .../hive/service/cli/session/HiveSessionImpl.java  |   42 ++++++++++++++++----
+ 1 files changed, 34 insertions(+), 8 deletions(-)
+
+diff --git a/src/service/src/java/org/apache/hive/service/cli/session/HiveSessionImpl.java b/src/service/src/java/org/apache/hive/service/cli/session/HiveSessionImpl.java
+index e1f3885..911ca30 100644
+--- a/src/service/src/java/org/apache/hive/service/cli/session/HiveSessionImpl.java
++++ b/src/service/src/java/org/apache/hive/service/cli/session/HiveSessionImpl.java
+@@ -93,10 +93,12 @@ public class HiveSessionImpl implements HiveSession {
+     sessionState = new SessionState(hiveConf);
+   }
+ 
++  @Override
+   public SessionManager getSessionManager() {
+     return sessionManager;
+   }
+ 
++  @Override
+   public void setSessionManager(SessionManager sessionManager) {
+     this.sessionManager = sessionManager;
+   }
+@@ -105,6 +107,7 @@ public class HiveSessionImpl implements HiveSession {
+     return operationManager;
+   }
+ 
++  @Override
+   public void setOperationManager(OperationManager operationManager) {
+     this.operationManager = operationManager;
+   }
+@@ -118,31 +121,38 @@ public class HiveSessionImpl implements HiveSession {
+     // no need to release sessionState...
+   }
+ 
++  @Override
+   public SessionHandle getSessionHandle() {
+     return sessionHandle;
+   }
+ 
++  @Override
+   public String getUsername() {
+     return username;
+   }
+ 
++  @Override
+   public String getPassword() {
+     return password;
+   }
+ 
++  @Override
+   public HiveConf getHiveConf() {
+     hiveConf.setVar(HiveConf.ConfVars.HIVEFETCHOUTPUTSERDE, FETCH_WORK_SERDE_CLASS);
+     return hiveConf;
+   }
+ 
++  @Override
+   public LogManager getLogManager() {
+     return logManager;
+   }
+ 
++  @Override
+   public void setLogManager(LogManager logManager) {
+     this.logManager = logManager;
+   }
+ 
++  @Override
+   public IMetaStoreClient getMetaStoreClient() throws HiveSQLException {
+     if (metastoreClient == null) {
+       try {
+@@ -154,6 +164,7 @@ public class HiveSessionImpl implements HiveSession {
+     return metastoreClient;
+   }
+ 
++  @Override
+   public GetInfoValue getInfo(GetInfoType getInfoType)
+       throws HiveSQLException {
+     acquire();
+@@ -180,13 +191,14 @@ public class HiveSessionImpl implements HiveSession {
+     }
+   }
+ 
++  @Override
+   public OperationHandle executeStatement(String statement, Map<String, String> confOverlay)
+       throws HiveSQLException {
+     OperationHandle operationHandle;
+     acquire();
+     try {
+       ExecuteStatementOperation operation = getOperationManager()
+-          .newExecuteStatementOperation(this, statement, confOverlay);
++          .newExecuteStatementOperation(getSession(), statement, confOverlay);
+       //Log capture
+       getLogManager().unregisterCurrentThread();
+       operationHandle = operation.getHandle();
+@@ -203,12 +215,13 @@ public class HiveSessionImpl implements HiveSession {
+     }
+   }
+ 
++  @Override
+   public OperationHandle getTypeInfo()
+       throws HiveSQLException {
+     OperationHandle operationHandle;
+     acquire();
+     try {
+-      GetTypeInfoOperation operation = getOperationManager().newGetTypeInfoOperation(this);
++      GetTypeInfoOperation operation = getOperationManager().newGetTypeInfoOperation(getSession());
+       getLogManager().unregisterCurrentThread();
+ 
+       //Log Capture
+@@ -225,11 +238,12 @@ public class HiveSessionImpl implements HiveSession {
+     }
+   }
+ 
++  @Override
+   public OperationHandle getCatalogs() throws HiveSQLException {
+     OperationHandle operationHandle;
+     acquire();
+     try {
+-      GetCatalogsOperation operation = getOperationManager().newGetCatalogsOperation(this);
++      GetCatalogsOperation operation = getOperationManager().newGetCatalogsOperation(getSession());
+       getLogManager().unregisterCurrentThread();
+ 
+       //Log Capture
+@@ -246,13 +260,14 @@ public class HiveSessionImpl implements HiveSession {
+     }
+   }
+ 
++  @Override
+   public OperationHandle getSchemas(String catalogName, String schemaName)
+       throws HiveSQLException {
+     OperationHandle operationHandle;
+     acquire();
+     try {
+       GetSchemasOperation operation =
+-          getOperationManager().newGetSchemasOperation(this, catalogName, schemaName);
++          getOperationManager().newGetSchemasOperation(getSession(), catalogName, schemaName);
+       getLogManager().unregisterCurrentThread();
+ 
+       //Log Capture
+@@ -269,13 +284,14 @@ public class HiveSessionImpl implements HiveSession {
+     }
+   }
+ 
++  @Override
+   public OperationHandle getTables(String catalogName, String schemaName, String tableName,
+       List<String> tableTypes) throws HiveSQLException {
+     OperationHandle operationHandle;
+     acquire();
+     try {
+       MetadataOperation operation =
+-        getOperationManager().newGetTablesOperation(this, catalogName, schemaName, tableName, tableTypes);
++        getOperationManager().newGetTablesOperation(getSession(), catalogName, schemaName, tableName, tableTypes);
+       getLogManager().unregisterCurrentThread();
+ 
+       //Log Capture
+@@ -292,11 +308,12 @@ public class HiveSessionImpl implements HiveSession {
+     }
+   }
+ 
++  @Override
+   public OperationHandle getTableTypes() throws HiveSQLException {
+     OperationHandle operationHandle;
+     acquire();
+     try {
+-      GetTableTypesOperation operation = getOperationManager().newGetTableTypesOperation(this);
++      GetTableTypesOperation operation = getOperationManager().newGetTableTypesOperation(getSession());
+       //Log Capture
+       operationHandle = operation.getHandle();
+       getLogManager().registerCurrentThread(operationHandle);
+@@ -310,12 +327,13 @@ public class HiveSessionImpl implements HiveSession {
+     }
+   }
+ 
++  @Override
+   public OperationHandle getColumns(String catalogName, String schemaName,
+       String tableName, String columnName)  throws HiveSQLException {
+     OperationHandle operationHandle;
+     acquire();
+     try {
+-    GetColumnsOperation operation = getOperationManager().newGetColumnsOperation(this,
++    GetColumnsOperation operation = getOperationManager().newGetColumnsOperation(getSession(),
+         catalogName, schemaName, tableName, columnName);
+     //Log Capture
+     operationHandle = operation.getHandle();
+@@ -331,13 +349,14 @@ public class HiveSessionImpl implements HiveSession {
+     }
+   }
+ 
++  @Override
+   public OperationHandle getFunctions(String catalogName, String schemaName, String functionName)
+       throws HiveSQLException {
+     OperationHandle operationHandle;
+     acquire();
+     try {
+       GetFunctionsOperation operation = getOperationManager()
+-          .newGetFunctionsOperation(this, catalogName, schemaName, functionName);
++          .newGetFunctionsOperation(getSession(), catalogName, schemaName, functionName);
+       //Log Capture
+       operationHandle = operation.getHandle();
+       getLogManager().registerCurrentThread(operationHandle);
+@@ -352,6 +371,7 @@ public class HiveSessionImpl implements HiveSession {
+     }
+   }
+ 
++  @Override
+   public void close() throws HiveSQLException {
+     try {
+       acquire();
+@@ -377,21 +397,27 @@ public class HiveSessionImpl implements HiveSession {
+     }
+   }
+ 
++  @Override
+   public SessionState getSessionState() {
+     return sessionState;
+   }
+ 
++  @Override
+   public String getIpAddress() {
+     return ipAddress;
+   }
+ 
++  @Override
+   public String setIpAddress(String ipAddress) {
+     return this.ipAddress = ipAddress;
+   }
+ 
++  @Override
+   public String getUserName() {
+     return username;
+   }
++
++  @Override
+   public void setUserName(String userName) {
+     this.username = userName;
+   }
+-- 
+1.7.0.4
+

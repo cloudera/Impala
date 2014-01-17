@@ -1,0 +1,344 @@
+From 2a3039664b68e750703eb0ce3c6229dfda2b22d5 Mon Sep 17 00:00:00 2001
+From: Ashutosh Chauhan <hashutosh@apache.org>
+Date: Thu, 20 Jun 2013 01:22:38 +0000
+Subject: [PATCH 147/218] HIVE-3953 : Reading of partitioned Avro data fails because of missing properties (Mark Wagner via Ashutosh Chauhan)
+
+git-svn-id: https://svn.apache.org/repos/asf/hive/trunk@1494833 13f79535-47bb-0310-9956-ffa450edef68
+---
+ .../apache/hadoop/hive/ql/exec/MapOperator.java    |    8 +-
+ .../apache/hadoop/hive/ql/plan/PartitionDesc.java  |   10 +
+ .../test/queries/clientpositive/avro_partitioned.q |   66 +++++++
+ .../results/clientpositive/avro_partitioned.q.out  |  199 ++++++++++++++++++++
+ 4 files changed, 280 insertions(+), 3 deletions(-)
+ create mode 100644 ql/src/test/queries/clientpositive/avro_partitioned.q
+ create mode 100644 ql/src/test/results/clientpositive/avro_partitioned.q.out
+
+diff --git a/src/ql/src/java/org/apache/hadoop/hive/ql/exec/MapOperator.java b/src/ql/src/java/org/apache/hadoop/hive/ql/exec/MapOperator.java
+index 3083129..5f97556 100644
+--- a/src/ql/src/java/org/apache/hadoop/hive/ql/exec/MapOperator.java
++++ b/src/ql/src/java/org/apache/hadoop/hive/ql/exec/MapOperator.java
+@@ -244,10 +244,12 @@ public class MapOperator extends Operator<MapredWork> implements Serializable, C
+       SerDeException {
+     PartitionDesc pd = conf.getPathToPartitionInfo().get(onefile);
+     LinkedHashMap<String, String> partSpec = pd.getPartSpec();
+-    // Use tblProps in case of unpartitioned tables
++    // Use table properties in case of unpartitioned tables,
++    // and the union of table properties and partition properties, with partition
++    // taking precedence
+     Properties partProps =
+         (pd.getPartSpec() == null || pd.getPartSpec().isEmpty()) ?
+-            pd.getTableDesc().getProperties() : pd.getProperties();
++            pd.getTableDesc().getProperties() : pd.getOverlayedProperties();
+ 
+     Class serdeclass = pd.getDeserializerClass();
+     if (serdeclass == null) {
+@@ -411,7 +413,7 @@ public class MapOperator extends Operator<MapredWork> implements Serializable, C
+         // If the partition does not exist, use table properties
+         Properties partProps =
+             (pd.getPartSpec() == null || pd.getPartSpec().isEmpty()) ?
+-                tblProps : pd.getProperties();
++                tblProps : pd.getOverlayedProperties();
+ 
+         Class sdclass = pd.getDeserializerClass();
+         if (sdclass == null) {
+diff --git a/src/ql/src/java/org/apache/hadoop/hive/ql/plan/PartitionDesc.java b/src/ql/src/java/org/apache/hadoop/hive/ql/plan/PartitionDesc.java
+index f0b16e4..f2053b1 100644
+--- a/src/ql/src/java/org/apache/hadoop/hive/ql/plan/PartitionDesc.java
++++ b/src/ql/src/java/org/apache/hadoop/hive/ql/plan/PartitionDesc.java
+@@ -188,6 +188,16 @@ public class PartitionDesc implements Serializable, Cloneable {
+     return properties;
+   }
+ 
++  public java.util.Properties getOverlayedProperties(){
++    if (tableDesc != null) {
++      Properties overlayedProps = new Properties(tableDesc.getProperties());
++      overlayedProps.putAll(getProperties());
++      return overlayedProps;
++    } else {
++      return getProperties();
++    }
++  }
++
+   public void setProperties(final java.util.Properties properties) {
+     this.properties = properties;
+   }
+diff --git a/src/ql/src/test/queries/clientpositive/avro_partitioned.q b/src/ql/src/test/queries/clientpositive/avro_partitioned.q
+new file mode 100644
+index 0000000..601ed33
+--- /dev/null
++++ b/src/ql/src/test/queries/clientpositive/avro_partitioned.q
+@@ -0,0 +1,66 @@
++-- verify that new joins bring in correct schemas (including evolved schemas)
++CREATE TABLE episodes
++ROW FORMAT
++SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
++STORED AS
++INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
++OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
++TBLPROPERTIES ('avro.schema.literal'='{
++  "namespace": "testing.hive.avro.serde",
++  "name": "episodes",
++  "type": "record",
++  "fields": [
++    {
++      "name":"title",
++      "type":"string",
++      "doc":"episode title"
++    },
++    {
++      "name":"air_date",
++      "type":"string",
++      "doc":"initial date"
++    },
++    {
++      "name":"doctor",
++      "type":"int",
++      "doc":"main actor playing the Doctor in episode"
++    }
++  ]
++}');
++
++LOAD DATA LOCAL INPATH '../data/files/episodes.avro' INTO TABLE episodes;
++
++CREATE TABLE episodes_partitioned
++PARTITIONED BY (doctor_pt INT)
++ROW FORMAT
++SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
++STORED AS
++INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
++OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
++TBLPROPERTIES ('avro.schema.literal'='{
++  "namespace": "testing.hive.avro.serde",
++  "name": "episodes",
++  "type": "record",
++  "fields": [
++    {
++      "name":"title",
++      "type":"string",
++      "doc":"episode title"
++    },
++    {
++      "name":"air_date",
++      "type":"string",
++      "doc":"initial date"
++    },
++    {
++      "name":"doctor",
++      "type":"int",
++      "doc":"main actor playing the Doctor in episode"
++    }
++  ]
++}');
++
++SET hive.exec.dynamic.partition.mode=nonstrict;
++INSERT OVERWRITE TABLE episodes_partitioned PARTITION (doctor_pt) SELECT title, air_date, doctor, doctor as doctor_pt FROM episodes;
++
++SELECT * FROM episodes_partitioned WHERE doctor_pt > 6 ORDER BY air_date;
+diff --git a/src/ql/src/test/results/clientpositive/avro_partitioned.q.out b/src/ql/src/test/results/clientpositive/avro_partitioned.q.out
+new file mode 100644
+index 0000000..65cd8e0
+--- /dev/null
++++ b/src/ql/src/test/results/clientpositive/avro_partitioned.q.out
+@@ -0,0 +1,199 @@
++PREHOOK: query: -- verify that new joins bring in correct schemas (including evolved schemas)
++CREATE TABLE episodes
++ROW FORMAT
++SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
++STORED AS
++INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
++OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
++TBLPROPERTIES ('avro.schema.literal'='{
++  "namespace": "testing.hive.avro.serde",
++  "name": "episodes",
++  "type": "record",
++  "fields": [
++    {
++      "name":"title",
++      "type":"string",
++      "doc":"episode title"
++    },
++    {
++      "name":"air_date",
++      "type":"string",
++      "doc":"initial date"
++    },
++    {
++      "name":"doctor",
++      "type":"int",
++      "doc":"main actor playing the Doctor in episode"
++    }
++  ]
++}')
++PREHOOK: type: CREATETABLE
++POSTHOOK: query: -- verify that new joins bring in correct schemas (including evolved schemas)
++CREATE TABLE episodes
++ROW FORMAT
++SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
++STORED AS
++INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
++OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
++TBLPROPERTIES ('avro.schema.literal'='{
++  "namespace": "testing.hive.avro.serde",
++  "name": "episodes",
++  "type": "record",
++  "fields": [
++    {
++      "name":"title",
++      "type":"string",
++      "doc":"episode title"
++    },
++    {
++      "name":"air_date",
++      "type":"string",
++      "doc":"initial date"
++    },
++    {
++      "name":"doctor",
++      "type":"int",
++      "doc":"main actor playing the Doctor in episode"
++    }
++  ]
++}')
++POSTHOOK: type: CREATETABLE
++POSTHOOK: Output: default@episodes
++PREHOOK: query: LOAD DATA LOCAL INPATH '../data/files/episodes.avro' INTO TABLE episodes
++PREHOOK: type: LOAD
++PREHOOK: Output: default@episodes
++POSTHOOK: query: LOAD DATA LOCAL INPATH '../data/files/episodes.avro' INTO TABLE episodes
++POSTHOOK: type: LOAD
++POSTHOOK: Output: default@episodes
++PREHOOK: query: CREATE TABLE episodes_partitioned
++PARTITIONED BY (doctor_pt INT)
++ROW FORMAT
++SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
++STORED AS
++INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
++OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
++TBLPROPERTIES ('avro.schema.literal'='{
++  "namespace": "testing.hive.avro.serde",
++  "name": "episodes",
++  "type": "record",
++  "fields": [
++    {
++      "name":"title",
++      "type":"string",
++      "doc":"episode title"
++    },
++    {
++      "name":"air_date",
++      "type":"string",
++      "doc":"initial date"
++    },
++    {
++      "name":"doctor",
++      "type":"int",
++      "doc":"main actor playing the Doctor in episode"
++    }
++  ]
++}')
++PREHOOK: type: CREATETABLE
++POSTHOOK: query: CREATE TABLE episodes_partitioned
++PARTITIONED BY (doctor_pt INT)
++ROW FORMAT
++SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
++STORED AS
++INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
++OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
++TBLPROPERTIES ('avro.schema.literal'='{
++  "namespace": "testing.hive.avro.serde",
++  "name": "episodes",
++  "type": "record",
++  "fields": [
++    {
++      "name":"title",
++      "type":"string",
++      "doc":"episode title"
++    },
++    {
++      "name":"air_date",
++      "type":"string",
++      "doc":"initial date"
++    },
++    {
++      "name":"doctor",
++      "type":"int",
++      "doc":"main actor playing the Doctor in episode"
++    }
++  ]
++}')
++POSTHOOK: type: CREATETABLE
++POSTHOOK: Output: default@episodes_partitioned
++PREHOOK: query: INSERT OVERWRITE TABLE episodes_partitioned PARTITION (doctor_pt) SELECT title, air_date, doctor, doctor as doctor_pt FROM episodes
++PREHOOK: type: QUERY
++PREHOOK: Input: default@episodes
++PREHOOK: Output: default@episodes_partitioned
++POSTHOOK: query: INSERT OVERWRITE TABLE episodes_partitioned PARTITION (doctor_pt) SELECT title, air_date, doctor, doctor as doctor_pt FROM episodes
++POSTHOOK: type: QUERY
++POSTHOOK: Input: default@episodes
++POSTHOOK: Output: default@episodes_partitioned@doctor_pt=1
++POSTHOOK: Output: default@episodes_partitioned@doctor_pt=11
++POSTHOOK: Output: default@episodes_partitioned@doctor_pt=2
++POSTHOOK: Output: default@episodes_partitioned@doctor_pt=4
++POSTHOOK: Output: default@episodes_partitioned@doctor_pt=5
++POSTHOOK: Output: default@episodes_partitioned@doctor_pt=6
++POSTHOOK: Output: default@episodes_partitioned@doctor_pt=9
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=11).air_date SIMPLE [(episodes)episodes.FieldSchema(name:air_date, type:string, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=11).doctor SIMPLE [(episodes)episodes.FieldSchema(name:doctor, type:int, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=11).title SIMPLE [(episodes)episodes.FieldSchema(name:title, type:string, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=1).air_date SIMPLE [(episodes)episodes.FieldSchema(name:air_date, type:string, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=1).doctor SIMPLE [(episodes)episodes.FieldSchema(name:doctor, type:int, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=1).title SIMPLE [(episodes)episodes.FieldSchema(name:title, type:string, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=2).air_date SIMPLE [(episodes)episodes.FieldSchema(name:air_date, type:string, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=2).doctor SIMPLE [(episodes)episodes.FieldSchema(name:doctor, type:int, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=2).title SIMPLE [(episodes)episodes.FieldSchema(name:title, type:string, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=4).air_date SIMPLE [(episodes)episodes.FieldSchema(name:air_date, type:string, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=4).doctor SIMPLE [(episodes)episodes.FieldSchema(name:doctor, type:int, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=4).title SIMPLE [(episodes)episodes.FieldSchema(name:title, type:string, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=5).air_date SIMPLE [(episodes)episodes.FieldSchema(name:air_date, type:string, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=5).doctor SIMPLE [(episodes)episodes.FieldSchema(name:doctor, type:int, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=5).title SIMPLE [(episodes)episodes.FieldSchema(name:title, type:string, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=6).air_date SIMPLE [(episodes)episodes.FieldSchema(name:air_date, type:string, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=6).doctor SIMPLE [(episodes)episodes.FieldSchema(name:doctor, type:int, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=6).title SIMPLE [(episodes)episodes.FieldSchema(name:title, type:string, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=9).air_date SIMPLE [(episodes)episodes.FieldSchema(name:air_date, type:string, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=9).doctor SIMPLE [(episodes)episodes.FieldSchema(name:doctor, type:int, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=9).title SIMPLE [(episodes)episodes.FieldSchema(name:title, type:string, comment:from deserializer), ]
++PREHOOK: query: SELECT * FROM episodes_partitioned WHERE doctor_pt > 6 ORDER BY air_date
++PREHOOK: type: QUERY
++PREHOOK: Input: default@episodes_partitioned
++PREHOOK: Input: default@episodes_partitioned@doctor_pt=11
++PREHOOK: Input: default@episodes_partitioned@doctor_pt=9
++#### A masked pattern was here ####
++POSTHOOK: query: SELECT * FROM episodes_partitioned WHERE doctor_pt > 6 ORDER BY air_date
++POSTHOOK: type: QUERY
++POSTHOOK: Input: default@episodes_partitioned
++POSTHOOK: Input: default@episodes_partitioned@doctor_pt=11
++POSTHOOK: Input: default@episodes_partitioned@doctor_pt=9
++#### A masked pattern was here ####
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=11).air_date SIMPLE [(episodes)episodes.FieldSchema(name:air_date, type:string, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=11).doctor SIMPLE [(episodes)episodes.FieldSchema(name:doctor, type:int, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=11).title SIMPLE [(episodes)episodes.FieldSchema(name:title, type:string, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=1).air_date SIMPLE [(episodes)episodes.FieldSchema(name:air_date, type:string, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=1).doctor SIMPLE [(episodes)episodes.FieldSchema(name:doctor, type:int, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=1).title SIMPLE [(episodes)episodes.FieldSchema(name:title, type:string, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=2).air_date SIMPLE [(episodes)episodes.FieldSchema(name:air_date, type:string, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=2).doctor SIMPLE [(episodes)episodes.FieldSchema(name:doctor, type:int, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=2).title SIMPLE [(episodes)episodes.FieldSchema(name:title, type:string, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=4).air_date SIMPLE [(episodes)episodes.FieldSchema(name:air_date, type:string, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=4).doctor SIMPLE [(episodes)episodes.FieldSchema(name:doctor, type:int, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=4).title SIMPLE [(episodes)episodes.FieldSchema(name:title, type:string, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=5).air_date SIMPLE [(episodes)episodes.FieldSchema(name:air_date, type:string, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=5).doctor SIMPLE [(episodes)episodes.FieldSchema(name:doctor, type:int, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=5).title SIMPLE [(episodes)episodes.FieldSchema(name:title, type:string, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=6).air_date SIMPLE [(episodes)episodes.FieldSchema(name:air_date, type:string, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=6).doctor SIMPLE [(episodes)episodes.FieldSchema(name:doctor, type:int, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=6).title SIMPLE [(episodes)episodes.FieldSchema(name:title, type:string, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=9).air_date SIMPLE [(episodes)episodes.FieldSchema(name:air_date, type:string, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=9).doctor SIMPLE [(episodes)episodes.FieldSchema(name:doctor, type:int, comment:from deserializer), ]
++POSTHOOK: Lineage: episodes_partitioned PARTITION(doctor_pt=9).title SIMPLE [(episodes)episodes.FieldSchema(name:title, type:string, comment:from deserializer), ]
++The Doctor's Wife	14 May 2011	11	11
++Rose	26 March 2005	9	9
++The Eleventh Hour	3 April 2010	11	11
+-- 
+1.7.0.4
+

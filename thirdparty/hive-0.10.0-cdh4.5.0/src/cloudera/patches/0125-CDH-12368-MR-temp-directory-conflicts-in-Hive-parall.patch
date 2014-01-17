@@ -1,0 +1,103 @@
+From 302f7bb5c99f999ddf9f7beb4462479b8546bcb8 Mon Sep 17 00:00:00 2001
+From: Prasad Mujumdar <prasadm@cloudera.com>
+Date: Thu, 23 May 2013 22:45:01 -0700
+Subject: [PATCH 125/218] CDH-12368: MR temp directory conflicts in Hive parallel execution mode
+
+---
+ ql/src/java/org/apache/hadoop/hive/ql/Context.java |   13 ++++++++-----
+ .../org/apache/hadoop/hive/ql/exec/TaskRunner.java |   12 ++++++++++++
+ 2 files changed, 20 insertions(+), 5 deletions(-)
+
+diff --git a/src/ql/src/java/org/apache/hadoop/hive/ql/Context.java b/src/ql/src/java/org/apache/hadoop/hive/ql/Context.java
+index 5da17c3..a9d6638 100644
+--- a/src/ql/src/java/org/apache/hadoop/hive/ql/Context.java
++++ b/src/ql/src/java/org/apache/hadoop/hive/ql/Context.java
+@@ -43,6 +43,7 @@ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.hive.common.FileUtils;
+ import org.apache.hadoop.hive.conf.HiveConf;
++import org.apache.hadoop.hive.ql.exec.TaskRunner;
+ import org.apache.hadoop.hive.ql.lockmgr.HiveLock;
+ import org.apache.hadoop.hive.ql.lockmgr.HiveLockManager;
+ import org.apache.hadoop.hive.shims.ShimLoader;
+@@ -158,10 +159,11 @@ public class Context {
+                                boolean mkdir, String scratchDir) {
+ 
+     String fileSystem =  scheme + ":" + authority;
+-    String dir = fsScratchDirs.get(fileSystem);
++    String dir = fsScratchDirs.get(fileSystem + "-" + TaskRunner.getTaskID());
+ 
+     if (dir == null) {
+-      Path dirPath = new Path(scheme, authority, scratchDir);
++      Path dirPath = new Path(scheme, authority,
++          scratchDir + "-" + TaskRunner.getTaskID());
+       if (mkdir) {
+         try {
+           FileSystem fs = dirPath.getFileSystem(conf);
+@@ -183,7 +185,7 @@ public class Context {
+         }
+       }
+       dir = dirPath.toString();
+-      fsScratchDirs.put(fileSystem, dir);
++      fsScratchDirs.put(fileSystem + "-" + TaskRunner.getTaskID(), dir);
+ 
+     }
+     return dir;
+@@ -220,9 +222,10 @@ public class Context {
+     try {
+       Path dir = FileUtils.makeQualified(nonLocalScratchPath, conf);
+       URI uri = dir.toUri();
+-      return getScratchDir(uri.getScheme(), uri.getAuthority(),
++      String newScratchDir = getScratchDir(uri.getScheme(), uri.getAuthority(),
+                            !explain, uri.getPath());
+-
++      LOG.info("New scratch dir is " + newScratchDir);
++      return newScratchDir;
+     } catch (IOException e) {
+       throw new RuntimeException(e);
+     } catch (IllegalArgumentException e) {
+diff --git a/src/ql/src/java/org/apache/hadoop/hive/ql/exec/TaskRunner.java b/src/ql/src/java/org/apache/hadoop/hive/ql/exec/TaskRunner.java
+index 56c2be6..4f179b1 100644
+--- a/src/ql/src/java/org/apache/hadoop/hive/ql/exec/TaskRunner.java
++++ b/src/ql/src/java/org/apache/hadoop/hive/ql/exec/TaskRunner.java
+@@ -19,6 +19,7 @@
+ package org.apache.hadoop.hive.ql.exec;
+ 
+ import java.io.Serializable;
++import java.util.concurrent.atomic.AtomicLong;
+ 
+ import org.apache.hadoop.hive.ql.session.SessionState;
+ 
+@@ -30,6 +31,13 @@ public class TaskRunner extends Thread {
+   protected Task<? extends Serializable> tsk;
+   protected TaskResult result;
+   protected SessionState ss;
++  private static AtomicLong taskCounter = new AtomicLong(0);
++  private static ThreadLocal<Long> taskID = new ThreadLocal<Long>() {
++    @Override
++    protected Long initialValue() {
++      return taskCounter.incrementAndGet();
++    }
++  };
+ 
+   public TaskRunner(Task<? extends Serializable> tsk, TaskResult result) {
+     this.tsk = tsk;
+@@ -44,6 +52,7 @@ public class TaskRunner extends Thread {
+   @Override
+   public void run() {
+     SessionState.start(ss);
++    taskID.set(taskCounter.incrementAndGet());
+     runSequential();
+   }
+ 
+@@ -61,4 +70,7 @@ public class TaskRunner extends Thread {
+     result.setExitVal(exitVal);
+   }
+ 
++  public static long getTaskID () {
++    return taskID.get();
++  }
+ }
+-- 
+1.7.0.4
+

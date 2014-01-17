@@ -1,0 +1,125 @@
+From bd8024c229a498c843cc10a1ee400c9dbfea58ce Mon Sep 17 00:00:00 2001
+From: xzhang <xzhang@xzdt.(none)>
+Date: Tue, 4 Jun 2013 16:47:19 -0700
+Subject: [PATCH 129/218] CDH-12515 NullPointerException if typeinfo and nativesql commands are executed at beeline before a DB connection is established. Apache JIRA HIVE-4566
+
+---
+ .../src/java/org/apache/hive/beeline/Commands.java |   12 ++++--
+ .../hive/beeline/src/test/TestBeeLineWithArgs.java |   45 +++++++++++++++-----
+ 2 files changed, 42 insertions(+), 15 deletions(-)
+
+diff --git a/src/beeline/src/java/org/apache/hive/beeline/Commands.java b/src/beeline/src/java/org/apache/hive/beeline/Commands.java
+index cc4f4d0..3799cc1 100644
+--- a/src/beeline/src/java/org/apache/hive/beeline/Commands.java
++++ b/src/beeline/src/java/org/apache/hive/beeline/Commands.java
+@@ -96,8 +96,12 @@ public class Commands {
+ 
+ 
+   public boolean metadata(String cmd, String[] args) {
++    if (!(beeLine.assertConnection())) {
++      return false;
++    }
++
+     try {
+-      Method[] m = beeLine.getDatabaseConnection().getDatabaseMetaData().getClass().getMethods();
++      Method[] m = beeLine.getDatabaseMetaData().getClass().getMethods();
+       Set<String> methodNames = new TreeSet<String>();
+       Set<String> methodNamesUpper = new TreeSet<String>();
+       for (int i = 0; i < m.length; i++) {
+@@ -114,7 +118,7 @@ public class Commands {
+         return false;
+       }
+ 
+-      Object res = beeLine.getReflector().invoke(beeLine.getDatabaseConnection().getDatabaseMetaData(),
++      Object res = beeLine.getReflector().invoke(beeLine.getDatabaseMetaData(),
+           DatabaseMetaData.class, cmd, Arrays.asList(args));
+ 
+       if (res instanceof ResultSet) {
+@@ -224,7 +228,7 @@ public class Commands {
+     if (sql.startsWith("native")) {
+       sql = sql.substring("native".length() + 1);
+     }
+-    String nat = beeLine.getDatabaseConnection().getConnection().nativeSQL(sql);
++    String nat = beeLine.getConnection().nativeSQL(sql);
+     beeLine.output(nat);
+     return true;
+   }
+@@ -568,7 +572,7 @@ public class Commands {
+     for (int i = 0; i < m.length; i++) {
+       try {
+         beeLine.output(beeLine.getColorBuffer().pad(m[i], padlen).append(
+-            "" + beeLine.getReflector().invoke(beeLine.getDatabaseConnection().getDatabaseMetaData(),
++            "" + beeLine.getReflector().invoke(beeLine.getDatabaseMetaData(),
+                 m[i], new Object[0])));
+       } catch (Exception e) {
+         beeLine.handleException(e);
+diff --git a/src/beeline/src/test/org/apache/hive/beeline/src/test/TestBeeLineWithArgs.java b/src/beeline/src/test/org/apache/hive/beeline/src/test/TestBeeLineWithArgs.java
+index 2a3848e..030f6b0 100644
+--- a/src/beeline/src/test/org/apache/hive/beeline/src/test/TestBeeLineWithArgs.java
++++ b/src/beeline/src/test/org/apache/hive/beeline/src/test/TestBeeLineWithArgs.java
+@@ -18,23 +18,19 @@
+ 
+ package org.apache.hive.beeline.src.test;
+ 
+-import java.io.File;
+-import java.io.IOException;
+-import java.io.PrintStream;
+ import java.io.ByteArrayOutputStream;
++import java.io.File;
+ import java.io.FileOutputStream;
+-
+-import junit.framework.TestCase;
+-import org.junit.AfterClass;
+-import org.junit.BeforeClass;
+-import org.junit.Test;
+-import org.junit.Assert;
++import java.io.PrintStream;
++import java.io.UnsupportedEncodingException;
+ 
+ import org.apache.hadoop.hive.conf.HiveConf;
+-import org.apache.hadoop.hive.ql.parse.SemanticException;
+ import org.apache.hive.beeline.BeeLine;
+ import org.apache.hive.service.server.HiveServer2;
+-import org.apache.hive.service.cli.HiveSQLException;
++import org.junit.AfterClass;
++import org.junit.Assert;
++import org.junit.BeforeClass;
++import org.junit.Test;
+ 
+ /**
+  * TestBeeLineWithArgs - executes tests of the command-line arguments to BeeLine
+@@ -216,4 +212,31 @@ public class TestBeeLineWithArgs {
+       throw e;
+     }
+   }
++
++  /**
++   * HIVE-4566
++   * @throws UnsupportedEncodingException
++   */
++  @Test
++  public void testNPE() throws UnsupportedEncodingException {
++    BeeLine beeLine = new BeeLine();
++
++    ByteArrayOutputStream os = new ByteArrayOutputStream();
++    PrintStream beelineOutputStream = new PrintStream(os);
++    beeLine.setOutputStream(beelineOutputStream);
++    beeLine.setErrorStream(beelineOutputStream);
++
++    beeLine.runCommands( new String[] {"!typeinfo"} );
++    String output = os.toString("UTF8");
++    Assert.assertFalse( output.contains("java.lang.NullPointerException") );
++    Assert.assertTrue( output.contains("No current connection") );
++
++    beeLine.runCommands( new String[] {"!nativesql"} );
++    output = os.toString("UTF8");
++    Assert.assertFalse( output.contains("java.lang.NullPointerException") );
++    Assert.assertTrue( output.contains("No current connection") );
++
++    System.out.println(">>> PASSED " + "testNPE" );
++  }
++
+ }
+-- 
+1.7.0.4
+

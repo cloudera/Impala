@@ -1,0 +1,523 @@
+From 898d2c83bd61406b3467c7e7b6180a6b2fc25715 Mon Sep 17 00:00:00 2001
+From: Brock Noland <brock@cloudera.com>
+Date: Tue, 13 Aug 2013 08:37:55 -0500
+Subject: [PATCH 195/218] CDH-11611 - Backport HIVE-4911 - Enable QOP configuration for Hive Server 2 thrift transport
+
+---
+ .../java/org/apache/hadoop/hive/conf/HiveConf.java |    1 +
+ conf/hive-default.xml.template                     |    5 ++
+ .../java/org/apache/hive/jdbc/HiveConnection.java  |   18 +++++-
+ .../hadoop/hive/metastore/HiveMetaStore.java       |    3 +-
+ .../hadoop/hive/metastore/HiveMetaStoreClient.java |    6 +-
+ .../hadoop/hive/metastore/MetaStoreUtils.java      |   12 ++++
+ .../apache/hive/service/auth/HiveAuthFactory.java  |   29 +++++++++-
+ .../hive/service/auth/KerberosSaslHelper.java      |   10 ++-
+ .../java/org/apache/hive/service/auth/SaslQOP.java |   61 ++++++++++++++++++++
+ .../hive/thrift/HadoopThriftAuthBridge20S.java     |   34 ++++++++---
+ .../hive/thrift/TestHadoop20SAuthBridge.java       |    5 +-
+ .../hadoop/hive/thrift/HadoopThriftAuthBridge.java |   22 ++++++-
+ 12 files changed, 180 insertions(+), 26 deletions(-)
+ create mode 100644 service/src/java/org/apache/hive/service/auth/SaslQOP.java
+
+diff --git a/src/common/src/java/org/apache/hadoop/hive/conf/HiveConf.java b/src/common/src/java/org/apache/hadoop/hive/conf/HiveConf.java
+index 05e6046..0cd5386 100644
+--- a/src/common/src/java/org/apache/hadoop/hive/conf/HiveConf.java
++++ b/src/common/src/java/org/apache/hadoop/hive/conf/HiveConf.java
+@@ -690,6 +690,7 @@ public class HiveConf extends Configuration {
+ 
+     HIVE_SERVER2_THRIFT_PORT("hive.server2.thrift.port", 10000),
+     HIVE_SERVER2_THRIFT_BIND_HOST("hive.server2.thrift.bind.host", ""),
++    HIVE_SERVER2_THRIFT_SASL_QOP("hive.server2.thrift.sasl.qop", "auth"),
+ 
+ 
+     // HiveServer2 auth configuration
+diff --git a/src/conf/hive-default.xml.template b/src/conf/hive-default.xml.template
+index 781cc50..a0bb3da 100644
+--- a/src/conf/hive-default.xml.template
++++ b/src/conf/hive-default.xml.template
+@@ -1691,6 +1691,11 @@
+   </description>
+ </property>
+ 
++<property>
++  <name>hive.server2.thrift.sasl.qop</name>
++  <value>auth</auth>
++  <description>Sasl QOP value; one of 'auth', 'auth-int' and 'auth-conf'</description>
++</property>
+ 
+ <property>
+   <name>hive.server2.authentication.ldap.baseDN</name>
+diff --git a/src/jdbc/src/java/org/apache/hive/jdbc/HiveConnection.java b/src/jdbc/src/java/org/apache/hive/jdbc/HiveConnection.java
+index 64562c7..2f3a47a 100644
+--- a/src/jdbc/src/java/org/apache/hive/jdbc/HiveConnection.java
++++ b/src/jdbc/src/java/org/apache/hive/jdbc/HiveConnection.java
+@@ -43,6 +43,7 @@ import java.util.Map.Entry;
+ import java.util.Properties;
+ import java.util.concurrent.Executor;
+ 
++import javax.security.sasl.Sasl;
+ import javax.security.sasl.SaslException;
+ 
+ import org.apache.hadoop.hive.ql.session.SessionState;
+@@ -50,6 +51,7 @@ import org.apache.hadoop.hive.shims.ShimLoader;
+ import org.apache.hive.service.auth.HiveAuthFactory;
+ import org.apache.hive.service.auth.KerberosSaslHelper;
+ import org.apache.hive.service.auth.PlainSaslHelper;
++import org.apache.hive.service.auth.SaslQOP;
+ import org.apache.hive.service.cli.thrift.EmbeddedThriftCLIService;
+ import org.apache.hive.service.cli.thrift.TCLIService;
+ import org.apache.hive.service.cli.thrift.TCancelDelegationTokenReq;
+@@ -76,6 +78,7 @@ import org.apache.thrift.transport.TTransportException;
+  */
+ public class HiveConnection implements java.sql.Connection {
+   private static final String HIVE_AUTH_TYPE= "auth";
++  private static final String HIVE_AUTH_QOP = "sasl.qop";
+   private static final String HIVE_AUTH_SIMPLE = "noSasl";
+   private static final String HIVE_AUTH_TOKEN = "delegationToken";
+   private static final String HIVE_AUTH_USER = "user";
+@@ -150,9 +153,20 @@ public class HiveConnection implements java.sql.Connection {
+       try {
+         String tokenStr;
+         if (sessConf.containsKey(HIVE_AUTH_PRINCIPAL)) {
++          Map<String, String> saslProps = new HashMap<String, String>();
++          SaslQOP saslQOP = SaslQOP.AUTH;
++          if(sessConf.containsKey(HIVE_AUTH_QOP)) {
++            try {
++              saslQOP = SaslQOP.fromString(sessConf.get(HIVE_AUTH_QOP));
++            } catch (IllegalArgumentException e) {
++              throw new SQLException("Invalid " + HIVE_AUTH_QOP + " parameter. " + e.getMessage(), "42000", e);
++            }
++          }
++          saslProps.put(Sasl.QOP, saslQOP.toString());
++          saslProps.put(Sasl.SERVER_AUTH, "true");
+           transport = KerberosSaslHelper.getKerberosTransport(
+-                  sessConf.get(HIVE_AUTH_PRINCIPAL), host, transport);
+-        } else if ((tokenStr = getClientDelegationToken(sessConf)) != null){
++                  sessConf.get(HIVE_AUTH_PRINCIPAL), host, transport, saslProps);
++        } else if ((tokenStr = getClientDelegationToken(sessConf)) != null) {
+           transport = KerberosSaslHelper.getTokenTransport(tokenStr,
+                   host, transport);
+         } else {
+diff --git a/src/metastore/src/java/org/apache/hadoop/hive/metastore/HiveMetaStore.java b/src/metastore/src/java/org/apache/hadoop/hive/metastore/HiveMetaStore.java
+index ce18751..56de6d6 100644
+--- a/src/metastore/src/java/org/apache/hadoop/hive/metastore/HiveMetaStore.java
++++ b/src/metastore/src/java/org/apache/hadoop/hive/metastore/HiveMetaStore.java
+@@ -4202,7 +4202,8 @@ public class HiveMetaStore extends ThriftHiveMetastore {
+             conf.getVar(HiveConf.ConfVars.METASTORE_KERBEROS_PRINCIPAL));
+         // start delegation token manager
+         saslServer.startDelegationTokenSecretManager(conf);
+-        transFactory = saslServer.createTransportFactory();
++        transFactory = saslServer.createTransportFactory(
++                MetaStoreUtils.getMetaStoreSaslProperties(conf));
+         processor = saslServer.wrapProcessor(new ThriftHiveMetastore.Processor<IHMSHandler>(
+             newHMSHandler("new db based metaserver", conf)));
+         LOG.info("Starting DB backed MetaStore Server in Secure Mode");
+diff --git a/src/metastore/src/java/org/apache/hadoop/hive/metastore/HiveMetaStoreClient.java b/src/metastore/src/java/org/apache/hadoop/hive/metastore/HiveMetaStoreClient.java
+index 5f212ce..8035ae2 100644
+--- a/src/metastore/src/java/org/apache/hadoop/hive/metastore/HiveMetaStoreClient.java
++++ b/src/metastore/src/java/org/apache/hadoop/hive/metastore/HiveMetaStoreClient.java
+@@ -252,17 +252,17 @@ public class HiveMetaStoreClient implements IMetaStoreClient {
+               String tokenSig = conf.get("hive.metastore.token.signature");
+               // tokenSig could be null
+               tokenStrForm = shim.getTokenStrForm(tokenSig);
+-
+               if(tokenStrForm != null) {
+                 // authenticate using delegation tokens via the "DIGEST" mechanism
+                 transport = authBridge.createClientTransport(null, store.getHost(),
+-                    "DIGEST", tokenStrForm, transport);
++                    "DIGEST", tokenStrForm, transport,
++                        MetaStoreUtils.getMetaStoreSaslProperties(conf));
+               } else {
+                 String principalConfig =
+                     conf.getVar(HiveConf.ConfVars.METASTORE_KERBEROS_PRINCIPAL);
+                 transport = authBridge.createClientTransport(
+                     principalConfig, store.getHost(), "KERBEROS", null,
+-                    transport);
++                    transport, MetaStoreUtils.getMetaStoreSaslProperties(conf));
+               }
+             } catch (IOException ioe) {
+               LOG.error("Couldn't create client transport", ioe);
+diff --git a/src/metastore/src/java/org/apache/hadoop/hive/metastore/MetaStoreUtils.java b/src/metastore/src/java/org/apache/hadoop/hive/metastore/MetaStoreUtils.java
+index a652320..96e73bc 100644
+--- a/src/metastore/src/java/org/apache/hadoop/hive/metastore/MetaStoreUtils.java
++++ b/src/metastore/src/java/org/apache/hadoop/hive/metastore/MetaStoreUtils.java
+@@ -59,6 +59,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector.Category;
+ import org.apache.hadoop.hive.serde2.objectinspector.StructField;
+ import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
+ import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
++import org.apache.hadoop.hive.shims.ShimLoader;
+ import org.apache.hadoop.hive.thrift.HadoopThriftAuthBridge;
+ import org.apache.hadoop.util.StringUtils;
+ 
+@@ -1102,4 +1103,15 @@ public class MetaStoreUtils {
+     }
+   }
+ 
++  /**
++   * Read and return the meta store Sasl configuration. Currently it uses the default
++   * Hadoop SASL configuration and can be configured using "hadoop.rpc.protection"
++   * @param conf
++   * @return The SASL configuration
++   */
++  public static Map<String, String> getMetaStoreSaslProperties(HiveConf conf) {
++    // As of now Hive Meta Store uses the same configuration as Hadoop SASL configuration
++    return ShimLoader.getHadoopThriftAuthBridge().getHadoopSaslProperties(conf);
++  }
++
+ }
+diff --git a/src/service/src/java/org/apache/hive/service/auth/HiveAuthFactory.java b/src/service/src/java/org/apache/hive/service/auth/HiveAuthFactory.java
+index 9a84847..0c95810 100644
+--- a/src/service/src/java/org/apache/hive/service/auth/HiveAuthFactory.java
++++ b/src/service/src/java/org/apache/hive/service/auth/HiveAuthFactory.java
+@@ -20,6 +20,7 @@ package org.apache.hive.service.auth;
+ import java.io.IOException;
+ 
+ import javax.security.auth.login.LoginException;
++import javax.security.sasl.Sasl;
+ 
+ import org.apache.hadoop.hive.conf.HiveConf;
+ import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
+@@ -30,8 +31,15 @@ import org.apache.hive.service.cli.thrift.ThriftCLIService;
+ import org.apache.thrift.TProcessorFactory;
+ import org.apache.thrift.transport.TTransportException;
+ import org.apache.thrift.transport.TTransportFactory;
++import org.slf4j.Logger;
++import org.slf4j.LoggerFactory;
++
++import java.text.MessageFormat;
++import java.util.HashMap;
++import java.util.Map;
+ 
+ public class HiveAuthFactory {
++  private static final Logger LOG = LoggerFactory.getLogger(HiveAuthFactory.class);
+ 
+   public static enum AuthTypes {
+     NOSASL("NOSASL"),
+@@ -82,13 +90,32 @@ public class HiveAuthFactory {
+     }
+   }
+ 
++  public Map<String, String> getSaslProperties() {
++    Map<String, String> saslProps = new HashMap<String, String>();
++    SaslQOP saslQOP =
++            SaslQOP.fromString(conf.getVar(ConfVars.HIVE_SERVER2_THRIFT_SASL_QOP));
++    // hadoop.rpc.protection being set to a higher level than hive.server2.thrift.rpc.protection
++    // does not make sense in most situations. Log warning message in such cases.
++    Map<String, String> hadoopSaslProps =  ShimLoader.getHadoopThriftAuthBridge().
++            getHadoopSaslProperties(conf);
++    SaslQOP hadoopSaslQOP = SaslQOP.fromString(hadoopSaslProps.get(Sasl.QOP));
++    if(hadoopSaslQOP.ordinal() > saslQOP.ordinal()) {
++      LOG.warn(MessageFormat.format("\"hadoop.rpc.protection\" is set to higher security level " +
++              "{0} then {1} which is set to {2}", hadoopSaslQOP.toString(),
++              ConfVars.HIVE_SERVER2_THRIFT_SASL_QOP.varname, saslQOP.toString()));
++    }
++    saslProps.put(Sasl.QOP, saslQOP.toString());
++    saslProps.put(Sasl.SERVER_AUTH, "true");
++    return saslProps;
++  }
++
+   public TTransportFactory getAuthTransFactory() throws LoginException {
+ 
+     TTransportFactory transportFactory;
+ 
+     if (authTypeStr.equalsIgnoreCase(AuthTypes.KERBEROS.getAuthName())) {
+       try {
+-        transportFactory = saslServer.createTransportFactory();
++        transportFactory = saslServer.createTransportFactory(getSaslProperties());
+       } catch (TTransportException e) {
+         throw new LoginException(e.getMessage());
+       }
+diff --git a/src/service/src/java/org/apache/hive/service/auth/KerberosSaslHelper.java b/src/service/src/java/org/apache/hive/service/auth/KerberosSaslHelper.java
+index d616cfc..8968220 100644
+--- a/src/service/src/java/org/apache/hive/service/auth/KerberosSaslHelper.java
++++ b/src/service/src/java/org/apache/hive/service/auth/KerberosSaslHelper.java
+@@ -18,6 +18,8 @@
+ package org.apache.hive.service.auth;
+ 
+ import java.io.IOException;
++import java.util.Map;
++import java.util.HashMap;
+ 
+ import javax.security.sasl.SaslException;
+ 
+@@ -56,7 +58,7 @@ public class KerberosSaslHelper {
+   }
+ 
+   public static TTransport getKerberosTransport(String principal, String host,
+-      final TTransport underlyingTransport) throws SaslException {
++      final TTransport underlyingTransport, Map<String, String> saslProps) throws SaslException {
+     try {
+       final String names[] = principal.split("[/@]");
+       if (names.length != 3) {
+@@ -67,7 +69,7 @@ public class KerberosSaslHelper {
+       HadoopThriftAuthBridge.Client authBridge =
+         ShimLoader.getHadoopThriftAuthBridge().createClientWithConf("kerberos");
+       return authBridge.createClientTransport(principal, host,
+-          "KERBEROS", null, underlyingTransport);
++          "KERBEROS", null, underlyingTransport, saslProps);
+     } catch (IOException e) {
+       throw new SaslException("Failed to open client transport", e);
+     }
+@@ -79,8 +81,8 @@ public class KerberosSaslHelper {
+       ShimLoader.getHadoopThriftAuthBridge().createClientWithConf("kerberos");
+ 
+     try {
+-      return authBridge.createClientTransport(null, host,
+-          "DIGEST", tokenStr, underlyingTransport);
++      return authBridge.createClientTransport((String)null, host,
++          "DIGEST", tokenStr, underlyingTransport, new HashMap<String,String>());
+     } catch (IOException e) {
+       throw new SaslException("Failed to open client transport", e);
+     }
+diff --git a/src/service/src/java/org/apache/hive/service/auth/SaslQOP.java b/src/service/src/java/org/apache/hive/service/auth/SaslQOP.java
+new file mode 100644
+index 0000000..0b2e7a2
+--- /dev/null
++++ b/src/service/src/java/org/apache/hive/service/auth/SaslQOP.java
+@@ -0,0 +1,61 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hive.service.auth;
++
++import java.util.HashMap;
++import java.util.Map;
++
++/**
++ * Possible values of  SASL quality-of-protection value.
++ */
++public enum SaslQOP {
++  AUTH("auth"), // Authentication only.
++  AUTH_INT("auth-int"), // Authentication and integrity checking by using signatures.
++  AUTH_CONF("auth-conf"); // Authentication, integrity and confidentiality checking
++                          // by using signatures and encryption.
++
++  public final String saslQop;
++
++  private static final Map<String, SaslQOP> strToEnum
++          = new HashMap<String, SaslQOP>();
++  static {
++    for (SaslQOP SaslQOP : values())
++      strToEnum.put(SaslQOP.toString(), SaslQOP);
++  }
++
++  private SaslQOP(final String saslQop) {
++    this.saslQop = saslQop;
++  }
++
++  public String toString() {
++    return saslQop;
++  }
++
++  public static SaslQOP fromString(String str) {
++    if(str != null) {
++      str = str.toLowerCase();
++    }
++    SaslQOP saslQOP = strToEnum.get(str);
++    if(saslQOP == null) {
++      throw new IllegalArgumentException("Unknown auth type: " + str + " Allowed values are: "
++              + strToEnum.keySet());
++    }
++    return saslQOP;
++  }
++}
+diff --git a/src/shims/src/common-secure/java/org/apache/hadoop/hive/thrift/HadoopThriftAuthBridge20S.java b/src/shims/src/common-secure/java/org/apache/hadoop/hive/thrift/HadoopThriftAuthBridge20S.java
+index 5e84d62..ebf3f6d 100644
+--- a/src/shims/src/common-secure/java/org/apache/hadoop/hive/thrift/HadoopThriftAuthBridge20S.java
++++ b/src/shims/src/common-secure/java/org/apache/hadoop/hive/thrift/HadoopThriftAuthBridge20S.java
+@@ -24,6 +24,7 @@ import java.net.InetAddress;
+ import java.net.Socket;
+ import java.security.PrivilegedAction;
+ import java.security.PrivilegedExceptionAction;
++import java.util.Map;
+ 
+ import javax.security.auth.callback.Callback;
+ import javax.security.auth.callback.CallbackHandler;
+@@ -91,6 +92,19 @@ import org.apache.thrift.transport.TTransportFactory;
+      return new Server(keytabFile, principalConf);
+    }
+ 
++   /**
++    * Read and return Hadoop SASL configuration which can be configured using
++    * "hadoop.rpc.protection"
++    * @param conf
++    * @return Hadoop SASL configuration
++    */
++   @Override
++   public Map<String, String> getHadoopSaslProperties(Configuration conf) {
++     // Initialize the SaslRpcServer to ensure QOP parameters are read from conf
++     SaslRpcServer.init(conf);
++     return SaslRpcServer.SASL_PROPS;
++   }
++
+    public static class Client extends HadoopThriftAuthBridge.Client {
+      /**
+       * Create a client-side SASL transport that wraps an underlying transport.
+@@ -99,13 +113,14 @@ import org.apache.thrift.transport.TTransportFactory;
+       *               supported.
+       * @param serverPrincipal The Kerberos principal of the target server.
+       * @param underlyingTransport The underlying transport mechanism, usually a TSocket.
++      * @param saslProps the sasl properties to create the client with
+       */
+ 
+      @Override
+      public TTransport createClientTransport(
+        String principalConfig, String host,
+-        String methodStr, String tokenStrForm, TTransport underlyingTransport)
+-       throws IOException {
++       String methodStr, String tokenStrForm, TTransport underlyingTransport,
++       Map<String, String> saslProps) throws IOException {
+        AuthMethod method = AuthMethod.valueOf(AuthMethod.class, methodStr);
+ 
+        TTransport saslTransport = null;
+@@ -117,7 +132,7 @@ import org.apache.thrift.transport.TTransportFactory;
+             method.getMechanismName(),
+             null,
+             null, SaslRpcServer.SASL_DEFAULT_REALM,
+-            SaslRpcServer.SASL_PROPS, new SaslClientCallbackHandler(t),
++            saslProps, new SaslClientCallbackHandler(t),
+             underlyingTransport);
+            return new TUGIAssumingTransport(saslTransport, UserGroupInformation.getCurrentUser());
+ 
+@@ -134,7 +149,7 @@ import org.apache.thrift.transport.TTransportFactory;
+                method.getMechanismName(),
+                null,
+                names[0], names[1],
+-               SaslRpcServer.SASL_PROPS, null,
++               saslProps, null,
+                underlyingTransport);
+              return new TUGIAssumingTransport(saslTransport, UserGroupInformation.getCurrentUser());
+            } catch (SaslException se) {
+@@ -142,7 +157,7 @@ import org.apache.thrift.transport.TTransportFactory;
+            }
+ 
+          default:
+-        throw new IOException("Unsupported authentication method: " + method);
++           throw new IOException("Unsupported authentication method: " + method);
+        }
+      }
+     private static class SaslClientCallbackHandler implements CallbackHandler {
+@@ -273,10 +288,11 @@ import org.apache.thrift.transport.TTransportFactory;
+       * can be passed as both the input and output transport factory when
+       * instantiating a TThreadPoolServer, for example.
+       *
++      * @param saslProps Map of SASL properties
+       */
+      @Override
+-     public TTransportFactory createTransportFactory() throws TTransportException
+-     {
++     public TTransportFactory createTransportFactory(Map<String, String> saslProps)
++             throws TTransportException {
+        // Parse out the kerberos principal, host, realm.
+        String kerberosName = realUgi.getUserName();
+        final String names[] = SaslRpcServer.splitKerberosName(kerberosName);
+@@ -288,11 +304,11 @@ import org.apache.thrift.transport.TTransportFactory;
+        transFactory.addServerDefinition(
+          AuthMethod.KERBEROS.getMechanismName(),
+          names[0], names[1],  // two parts of kerberos principal
+-         SaslRpcServer.SASL_PROPS,
++         saslProps,
+          new SaslRpcServer.SaslGssCallbackHandler());
+        transFactory.addServerDefinition(AuthMethod.DIGEST.getMechanismName(),
+           null, SaslRpcServer.SASL_DEFAULT_REALM,
+-          SaslRpcServer.SASL_PROPS, new SaslDigestCallbackHandler(secretManager));
++          saslProps, new SaslDigestCallbackHandler(secretManager));
+ 
+        return new TUGIAssumingTransportFactory(transFactory, realUgi);
+      }
+diff --git a/src/shims/src/common-secure/test/org/apache/hadoop/hive/thrift/TestHadoop20SAuthBridge.java b/src/shims/src/common-secure/test/org/apache/hadoop/hive/thrift/TestHadoop20SAuthBridge.java
+index 172e031..b518963 100644
+--- a/src/shims/src/common-secure/test/org/apache/hadoop/hive/thrift/TestHadoop20SAuthBridge.java
++++ b/src/shims/src/common-secure/test/org/apache/hadoop/hive/thrift/TestHadoop20SAuthBridge.java
+@@ -29,6 +29,7 @@ import java.util.ArrayList;
+ import java.util.Arrays;
+ import java.util.Enumeration;
+ import java.util.List;
++import java.util.Map;
+ 
+ import junit.framework.TestCase;
+ 
+@@ -72,13 +73,13 @@ public class TestHadoop20SAuthBridge extends TestCase {
+         super();
+       }
+       @Override
+-      public TTransportFactory createTransportFactory()
++      public TTransportFactory createTransportFactory(Map<String, String> saslProps)
+       throws TTransportException {
+         TSaslServerTransport.Factory transFactory =
+           new TSaslServerTransport.Factory();
+         transFactory.addServerDefinition(AuthMethod.DIGEST.getMechanismName(),
+             null, SaslRpcServer.SASL_DEFAULT_REALM,
+-            SaslRpcServer.SASL_PROPS,
++            saslProps,
+             new SaslDigestCallbackHandler(secretManager));
+ 
+         return new TUGIAssumingTransportFactory(transFactory, realUgi);
+diff --git a/src/shims/src/common/java/org/apache/hadoop/hive/thrift/HadoopThriftAuthBridge.java b/src/shims/src/common/java/org/apache/hadoop/hive/thrift/HadoopThriftAuthBridge.java
+index 5629baf..93df16b 100644
+--- a/src/shims/src/common/java/org/apache/hadoop/hive/thrift/HadoopThriftAuthBridge.java
++++ b/src/shims/src/common/java/org/apache/hadoop/hive/thrift/HadoopThriftAuthBridge.java
+@@ -20,6 +20,7 @@
+ 
+  import java.io.IOException;
+ import java.net.InetAddress;
++import java.util.Map;
+ 
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.thrift.TProcessor;
+@@ -49,6 +50,18 @@ import org.apache.thrift.transport.TTransportFactory;
+    }
+ 
+ 
++  /**
++   * Read and return Hadoop SASL configuration which can be configured using
++   * "hadoop.rpc.protection"
++   *
++   * @param conf
++   * @return Hadoop SASL configuration
++   */
++   public Map<String, String> getHadoopSaslProperties(Configuration conf) {
++     throw new UnsupportedOperationException(
++       "The current version of Hadoop does not support Authentication");
++   }
++
+    public static abstract class Client {
+    /**
+     *
+@@ -64,13 +77,14 @@ import org.apache.thrift.transport.TTransportFactory;
+     * @throws IOException
+     */
+      public abstract TTransport createClientTransport(
+-       String principalConfig, String host,
+-       String methodStr,String tokenStrForm, TTransport underlyingTransport)
+-       throws IOException;
++             String principalConfig, String host,
++             String methodStr, String tokenStrForm, TTransport underlyingTransport,
++             Map<String, String> saslProps)
++             throws IOException;
+    }
+ 
+    public static abstract class Server {
+-     public abstract TTransportFactory createTransportFactory() throws TTransportException;
++     public abstract TTransportFactory createTransportFactory(Map<String, String> saslProps) throws TTransportException;
+      public abstract TProcessor wrapProcessor(TProcessor processor);
+      public abstract TProcessor wrapNonAssumingProcessor(TProcessor processor);
+      public abstract InetAddress getRemoteAddress();
+-- 
+1.7.0.4
+

@@ -1,0 +1,338 @@
+From 5c0c119c2f222c55acd54103c6dd9d9377deceaf Mon Sep 17 00:00:00 2001
+From: Prasad Mujumdar <prasadm@cloudera.com>
+Date: Thu, 19 Sep 2013 21:07:15 -0700
+Subject: [PATCH 202/218] CDH-14070 : Backport HIVE-4343
+
+---
+ .../org/apache/hadoop/hive/ql/exec/ExecDriver.java |    7 +++
+ .../hadoop/hive/ql/exec/MapredLocalTask.java       |   18 ++++++-
+ .../apache/hadoop/hive/ql/exec/SecureCmdDoAs.java  |   55 ++++++++++++++++++++
+ .../apache/hadoop/hive/shims/Hadoop20Shims.java    |   12 ++++
+ .../hadoop/hive/shims/HadoopShimsSecure.java       |   27 ++++++++++
+ .../hive/thrift/HadoopThriftAuthBridge20S.java     |   10 +++-
+ .../org/apache/hadoop/hive/shims/HadoopShims.java  |   28 +++++++++-
+ 7 files changed, 149 insertions(+), 8 deletions(-)
+ create mode 100644 ql/src/java/org/apache/hadoop/hive/ql/exec/SecureCmdDoAs.java
+
+diff --git a/src/ql/src/java/org/apache/hadoop/hive/ql/exec/ExecDriver.java b/src/ql/src/java/org/apache/hadoop/hive/ql/exec/ExecDriver.java
+index 40f1305..381a713 100644
+--- a/src/ql/src/java/org/apache/hadoop/hive/ql/exec/ExecDriver.java
++++ b/src/ql/src/java/org/apache/hadoop/hive/ql/exec/ExecDriver.java
+@@ -586,6 +586,7 @@ public class ExecDriver extends Task<MapredWork> implements Serializable, Hadoop
+     boolean noLog = false;
+     String files = null;
+     boolean localtask = false;
++    String hadoopAuthToken = null;
+     try {
+       for (int i = 0; i < args.length; i++) {
+         if (args[i].equals("-plan")) {
+@@ -598,6 +599,9 @@ public class ExecDriver extends Task<MapredWork> implements Serializable, Hadoop
+           files = args[++i];
+         } else if (args[i].equals("-localtask")) {
+           localtask = true;
++        } else if (args[i].equals("-hadooptoken")) {
++          //set with HS2 in secure mode with doAs
++          hadoopAuthToken = args[++i];
+         }
+       }
+     } catch (IndexOutOfBoundsException e) {
+@@ -619,6 +623,9 @@ public class ExecDriver extends Task<MapredWork> implements Serializable, Hadoop
+     if (files != null) {
+       conf.set("tmpfiles", files);
+     }
++    if(hadoopAuthToken != null){
++      conf.set("mapreduce.job.credentials.binary", hadoopAuthToken);
++    }
+ 
+     boolean isSilent = HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVESESSIONSILENT);
+ 
+diff --git a/src/ql/src/java/org/apache/hadoop/hive/ql/exec/MapredLocalTask.java b/src/ql/src/java/org/apache/hadoop/hive/ql/exec/MapredLocalTask.java
+index dd0efc7..f12064f 100644
+--- a/src/ql/src/java/org/apache/hadoop/hive/ql/exec/MapredLocalTask.java
++++ b/src/ql/src/java/org/apache/hadoop/hive/ql/exec/MapredLocalTask.java
+@@ -47,6 +47,7 @@ import org.apache.hadoop.hive.ql.exec.Utilities.StreamPrinter;
+ import org.apache.hadoop.hive.ql.exec.persistence.AbstractMapJoinKey;
+ import org.apache.hadoop.hive.ql.exec.persistence.HashMapWrapper;
+ import org.apache.hadoop.hive.ql.exec.persistence.MapJoinObjectValue;
++import org.apache.hadoop.hive.ql.exec.SecureCmdDoAs;
+ import org.apache.hadoop.hive.ql.metadata.HiveException;
+ import org.apache.hadoop.hive.ql.plan.BucketMapJoinContext;
+ import org.apache.hadoop.hive.ql.plan.FetchWork;
+@@ -158,8 +159,6 @@ public class MapredLocalTask extends Task<MapredLocalWork> implements Serializab
+         }
+       }
+ 
+-      LOG.info("Executing: " + cmdLine);
+-
+       // Inherit Java system variables
+       String hadoopOpts;
+       StringBuilder sb = new StringBuilder();
+@@ -215,14 +214,29 @@ public class MapredLocalTask extends Task<MapredLocalWork> implements Serializab
+         MapRedTask.configureDebugVariablesForChildJVM(variables);
+       }
+ 
++
++      if(ShimLoader.getHadoopShims().isSecurityEnabled() &&
++          conf.getBoolVar(HiveConf.ConfVars.HIVE_SERVER2_KERBEROS_IMPERSONATION) == true
++          ){
++        //If kerberos security is enabled, and HS2 doAs is enabled,
++        // then additional params need to be set so that the command is run as
++        // intended user
++        SecureCmdDoAs secureDoAs = new SecureCmdDoAs(conf);
++        cmdLine = secureDoAs.addArg(cmdLine);
++        secureDoAs.addEnv(variables);
++      }
++
+       env = new String[variables.size()];
+       int pos = 0;
+       for (Map.Entry<String, String> entry : variables.entrySet()) {
+         String name = entry.getKey();
+         String value = entry.getValue();
+         env[pos++] = name + "=" + value;
++        LOG.debug("Setting env: " + env[pos-1]);
+       }
+ 
++      LOG.info("Executing: " + cmdLine);
++
+       // Run ExecDriver in another JVM
+       executor = Runtime.getRuntime().exec(cmdLine, env, new File(workDir));
+ 
+diff --git a/src/ql/src/java/org/apache/hadoop/hive/ql/exec/SecureCmdDoAs.java b/src/ql/src/java/org/apache/hadoop/hive/ql/exec/SecureCmdDoAs.java
+new file mode 100644
+index 0000000..a9a9874
+--- /dev/null
++++ b/src/ql/src/java/org/apache/hadoop/hive/ql/exec/SecureCmdDoAs.java
+@@ -0,0 +1,55 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hive.ql.exec;
++
++import java.io.IOException;
++import java.util.Map;
++
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.hive.conf.HiveConf;
++import org.apache.hadoop.hive.ql.metadata.HiveException;
++import org.apache.hadoop.hive.shims.ShimLoader;
++import org.apache.hadoop.security.UserGroupInformation;
++
++/**
++ * SecureCmdDoAs - Helper class for setting parameters and env necessary for
++ * being able to run child jvm as intended user.
++ * Used only when kerberos security is used
++ *
++ */
++public class SecureCmdDoAs {
++  private final Path tokenPath;
++
++  public SecureCmdDoAs(HiveConf conf) throws HiveException, IOException{
++    tokenPath = ShimLoader.getHadoopShims().createDelegationTokenFile(conf);
++  }
++
++  public String addArg(String cmdline) throws HiveException {
++    StringBuilder sb = new StringBuilder();
++    sb.append(cmdline);
++    sb.append(" -hadooptoken ");
++    sb.append(tokenPath.toUri().getPath());
++    return sb.toString();
++  }
++
++  public void addEnv(Map<String, String> env){
++    env.put(UserGroupInformation.HADOOP_TOKEN_FILE_LOCATION,
++        tokenPath.toUri().getPath());
++  }
++
++}
+diff --git a/src/shims/src/0.20/java/org/apache/hadoop/hive/shims/Hadoop20Shims.java b/src/shims/src/0.20/java/org/apache/hadoop/hive/shims/Hadoop20Shims.java
+index 299018a..a6be13e 100644
+--- a/src/shims/src/0.20/java/org/apache/hadoop/hive/shims/Hadoop20Shims.java
++++ b/src/shims/src/0.20/java/org/apache/hadoop/hive/shims/Hadoop20Shims.java
+@@ -550,6 +550,11 @@ public class Hadoop20Shims implements HadoopShims {
+   }
+ 
+   @Override
++  public Path createDelegationTokenFile(Configuration conf) throws IOException {
++    throw new UnsupportedOperationException("Tokens are not supported in current hadoop version");
++  }
++
++  @Override
+   public UserGroupInformation createRemoteUser(String userName, List<String> groupNames) {
+     return new UnixUserGroupInformation(userName, groupNames.toArray(new String[0]));
+   }
+@@ -640,4 +645,11 @@ public class Hadoop20Shims implements HadoopShims {
+   public String getJobLauncherHttpAddress(Configuration conf) {
+     return conf.get("mapred.job.tracker.http.address");
+   }
++
++  @Override
++  public String getTokenFileLocEnvName() {
++    throw new UnsupportedOperationException(
++        "Kerberos not supported in current hadoop version");
++  }
++
+ }
+diff --git a/src/shims/src/common-secure/java/org/apache/hadoop/hive/shims/HadoopShimsSecure.java b/src/shims/src/common-secure/java/org/apache/hadoop/hive/shims/HadoopShimsSecure.java
+index 4d2ec83..960dcad 100644
+--- a/src/shims/src/common-secure/java/org/apache/hadoop/hive/shims/HadoopShimsSecure.java
++++ b/src/shims/src/common-secure/java/org/apache/hadoop/hive/shims/HadoopShimsSecure.java
+@@ -19,6 +19,7 @@ package org.apache.hadoop.hive.shims;
+ 
+ import java.io.DataInput;
+ import java.io.DataOutput;
++import java.io.File;
+ import java.io.IOException;
+ import java.lang.reflect.Constructor;
+ import java.net.URI;
+@@ -60,6 +61,7 @@ import org.apache.hadoop.mapred.TaskID;
+ import org.apache.hadoop.mapred.lib.CombineFileInputFormat;
+ import org.apache.hadoop.mapred.lib.CombineFileSplit;
+ import org.apache.hadoop.mapreduce.Job;
++import org.apache.hadoop.security.Credentials;
+ import org.apache.hadoop.security.SecurityUtil;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.authorize.ProxyUsers;
+@@ -581,6 +583,26 @@ public abstract class HadoopShimsSecure implements HadoopShims {
+   }
+ 
+   @Override
++  public Path createDelegationTokenFile(Configuration conf) throws IOException {
++
++    //get delegation token for user
++    String uname = UserGroupInformation.getLoginUser().getShortUserName();
++    FileSystem fs = FileSystem.get(conf);
++    Token<?> fsToken = fs.getDelegationToken(uname);
++
++    File t = File.createTempFile("hive_hadoop_delegation_token", null);
++    Path tokenPath = new Path(t.toURI());
++
++    //write credential with token to file
++    Credentials cred = new Credentials();
++    cred.addToken(fsToken.getService(), fsToken);
++    cred.writeTokenStorageFile(tokenPath, conf);
++
++    return tokenPath;
++  }
++
++
++  @Override
+   public UserGroupInformation createProxyUser(String userName) throws IOException {
+     return UserGroupInformation.createProxyUser(
+         userName, UserGroupInformation.getLoginUser());
+@@ -629,6 +651,11 @@ public abstract class HadoopShimsSecure implements HadoopShims {
+   }
+ 
+   @Override
++  public String getTokenFileLocEnvName() {
++    return UserGroupInformation.HADOOP_TOKEN_FILE_LOCATION;
++  }
++
++  @Override
+   abstract public JobTrackerState getJobTrackerState(ClusterStatus clusterStatus) throws Exception;
+ 
+   @Override
+diff --git a/src/shims/src/common-secure/java/org/apache/hadoop/hive/thrift/HadoopThriftAuthBridge20S.java b/src/shims/src/common-secure/java/org/apache/hadoop/hive/thrift/HadoopThriftAuthBridge20S.java
+index ebf3f6d..9670d0a 100644
+--- a/src/shims/src/common-secure/java/org/apache/hadoop/hive/thrift/HadoopThriftAuthBridge20S.java
++++ b/src/shims/src/common-secure/java/org/apache/hadoop/hive/thrift/HadoopThriftAuthBridge20S.java
+@@ -17,7 +17,7 @@
+  */
+ package org.apache.hadoop.hive.thrift;
+ 
+-import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION;
++import static org.apache.hadoop.fs.CommonConfigurationKeys.HADOOP_SECURITY_AUTHENTICATION;
+ 
+ import java.io.IOException;
+ import java.net.InetAddress;
+@@ -373,7 +373,9 @@ import org.apache.thrift.transport.TTransportFactory;
+      throws IOException, InterruptedException {
+        if (!authenticationMethod.get().equals(AuthenticationMethod.KERBEROS)) {
+          throw new AuthorizationException(
+-         "Delegation Token can be issued only with kerberos authentication");
++         "Delegation Token can be issued only with kerberos authentication. " +
++         "Current AuthenticationMethod: " + authenticationMethod.get()
++             );
+        }
+        //if the user asking the token is same as the 'owner' then don't do
+        //any proxy authorization checks. For cases like oozie, where it gets
+@@ -409,7 +411,9 @@ import org.apache.thrift.transport.TTransportFactory;
+      public long renewDelegationToken(String tokenStrForm) throws IOException {
+        if (!authenticationMethod.get().equals(AuthenticationMethod.KERBEROS)) {
+          throw new AuthorizationException(
+-         "Delegation Token can be issued only with kerberos authentication");
++         "Delegation Token can be issued only with kerberos authentication. " +
++         "Current AuthenticationMethod: " + authenticationMethod.get()
++             );
+        }
+        return secretManager.renewDelegationToken(tokenStrForm);
+      }
+diff --git a/src/shims/src/common/java/org/apache/hadoop/hive/shims/HadoopShims.java b/src/shims/src/common/java/org/apache/hadoop/hive/shims/HadoopShims.java
+index e46121f..69276c4 100644
+--- a/src/shims/src/common/java/org/apache/hadoop/hive/shims/HadoopShims.java
++++ b/src/shims/src/common/java/org/apache/hadoop/hive/shims/HadoopShims.java
+@@ -182,16 +182,18 @@ public interface HadoopShims {
+    */
+   public String unquoteHtmlChars(String item);
+ 
++
++
++  public void closeAllForUGI(UserGroupInformation ugi);
++
+   /**
+    * Get the UGI that the given job configuration will run as.
+    *
+    * In secure versions of Hadoop, this simply returns the current
+    * access control context's user, ignoring the configuration.
+    */
+-
+-  public void closeAllForUGI(UserGroupInformation ugi);
+-
+   public UserGroupInformation getUGIForConf(Configuration conf) throws LoginException, IOException;
++
+   /**
+    * Used by metastore server to perform requested rpc in client context.
+    * @param <T>
+@@ -204,6 +206,26 @@ public interface HadoopShims {
+     IOException, InterruptedException;
+ 
+   /**
++   * Once a delegation token is stored in a file, the location is specified
++   * for a child process that runs hadoop operations, using an environment
++   * variable .
++   * @return Return the name of environment variable used by hadoop to find
++   *  location of token file
++   */
++  public String getTokenFileLocEnvName();
++
++
++  /**
++   * Get delegation token from filesystem and write the token along with
++   * metastore tokens into a file
++   * @param conf
++   * @return Path of the file with token credential
++   * @throws IOException
++   */
++  public Path createDelegationTokenFile(final Configuration conf) throws IOException;
++
++
++  /**
+    * Used by metastore server to creates UGI object for a remote user.
+    * @param userName remote User Name
+    * @param groupNames group names associated with remote user name
+-- 
+1.7.0.4
+

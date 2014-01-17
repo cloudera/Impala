@@ -1,0 +1,100 @@
+From 7cc510814dece81516fb07f8eeba5347702b72b8 Mon Sep 17 00:00:00 2001
+From: xzhang <xzhang@xzdt.(none)>
+Date: Wed, 10 Jul 2013 11:16:20 -0700
+Subject: [PATCH 155/218] CDH-12609 Query udf_substr.q results an output diff when TestCliDriver is compiled on JDK7
+
+---
+ ql/src/test/queries/clientpositive/udf_substr.q    |    4 ++--
+ .../test/results/clientpositive/udf_substr.q.out   |   10 +++++-----
+ .../PrimitiveObjectInspectorConverter.java         |    4 ++++
+ 3 files changed, 11 insertions(+), 7 deletions(-)
+
+diff --git a/src/ql/src/test/queries/clientpositive/udf_substr.q b/src/ql/src/test/queries/clientpositive/udf_substr.q
+index 32757be..d90996b 100644
+--- a/src/ql/src/test/queries/clientpositive/udf_substr.q
++++ b/src/ql/src/test/queries/clientpositive/udf_substr.q
+@@ -2,7 +2,7 @@ DESCRIBE FUNCTION substr;
+ DESCRIBE FUNCTION EXTENDED substr;
+ 
+ SELECT
+-  substr(null, 1), substr(null, 1, 1),
++  substr(CAST(null AS string), 1), substr(CAST(null AS string), 1, 1),
+   substr('ABC', null), substr('ABC', null, 1),
+   substr('ABC', 1, null)
+ FROM src LIMIT 1;
+@@ -50,7 +50,7 @@ FROM src LIMIT 1;
+ 
+ -- test for binary substr
+ SELECT
+-  substr(null, 1), substr(null, 1, 1),
++  substr(CAST(null AS binary), 1), substr(CAST(null AS binary), 1, 1),
+   substr(ABC, null), substr(ABC, null, 1),
+   substr(ABC, 1, null),
+   substr(ABC, 0, 1), substr(ABC, 0, 2), substr(ABC, 0, 3), substr(ABC, 0, 4),
+diff --git a/src/ql/src/test/results/clientpositive/udf_substr.q.out b/src/ql/src/test/results/clientpositive/udf_substr.q.out
+index a7e690f..32c468d 100644
+--- a/src/ql/src/test/results/clientpositive/udf_substr.q.out
++++ b/src/ql/src/test/results/clientpositive/udf_substr.q.out
+@@ -18,7 +18,7 @@ Example:
+   > SELECT substr('Facebook', 5, 1) FROM src LIMIT 1;
+   'b'
+ PREHOOK: query: SELECT
+-  substr(null, 1), substr(null, 1, 1),
++  substr(CAST(null AS string), 1), substr(CAST(null AS string), 1, 1),
+   substr('ABC', null), substr('ABC', null, 1),
+   substr('ABC', 1, null)
+ FROM src LIMIT 1
+@@ -26,7 +26,7 @@ PREHOOK: type: QUERY
+ PREHOOK: Input: default@src
+ #### A masked pattern was here ####
+ POSTHOOK: query: SELECT
+-  substr(null, 1), substr(null, 1, 1),
++  substr(CAST(null AS string), 1), substr(CAST(null AS string), 1, 1),
+   substr('ABC', null), substr('ABC', null, 1),
+   substr('ABC', 1, null)
+ FROM src LIMIT 1
+@@ -143,7 +143,7 @@ POSTHOOK: Input: default@src
+ CDEF	CDEF	CDEFG	CDEFG	ABC	ABC	BC	C	ABC	BC	A	A	A
+ PREHOOK: query: -- test for binary substr
+ SELECT
+-  substr(null, 1), substr(null, 1, 1),
++  substr(CAST(null AS binary), 1), substr(CAST(null AS binary), 1, 1),
+   substr(ABC, null), substr(ABC, null, 1),
+   substr(ABC, 1, null),
+   substr(ABC, 0, 1), substr(ABC, 0, 2), substr(ABC, 0, 3), substr(ABC, 0, 4),
+@@ -163,7 +163,7 @@ PREHOOK: Input: default@src
+ #### A masked pattern was here ####
+ POSTHOOK: query: -- test for binary substr
+ SELECT
+-  substr(null, 1), substr(null, 1, 1),
++  substr(CAST(null AS binary), 1), substr(CAST(null AS binary), 1, 1),
+   substr(ABC, null), substr(ABC, null, 1),
+   substr(ABC, 1, null),
+   substr(ABC, 0, 1), substr(ABC, 0, 2), substr(ABC, 0, 3), substr(ABC, 0, 4),
+@@ -181,7 +181,7 @@ FROM (
+ POSTHOOK: type: QUERY
+ POSTHOOK: Input: default@src
+ #### A masked pattern was here ####
+-NULL	NULL	null	null	null	A	AB	ABC	ABC	A	AB	ABC	ABC	B	BC	BC	BC	C	C	C	C		C	C	C	C	B	BC	BC	BC	A	AB	ABC	ABC	
++null	null	null	null	null	A	AB	ABC	ABC	A	AB	ABC	ABC	B	BC	BC	BC	C	C	C	C		C	C	C	C	B	BC	BC	BC	A	AB	ABC	ABC	
+ PREHOOK: query: -- test UTF-8 substr
+ SELECT
+   substr("玩", 1),
+diff --git a/src/serde/src/java/org/apache/hadoop/hive/serde2/objectinspector/primitive/PrimitiveObjectInspectorConverter.java b/src/serde/src/java/org/apache/hadoop/hive/serde2/objectinspector/primitive/PrimitiveObjectInspectorConverter.java
+index 1c4c8bd..516f01f 100644
+--- a/src/serde/src/java/org/apache/hadoop/hive/serde2/objectinspector/primitive/PrimitiveObjectInspectorConverter.java
++++ b/src/serde/src/java/org/apache/hadoop/hive/serde2/objectinspector/primitive/PrimitiveObjectInspectorConverter.java
+@@ -297,6 +297,10 @@ public class PrimitiveObjectInspectorConverter {
+ 
+     @Override
+     public Object convert(Object input) {
++      if (input == null) {
++        return null;
++      }
++
+       return outputOI.set(r, PrimitiveObjectInspectorUtils.getBinary(input,
+           inputOI));
+     }
+-- 
+1.7.0.4
+

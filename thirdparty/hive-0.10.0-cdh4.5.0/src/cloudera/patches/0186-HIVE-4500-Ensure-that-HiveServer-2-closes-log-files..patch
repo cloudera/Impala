@@ -1,0 +1,123 @@
+From 24ea58e07103c8ae9826611064bef7f8539d8d20 Mon Sep 17 00:00:00 2001
+From: Owen O'Malley <omalley@apache.org>
+Date: Wed, 8 May 2013 18:24:51 +0000
+Subject: [PATCH 186/218] HIVE-4500 Ensure that HiveServer 2 closes log files. (Alan Gates via omalley)
+
+git-svn-id: https://svn.apache.org/repos/asf/hive/trunk@1480390 13f79535-47bb-0310-9956-ffa450edef68
+---
+ .../apache/hadoop/hive/ql/history/HiveHistory.java |   10 +++++++---
+ .../cli/operation/HiveCommandOperation.java        |    9 +++++++++
+ .../hive/service/cli/operation/Operation.java      |    2 +-
+ .../hive/service/cli/session/HiveSessionImpl.java  |    5 +++++
+ 4 files changed, 22 insertions(+), 4 deletions(-)
+
+diff --git a/src/ql/src/java/org/apache/hadoop/hive/ql/history/HiveHistory.java b/src/ql/src/java/org/apache/hadoop/hive/ql/history/HiveHistory.java
+index bfd0a83..e1c1ae3 100644
+--- a/src/ql/src/java/org/apache/hadoop/hive/ql/history/HiveHistory.java
++++ b/src/ql/src/java/org/apache/hadoop/hive/ql/history/HiveHistory.java
+@@ -39,6 +39,7 @@ import org.apache.hadoop.hive.ql.QueryPlan;
+ import org.apache.hadoop.hive.ql.exec.Task;
+ import org.apache.hadoop.hive.ql.session.SessionState;
+ import org.apache.hadoop.hive.ql.session.SessionState.LogHelper;
++import org.apache.hadoop.io.IOUtils;
+ import org.apache.hadoop.mapred.Counters;
+ import org.apache.hadoop.mapred.Counters.Counter;
+ import org.apache.hadoop.mapred.Counters.Group;
+@@ -532,11 +533,14 @@ public class HiveHistory {
+     return null;
+ 
+   }
++
++  public void closeStream() {
++    IOUtils.cleanup(LOG, histStream);
++  }
++
+   @Override
+   public void finalize() throws Throwable {
+-    if (histStream !=null){
+-      histStream.close();
+-    }
++    closeStream();
+     super.finalize();
+   }
+ }
+diff --git a/src/service/src/java/org/apache/hive/service/cli/operation/HiveCommandOperation.java b/src/service/src/java/org/apache/hive/service/cli/operation/HiveCommandOperation.java
+index e54ca78..7f370ed 100644
+--- a/src/service/src/java/org/apache/hive/service/cli/operation/HiveCommandOperation.java
++++ b/src/service/src/java/org/apache/hive/service/cli/operation/HiveCommandOperation.java
+@@ -35,6 +35,7 @@ import org.apache.hadoop.hive.metastore.api.Schema;
+ import org.apache.hadoop.hive.ql.processors.CommandProcessor;
+ import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse;
+ import org.apache.hadoop.hive.ql.session.SessionState;
++import org.apache.hadoop.io.IOUtils;
+ import org.apache.hive.service.cli.FetchOrientation;
+ import org.apache.hive.service.cli.HiveSQLException;
+ import org.apache.hive.service.cli.OperationState;
+@@ -87,6 +88,12 @@ public abstract class HiveCommandOperation extends ExecuteStatementOperation {
+     }
+   }
+ 
++
++  private void tearDownSessionIO() {
++    IOUtils.cleanup(LOG, parentSession.getSessionState().out);
++    IOUtils.cleanup(LOG, parentSession.getSessionState().err);
++  }
++
+   /* (non-Javadoc)
+    * @see org.apache.hive.service.cli.operation.Operation#run()
+    */
+@@ -123,6 +130,7 @@ public abstract class HiveCommandOperation extends ExecuteStatementOperation {
+   @Override
+   public void close() throws HiveSQLException {
+     setState(OperationState.CLOSED);
++    tearDownSessionIO();
+     cleanTmpFile();
+   }
+ 
+@@ -190,6 +198,7 @@ public abstract class HiveCommandOperation extends ExecuteStatementOperation {
+     if (resultReader != null) {
+       SessionState sessionState = getParentSession().getSessionState();
+       File tmp = sessionState.getTmpOutputFile();
++      IOUtils.cleanup(LOG, resultReader);
+       tmp.delete();
+       resultReader = null;
+     }
+diff --git a/src/service/src/java/org/apache/hive/service/cli/operation/Operation.java b/src/service/src/java/org/apache/hive/service/cli/operation/Operation.java
+index c44f462..d13e9d9 100644
+--- a/src/service/src/java/org/apache/hive/service/cli/operation/Operation.java
++++ b/src/service/src/java/org/apache/hive/service/cli/operation/Operation.java
+@@ -34,7 +34,7 @@ import org.apache.hive.service.cli.session.HiveSession;
+ 
+ 
+ public abstract class Operation {
+-  private final HiveSession parentSession;
++  protected final HiveSession parentSession;
+   private OperationState state = OperationState.INITIALIZED;
+   private final OperationHandle opHandle;
+   private HiveConf configuration = null;
+diff --git a/src/service/src/java/org/apache/hive/service/cli/session/HiveSessionImpl.java b/src/service/src/java/org/apache/hive/service/cli/session/HiveSessionImpl.java
+index b84bb34..c18cad8 100644
+--- a/src/service/src/java/org/apache/hive/service/cli/session/HiveSessionImpl.java
++++ b/src/service/src/java/org/apache/hive/service/cli/session/HiveSessionImpl.java
+@@ -32,6 +32,7 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
+ import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
+ import org.apache.hadoop.hive.metastore.IMetaStoreClient;
+ import org.apache.hadoop.hive.metastore.api.MetaException;
++import org.apache.hadoop.hive.ql.history.HiveHistory;
+ import org.apache.hadoop.hive.ql.session.SessionState;
+ import org.apache.hive.service.auth.HiveAuthFactory;
+ import org.apache.hive.service.cli.FetchOrientation;
+@@ -390,6 +391,10 @@ public class HiveSessionImpl implements HiveSession {
+         operationManager.closeOperation(opHandle);
+       }
+       opHandleSet.clear();
++      HiveHistory hiveHist = sessionState.getHiveHistory();
++      if (null != hiveHist) {
++        hiveHist.closeStream();
++      }
+       sessionState.close();
+     } catch (IOException ioe) {
+       throw new HiveSQLException("Failure to close", ioe);
+-- 
+1.7.0.4
+

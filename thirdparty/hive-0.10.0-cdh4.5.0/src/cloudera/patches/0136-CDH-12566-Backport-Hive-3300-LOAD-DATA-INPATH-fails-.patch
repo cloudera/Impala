@@ -1,0 +1,382 @@
+From 3c5478b0f8126abd1935e981145f21ebfa90b9cd Mon Sep 17 00:00:00 2001
+From: Chaoyu Tang <ctang@cloudera.com>
+Date: Fri, 7 Jun 2013 10:09:51 -0700
+Subject: [PATCH 136/218] CDH-12566: Backport Hive-3300 (LOAD DATA INPATH fails if a hdfs file with same name is added to table)
+
+---
+ build-common.xml                                   |    2 +-
+ .../org/apache/hadoop/hive/ql/metadata/Hive.java   |  132 +++++++++++---------
+ ql/src/test/queries/clientpositive/load_fs2.q      |   20 +++
+ ql/src/test/results/clientpositive/load_fs2.q.out  |  103 +++++++++++++++
+ 4 files changed, 194 insertions(+), 63 deletions(-)
+ create mode 100644 ql/src/test/queries/clientpositive/load_fs2.q
+ create mode 100644 ql/src/test/results/clientpositive/load_fs2.q.out
+
+diff --git a/src/build-common.xml b/src/build-common.xml
+index c23f687..8ece171 100644
+--- a/src/build-common.xml
++++ b/src/build-common.xml
+@@ -87,7 +87,7 @@
+   <property name="test.output" value="true"/>
+   <property name="test.junit.output.format" value="xml"/>
+   <property name="test.junit.output.usefile" value="true"/>
+-  <property name="minimr.query.files" value="input16_cc.q,scriptfile1.q,bucket4.q,bucketmapjoin6.q,disable_merge_for_bucketing.q,reduce_deduplicate.q,smb_mapjoin_8.q,join1.q,groupby2.q,bucketizedhiveinputformat.q,bucketmapjoin7.q,optrstat_groupby.q,bucket_num_reducers.q,remote_script.q"/>
++  <property name="minimr.query.files" value="input16_cc.q,scriptfile1.q,bucket4.q,bucketmapjoin6.q,disable_merge_for_bucketing.q,reduce_deduplicate.q,smb_mapjoin_8.q,join1.q,groupby2.q,bucketizedhiveinputformat.q,bucketmapjoin7.q,optrstat_groupby.q,bucket_num_reducers.q,remote_script.q,load_fs2.q"/>
+   <property name="minimr.query.negative.files" value="cluster_tasklog_retrieval.q,minimr_broken_pipe.q,mapreduce_stack_trace.q,mapreduce_stack_trace_turnoff.q,mapreduce_stack_trace_hadoop20.q,mapreduce_stack_trace_turnoff_hadoop20.q" />
+   <property name="test.silent" value="true"/>
+   <property name="hadoopVersion" value="${hadoop.version.ant-internal}"/>
+diff --git a/src/ql/src/java/org/apache/hadoop/hive/ql/metadata/Hive.java b/src/ql/src/java/org/apache/hadoop/hive/ql/metadata/Hive.java
+index 3e7b30b..06f5438 100644
+--- a/src/ql/src/java/org/apache/hadoop/hive/ql/metadata/Hive.java
++++ b/src/ql/src/java/org/apache/hadoop/hive/ql/metadata/Hive.java
+@@ -30,6 +30,7 @@ import static org.apache.hadoop.hive.serde.serdeConstants.STRING_TYPE_NAME;
+ 
+ import java.io.IOException;
+ import java.util.ArrayList;
++import java.util.Arrays;
+ import java.util.HashMap;
+ import java.util.HashSet;
+ import java.util.Iterator;
+@@ -99,16 +100,16 @@ public class Hive {
+   private IMetaStoreClient metaStoreClient;
+   private String currentDatabase;
+ 
+-  private static ThreadLocal<Hive> hiveDB = new ThreadLocal() {
++  private static ThreadLocal<Hive> hiveDB = new ThreadLocal<Hive>() {
+     @Override
+-    protected synchronized Object initialValue() {
++    protected synchronized Hive initialValue() {
+       return null;
+     }
+ 
+     @Override
+     public synchronized void remove() {
+       if (this.get() != null) {
+-        ((Hive) this.get()).close();
++        this.get().close();
+       }
+       super.remove();
+     }
+@@ -1897,28 +1898,59 @@ public class Hive {
+     }
+   }
+ 
+-  static private void checkPaths(HiveConf conf,
+-    FileSystem fs, FileStatus[] srcs, Path destf,
+-    boolean replace) throws HiveException {
++  // for each file or directory in 'srcs', make mapping for every file in src to safe name in dest
++  private static List<List<Path[]>> checkPaths(HiveConf conf,
++      FileSystem fs, FileStatus[] srcs, Path destf,
++      boolean replace) throws HiveException {
++
++    List<List<Path[]>> result = new ArrayList<List<Path[]>>();
+     try {
++      FileStatus destStatus = !replace && fs.exists(destf) ? fs.getFileStatus(destf) : null;
++      if (destStatus != null && !destStatus.isDir()) {
++        throw new HiveException("checkPaths: destination " + destf
++            + " should be a directory");
++      }
+       for (FileStatus src : srcs) {
+-        FileStatus[] items = fs.listStatus(src.getPath());
++        FileStatus[] items;
++        if (src.isDir()) {
++          items = fs.listStatus(src.getPath());
++          Arrays.sort(items);
++        } else {
++          items = new FileStatus[] {src};
++        }
++
++        List<Path[]> srcToDest = new ArrayList<Path[]>();
+         for (FileStatus item : items) {
+-          Path itemStaging = item.getPath();
++
++          Path itemSource = item.getPath();
+ 
+           if (Utilities.isTempPath(item)) {
+             // This check is redundant because temp files are removed by
+             // execution layer before
+             // calling loadTable/Partition. But leaving it in just in case.
+-            fs.delete(itemStaging, true);
++            fs.delete(itemSource, true);
+             continue;
+           }
+ 
+           if (!conf.getBoolVar(HiveConf.ConfVars.HIVE_HADOOP_SUPPORTS_SUBDIRECTORIES) &&
+             item.isDir()) {
+             throw new HiveException("checkPaths: " + src.getPath()
+-                + " has nested directory" + itemStaging);
++                + " has nested directory" + itemSource);
+           }
++          // Strip off the file type, if any so we don't make:
++          // 000000_0.gz -> 000000_0.gz_copy_1
++          String name = itemSource.getName();
++          String filetype;
++          int index = name.lastIndexOf('.');
++          if (index >= 0) {
++            filetype = name.substring(index);
++            name = name.substring(0, index);
++          } else {
++            filetype = "";
++          }
++
++          Path itemDest = new Path(destf, itemSource.getName());
++
+           if (!replace) {
+             // It's possible that the file we're copying may have the same
+             // relative name as an existing file in the "destf" directory.
+@@ -1928,51 +1960,30 @@ public class Hive {
+             // on "_copy_N" where N starts at 1 and works its way up until
+             // we find a free space.
+ 
+-            // Note: there are race conditions here, but I don't believe
+-            // they're worse than what was already present.
+-            int counter = 1;
+-
+-            // Strip off the file type, if any so we don't make:
+-            // 000000_0.gz -> 000000_0.gz_copy_1
+-            String name = itemStaging.getName();
+-            String filetype;
+-            int index = name.lastIndexOf('.');
+-            if (index >= 0) {
+-              filetype = name.substring(index);
+-              name = name.substring(0, index);
+-            } else {
+-              filetype = "";
+-            }
+-
+-            Path itemDest = new Path(destf, itemStaging.getName());
+-            Path itemStagingBase = new Path(itemStaging.getParent(), name);
+-
+-            while (fs.exists(itemDest)) {
+-              Path proposedStaging = itemStagingBase
+-                  .suffix("_copy_" + counter++).suffix(filetype);
+-              Path proposedDest = new Path(destf, proposedStaging.getName());
+-
+-              if (fs.exists(proposedDest)) {
+-                // There's already a file in our destination directory with our
+-                // _copy_N suffix. We've been here before...
+-                LOG.trace(proposedDest + " already exists");
+-                continue;
+-              }
+-
+-              if (!fs.rename(itemStaging, proposedStaging)) {
+-                LOG.debug("Unsuccessfully in attempt to rename " + itemStaging + " to " + proposedStaging + "...");
+-                continue;
+-              }
+-
+-              LOG.debug("Successfully renamed " + itemStaging + " to " + proposedStaging);
+-              itemDest = proposedDest;
++            // removed source file staging.. it's more confusing when faild.
++            for (int counter = 1; fs.exists(itemDest) || destExists(result, itemDest); counter++) {
++              itemDest = new Path(destf, name + ("_copy_" + counter) + filetype);
+             }
+           }
++          srcToDest.add(new Path[]{itemSource, itemDest});
+         }
++        result.add(srcToDest);
+       }
+     } catch (IOException e) {
+       throw new HiveException("checkPaths: filesystem error in check phase", e);
+     }
++    return result;
++  }
++
++  private static boolean destExists(List<List<Path[]>> result, Path proposed) {
++    for (List<Path[]> sdpairs : result) {
++      for (Path[] sdpair : sdpairs) {
++        if (sdpair[1].equals(proposed)) {
++          return true;
++        }
++      }
++    }
++    return false;
+   }
+ 
+   static protected void copyFiles(HiveConf conf, Path srcf, Path destf, FileSystem fs)
+@@ -2001,17 +2012,14 @@ public class Hive {
+       // srcs = new FileStatus[0]; Why is this needed?
+     }
+     // check that source and target paths exist
+-    checkPaths(conf, fs, srcs, destf, false);
++    List<List<Path[]>> result = checkPaths(conf, fs, srcs, destf, false);
+ 
+     // move it, move it
+     try {
+-      for (FileStatus src : srcs) {
+-        FileStatus[] items = fs.listStatus(src.getPath());
+-        for (FileStatus item : items) {
+-          Path source = item.getPath();
+-          Path target = new Path(destf, item.getPath().getName());
+-          if (!fs.rename(source, target)) {
+-            throw new IOException("Cannot move " + source + " to " + target);
++      for (List<Path[]> sdpairs : result) {
++        for (Path[] sdpair : sdpairs) {
++          if (!fs.rename(sdpair[0], sdpair[1])) {
++            throw new IOException("Cannot move " + sdpair[0] + " to " + sdpair[1]);
+           }
+         }
+       }
+@@ -2052,7 +2060,7 @@ public class Hive {
+         LOG.info("No sources specified to move: " + srcf);
+         return;
+       }
+-      checkPaths(conf, fs, srcs, destf, true);
++      List<List<Path[]>> result = checkPaths(conf, fs, srcs, destf, true);
+ 
+       // point of no return -- delete oldPath
+       if (oldPath != null) {
+@@ -2091,11 +2099,11 @@ public class Hive {
+           fs.mkdirs(destf);
+         }
+         // srcs must be a list of files -- ensured by LoadSemanticAnalyzer
+-        for (FileStatus src : srcs) {
+-          Path destPath = new Path(destf, src.getPath().getName());
+-          if (!fs.rename(src.getPath(), destPath)) {
+-            throw new HiveException("Error moving: " + src.getPath()
+-                + " into: " + destf);
++        for (List<Path[]> sdpairs : result) {
++          for (Path[] sdpair : sdpairs) {
++            if (!fs.rename(sdpair[0], sdpair[1])) {
++              throw new IOException("Error moving: " + sdpair[0] + " into: " + sdpair[1]);
++            }
+           }
+         }
+       }
+diff --git a/src/ql/src/test/queries/clientpositive/load_fs2.q b/src/ql/src/test/queries/clientpositive/load_fs2.q
+new file mode 100644
+index 0000000..7255324
+--- /dev/null
++++ b/src/ql/src/test/queries/clientpositive/load_fs2.q
+@@ -0,0 +1,20 @@
++-- HIVE-3300 [jira] LOAD DATA INPATH fails if a hdfs file with same name is added to table
++-- 'loader' table is used only for uploading kv1.txt to HDFS (!hdfs -put is not working on minMRDriver)
++
++create table result (key string, value string);
++create table loader (key string, value string);
++
++load data local inpath '../data/files/kv1.txt' into table loader;
++
++load data inpath '/build/ql/test/data/warehouse/loader/kv1.txt' into table result;
++show table extended like result;
++
++load data local inpath '../data/files/kv1.txt' into table loader;
++
++load data inpath '/build/ql/test/data/warehouse/loader/kv1.txt' into table result;
++show table extended like result;
++
++load data local inpath '../data/files/kv1.txt' into table loader;
++
++load data inpath '/build/ql/test/data/warehouse/loader/kv1.txt' into table result;
++show table extended like result;
+diff --git a/src/ql/src/test/results/clientpositive/load_fs2.q.out b/src/ql/src/test/results/clientpositive/load_fs2.q.out
+new file mode 100644
+index 0000000..914ca14
+--- /dev/null
++++ b/src/ql/src/test/results/clientpositive/load_fs2.q.out
+@@ -0,0 +1,103 @@
++PREHOOK: query: -- HIVE-3300 [jira] LOAD DATA INPATH fails if a hdfs file with same name is added to table
++-- 'loader' table is used only for uploading kv1.txt to HDFS (!hdfs -put is not working on minMRDriver)
++
++create table result (key string, value string)
++PREHOOK: type: CREATETABLE
++POSTHOOK: query: -- HIVE-3300 [jira] LOAD DATA INPATH fails if a hdfs file with same name is added to table
++-- 'loader' table is used only for uploading kv1.txt to HDFS (!hdfs -put is not working on minMRDriver)
++
++create table result (key string, value string)
++POSTHOOK: type: CREATETABLE
++POSTHOOK: Output: default@result
++PREHOOK: query: create table loader (key string, value string)
++PREHOOK: type: CREATETABLE
++POSTHOOK: query: create table loader (key string, value string)
++POSTHOOK: type: CREATETABLE
++POSTHOOK: Output: default@loader
++PREHOOK: query: load data local inpath '../data/files/kv1.txt' into table loader
++PREHOOK: type: LOAD
++PREHOOK: Output: default@loader
++POSTHOOK: query: load data local inpath '../data/files/kv1.txt' into table loader
++POSTHOOK: type: LOAD
++POSTHOOK: Output: default@loader
++PREHOOK: query: load data inpath '/build/ql/test/data/warehouse/loader/kv1.txt' into table result
++PREHOOK: type: LOAD
++PREHOOK: Output: default@result
++POSTHOOK: query: load data inpath '/build/ql/test/data/warehouse/loader/kv1.txt' into table result
++POSTHOOK: type: LOAD
++POSTHOOK: Output: default@result
++PREHOOK: query: show table extended like result
++PREHOOK: type: SHOW_TABLESTATUS
++POSTHOOK: query: show table extended like result
++POSTHOOK: type: SHOW_TABLESTATUS
++tableName:result
++#### A masked pattern was here ####
++inputformat:org.apache.hadoop.mapred.TextInputFormat
++outputformat:org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
++columns:struct columns { string key, string value}
++partitioned:false
++partitionColumns:
++totalNumberFiles:1
++totalFileSize:5812
++maxFileSize:5812
++minFileSize:5812
++#### A masked pattern was here ####
++
++PREHOOK: query: load data local inpath '../data/files/kv1.txt' into table loader
++PREHOOK: type: LOAD
++PREHOOK: Output: default@loader
++POSTHOOK: query: load data local inpath '../data/files/kv1.txt' into table loader
++POSTHOOK: type: LOAD
++POSTHOOK: Output: default@loader
++PREHOOK: query: load data inpath '/build/ql/test/data/warehouse/loader/kv1.txt' into table result
++PREHOOK: type: LOAD
++PREHOOK: Output: default@result
++POSTHOOK: query: load data inpath '/build/ql/test/data/warehouse/loader/kv1.txt' into table result
++POSTHOOK: type: LOAD
++POSTHOOK: Output: default@result
++PREHOOK: query: show table extended like result
++PREHOOK: type: SHOW_TABLESTATUS
++POSTHOOK: query: show table extended like result
++POSTHOOK: type: SHOW_TABLESTATUS
++tableName:result
++#### A masked pattern was here ####
++inputformat:org.apache.hadoop.mapred.TextInputFormat
++outputformat:org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
++columns:struct columns { string key, string value}
++partitioned:false
++partitionColumns:
++totalNumberFiles:2
++totalFileSize:11624
++maxFileSize:5812
++minFileSize:5812
++#### A masked pattern was here ####
++
++PREHOOK: query: load data local inpath '../data/files/kv1.txt' into table loader
++PREHOOK: type: LOAD
++PREHOOK: Output: default@loader
++POSTHOOK: query: load data local inpath '../data/files/kv1.txt' into table loader
++POSTHOOK: type: LOAD
++POSTHOOK: Output: default@loader
++PREHOOK: query: load data inpath '/build/ql/test/data/warehouse/loader/kv1.txt' into table result
++PREHOOK: type: LOAD
++PREHOOK: Output: default@result
++POSTHOOK: query: load data inpath '/build/ql/test/data/warehouse/loader/kv1.txt' into table result
++POSTHOOK: type: LOAD
++POSTHOOK: Output: default@result
++PREHOOK: query: show table extended like result
++PREHOOK: type: SHOW_TABLESTATUS
++POSTHOOK: query: show table extended like result
++POSTHOOK: type: SHOW_TABLESTATUS
++tableName:result
++#### A masked pattern was here ####
++inputformat:org.apache.hadoop.mapred.TextInputFormat
++outputformat:org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
++columns:struct columns { string key, string value}
++partitioned:false
++partitionColumns:
++totalNumberFiles:3
++totalFileSize:17436
++maxFileSize:5812
++minFileSize:5812
++#### A masked pattern was here ####
++
+-- 
+1.7.0.4
+

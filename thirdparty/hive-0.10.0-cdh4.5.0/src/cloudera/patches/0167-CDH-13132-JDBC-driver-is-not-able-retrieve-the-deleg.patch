@@ -1,0 +1,211 @@
+From 5f55f50fde45881b03c5958567b397d2e8514ba6 Mon Sep 17 00:00:00 2001
+From: Jarek Jarcec Cecho <jarcec@apache.org>
+Date: Fri, 19 Jul 2013 08:10:45 -0700
+Subject: [PATCH 167/218] CDH-13132: JDBC driver is not able retrieve the delegation token from token store injected by external process like oozie
+
+---
+ .../java/org/apache/hive/jdbc/HiveConnection.java  |    5 +--
+ .../apache/hive/service/auth/HiveAuthFactory.java  |    3 +-
+ .../hadoop/hive/shims/HadoopShimsSecure.java       |   29 +++++++++++++++++++-
+ .../hive/thrift/HadoopThriftAuthBridge20S.java     |    9 ++++++
+ .../org/apache/hadoop/hive/shims/HadoopShims.java  |   14 ++++++++-
+ .../hadoop/hive/thrift/HadoopThriftAuthBridge.java |    6 +++-
+ 6 files changed, 57 insertions(+), 9 deletions(-)
+
+diff --git a/src/jdbc/src/java/org/apache/hive/jdbc/HiveConnection.java b/src/jdbc/src/java/org/apache/hive/jdbc/HiveConnection.java
+index 202b3e4..64562c7 100644
+--- a/src/jdbc/src/java/org/apache/hive/jdbc/HiveConnection.java
++++ b/src/jdbc/src/java/org/apache/hive/jdbc/HiveConnection.java
+@@ -35,13 +35,13 @@ import java.sql.SQLXML;
+ import java.sql.Savepoint;
+ import java.sql.Statement;
+ import java.sql.Struct;
+-import java.util.concurrent.Executor;
+ import java.util.HashMap;
+ import java.util.LinkedList;
+ import java.util.List;
+ import java.util.Map;
+ import java.util.Map.Entry;
+ import java.util.Properties;
++import java.util.concurrent.Executor;
+ 
+ import javax.security.sasl.SaslException;
+ 
+@@ -78,7 +78,6 @@ public class HiveConnection implements java.sql.Connection {
+   private static final String HIVE_AUTH_TYPE= "auth";
+   private static final String HIVE_AUTH_SIMPLE = "noSasl";
+   private static final String HIVE_AUTH_TOKEN = "delegationToken";
+-  public static final String HIVE_CONF_TOKEN= "hive.server2.delegation.token";
+   private static final String HIVE_AUTH_USER = "user";
+   private static final String HIVE_AUTH_PRINCIPAL = "principal";
+   private static final String HIVE_AUTH_PASSWD = "password";
+@@ -192,7 +191,7 @@ public class HiveConnection implements java.sql.Connection {
+     } else {
+       // check delegation token in job conf if any
+       try {
+-        tokenStr = ShimLoader.getHadoopShims().getTokenStrForm(HIVE_CONF_TOKEN);
++        tokenStr = ShimLoader.getHadoopShims().getTokenStrForm(HiveAuthFactory.HS2_CLIENT_TOKEN);
+       } catch (IOException e) {
+         throw new SQLException("Error reading token ", e);
+       }
+diff --git a/src/service/src/java/org/apache/hive/service/auth/HiveAuthFactory.java b/src/service/src/java/org/apache/hive/service/auth/HiveAuthFactory.java
+index abf9479..9a84847 100644
+--- a/src/service/src/java/org/apache/hive/service/auth/HiveAuthFactory.java
++++ b/src/service/src/java/org/apache/hive/service/auth/HiveAuthFactory.java
+@@ -57,6 +57,7 @@ public class HiveAuthFactory {
+   private final HiveConf conf;
+ 
+   public static final String HS2_PROXY_USER = "hive.server2.proxy.user";
++  public static final String HS2_CLIENT_TOKEN = "hiveserver2ClientToken";
+ 
+   public HiveAuthFactory() throws TTransportException {
+     conf = new HiveConf();
+@@ -148,7 +149,7 @@ public class HiveAuthFactory {
+     }
+ 
+     try {
+-      return saslServer.getDelegationToken(owner, renewer);
++      return saslServer.getDelegationTokenWithService(owner, renewer, HS2_CLIENT_TOKEN);
+     } catch (IOException e) {
+       throw new HiveSQLException("Error retrieving delegation token for user " + owner, e);
+     } catch (InterruptedException e) {
+diff --git a/src/shims/src/common-secure/java/org/apache/hadoop/hive/shims/HadoopShimsSecure.java b/src/shims/src/common-secure/java/org/apache/hadoop/hive/shims/HadoopShimsSecure.java
+index 26956f7..7443163 100644
+--- a/src/shims/src/common-secure/java/org/apache/hadoop/hive/shims/HadoopShimsSecure.java
++++ b/src/shims/src/common-secure/java/org/apache/hadoop/hive/shims/HadoopShimsSecure.java
+@@ -540,12 +540,39 @@ public abstract class HadoopShimsSecure implements HadoopShims {
+     return token != null ? token.encodeToUrlString() : null;
+   }
+ 
++  /**
++   * Create a delegation token object for the given token string and service.
++   * Add the token to given UGI
++   */
+   @Override
+   public void setTokenStr(UserGroupInformation ugi, String tokenStr, String tokenService) throws IOException {
++    Token<DelegationTokenIdentifier> delegationToken = createToken(tokenStr, tokenService);
++    ugi.addToken(delegationToken);
++  }
++
++  /**
++   * Add a given service to delegation token string.
++   */
++  @Override
++  public String addServiceToToken(String tokenStr, String tokenService)
++  throws IOException {
++    Token<DelegationTokenIdentifier> delegationToken = createToken(tokenStr, tokenService);
++    return delegationToken.encodeToUrlString();
++  }
++
++  /**
++   * Create a new token using the given string and service
++   * @param tokenStr
++   * @param tokenService
++   * @return
++   * @throws IOException
++   */
++  private Token<DelegationTokenIdentifier> createToken(String tokenStr, String tokenService)
++      throws IOException {
+     Token<DelegationTokenIdentifier> delegationToken = new Token<DelegationTokenIdentifier>();
+     delegationToken.decodeFromUrlString(tokenStr);
+     delegationToken.setService(new Text(tokenService));
+-    ugi.addToken(delegationToken);
++    return delegationToken;
+   }
+ 
+   @Override
+diff --git a/src/shims/src/common-secure/java/org/apache/hadoop/hive/thrift/HadoopThriftAuthBridge20S.java b/src/shims/src/common-secure/java/org/apache/hadoop/hive/thrift/HadoopThriftAuthBridge20S.java
+index e9f652d..5e84d62 100644
+--- a/src/shims/src/common-secure/java/org/apache/hadoop/hive/thrift/HadoopThriftAuthBridge20S.java
++++ b/src/shims/src/common-secure/java/org/apache/hadoop/hive/thrift/HadoopThriftAuthBridge20S.java
+@@ -42,6 +42,7 @@ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.hive.shims.ShimLoader;
+ import org.apache.hadoop.hive.thrift.client.TUGIAssumingTransport;
+ import org.apache.hadoop.security.SaslRpcServer;
+ import org.apache.hadoop.security.SaslRpcServer.AuthMethod;
+@@ -382,6 +383,13 @@ import org.apache.thrift.transport.TTransportFactory;
+      }
+ 
+      @Override
++     public String getDelegationTokenWithService(String owner, String renewer, String service)
++         throws IOException, InterruptedException {
++       String token = getDelegationToken(owner, renewer);
++       return ShimLoader.getHadoopShims().addServiceToToken(token, service);
++     }
++
++     @Override
+      public long renewDelegationToken(String tokenStrForm) throws IOException {
+        if (!authenticationMethod.get().equals(AuthenticationMethod.KERBEROS)) {
+          throw new AuthorizationException(
+@@ -619,5 +627,6 @@ import org.apache.thrift.transport.TTransportFactory;
+          });
+        }
+      }
++
+    }
+  }
+diff --git a/src/shims/src/common/java/org/apache/hadoop/hive/shims/HadoopShims.java b/src/shims/src/common/java/org/apache/hadoop/hive/shims/HadoopShims.java
+index 61689bd..b30d259 100644
+--- a/src/shims/src/common/java/org/apache/hadoop/hive/shims/HadoopShims.java
++++ b/src/shims/src/common/java/org/apache/hadoop/hive/shims/HadoopShims.java
+@@ -246,7 +246,7 @@ public interface HadoopShims {
+    * @return the string form of the token found
+    * @throws IOException
+    */
+-  String getTokenStrForm(String tokenSignature) throws IOException;
++  public String getTokenStrForm(String tokenSignature) throws IOException;
+ 
+   /**
+    * Add a delegation token to the given ugi
+@@ -255,10 +255,20 @@ public interface HadoopShims {
+    * @param tokenService
+    * @throws IOException
+    */
+-  void setTokenStr(UserGroupInformation ugi, String tokenStr, String tokenService)
++  public void setTokenStr(UserGroupInformation ugi, String tokenStr, String tokenService)
+     throws IOException;
+ 
+ 
++  /**
++   * Add given service to the string format token
++   * @param tokenStr
++   * @param tokenService
++   * @return
++   * @throws IOException
++   */
++  public String addServiceToToken(String tokenStr, String tokenService)
++    throws IOException;
++
+   enum JobTrackerState { INITIALIZING, RUNNING };
+ 
+   /**
+diff --git a/src/shims/src/common/java/org/apache/hadoop/hive/thrift/HadoopThriftAuthBridge.java b/src/shims/src/common/java/org/apache/hadoop/hive/thrift/HadoopThriftAuthBridge.java
+index 9b0ec0a..5629baf 100644
+--- a/src/shims/src/common/java/org/apache/hadoop/hive/thrift/HadoopThriftAuthBridge.java
++++ b/src/shims/src/common/java/org/apache/hadoop/hive/thrift/HadoopThriftAuthBridge.java
+@@ -41,7 +41,7 @@ import org.apache.thrift.transport.TTransportFactory;
+      throw new UnsupportedOperationException(
+        "The current version of Hadoop does not support Authentication");
+    }
+-   
++
+    public Server createServer(String keytabFile, String principalConf)
+      throws TTransportException {
+      throw new UnsupportedOperationException(
+@@ -76,7 +76,9 @@ import org.apache.thrift.transport.TTransportFactory;
+      public abstract InetAddress getRemoteAddress();
+      public abstract String getRemoteUser();
+      public abstract void startDelegationTokenSecretManager(Configuration conf) throws IOException;
+-     public abstract String getDelegationToken(String owner, String renewer) 
++     public abstract String getDelegationToken(String owner, String renewer)
++     throws IOException, InterruptedException;
++     public abstract String getDelegationTokenWithService(String owner, String renewer, String service)
+      throws IOException, InterruptedException;
+      public abstract long renewDelegationToken(String tokenStrForm) throws IOException;
+      public abstract void cancelDelegationToken(String tokenStrForm) throws IOException;
+-- 
+1.7.0.4
+

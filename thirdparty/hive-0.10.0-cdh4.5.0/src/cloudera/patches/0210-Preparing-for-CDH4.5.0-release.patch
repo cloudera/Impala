@@ -1,0 +1,284 @@
+From 4dea778e19ef3824e5180f905e6d16d17d496495 Mon Sep 17 00:00:00 2001
+From: Jenkins slave <kitchen-build@cloudera.com>
+Date: Mon, 11 Nov 2013 08:47:48 -0800
+Subject: [PATCH 210/218] Preparing for CDH4.5.0 release
+
+---
+ build.properties                                   |    2 +-
+ cloudera-pom.xml                                   |    4 ++--
+ cloudera/maven-packaging/hive-anttasks/pom.xml     |    2 +-
+ cloudera/maven-packaging/hive-beeline/pom.xml      |    2 +-
+ cloudera/maven-packaging/hive-builtins/pom.xml     |    2 +-
+ cloudera/maven-packaging/hive-cli/pom.xml          |    2 +-
+ cloudera/maven-packaging/hive-common/pom.xml       |    2 +-
+ cloudera/maven-packaging/hive-contrib/pom.xml      |    2 +-
+ cloudera/maven-packaging/hive-exec/pom.xml         |    2 +-
+ .../maven-packaging/hive-hbase-handler/pom.xml     |    2 +-
+ cloudera/maven-packaging/hive-hwi/pom.xml          |    2 +-
+ cloudera/maven-packaging/hive-jdbc/pom.xml         |    2 +-
+ cloudera/maven-packaging/hive-metastore/pom.xml    |    2 +-
+ cloudera/maven-packaging/hive-pdk/pom.xml          |    2 +-
+ cloudera/maven-packaging/hive-serde/pom.xml        |    2 +-
+ cloudera/maven-packaging/hive-service/pom.xml      |    2 +-
+ cloudera/maven-packaging/hive-shims/pom.xml        |    2 +-
+ cloudera/maven-packaging/pom.xml                   |    6 +++---
+ 18 files changed, 21 insertions(+), 21 deletions(-)
+
+diff --git a/src/build.properties b/src/build.properties
+index 2612479..fb09d3d 100644
+--- a/src/build.properties
++++ b/src/build.properties
+@@ -16,7 +16,7 @@
+ 
+ Name=Hive
+ name=hive
+-version=0.10.0-cdh4.5.0-SNAPSHOT
++version=0.10.0-cdh4.5.0
+ year=2011
+ 
+ javac.debug=on
+diff --git a/src/cloudera-pom.xml b/src/cloudera-pom.xml
+index 89d8a98..d33f40b 100644
+--- a/src/cloudera-pom.xml
++++ b/src/cloudera-pom.xml
+@@ -21,13 +21,13 @@
+     <parent>
+         <groupId>com.cloudera.cdh</groupId>
+         <artifactId>hive-root</artifactId>
+-        <version>0.10.0-cdh4.5.0-SNAPSHOT</version>
++        <version>0.10.0-cdh4.5.0</version>
+         <relativePath>cloudera/maven-packaging/pom.xml</relativePath>
+     </parent>
+ 
+     <groupId>com.cloudera.cdh</groupId>
+     <artifactId>hive-ant</artifactId>
+-    <version>0.10.0-cdh4.5.0-SNAPSHOT</version>
++    <version>0.10.0-cdh4.5.0</version>
+     <packaging>pom</packaging>
+ 
+     <scm>
+diff --git a/src/cloudera/maven-packaging/hive-anttasks/pom.xml b/src/cloudera/maven-packaging/hive-anttasks/pom.xml
+index 88a7eb6..e0b75d3 100644
+--- a/src/cloudera/maven-packaging/hive-anttasks/pom.xml
++++ b/src/cloudera/maven-packaging/hive-anttasks/pom.xml
+@@ -24,7 +24,7 @@
+   <parent>
+     <groupId>com.cloudera.cdh</groupId>
+     <artifactId>hive-root</artifactId>
+-    <version>0.10.0-cdh4.5.0-SNAPSHOT</version>
++    <version>0.10.0-cdh4.5.0</version>
+     <relativePath>../pom.xml</relativePath>
+   </parent>
+ 
+diff --git a/src/cloudera/maven-packaging/hive-beeline/pom.xml b/src/cloudera/maven-packaging/hive-beeline/pom.xml
+index 154979b..6e9e3d8 100644
+--- a/src/cloudera/maven-packaging/hive-beeline/pom.xml
++++ b/src/cloudera/maven-packaging/hive-beeline/pom.xml
+@@ -24,7 +24,7 @@
+   <parent>
+     <groupId>com.cloudera.cdh</groupId>
+     <artifactId>hive-root</artifactId>
+-    <version>0.10.0-cdh4.5.0-SNAPSHOT</version>
++    <version>0.10.0-cdh4.5.0</version>
+     <relativePath>../pom.xml</relativePath>
+   </parent>
+ 
+diff --git a/src/cloudera/maven-packaging/hive-builtins/pom.xml b/src/cloudera/maven-packaging/hive-builtins/pom.xml
+index 006ecdb..f2ffdcb 100644
+--- a/src/cloudera/maven-packaging/hive-builtins/pom.xml
++++ b/src/cloudera/maven-packaging/hive-builtins/pom.xml
+@@ -24,7 +24,7 @@
+   <parent>
+     <groupId>com.cloudera.cdh</groupId>
+     <artifactId>hive-root</artifactId>
+-    <version>0.10.0-cdh4.5.0-SNAPSHOT</version>
++    <version>0.10.0-cdh4.5.0</version>
+     <relativePath>../pom.xml</relativePath>
+   </parent>
+ 
+diff --git a/src/cloudera/maven-packaging/hive-cli/pom.xml b/src/cloudera/maven-packaging/hive-cli/pom.xml
+index 00960a6..04fa9c5 100644
+--- a/src/cloudera/maven-packaging/hive-cli/pom.xml
++++ b/src/cloudera/maven-packaging/hive-cli/pom.xml
+@@ -24,7 +24,7 @@
+   <parent>
+     <groupId>com.cloudera.cdh</groupId>
+     <artifactId>hive-root</artifactId>
+-    <version>0.10.0-cdh4.5.0-SNAPSHOT</version>
++    <version>0.10.0-cdh4.5.0</version>
+     <relativePath>../pom.xml</relativePath>
+   </parent>
+ 
+diff --git a/src/cloudera/maven-packaging/hive-common/pom.xml b/src/cloudera/maven-packaging/hive-common/pom.xml
+index 2a53aa4..8b9de2a 100644
+--- a/src/cloudera/maven-packaging/hive-common/pom.xml
++++ b/src/cloudera/maven-packaging/hive-common/pom.xml
+@@ -24,7 +24,7 @@
+   <parent>
+     <groupId>com.cloudera.cdh</groupId>
+     <artifactId>hive-root</artifactId>
+-    <version>0.10.0-cdh4.5.0-SNAPSHOT</version>
++    <version>0.10.0-cdh4.5.0</version>
+     <relativePath>../pom.xml</relativePath>
+   </parent>
+ 
+diff --git a/src/cloudera/maven-packaging/hive-contrib/pom.xml b/src/cloudera/maven-packaging/hive-contrib/pom.xml
+index 6802dd7..0c14e55 100644
+--- a/src/cloudera/maven-packaging/hive-contrib/pom.xml
++++ b/src/cloudera/maven-packaging/hive-contrib/pom.xml
+@@ -24,7 +24,7 @@
+   <parent>
+     <groupId>com.cloudera.cdh</groupId>
+     <artifactId>hive-root</artifactId>
+-    <version>0.10.0-cdh4.5.0-SNAPSHOT</version>
++    <version>0.10.0-cdh4.5.0</version>
+     <relativePath>../pom.xml</relativePath>
+   </parent>
+ 
+diff --git a/src/cloudera/maven-packaging/hive-exec/pom.xml b/src/cloudera/maven-packaging/hive-exec/pom.xml
+index 1f901ef..b620f64 100644
+--- a/src/cloudera/maven-packaging/hive-exec/pom.xml
++++ b/src/cloudera/maven-packaging/hive-exec/pom.xml
+@@ -24,7 +24,7 @@
+   <parent>
+     <groupId>com.cloudera.cdh</groupId>
+     <artifactId>hive-root</artifactId>
+-    <version>0.10.0-cdh4.5.0-SNAPSHOT</version>
++    <version>0.10.0-cdh4.5.0</version>
+     <relativePath>../pom.xml</relativePath>
+   </parent>
+ 
+diff --git a/src/cloudera/maven-packaging/hive-hbase-handler/pom.xml b/src/cloudera/maven-packaging/hive-hbase-handler/pom.xml
+index 1757b48..eb5b22e 100644
+--- a/src/cloudera/maven-packaging/hive-hbase-handler/pom.xml
++++ b/src/cloudera/maven-packaging/hive-hbase-handler/pom.xml
+@@ -24,7 +24,7 @@
+   <parent>
+     <groupId>com.cloudera.cdh</groupId>
+     <artifactId>hive-root</artifactId>
+-    <version>0.10.0-cdh4.5.0-SNAPSHOT</version>
++    <version>0.10.0-cdh4.5.0</version>
+     <relativePath>../pom.xml</relativePath>
+   </parent>
+ 
+diff --git a/src/cloudera/maven-packaging/hive-hwi/pom.xml b/src/cloudera/maven-packaging/hive-hwi/pom.xml
+index 136973b..bd3b0f9 100644
+--- a/src/cloudera/maven-packaging/hive-hwi/pom.xml
++++ b/src/cloudera/maven-packaging/hive-hwi/pom.xml
+@@ -24,7 +24,7 @@
+   <parent>
+     <groupId>com.cloudera.cdh</groupId>
+     <artifactId>hive-root</artifactId>
+-    <version>0.10.0-cdh4.5.0-SNAPSHOT</version>
++    <version>0.10.0-cdh4.5.0</version>
+     <relativePath>../pom.xml</relativePath>
+   </parent>
+ 
+diff --git a/src/cloudera/maven-packaging/hive-jdbc/pom.xml b/src/cloudera/maven-packaging/hive-jdbc/pom.xml
+index f4ddb9a..6e38226 100644
+--- a/src/cloudera/maven-packaging/hive-jdbc/pom.xml
++++ b/src/cloudera/maven-packaging/hive-jdbc/pom.xml
+@@ -24,7 +24,7 @@
+   <parent>
+     <groupId>com.cloudera.cdh</groupId>
+     <artifactId>hive-root</artifactId>
+-    <version>0.10.0-cdh4.5.0-SNAPSHOT</version>
++    <version>0.10.0-cdh4.5.0</version>
+     <relativePath>../pom.xml</relativePath>
+   </parent>
+ 
+diff --git a/src/cloudera/maven-packaging/hive-metastore/pom.xml b/src/cloudera/maven-packaging/hive-metastore/pom.xml
+index d5c2647..ae74efe 100644
+--- a/src/cloudera/maven-packaging/hive-metastore/pom.xml
++++ b/src/cloudera/maven-packaging/hive-metastore/pom.xml
+@@ -24,7 +24,7 @@
+   <parent>
+     <groupId>com.cloudera.cdh</groupId>
+     <artifactId>hive-root</artifactId>
+-    <version>0.10.0-cdh4.5.0-SNAPSHOT</version>
++    <version>0.10.0-cdh4.5.0</version>
+     <relativePath>../pom.xml</relativePath>
+   </parent>
+ 
+diff --git a/src/cloudera/maven-packaging/hive-pdk/pom.xml b/src/cloudera/maven-packaging/hive-pdk/pom.xml
+index 5d8d444..c30cf72 100644
+--- a/src/cloudera/maven-packaging/hive-pdk/pom.xml
++++ b/src/cloudera/maven-packaging/hive-pdk/pom.xml
+@@ -24,7 +24,7 @@
+   <parent>
+     <groupId>com.cloudera.cdh</groupId>
+     <artifactId>hive-root</artifactId>
+-    <version>0.10.0-cdh4.5.0-SNAPSHOT</version>
++    <version>0.10.0-cdh4.5.0</version>
+     <relativePath>../pom.xml</relativePath>
+   </parent>
+ 
+diff --git a/src/cloudera/maven-packaging/hive-serde/pom.xml b/src/cloudera/maven-packaging/hive-serde/pom.xml
+index c6a50b2..c0caf85 100644
+--- a/src/cloudera/maven-packaging/hive-serde/pom.xml
++++ b/src/cloudera/maven-packaging/hive-serde/pom.xml
+@@ -24,7 +24,7 @@
+   <parent>
+     <groupId>com.cloudera.cdh</groupId>
+     <artifactId>hive-root</artifactId>
+-    <version>0.10.0-cdh4.5.0-SNAPSHOT</version>
++    <version>0.10.0-cdh4.5.0</version>
+     <relativePath>../pom.xml</relativePath>
+   </parent>
+ 
+diff --git a/src/cloudera/maven-packaging/hive-service/pom.xml b/src/cloudera/maven-packaging/hive-service/pom.xml
+index 2e920da..05ba8d5 100644
+--- a/src/cloudera/maven-packaging/hive-service/pom.xml
++++ b/src/cloudera/maven-packaging/hive-service/pom.xml
+@@ -24,7 +24,7 @@
+   <parent>
+     <groupId>com.cloudera.cdh</groupId>
+     <artifactId>hive-root</artifactId>
+-    <version>0.10.0-cdh4.5.0-SNAPSHOT</version>
++    <version>0.10.0-cdh4.5.0</version>
+     <relativePath>../pom.xml</relativePath>
+   </parent>
+ 
+diff --git a/src/cloudera/maven-packaging/hive-shims/pom.xml b/src/cloudera/maven-packaging/hive-shims/pom.xml
+index 5c25458..0794a13 100644
+--- a/src/cloudera/maven-packaging/hive-shims/pom.xml
++++ b/src/cloudera/maven-packaging/hive-shims/pom.xml
+@@ -24,7 +24,7 @@
+   <parent>
+     <groupId>com.cloudera.cdh</groupId>
+     <artifactId>hive-root</artifactId>
+-    <version>0.10.0-cdh4.5.0-SNAPSHOT</version>
++    <version>0.10.0-cdh4.5.0</version>
+     <relativePath>../pom.xml</relativePath>
+   </parent>
+ 
+diff --git a/src/cloudera/maven-packaging/pom.xml b/src/cloudera/maven-packaging/pom.xml
+index bf64edf..055476a 100644
+--- a/src/cloudera/maven-packaging/pom.xml
++++ b/src/cloudera/maven-packaging/pom.xml
+@@ -21,19 +21,19 @@
+   <parent>
+     <groupId>com.cloudera.cdh</groupId>
+     <artifactId>cdh-root</artifactId>
+-    <version>4.5.0-SNAPSHOT</version>
++    <version>4.5.0</version>
+     <relativePath>../../../../../pom.xml</relativePath>
+   </parent>
+ 
+   <groupId>com.cloudera.cdh</groupId>
+   <artifactId>hive-root</artifactId>
+-  <version>0.10.0-cdh4.5.0-SNAPSHOT</version>
++  <version>0.10.0-cdh4.5.0</version>
+   <packaging>pom</packaging>
+ 
+   <name>CDH Hive root</name>
+ 
+   <properties>
+-    <cdh.hive.version>0.10.0-cdh4.5.0-SNAPSHOT</cdh.hive.version>
++    <cdh.hive.version>0.10.0-cdh4.5.0</cdh.hive.version>
+   </properties>
+ 
+   <repositories>
+-- 
+1.7.0.4
+

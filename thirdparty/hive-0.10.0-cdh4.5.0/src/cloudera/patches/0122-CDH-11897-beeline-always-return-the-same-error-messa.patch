@@ -1,0 +1,26 @@
+From fb844a12947280050b1defa7406f47144d894c1c Mon Sep 17 00:00:00 2001
+From: Chaoyu Tang <ctang@cloudera.com>
+Date: Thu, 23 May 2013 17:24:21 -0400
+Subject: [PATCH 122/218] CDH-11897: beeline always return the same error message twice
+
+---
+ .../src/java/org/apache/hive/beeline/Commands.java |    3 ---
+ 1 files changed, 0 insertions(+), 3 deletions(-)
+
+diff --git a/src/beeline/src/java/org/apache/hive/beeline/Commands.java b/src/beeline/src/java/org/apache/hive/beeline/Commands.java
+index 8e2a52f..cc4f4d0 100644
+--- a/src/beeline/src/java/org/apache/hive/beeline/Commands.java
++++ b/src/beeline/src/java/org/apache/hive/beeline/Commands.java
+@@ -771,9 +771,6 @@ public class Commands {
+           beeLine.info(beeLine.loc("rows-affected", count)
+               + " " + beeLine.locElapsedTime(end - start));
+         }
+-      } catch (Exception e) {
+-        beeLine.error(e);
+-        throw e;
+       } finally {
+         if (stmnt != null) {
+           stmnt.close();
+-- 
+1.7.0.4
+

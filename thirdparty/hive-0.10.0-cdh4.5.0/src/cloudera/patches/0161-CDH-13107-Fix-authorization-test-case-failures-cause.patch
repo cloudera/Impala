@@ -1,0 +1,314 @@
+From 97e2931ff7feb6ef428d5bdbab30a7bf74830b97 Mon Sep 17 00:00:00 2001
+From: Xuefu Zhang <xzhang@xzlt.(none)>
+Date: Sun, 14 Jul 2013 10:38:42 -0700
+Subject: [PATCH 161/218] CDH-13107: Fix authorization test case failures caused by DN upgrade
+
+---
+ .../org/apache/hadoop/hive/ql/exec/DDLTask.java    |   16 +++++++
+ .../alter_rename_partition_authorization.q.out     |    4 +-
+ .../results/clientpositive/authorization_2.q.out   |   42 ++++++++++----------
+ .../results/clientpositive/authorization_6.q.out   |    4 +-
+ 4 files changed, 41 insertions(+), 25 deletions(-)
+
+diff --git a/src/ql/src/java/org/apache/hadoop/hive/ql/exec/DDLTask.java b/src/ql/src/java/org/apache/hadoop/hive/ql/exec/DDLTask.java
+index 5026062..76b585b 100644
+--- a/src/ql/src/java/org/apache/hadoop/hive/ql/exec/DDLTask.java
++++ b/src/ql/src/java/org/apache/hadoop/hive/ql/exec/DDLTask.java
+@@ -514,6 +514,7 @@ public class DDLTask extends Task<DDLWork> implements Serializable {
+             null, null, null, null);
+         if (users != null && users.size() > 0) {
+           boolean first = true;
++          sortPrivileges(users);
+           for (HiveObjectPrivilege usr : users) {
+             if (!first) {
+               outStream.write(terminator);
+@@ -569,6 +570,7 @@ public class DDLTask extends Task<DDLWork> implements Serializable {
+               principalDesc.getType(), dbName, null, null, null);
+           if (dbs != null && dbs.size() > 0) {
+             boolean first = true;
++            sortPrivileges(dbs);
+             for (HiveObjectPrivilege db : dbs) {
+               if (!first) {
+                 outStream.write(terminator);
+@@ -592,6 +594,7 @@ public class DDLTask extends Task<DDLWork> implements Serializable {
+                   columnName);
+               if (columnss != null && columnss.size() > 0) {
+                 boolean first = true;
++                sortPrivileges(columnss);
+                 for (HiveObjectPrivilege col : columnss) {
+                   if (!first) {
+                     outStream.write(terminator);
+@@ -612,6 +615,7 @@ public class DDLTask extends Task<DDLWork> implements Serializable {
+                     .getType(), dbName, tableName, partValues, null);
+             if (parts != null && parts.size() > 0) {
+               boolean first = true;
++              sortPrivileges(parts);
+               for (HiveObjectPrivilege part : parts) {
+                 if (!first) {
+                   outStream.write(terminator);
+@@ -631,6 +635,7 @@ public class DDLTask extends Task<DDLWork> implements Serializable {
+                 dbName, tableName, null, null);
+             if (tbls != null && tbls.size() > 0) {
+               boolean first = true;
++              sortPrivileges(tbls);
+               for (HiveObjectPrivilege tbl : tbls) {
+                 if (!first) {
+                   outStream.write(terminator);
+@@ -663,6 +668,17 @@ public class DDLTask extends Task<DDLWork> implements Serializable {
+     return 0;
+   }
+ 
++  private static void sortPrivileges(List<HiveObjectPrivilege> privileges) {
++    Collections.sort( privileges, new Comparator<HiveObjectPrivilege>() {
++
++      @Override
++      public int compare(HiveObjectPrivilege one, HiveObjectPrivilege other) {
++        return one.getGrantInfo().getPrivilege().compareTo( other.getGrantInfo().getPrivilege() );
++      }
++
++    } );
++  }
++
+   private int grantOrRevokePrivileges(List<PrincipalDesc> principals,
+       List<PrivilegeDesc> privileges, PrivilegeObjectDesc privSubjectDesc,
+       String grantor, PrincipalType grantorType, boolean grantOption, boolean isGrant) {
+diff --git a/src/ql/src/test/results/clientpositive/alter_rename_partition_authorization.q.out b/src/ql/src/test/results/clientpositive/alter_rename_partition_authorization.q.out
+index ce0511b..5caeff8 100644
+--- a/src/ql/src/test/results/clientpositive/alter_rename_partition_authorization.q.out
++++ b/src/ql/src/test/results/clientpositive/alter_rename_partition_authorization.q.out
+@@ -61,7 +61,7 @@ database	default
+ table	authorization_part	
+ principalName	hive_test_user	
+ principalType	USER	
+-privilege	Update	
++privilege	Drop	
+ #### A masked pattern was here ####
+ grantor	hive_test_user	
+ 
+@@ -69,7 +69,7 @@ database	default
+ table	authorization_part	
+ principalName	hive_test_user	
+ principalType	USER	
+-privilege	Drop	
++privilege	Update	
+ #### A masked pattern was here ####
+ grantor	hive_test_user	
+ PREHOOK: query: grant select(key) on table authorization_part to user hive_test_user
+diff --git a/src/ql/src/test/results/clientpositive/authorization_2.q.out b/src/ql/src/test/results/clientpositive/authorization_2.q.out
+index da1cad9..702933f 100644
+--- a/src/ql/src/test/results/clientpositive/authorization_2.q.out
++++ b/src/ql/src/test/results/clientpositive/authorization_2.q.out
+@@ -61,7 +61,7 @@ database	default
+ table	authorization_part	
+ principalName	hive_test_user	
+ principalType	USER	
+-privilege	Update	
++privilege	Drop	
+ #### A masked pattern was here ####
+ grantor	hive_test_user	
+ 
+@@ -69,7 +69,7 @@ database	default
+ table	authorization_part	
+ principalName	hive_test_user	
+ principalType	USER	
+-privilege	Drop	
++privilege	Update	
+ #### A masked pattern was here ####
+ grantor	hive_test_user	
+ PREHOOK: query: alter table authorization_part add partition (ds='2010')
+@@ -98,7 +98,7 @@ table	authorization_part
+ partition	ds=2010	
+ principalName	hive_test_user	
+ principalType	USER	
+-privilege	Update	
++privilege	Drop	
+ #### A masked pattern was here ####
+ grantor	hive_test_user	
+ 
+@@ -107,7 +107,7 @@ table	authorization_part
+ partition	ds=2010	
+ principalName	hive_test_user	
+ principalType	USER	
+-privilege	Drop	
++privilege	Update	
+ #### A masked pattern was here ####
+ grantor	hive_test_user	
+ PREHOOK: query: grant select(key) on table authorization_part to user hive_test_user
+@@ -304,7 +304,7 @@ database	default
+ table	authorization_part	
+ principalName	hive_test_user	
+ principalType	USER	
+-privilege	Update	
++privilege	Drop	
+ #### A masked pattern was here ####
+ grantor	hive_test_user	
+ 
+@@ -312,7 +312,7 @@ database	default
+ table	authorization_part	
+ principalName	hive_test_user	
+ principalType	USER	
+-privilege	Drop	
++privilege	Update	
+ #### A masked pattern was here ####
+ grantor	hive_test_user	
+ PREHOOK: query: alter table authorization_part add partition (ds='2010')
+@@ -345,7 +345,7 @@ table	authorization_part
+ partition	ds=2010	
+ principalName	hive_test_user	
+ principalType	USER	
+-privilege	Update	
++privilege	Drop	
+ #### A masked pattern was here ####
+ grantor	hive_test_user	
+ 
+@@ -354,7 +354,7 @@ table	authorization_part
+ partition	ds=2010	
+ principalName	hive_test_user	
+ principalType	USER	
+-privilege	Drop	
++privilege	Update	
+ #### A masked pattern was here ####
+ grantor	hive_test_user	
+ PREHOOK: query: grant select on table authorization_part to user hive_test_user
+@@ -410,7 +410,7 @@ table	authorization_part
+ partition	ds=2010	
+ principalName	hive_test_user	
+ principalType	USER	
+-privilege	Update	
++privilege	Drop	
+ #### A masked pattern was here ####
+ grantor	hive_test_user	
+ 
+@@ -419,7 +419,7 @@ table	authorization_part
+ partition	ds=2010	
+ principalName	hive_test_user	
+ principalType	USER	
+-privilege	Drop	
++privilege	Select	
+ #### A masked pattern was here ####
+ grantor	hive_test_user	
+ 
+@@ -428,7 +428,7 @@ table	authorization_part
+ partition	ds=2010	
+ principalName	hive_test_user	
+ principalType	USER	
+-privilege	Select	
++privilege	Update	
+ #### A masked pattern was here ####
+ grantor	hive_test_user	
+ PREHOOK: query: show grant user hive_test_user on table authorization_part
+@@ -452,7 +452,7 @@ database	default
+ table	authorization_part	
+ principalName	hive_test_user	
+ principalType	USER	
+-privilege	Update	
++privilege	Drop	
+ #### A masked pattern was here ####
+ grantor	hive_test_user	
+ 
+@@ -460,7 +460,7 @@ database	default
+ table	authorization_part	
+ principalName	hive_test_user	
+ principalType	USER	
+-privilege	Drop	
++privilege	Select	
+ #### A masked pattern was here ####
+ grantor	hive_test_user	
+ 
+@@ -468,7 +468,7 @@ database	default
+ table	authorization_part	
+ principalName	hive_test_user	
+ principalType	USER	
+-privilege	Select	
++privilege	Update	
+ #### A masked pattern was here ####
+ grantor	hive_test_user	
+ PREHOOK: query: select key from authorization_part where ds='2010' order by key limit 20
+@@ -536,7 +536,7 @@ database	default
+ table	authorization_part	
+ principalName	hive_test_user	
+ principalType	USER	
+-privilege	Update	
++privilege	Drop	
+ #### A masked pattern was here ####
+ grantor	hive_test_user	
+ 
+@@ -544,7 +544,7 @@ database	default
+ table	authorization_part	
+ principalName	hive_test_user	
+ principalType	USER	
+-privilege	Drop	
++privilege	Update	
+ #### A masked pattern was here ####
+ grantor	hive_test_user	
+ PREHOOK: query: show grant user hive_test_user on table authorization_part partition (ds='2010')
+@@ -570,7 +570,7 @@ table	authorization_part
+ partition	ds=2010	
+ principalName	hive_test_user	
+ principalType	USER	
+-privilege	Update	
++privilege	Drop	
+ #### A masked pattern was here ####
+ grantor	hive_test_user	
+ 
+@@ -579,7 +579,7 @@ table	authorization_part
+ partition	ds=2010	
+ principalName	hive_test_user	
+ principalType	USER	
+-privilege	Drop	
++privilege	Select	
+ #### A masked pattern was here ####
+ grantor	hive_test_user	
+ 
+@@ -588,7 +588,7 @@ table	authorization_part
+ partition	ds=2010	
+ principalName	hive_test_user	
+ principalType	USER	
+-privilege	Select	
++privilege	Update	
+ #### A masked pattern was here ####
+ grantor	hive_test_user	
+ PREHOOK: query: select key from authorization_part where ds='2010' order by key limit 20
+@@ -658,7 +658,7 @@ table	authorization_part
+ partition	ds=2010	
+ principalName	hive_test_user	
+ principalType	USER	
+-privilege	Update	
++privilege	Drop	
+ #### A masked pattern was here ####
+ grantor	hive_test_user	
+ 
+@@ -667,7 +667,7 @@ table	authorization_part
+ partition	ds=2010	
+ principalName	hive_test_user	
+ principalType	USER	
+-privilege	Drop	
++privilege	Update	
+ #### A masked pattern was here ####
+ grantor	hive_test_user	
+ PREHOOK: query: alter table authorization_part drop partition (ds='2010')
+diff --git a/src/ql/src/test/results/clientpositive/authorization_6.q.out b/src/ql/src/test/results/clientpositive/authorization_6.q.out
+index 583d045..e0ad471 100644
+--- a/src/ql/src/test/results/clientpositive/authorization_6.q.out
++++ b/src/ql/src/test/results/clientpositive/authorization_6.q.out
+@@ -61,7 +61,7 @@ database	default
+ table	authorization_part	
+ principalName	hive_test_user	
+ principalType	USER	
+-privilege	Update	
++privilege	Drop	
+ #### A masked pattern was here ####
+ grantor	hive_test_user	
+ 
+@@ -69,7 +69,7 @@ database	default
+ table	authorization_part	
+ principalName	hive_test_user	
+ principalType	USER	
+-privilege	Drop	
++privilege	Update	
+ #### A masked pattern was here ####
+ grantor	hive_test_user	
+ PREHOOK: query: grant select(key) on table authorization_part to user hive_test_user
+-- 
+1.7.0.4
+

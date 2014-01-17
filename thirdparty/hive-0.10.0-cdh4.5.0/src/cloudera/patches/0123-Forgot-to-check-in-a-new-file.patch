@@ -1,0 +1,57 @@
+From d259d563ede620dd2967ee4dbacacb838ae52f55 Mon Sep 17 00:00:00 2001
+From: xzhang <xzhang@xzdt.(none)>
+Date: Fri, 24 May 2013 10:17:39 -0700
+Subject: [PATCH 123/218] Forgot to check in a new file
+
+---
+ .../hive/beeline/TestBeeLineVarSubstitution.java   |   38 ++++++++++++++++++++
+ 1 files changed, 38 insertions(+), 0 deletions(-)
+ create mode 100644 beeline/src/java/org/apache/hive/beeline/TestBeeLineVarSubstitution.java
+
+diff --git a/src/beeline/src/java/org/apache/hive/beeline/TestBeeLineVarSubstitution.java b/src/beeline/src/java/org/apache/hive/beeline/TestBeeLineVarSubstitution.java
+new file mode 100644
+index 0000000..f5d8a58
+--- /dev/null
++++ b/src/beeline/src/java/org/apache/hive/beeline/TestBeeLineVarSubstitution.java
+@@ -0,0 +1,38 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hive.beeline;
++
++import org.junit.Assert;
++import org.junit.Test;
++
++public class TestBeeLineVarSubstitution {
++
++  @Test
++  public void testSystemVarSubstitution() throws Throwable {
++    String cmd = "!${system:MY_CMD}";
++    BeeLine bl = new BeeLine();
++    boolean result = bl.dispatch( cmd );
++    Assert.assertFalse( result );
++
++    System.setProperty( "MY_CMD", "help" );
++    result = bl.dispatch( cmd );
++    Assert.assertTrue( result );
++  }
++
++}
+-- 
+1.7.0.4
+

@@ -1,0 +1,26 @@
+From 03c2598331565cca9a7bf3c4451e09fda1ea160c Mon Sep 17 00:00:00 2001
+From: Chaoyu Tang <ctang@cloudera.com>
+Date: Mon, 2 Dec 2013 19:11:43 -0500
+Subject: [PATCH 216/218] Add PATCH.txt
+
+---
+ PATCH.txt |    7 +++++++
+ 1 files changed, 7 insertions(+), 0 deletions(-)
+ create mode 100644 PATCH.txt
+
+diff --git a/src/PATCH.txt b/src/PATCH.txt
+new file mode 100644
+index 0000000..299fe8e
+--- /dev/null
++++ b/src/PATCH.txt
+@@ -0,0 +1,7 @@
++SUMMARY 12/2/2013 - Hive cdh4-0.10.0_4.5.0_patch205
++PATCH JIRA: https://jira.cloudera.com/browse/PATCH-205
++This patch is built on top of cdh4.5.0-release patches and add a fix to an Avro bug
++
++PATCHES OF INTEREST
++===================================================================================================
++CDH-15853: Querying avro table with empty partition folders raises exceptions
+-- 
+1.7.0.4
+

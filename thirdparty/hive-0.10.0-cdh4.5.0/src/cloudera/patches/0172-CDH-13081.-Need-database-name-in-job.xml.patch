@@ -1,0 +1,41 @@
+From 9fbf72b6b505dd85372b15726f8ab6ecfc15bd2e Mon Sep 17 00:00:00 2001
+From: Shreepadma Venugopalan <shreepadma@cloudera.com>
+Date: Tue, 23 Jul 2013 13:38:09 -0700
+Subject: [PATCH 172/218] CDH-13081.  Need database name in job.xml
+
+---
+ .../java/org/apache/hadoop/hive/conf/HiveConf.java |    5 +++--
+ .../hadoop/hive/ql/session/SessionState.java       |    1 +
+ 2 files changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/src/common/src/java/org/apache/hadoop/hive/conf/HiveConf.java b/src/common/src/java/org/apache/hadoop/hive/conf/HiveConf.java
+index c73baa8..dfdd44d 100644
+--- a/src/common/src/java/org/apache/hadoop/hive/conf/HiveConf.java
++++ b/src/common/src/java/org/apache/hadoop/hive/conf/HiveConf.java
+@@ -727,8 +727,9 @@ public class HiveConf extends Configuration {
+     // This will be removed once the rest of the DML changes are committed.
+     HIVEOPTLISTBUCKETING("hive.optimize.listbucketing", false),
+ 
+-    // Allow TCP Keep alive socket option for for HiveServer or a maximum timeout for the socket.
+-
++    HIVE_CURRENT_DB("hive.current.db", "default"),
++    
++    // Allow TCP Keep alive socket option for for HiveServer or a maximum timeout for the socket.  
+     SERVER_READ_SOCKET_TIMEOUT("hive.server.read.socket.timeout", 10),
+     SERVER_TCP_KEEP_ALIVE("hive.server.tcp.keepalive", true),
+ 
+diff --git a/src/ql/src/java/org/apache/hadoop/hive/ql/session/SessionState.java b/src/ql/src/java/org/apache/hadoop/hive/ql/session/SessionState.java
+index 4c2a556..fb15981 100644
+--- a/src/ql/src/java/org/apache/hadoop/hive/ql/session/SessionState.java
++++ b/src/ql/src/java/org/apache/hadoop/hive/ql/session/SessionState.java
+@@ -341,6 +341,7 @@ public class SessionState {
+ 
+   public void setCurrentDB(String currentDB) {
+     this.currentDB = currentDB;
++    this.getConf().setVar(HiveConf.ConfVars.HIVE_CURRENT_DB, currentDB);
+   }
+ 
+   /**
+-- 
+1.7.0.4
+

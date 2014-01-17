@@ -1,0 +1,51 @@
+From f4fdc4eaa9272d8f4b43da6e59c25bc5688d419a Mon Sep 17 00:00:00 2001
+From: Prasad Mujumdar <prasadm@cloudera.com>
+Date: Mon, 29 Jul 2013 14:13:46 -0700
+Subject: [PATCH 182/218] CDH-13331: HiveServer2 throws NullPointerException when using custom thrift client
+
+---
+ .../cli/operation/ExecuteStatementOperation.java   |    2 +-
+ .../apache/hive/service/cli/CLIServiceTest.java    |   14 ++++++++++++++
+ 2 files changed, 15 insertions(+), 1 deletions(-)
+
+diff --git a/src/service/src/java/org/apache/hive/service/cli/operation/ExecuteStatementOperation.java b/src/service/src/java/org/apache/hive/service/cli/operation/ExecuteStatementOperation.java
+index 6444944..d256364 100644
+--- a/src/service/src/java/org/apache/hive/service/cli/operation/ExecuteStatementOperation.java
++++ b/src/service/src/java/org/apache/hive/service/cli/operation/ExecuteStatementOperation.java
+@@ -75,7 +75,7 @@ public abstract class ExecuteStatementOperation extends Operation {
+       newExecOP = new SQLOperation(parentSession, statement, confOverlay);
+       // check if this is needs to be run asynchronously
+       boolean isAsyncOP = (parentSession.getHiveConf().getBoolVar(ConfVars.HIVE_SERVER2_BLOCKING_QUERY) == false);
+-      if(confOverlay.containsKey(ConfVars.HIVE_SERVER2_BLOCKING_QUERY.toString())) {
++      if ((confOverlay != null)  && confOverlay.containsKey(ConfVars.HIVE_SERVER2_BLOCKING_QUERY.toString())) {
+         isAsyncOP = confOverlay.get(ConfVars.HIVE_SERVER2_BLOCKING_QUERY.toString()).equalsIgnoreCase("false");
+       }
+       if (isAsyncOP) {
+diff --git a/src/service/src/test/org/apache/hive/service/cli/CLIServiceTest.java b/src/service/src/test/org/apache/hive/service/cli/CLIServiceTest.java
+index 6a18629..840e763 100644
+--- a/src/service/src/test/org/apache/hive/service/cli/CLIServiceTest.java
++++ b/src/service/src/test/org/apache/hive/service/cli/CLIServiceTest.java
+@@ -129,6 +129,20 @@ public abstract class CLIServiceTest {
+   }
+ 
+   /**
++   * Test that execute doesn't fail when confOverlay is null
++   * @throws Exception
++   */
++  @Test
++  public void testNullConfOverlay() throws Exception {
++    SessionHandle sessionHandle = client.openSession("tom", "password", new HashMap<String, String>());
++    assertNotNull(sessionHandle);
++    String statement = "show databases";
++    OperationHandle opHandle = client.executeStatement(sessionHandle, statement, null);
++    client.closeOperation(opHandle);
++    client.closeSession(sessionHandle);
++  }
++
++  /**
+    * Test per statement configuration overlay
+    * @throws Exception
+    */
+-- 
+1.7.0.4
+

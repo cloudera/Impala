@@ -1,0 +1,51 @@
+From cb884faa19f490bf94623cbf79cb4f659f4c736f Mon Sep 17 00:00:00 2001
+From: xzhang <xzhang@xzdt.(none)>
+Date: Thu, 25 Jul 2013 22:21:27 -0700
+Subject: [PATCH 176/218] CDH-13181: ackport to CDH: HIVE-4900: Fix the mismatched column names in package.jdo *** Patch backported from HIVE-4913
+
+---
+ .../hadoop/hive/ql/udf/generic/NGramEstimator.java |   14 +++++++++++++-
+ .../clientpositive/udaf_context_ngrams.q.out       |    2 +-
+ 2 files changed, 14 insertions(+), 2 deletions(-)
+
+diff --git a/src/ql/src/java/org/apache/hadoop/hive/ql/udf/generic/NGramEstimator.java b/src/ql/src/java/org/apache/hadoop/hive/ql/udf/generic/NGramEstimator.java
+index 0ef8fca..a199ec9 100644
+--- a/src/ql/src/java/org/apache/hadoop/hive/ql/udf/generic/NGramEstimator.java
++++ b/src/ql/src/java/org/apache/hadoop/hive/ql/udf/generic/NGramEstimator.java
+@@ -104,7 +104,19 @@ public class NGramEstimator {
+     Collections.sort(list, new Comparator<Map.Entry<ArrayList<String>, Double>>() {
+       public int compare(Map.Entry<ArrayList<String>, Double> o1,
+                          Map.Entry<ArrayList<String>, Double> o2) {
+-        return o2.getValue().compareTo(o1.getValue());
++        int result = o2.getValue().compareTo(o1.getValue());
++        if (result != 0)
++          return result;
++        
++        ArrayList<String> key1 = o1.getKey();
++        ArrayList<String> key2 = o2.getKey();
++        for (int i = 0; i < key1.size() && i < key2.size(); i++) {
++          result = key1.get(i).compareTo(key2.get(i));
++          if (result != 0)
++            return result;
++        }
++        
++        return key1.size() - key2.size();
+       }
+     });
+ 
+diff --git a/src/ql/src/test/results/clientpositive/udaf_context_ngrams.q.out b/src/ql/src/test/results/clientpositive/udaf_context_ngrams.q.out
+index de2d395..2759582 100644
+--- a/src/ql/src/test/results/clientpositive/udaf_context_ngrams.q.out
++++ b/src/ql/src/test/results/clientpositive/udaf_context_ngrams.q.out
+@@ -26,7 +26,7 @@ POSTHOOK: query: SELECT context_ngrams(sentences(lower(contents)), array("he",nu
+ POSTHOOK: type: QUERY
+ POSTHOOK: Input: default@kafka
+ #### A masked pattern was here ####
+-[{"ngram":["was"],"estfrequency":17.0},{"ngram":["had"],"estfrequency":16.0},{"ngram":["thought"],"estfrequency":13.0},{"ngram":["could"],"estfrequency":9.0},{"ngram":["would"],"estfrequency":7.0},{"ngram":["lay"],"estfrequency":5.0},{"ngram":["looked"],"estfrequency":4.0},{"ngram":["s"],"estfrequency":4.0},{"ngram":["wanted"],"estfrequency":4.0},{"ngram":["did"],"estfrequency":4.0},{"ngram":["felt"],"estfrequency":4.0},{"ngram":["needed"],"estfrequency":3.0},{"ngram":["must"],"estfrequency":3.0},{"ngram":["told"],"estfrequency":3.0},{"ngram":["lifted"],"estfrequency":3.0},{"ngram":["tried"],"estfrequency":3.0},{"ngram":["finally"],"estfrequency":3.0},{"ngram":["slid"],"estfrequency":3.0},{"ngram":["reported"],"estfrequency":2.0},{"ngram":["drew"],"estfrequency":2.0},{"ngram":["is"],"estfrequency":2.0},{"ngram":["wouldn't"],"estfrequency":2.0},{"ngram":["always"],"estfrequency":2.0},{"ngram":["really"],"estfrequency":2.0},{"ngram":["let"],"estfrequency":2.0},{"ngram":["threw"],"estfrequency":2.0},{"ngram":["found"],"estfrequency":2.0},{"ngram":["also"],"estfrequency":2.0},{"ngram":["made"],"estfrequency":2.0},{"ngram":["didn't"],"estfrequency":2.0},{"ngram":["touched"],"estfrequency":2.0},{"ngram":["do"],"estfrequency":2.0},{"ngram":["began"],"estfrequency":2.0},{"ngram":["preferred"],"estfrequency":1.0},{"ngram":["maintained"],"estfrequency":1.0},{"ngram":["managed"],"estfrequency":1.0},{"ngram":["urged"],"estfrequency":1.0},{"ngram":["will"],"estfrequency":1.0},{"ngram":["failed"],"estfrequency":1.0},{"ngram":["have"],"estfrequency":1.0},{"ngram":["heard"],"estfrequency":1.0},{"ngram":["were"],"estfrequency":1.0},{"ngram":["caught"],"estfrequency":1.0},{"ngram":["hit"],"estfrequency":1.0},{"ngram":["turned"],"estfrequency":1.0},{"ngram":["slowly"],"estfrequency":1.0},{"ngram":["stood"],"estfrequency":1.0},{"ngram":["chose"],"estfrequency":1.0},{"ngram":["swung"],"estfrequency":1.0},{"ngram":["denied"],"estfrequency":1.0},{"ngram":["intended"],"estfrequency":1.0},{"ngram":["became"],"estfrequency":1.0},{"ngram":["sits"],"estfrequency":1.0},{"ngram":["discovered"],"estfrequency":1.0},{"ngram":["called"],"estfrequency":1.0},{"ngram":["never"],"estfrequency":1.0},{"ngram":["cut"],"estfrequency":1.0},{"ngram":["directed"],"estfrequency":1.0},{"ngram":["hoped"],"estfrequency":1.0},{"ngram":["remembered"],"estfrequency":1.0},{"ngram":["said"],"estfrequency":1.0},{"ngram":["allowed"],"estfrequency":1.0},{"ngram":["confined"],"estfrequency":1.0},{"ngram":["almost"],"estfrequency":1.0},{"ngram":["retracted"],"estfrequency":1.0}]
++[{"ngram":["was"],"estfrequency":17.0},{"ngram":["had"],"estfrequency":16.0},{"ngram":["thought"],"estfrequency":13.0},{"ngram":["could"],"estfrequency":9.0},{"ngram":["would"],"estfrequency":7.0},{"ngram":["lay"],"estfrequency":5.0},{"ngram":["did"],"estfrequency":4.0},{"ngram":["felt"],"estfrequency":4.0},{"ngram":["looked"],"estfrequency":4.0},{"ngram":["s"],"estfrequency":4.0},{"ngram":["wanted"],"estfrequency":4.0},{"ngram":["finally"],"estfrequency":3.0},{"ngram":["lifted"],"estfrequency":3.0},{"ngram":["must"],"estfrequency":3.0},{"ngram":["needed"],"estfrequency":3.0},{"ngram":["slid"],"estfrequency":3.0},{"ngram":["told"],"estfrequency":3.0},{"ngram":["tried"],"estfrequency":3.0},{"ngram":["also"],"estfrequency":2.0},{"ngram":["always"],"estfrequency":2.0},{"ngram":["began"],"estfrequency":2.0},{"ngram":["didn't"],"estfrequency":2.0},{"ngram":["do"],"estfrequency":2.0},{"ngram":["drew"],"estfrequency":2.0},{"ngram":["found"],"estfrequency":2.0},{"ngram":["is"],"estfrequency":2.0},{"ngram":["let"],"estfrequency":2.0},{"ngram":["made"],"estfrequency":2.0},{"ngram":["really"],"estfrequency":2.0},{"ngram":["reported"],"estfrequency":2.0},{"ngram":["threw"],"estfrequency":2.0},{"ngram":["touched"],"estfrequency":2.0},{"ngram":["wouldn't"],"estfrequency":2.0},{"ngram":["allowed"],"estfrequency":1.0},{"ngram":["almost"],"estfrequency":1.0},{"ngram":["became"],"estfrequency":1.0},{"ngram":["called"],"estfrequency":1.0},{"ngram":["caught"],"estfrequency":1.0},{"ngram":["chose"],"estfrequency":1.0},{"ngram":["confined"],"estfrequency":1.0},{"ngram":["cut"],"estfrequency":1.0},{"ngram":["denied"],"estfrequency":1.0},{"ngram":["directed"],"estfrequency":1.0},{"ngram":["discovered"],"estfrequency":1.0},{"ngram":["failed"],"estfrequency":1.0},{"ngram":["have"],"estfrequency":1.0},{"ngram":["heard"],"estfrequency":1.0},{"ngram":["hit"],"estfrequency":1.0},{"ngram":["hoped"],"estfrequency":1.0},{"ngram":["intended"],"estfrequency":1.0},{"ngram":["maintained"],"estfrequency":1.0},{"ngram":["managed"],"estfrequency":1.0},{"ngram":["never"],"estfrequency":1.0},{"ngram":["preferred"],"estfrequency":1.0},{"ngram":["remembered"],"estfrequency":1.0},{"ngram":["retracted"],"estfrequency":1.0},{"ngram":["said"],"estfrequency":1.0},{"ngram":["sits"],"estfrequency":1.0},{"ngram":["slowly"],"estfrequency":1.0},{"ngram":["stood"],"estfrequency":1.0},{"ngram":["swung"],"estfrequency":1.0},{"ngram":["turned"],"estfrequency":1.0},{"ngram":["urged"],"estfrequency":1.0},{"ngram":["were"],"estfrequency":1.0},{"ngram":["will"],"estfrequency":1.0}]
+ PREHOOK: query: SELECT context_ngrams(sentences(lower(contents)), array(null,"salesmen"), 100, 1000) FROM kafka
+ PREHOOK: type: QUERY
+ PREHOOK: Input: default@kafka
+-- 
+1.7.0.4
+

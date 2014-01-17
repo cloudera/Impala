@@ -1,0 +1,560 @@
+From 17e0340257695b6cdf024b459c7c9364d8afb6b3 Mon Sep 17 00:00:00 2001
+From: Namit Jain <namit@apache.org>
+Date: Tue, 2 Apr 2013 15:23:17 +0000
+Subject: [PATCH 146/218] HIVE-4272 partition wise metadata does not work for text files
+
+git-svn-id: https://svn.apache.org/repos/asf/hive/trunk@1463594 13f79535-47bb-0310-9956-ffa450edef68
+---
+ .../apache/hadoop/hive/ql/exec/FetchOperator.java  |   23 ++-
+ .../clientpositive/partition_wise_fileformat15.q   |   26 +++
+ .../clientpositive/partition_wise_fileformat16.q   |   26 +++
+ .../partition_wise_fileformat15.q.out              |  180 ++++++++++++++++++++
+ .../partition_wise_fileformat16.q.out              |  180 ++++++++++++++++++++
+ .../objectinspector/ObjectInspectorConverters.java |   27 +++-
+ 6 files changed, 454 insertions(+), 8 deletions(-)
+ create mode 100644 ql/src/test/queries/clientpositive/partition_wise_fileformat15.q
+ create mode 100644 ql/src/test/queries/clientpositive/partition_wise_fileformat16.q
+ create mode 100644 ql/src/test/results/clientpositive/partition_wise_fileformat15.q.out
+ create mode 100644 ql/src/test/results/clientpositive/partition_wise_fileformat16.q.out
+
+diff --git a/src/ql/src/java/org/apache/hadoop/hive/ql/exec/FetchOperator.java b/src/ql/src/java/org/apache/hadoop/hive/ql/exec/FetchOperator.java
+index a84a546..1829eb3 100644
+--- a/src/ql/src/java/org/apache/hadoop/hive/ql/exec/FetchOperator.java
++++ b/src/ql/src/java/org/apache/hadoop/hive/ql/exec/FetchOperator.java
+@@ -102,6 +102,7 @@ public class FetchOperator implements Serializable {
+   private transient Path currPath;
+   private transient StructObjectInspector objectInspector;
+   private transient StructObjectInspector rowObjectInspector;
++  private transient ObjectInspector partitionedTableOI;
+   private transient Object[] row;
+ 
+   public FetchOperator() {
+@@ -400,7 +401,7 @@ public class FetchOperator implements Serializable {
+ 
+       ObjectInspector outputOI = ObjectInspectorConverters.getConvertedOI(
+           serde.getObjectInspector(),
+-          tblSerde.getObjectInspector());
++          partitionedTableOI == null ? tblSerde.getObjectInspector() : partitionedTableOI);
+ 
+       partTblObjectInspectorConverter = ObjectInspectorConverters.getConverter(
+           serde.getObjectInspector(), outputOI);
+@@ -610,14 +611,22 @@ public class FetchOperator implements Serializable {
+       Deserializer tblSerde = partition.getTableDesc().getDeserializerClass().newInstance();
+       tblSerde.initialize(job, partition.getTableDesc().getProperties());
+ 
+-      Deserializer partSerde = partition.getDeserializerClass().newInstance();
+-      partSerde.initialize(job, partition.getProperties());
++      partitionedTableOI = null;
++      ObjectInspector tableOI = tblSerde.getObjectInspector();
+ 
+-      ObjectInspector partitionOI = ObjectInspectorConverters.getConvertedOI(
+-          partSerde.getObjectInspector(),
+-          tblSerde.getObjectInspector());
++      // Get the OI corresponding to all the partitions
++      for (PartitionDesc listPart : listParts) {
++        partition = listPart;
++        Deserializer partSerde = listPart.getDeserializerClass().newInstance();
++        partSerde.initialize(job, listPart.getProperties());
+ 
+-      return getRowInspectorFromPartition(partition, partitionOI);
++        partitionedTableOI = ObjectInspectorConverters.getConvertedOI(
++            partSerde.getObjectInspector(), tableOI);
++        if (!partitionedTableOI.equals(tableOI)) {
++          break;
++        }
++      }
++      return getRowInspectorFromPartition(partition, partitionedTableOI);
+     } catch (Exception e) {
+       throw new HiveException("Failed with exception " + e.getMessage()
+           + org.apache.hadoop.util.StringUtils.stringifyException(e));
+diff --git a/src/ql/src/test/queries/clientpositive/partition_wise_fileformat15.q b/src/ql/src/test/queries/clientpositive/partition_wise_fileformat15.q
+new file mode 100644
+index 0000000..6fce1e0
+--- /dev/null
++++ b/src/ql/src/test/queries/clientpositive/partition_wise_fileformat15.q
+@@ -0,0 +1,26 @@
++set hive.input.format = org.apache.hadoop.hive.ql.io.CombineHiveInputFormat;
++
++-- This tests that the schema can be changed for binary serde data
++create table partition_test_partitioned(key string, value string)
++partitioned by (dt string) stored as rcfile;
++insert overwrite table partition_test_partitioned partition(dt='1')
++select * from src where key = 238;
++
++select * from partition_test_partitioned where dt is not null;
++select key+key, value from partition_test_partitioned where dt is not null;
++
++alter table partition_test_partitioned change key key int;
++
++select key+key, value from partition_test_partitioned where dt is not null;
++select * from partition_test_partitioned where dt is not null;
++
++alter table partition_test_partitioned add columns (value2 string);
++
++select key+key, value from partition_test_partitioned where dt is not null;
++select * from partition_test_partitioned where dt is not null;
++
++insert overwrite table partition_test_partitioned partition(dt='2')
++select key, value, value from src where key = 86;
++
++select key+key, value, value2, dt from partition_test_partitioned where dt is not null;
++select * from partition_test_partitioned where dt is not null;
+diff --git a/src/ql/src/test/queries/clientpositive/partition_wise_fileformat16.q b/src/ql/src/test/queries/clientpositive/partition_wise_fileformat16.q
+new file mode 100644
+index 0000000..37bb1a7
+--- /dev/null
++++ b/src/ql/src/test/queries/clientpositive/partition_wise_fileformat16.q
+@@ -0,0 +1,26 @@
++set hive.input.format = org.apache.hadoop.hive.ql.io.CombineHiveInputFormat;
++
++-- This tests that the schema can be changed for binary serde data
++create table partition_test_partitioned(key string, value string)
++partitioned by (dt string) stored as textfile;
++insert overwrite table partition_test_partitioned partition(dt='1')
++select * from src where key = 238;
++
++select * from partition_test_partitioned where dt is not null;
++select key+key, value from partition_test_partitioned where dt is not null;
++
++alter table partition_test_partitioned change key key int;
++
++select key+key, value from partition_test_partitioned where dt is not null;
++select * from partition_test_partitioned where dt is not null;
++
++alter table partition_test_partitioned add columns (value2 string);
++
++select key+key, value from partition_test_partitioned where dt is not null;
++select * from partition_test_partitioned where dt is not null;
++
++insert overwrite table partition_test_partitioned partition(dt='2')
++select key, value, value from src where key = 86;
++
++select key+key, value, value2, dt from partition_test_partitioned where dt is not null;
++select * from partition_test_partitioned where dt is not null;
+diff --git a/src/ql/src/test/results/clientpositive/partition_wise_fileformat15.q.out b/src/ql/src/test/results/clientpositive/partition_wise_fileformat15.q.out
+new file mode 100644
+index 0000000..0b3f282
+--- /dev/null
++++ b/src/ql/src/test/results/clientpositive/partition_wise_fileformat15.q.out
+@@ -0,0 +1,180 @@
++PREHOOK: query: -- This tests that the schema can be changed for binary serde data
++create table partition_test_partitioned(key string, value string)
++partitioned by (dt string) stored as rcfile
++PREHOOK: type: CREATETABLE
++POSTHOOK: query: -- This tests that the schema can be changed for binary serde data
++create table partition_test_partitioned(key string, value string)
++partitioned by (dt string) stored as rcfile
++POSTHOOK: type: CREATETABLE
++POSTHOOK: Output: default@partition_test_partitioned
++PREHOOK: query: insert overwrite table partition_test_partitioned partition(dt='1')
++select * from src where key = 238
++PREHOOK: type: QUERY
++PREHOOK: Input: default@src
++PREHOOK: Output: default@partition_test_partitioned@dt=1
++POSTHOOK: query: insert overwrite table partition_test_partitioned partition(dt='1')
++select * from src where key = 238
++POSTHOOK: type: QUERY
++POSTHOOK: Input: default@src
++POSTHOOK: Output: default@partition_test_partitioned@dt=1
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++PREHOOK: query: select * from partition_test_partitioned where dt is not null
++PREHOOK: type: QUERY
++PREHOOK: Input: default@partition_test_partitioned
++PREHOOK: Input: default@partition_test_partitioned@dt=1
++#### A masked pattern was here ####
++POSTHOOK: query: select * from partition_test_partitioned where dt is not null
++POSTHOOK: type: QUERY
++POSTHOOK: Input: default@partition_test_partitioned
++POSTHOOK: Input: default@partition_test_partitioned@dt=1
++#### A masked pattern was here ####
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++238	val_238	1
++238	val_238	1
++PREHOOK: query: select key+key, value from partition_test_partitioned where dt is not null
++PREHOOK: type: QUERY
++PREHOOK: Input: default@partition_test_partitioned
++PREHOOK: Input: default@partition_test_partitioned@dt=1
++#### A masked pattern was here ####
++POSTHOOK: query: select key+key, value from partition_test_partitioned where dt is not null
++POSTHOOK: type: QUERY
++POSTHOOK: Input: default@partition_test_partitioned
++POSTHOOK: Input: default@partition_test_partitioned@dt=1
++#### A masked pattern was here ####
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++476.0	val_238
++476.0	val_238
++PREHOOK: query: alter table partition_test_partitioned change key key int
++PREHOOK: type: ALTERTABLE_RENAMECOL
++PREHOOK: Input: default@partition_test_partitioned
++PREHOOK: Output: default@partition_test_partitioned
++POSTHOOK: query: alter table partition_test_partitioned change key key int
++POSTHOOK: type: ALTERTABLE_RENAMECOL
++POSTHOOK: Input: default@partition_test_partitioned
++POSTHOOK: Output: default@partition_test_partitioned
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++PREHOOK: query: select key+key, value from partition_test_partitioned where dt is not null
++PREHOOK: type: QUERY
++PREHOOK: Input: default@partition_test_partitioned
++PREHOOK: Input: default@partition_test_partitioned@dt=1
++#### A masked pattern was here ####
++POSTHOOK: query: select key+key, value from partition_test_partitioned where dt is not null
++POSTHOOK: type: QUERY
++POSTHOOK: Input: default@partition_test_partitioned
++POSTHOOK: Input: default@partition_test_partitioned@dt=1
++#### A masked pattern was here ####
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++476	val_238
++476	val_238
++PREHOOK: query: select * from partition_test_partitioned where dt is not null
++PREHOOK: type: QUERY
++PREHOOK: Input: default@partition_test_partitioned
++PREHOOK: Input: default@partition_test_partitioned@dt=1
++#### A masked pattern was here ####
++POSTHOOK: query: select * from partition_test_partitioned where dt is not null
++POSTHOOK: type: QUERY
++POSTHOOK: Input: default@partition_test_partitioned
++POSTHOOK: Input: default@partition_test_partitioned@dt=1
++#### A masked pattern was here ####
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++238	val_238	1
++238	val_238	1
++PREHOOK: query: alter table partition_test_partitioned add columns (value2 string)
++PREHOOK: type: ALTERTABLE_ADDCOLS
++PREHOOK: Input: default@partition_test_partitioned
++PREHOOK: Output: default@partition_test_partitioned
++POSTHOOK: query: alter table partition_test_partitioned add columns (value2 string)
++POSTHOOK: type: ALTERTABLE_ADDCOLS
++POSTHOOK: Input: default@partition_test_partitioned
++POSTHOOK: Output: default@partition_test_partitioned
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++PREHOOK: query: select key+key, value from partition_test_partitioned where dt is not null
++PREHOOK: type: QUERY
++PREHOOK: Input: default@partition_test_partitioned
++PREHOOK: Input: default@partition_test_partitioned@dt=1
++#### A masked pattern was here ####
++POSTHOOK: query: select key+key, value from partition_test_partitioned where dt is not null
++POSTHOOK: type: QUERY
++POSTHOOK: Input: default@partition_test_partitioned
++POSTHOOK: Input: default@partition_test_partitioned@dt=1
++#### A masked pattern was here ####
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++476	val_238
++476	val_238
++PREHOOK: query: select * from partition_test_partitioned where dt is not null
++PREHOOK: type: QUERY
++PREHOOK: Input: default@partition_test_partitioned
++PREHOOK: Input: default@partition_test_partitioned@dt=1
++#### A masked pattern was here ####
++POSTHOOK: query: select * from partition_test_partitioned where dt is not null
++POSTHOOK: type: QUERY
++POSTHOOK: Input: default@partition_test_partitioned
++POSTHOOK: Input: default@partition_test_partitioned@dt=1
++#### A masked pattern was here ####
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++238	val_238	NULL	1
++238	val_238	NULL	1
++PREHOOK: query: insert overwrite table partition_test_partitioned partition(dt='2')
++select key, value, value from src where key = 86
++PREHOOK: type: QUERY
++PREHOOK: Input: default@src
++PREHOOK: Output: default@partition_test_partitioned@dt=2
++POSTHOOK: query: insert overwrite table partition_test_partitioned partition(dt='2')
++select key, value, value from src where key = 86
++POSTHOOK: type: QUERY
++POSTHOOK: Input: default@src
++POSTHOOK: Output: default@partition_test_partitioned@dt=2
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=2).key EXPRESSION [(src)src.FieldSchema(name:key, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=2).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=2).value2 SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++PREHOOK: query: select key+key, value, value2, dt from partition_test_partitioned where dt is not null
++PREHOOK: type: QUERY
++PREHOOK: Input: default@partition_test_partitioned
++PREHOOK: Input: default@partition_test_partitioned@dt=1
++PREHOOK: Input: default@partition_test_partitioned@dt=2
++#### A masked pattern was here ####
++POSTHOOK: query: select key+key, value, value2, dt from partition_test_partitioned where dt is not null
++POSTHOOK: type: QUERY
++POSTHOOK: Input: default@partition_test_partitioned
++POSTHOOK: Input: default@partition_test_partitioned@dt=1
++POSTHOOK: Input: default@partition_test_partitioned@dt=2
++#### A masked pattern was here ####
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=2).key EXPRESSION [(src)src.FieldSchema(name:key, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=2).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=2).value2 SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++476	val_238	NULL	1
++476	val_238	NULL	1
++172	val_86	val_86	2
++PREHOOK: query: select * from partition_test_partitioned where dt is not null
++PREHOOK: type: QUERY
++PREHOOK: Input: default@partition_test_partitioned
++PREHOOK: Input: default@partition_test_partitioned@dt=1
++PREHOOK: Input: default@partition_test_partitioned@dt=2
++#### A masked pattern was here ####
++POSTHOOK: query: select * from partition_test_partitioned where dt is not null
++POSTHOOK: type: QUERY
++POSTHOOK: Input: default@partition_test_partitioned
++POSTHOOK: Input: default@partition_test_partitioned@dt=1
++POSTHOOK: Input: default@partition_test_partitioned@dt=2
++#### A masked pattern was here ####
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=2).key EXPRESSION [(src)src.FieldSchema(name:key, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=2).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=2).value2 SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++238	val_238	NULL	1
++238	val_238	NULL	1
++86	val_86	val_86	2
+diff --git a/src/ql/src/test/results/clientpositive/partition_wise_fileformat16.q.out b/src/ql/src/test/results/clientpositive/partition_wise_fileformat16.q.out
+new file mode 100644
+index 0000000..c4cebcb
+--- /dev/null
++++ b/src/ql/src/test/results/clientpositive/partition_wise_fileformat16.q.out
+@@ -0,0 +1,180 @@
++PREHOOK: query: -- This tests that the schema can be changed for binary serde data
++create table partition_test_partitioned(key string, value string)
++partitioned by (dt string) stored as textfile
++PREHOOK: type: CREATETABLE
++POSTHOOK: query: -- This tests that the schema can be changed for binary serde data
++create table partition_test_partitioned(key string, value string)
++partitioned by (dt string) stored as textfile
++POSTHOOK: type: CREATETABLE
++POSTHOOK: Output: default@partition_test_partitioned
++PREHOOK: query: insert overwrite table partition_test_partitioned partition(dt='1')
++select * from src where key = 238
++PREHOOK: type: QUERY
++PREHOOK: Input: default@src
++PREHOOK: Output: default@partition_test_partitioned@dt=1
++POSTHOOK: query: insert overwrite table partition_test_partitioned partition(dt='1')
++select * from src where key = 238
++POSTHOOK: type: QUERY
++POSTHOOK: Input: default@src
++POSTHOOK: Output: default@partition_test_partitioned@dt=1
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++PREHOOK: query: select * from partition_test_partitioned where dt is not null
++PREHOOK: type: QUERY
++PREHOOK: Input: default@partition_test_partitioned
++PREHOOK: Input: default@partition_test_partitioned@dt=1
++#### A masked pattern was here ####
++POSTHOOK: query: select * from partition_test_partitioned where dt is not null
++POSTHOOK: type: QUERY
++POSTHOOK: Input: default@partition_test_partitioned
++POSTHOOK: Input: default@partition_test_partitioned@dt=1
++#### A masked pattern was here ####
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++238	val_238	1
++238	val_238	1
++PREHOOK: query: select key+key, value from partition_test_partitioned where dt is not null
++PREHOOK: type: QUERY
++PREHOOK: Input: default@partition_test_partitioned
++PREHOOK: Input: default@partition_test_partitioned@dt=1
++#### A masked pattern was here ####
++POSTHOOK: query: select key+key, value from partition_test_partitioned where dt is not null
++POSTHOOK: type: QUERY
++POSTHOOK: Input: default@partition_test_partitioned
++POSTHOOK: Input: default@partition_test_partitioned@dt=1
++#### A masked pattern was here ####
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++476.0	val_238
++476.0	val_238
++PREHOOK: query: alter table partition_test_partitioned change key key int
++PREHOOK: type: ALTERTABLE_RENAMECOL
++PREHOOK: Input: default@partition_test_partitioned
++PREHOOK: Output: default@partition_test_partitioned
++POSTHOOK: query: alter table partition_test_partitioned change key key int
++POSTHOOK: type: ALTERTABLE_RENAMECOL
++POSTHOOK: Input: default@partition_test_partitioned
++POSTHOOK: Output: default@partition_test_partitioned
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++PREHOOK: query: select key+key, value from partition_test_partitioned where dt is not null
++PREHOOK: type: QUERY
++PREHOOK: Input: default@partition_test_partitioned
++PREHOOK: Input: default@partition_test_partitioned@dt=1
++#### A masked pattern was here ####
++POSTHOOK: query: select key+key, value from partition_test_partitioned where dt is not null
++POSTHOOK: type: QUERY
++POSTHOOK: Input: default@partition_test_partitioned
++POSTHOOK: Input: default@partition_test_partitioned@dt=1
++#### A masked pattern was here ####
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++476	val_238
++476	val_238
++PREHOOK: query: select * from partition_test_partitioned where dt is not null
++PREHOOK: type: QUERY
++PREHOOK: Input: default@partition_test_partitioned
++PREHOOK: Input: default@partition_test_partitioned@dt=1
++#### A masked pattern was here ####
++POSTHOOK: query: select * from partition_test_partitioned where dt is not null
++POSTHOOK: type: QUERY
++POSTHOOK: Input: default@partition_test_partitioned
++POSTHOOK: Input: default@partition_test_partitioned@dt=1
++#### A masked pattern was here ####
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++238	val_238	1
++238	val_238	1
++PREHOOK: query: alter table partition_test_partitioned add columns (value2 string)
++PREHOOK: type: ALTERTABLE_ADDCOLS
++PREHOOK: Input: default@partition_test_partitioned
++PREHOOK: Output: default@partition_test_partitioned
++POSTHOOK: query: alter table partition_test_partitioned add columns (value2 string)
++POSTHOOK: type: ALTERTABLE_ADDCOLS
++POSTHOOK: Input: default@partition_test_partitioned
++POSTHOOK: Output: default@partition_test_partitioned
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++PREHOOK: query: select key+key, value from partition_test_partitioned where dt is not null
++PREHOOK: type: QUERY
++PREHOOK: Input: default@partition_test_partitioned
++PREHOOK: Input: default@partition_test_partitioned@dt=1
++#### A masked pattern was here ####
++POSTHOOK: query: select key+key, value from partition_test_partitioned where dt is not null
++POSTHOOK: type: QUERY
++POSTHOOK: Input: default@partition_test_partitioned
++POSTHOOK: Input: default@partition_test_partitioned@dt=1
++#### A masked pattern was here ####
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++476	val_238
++476	val_238
++PREHOOK: query: select * from partition_test_partitioned where dt is not null
++PREHOOK: type: QUERY
++PREHOOK: Input: default@partition_test_partitioned
++PREHOOK: Input: default@partition_test_partitioned@dt=1
++#### A masked pattern was here ####
++POSTHOOK: query: select * from partition_test_partitioned where dt is not null
++POSTHOOK: type: QUERY
++POSTHOOK: Input: default@partition_test_partitioned
++POSTHOOK: Input: default@partition_test_partitioned@dt=1
++#### A masked pattern was here ####
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++238	val_238	NULL	1
++238	val_238	NULL	1
++PREHOOK: query: insert overwrite table partition_test_partitioned partition(dt='2')
++select key, value, value from src where key = 86
++PREHOOK: type: QUERY
++PREHOOK: Input: default@src
++PREHOOK: Output: default@partition_test_partitioned@dt=2
++POSTHOOK: query: insert overwrite table partition_test_partitioned partition(dt='2')
++select key, value, value from src where key = 86
++POSTHOOK: type: QUERY
++POSTHOOK: Input: default@src
++POSTHOOK: Output: default@partition_test_partitioned@dt=2
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=2).key EXPRESSION [(src)src.FieldSchema(name:key, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=2).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=2).value2 SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++PREHOOK: query: select key+key, value, value2, dt from partition_test_partitioned where dt is not null
++PREHOOK: type: QUERY
++PREHOOK: Input: default@partition_test_partitioned
++PREHOOK: Input: default@partition_test_partitioned@dt=1
++PREHOOK: Input: default@partition_test_partitioned@dt=2
++#### A masked pattern was here ####
++POSTHOOK: query: select key+key, value, value2, dt from partition_test_partitioned where dt is not null
++POSTHOOK: type: QUERY
++POSTHOOK: Input: default@partition_test_partitioned
++POSTHOOK: Input: default@partition_test_partitioned@dt=1
++POSTHOOK: Input: default@partition_test_partitioned@dt=2
++#### A masked pattern was here ####
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=2).key EXPRESSION [(src)src.FieldSchema(name:key, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=2).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=2).value2 SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++476	val_238	NULL	1
++476	val_238	NULL	1
++172	val_86	val_86	2
++PREHOOK: query: select * from partition_test_partitioned where dt is not null
++PREHOOK: type: QUERY
++PREHOOK: Input: default@partition_test_partitioned
++PREHOOK: Input: default@partition_test_partitioned@dt=1
++PREHOOK: Input: default@partition_test_partitioned@dt=2
++#### A masked pattern was here ####
++POSTHOOK: query: select * from partition_test_partitioned where dt is not null
++POSTHOOK: type: QUERY
++POSTHOOK: Input: default@partition_test_partitioned
++POSTHOOK: Input: default@partition_test_partitioned@dt=1
++POSTHOOK: Input: default@partition_test_partitioned@dt=2
++#### A masked pattern was here ####
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=2).key EXPRESSION [(src)src.FieldSchema(name:key, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=2).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++POSTHOOK: Lineage: partition_test_partitioned PARTITION(dt=2).value2 SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
++238	val_238	NULL	1
++238	val_238	NULL	1
++86	val_86	val_86	2
+diff --git a/src/serde/src/java/org/apache/hadoop/hive/serde2/objectinspector/ObjectInspectorConverters.java b/src/serde/src/java/org/apache/hadoop/hive/serde2/objectinspector/ObjectInspectorConverters.java
+index 87b1b28..2f59b0b 100644
+--- a/src/serde/src/java/org/apache/hadoop/hive/serde2/objectinspector/ObjectInspectorConverters.java
++++ b/src/serde/src/java/org/apache/hadoop/hive/serde2/objectinspector/ObjectInspectorConverters.java
+@@ -24,6 +24,7 @@ import java.util.Map;
+ 
+ import org.apache.hadoop.hive.serde2.objectinspector.primitive.JavaStringObjectInspector;
+ import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorConverter;
++import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory;
+ import org.apache.hadoop.hive.serde2.objectinspector.primitive.SettableBigDecimalObjectInspector;
+ import org.apache.hadoop.hive.serde2.objectinspector.primitive.SettableBinaryObjectInspector;
+ import org.apache.hadoop.hive.serde2.objectinspector.primitive.SettableBooleanObjectInspector;
+@@ -149,6 +150,29 @@ public final class ObjectInspectorConverters {
+     }
+   }
+ 
++  // Return the settable equivalent object inspector for primitive categories
++  // For eg: for table T containing partitions p1 and p2 (possibly different
++  // from the table T), return the settable inspector for T. The inspector for
++  // T is settable recursively i.e all the nested fields are also settable.
++  private static ObjectInspector getSettableConvertedOI(
++      ObjectInspector inputOI) {
++    switch (inputOI.getCategory()) {
++    case PRIMITIVE:
++      PrimitiveObjectInspector primInputOI = (PrimitiveObjectInspector) inputOI;
++      return PrimitiveObjectInspectorFactory.
++          getPrimitiveWritableObjectInspector(primInputOI.getPrimitiveCategory());
++    case STRUCT:
++      return inputOI;
++    case LIST:
++      return inputOI;
++    case MAP:
++      return inputOI;
++    default:
++      throw new RuntimeException("Hive internal error: desired OI of "
++          + inputOI.getTypeName() + " not supported yet.");
++    }
++  }
++
+   public static ObjectInspector getConvertedOI(
+       ObjectInspector inputOI,
+       ObjectInspector outputOI) {
+@@ -173,7 +197,8 @@ public final class ObjectInspectorConverters {
+ 
+         for (StructField listField : listFields) {
+           structFieldNames.add(listField.getFieldName());
+-          structFieldObjectInspectors.add(listField.getFieldObjectInspector());
++          structFieldObjectInspectors.add(
++              getSettableConvertedOI(listField.getFieldObjectInspector()));
+         }
+ 
+         StandardStructObjectInspector structStandardOutputOI = ObjectInspectorFactory
+-- 
+1.7.0.4
+

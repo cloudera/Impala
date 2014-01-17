@@ -1,0 +1,25 @@
+From a12c036f387787f7a741db56b601222e12cc9b2d Mon Sep 17 00:00:00 2001
+From: Chaoyu Tang <ctang@cloudera.com>
+Date: Thu, 20 Jun 2013 12:54:52 -0400
+Subject: [PATCH 140/218] CDH-12426 to switch to use cdh verison of thrift lib: libthrift-0.9.0-cdh4-1.jar
+
+---
+ ivy/libraries.properties |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/ivy/libraries.properties b/src/ivy/libraries.properties
+index dec014a..501e859 100644
+--- a/src/ivy/libraries.properties
++++ b/src/ivy/libraries.properties
+@@ -55,7 +55,7 @@ jline.version=0.9.94
+ json.version=20090211
+ junit.version=4.10
+ libfb303.version=0.9.0
+-libthrift.version=0.9.0
++libthrift.version=0.9.0-cdh4-1
+ log4j.version=1.2.16
+ maven-ant-tasks.version=2.1.0
+ mockito-all.version=1.8.2
+-- 
+1.7.0.4
+

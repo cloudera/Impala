@@ -1,0 +1,43 @@
+From 0aacadc36bff6804ae0b454d3361041fbb706681 Mon Sep 17 00:00:00 2001
+From: Shreepadma Venugopalan <shreepadma@cloudera.com>
+Date: Sat, 13 Jul 2013 15:44:01 -0700
+Subject: [PATCH 160/218] CDH-13106 - Add the right DN jars along with the right version to maven packaging
+
+---
+ cloudera/maven-packaging/hive-exec/pom.xml      |    4 ++++
+ cloudera/maven-packaging/hive-metastore/pom.xml |    4 ++++
+ 2 files changed, 8 insertions(+), 0 deletions(-)
+
+diff --git a/src/cloudera/maven-packaging/hive-exec/pom.xml b/src/cloudera/maven-packaging/hive-exec/pom.xml
+index 3172c9a..d20cc51 100644
+--- a/src/cloudera/maven-packaging/hive-exec/pom.xml
++++ b/src/cloudera/maven-packaging/hive-exec/pom.xml
+@@ -121,6 +121,10 @@
+       <groupId>org.datanucleus</groupId>
+       <artifactId>datanucleus-core</artifactId>
+     </dependency>
++     <dependency>
++      <groupId>org.datanucleus</groupId>
++      <artifactId>datanucleus-api-jdo</artifactId>
++    </dependency>
+     <dependency>
+       <groupId>org.datanucleus</groupId>
+       <artifactId>datanucleus-enhancer</artifactId>
+diff --git a/src/cloudera/maven-packaging/hive-metastore/pom.xml b/src/cloudera/maven-packaging/hive-metastore/pom.xml
+index 75f8576..9456bc0 100644
+--- a/src/cloudera/maven-packaging/hive-metastore/pom.xml
++++ b/src/cloudera/maven-packaging/hive-metastore/pom.xml
+@@ -86,6 +86,10 @@
+     </dependency>
+     <dependency>
+       <groupId>org.datanucleus</groupId>
++      <artifactId>datanucleus-api-jdo</artifactId>
++    </dependency>
++    <dependency>
++      <groupId>org.datanucleus</groupId>
+       <artifactId>datanucleus-enhancer</artifactId>
+     </dependency>
+     <dependency>
+-- 
+1.7.0.4
+
