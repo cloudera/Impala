@@ -83,7 +83,7 @@ string_to_int = Template("\
 void* ComputeFunctions::${fn_signature}(Expr* e, TupleRow* row) {\n\
   Expr* op = e->children()[0];\n\
   ${native_type1}* val = reinterpret_cast<${native_type1}*>(op->GetValue(row));\n\
-  if (val == NULL) return NULL;\n\
+  if (val == NULL || val->ptr == NULL) return NULL;\n\
   StringParser::ParseResult result;\n\
   e->result_.${result_field} = \
       StringParser::StringToInt<${native_type2}>(val->ptr, val->len, &result);\n\
@@ -95,7 +95,7 @@ string_to_float = Template("\
 void* ComputeFunctions::${fn_signature}(Expr* e, TupleRow* row) {\n\
   Expr* op = e->children()[0];\n\
   ${native_type1}* val = reinterpret_cast<${native_type1}*>(op->GetValue(row));\n\
-  if (val == NULL) return NULL;\n\
+  if (val == NULL || val->ptr == NULL) return NULL;\n\
   StringParser::ParseResult result;\n\
   e->result_.${result_field} = \
       StringParser::StringToFloat<${native_type2}>(val->ptr, val->len, &result);\n\
@@ -107,7 +107,7 @@ string_to_timestamp = Template("\
 void* ComputeFunctions::${fn_signature}(Expr* e, TupleRow* row) {\n\
   Expr* op = e->children()[0];\n\
   ${native_type1}* val = reinterpret_cast<${native_type1}*>(op->GetValue(row));\n\
-  if (val == NULL) return NULL;\n\
+  if (val == NULL || val->ptr == NULL) return NULL;\n\
   e->result_.${result_field} = TimestampValue(val->ptr, val->len);\n\
   return &e->result_.${result_field};\n\
 }\n\n")
