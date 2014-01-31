@@ -24,7 +24,6 @@ import com.cloudera.impala.analysis.HdfsUri;
 import com.cloudera.impala.analysis.IntLiteral;
 import com.cloudera.impala.analysis.LiteralExpr;
 import com.cloudera.impala.authorization.AuthorizationConfig;
-import com.cloudera.impala.catalog.Catalog.CatalogInitStrategy;
 import com.cloudera.impala.catalog.MetaStoreClientPool.MetaStoreClient;
 import com.cloudera.impala.thrift.TFunctionType;
 import com.google.common.collect.Lists;
@@ -35,7 +34,7 @@ public class CatalogTest {
 
   @BeforeClass
   public static void setUp() throws Exception {
-    catalog_ = new ImpaladCatalog(CatalogInitStrategy.LAZY,
+    catalog_ = ImpaladCatalog.createForTesting(
         AuthorizationConfig.createAuthDisabledConfig());
   }
 
@@ -316,66 +315,57 @@ public class CatalogTest {
         (HdfsTable) catalog_.getDb("functional").getTable("AllTypesAgg");
 
     Column idCol = table.getColumn("id");
-    assertEquals(idCol.getStats().getAvgSerializedSize() -
-        PrimitiveType.INT.getSlotSize(),
+    assertEquals(idCol.getStats().getAvgSerializedSize(),
         PrimitiveType.INT.getSlotSize(), 0.0001);
     assertEquals(idCol.getStats().getMaxSize(), PrimitiveType.INT.getSlotSize());
     assertTrue(!idCol.getStats().hasNulls());
 
     Column boolCol = table.getColumn("bool_col");
-    assertEquals(boolCol.getStats().getAvgSerializedSize() -
-        PrimitiveType.BOOLEAN.getSlotSize(),
+    assertEquals(boolCol.getStats().getAvgSerializedSize(),
         PrimitiveType.BOOLEAN.getSlotSize(), 0.0001);
     assertEquals(boolCol.getStats().getMaxSize(), PrimitiveType.BOOLEAN.getSlotSize());
     assertTrue(!boolCol.getStats().hasNulls());
 
     Column tinyintCol = table.getColumn("tinyint_col");
-    assertEquals(tinyintCol.getStats().getAvgSerializedSize() -
-        PrimitiveType.TINYINT.getSlotSize(),
+    assertEquals(tinyintCol.getStats().getAvgSerializedSize(),
         PrimitiveType.TINYINT.getSlotSize(), 0.0001);
     assertEquals(tinyintCol.getStats().getMaxSize(),
         PrimitiveType.TINYINT.getSlotSize());
     assertTrue(tinyintCol.getStats().hasNulls());
 
     Column smallintCol = table.getColumn("smallint_col");
-    assertEquals(smallintCol.getStats().getAvgSerializedSize() -
-        PrimitiveType.SMALLINT.getSlotSize(),
+    assertEquals(smallintCol.getStats().getAvgSerializedSize(),
         PrimitiveType.SMALLINT.getSlotSize(), 0.0001);
     assertEquals(smallintCol.getStats().getMaxSize(),
         PrimitiveType.SMALLINT.getSlotSize());
     assertTrue(smallintCol.getStats().hasNulls());
 
     Column intCol = table.getColumn("int_col");
-    assertEquals(intCol.getStats().getAvgSerializedSize() -
-        PrimitiveType.INT.getSlotSize(),
+    assertEquals(intCol.getStats().getAvgSerializedSize(),
         PrimitiveType.INT.getSlotSize(), 0.0001);
     assertEquals(intCol.getStats().getMaxSize(), PrimitiveType.INT.getSlotSize());
     assertTrue(intCol.getStats().hasNulls());
 
     Column bigintCol = table.getColumn("bigint_col");
-    assertEquals(bigintCol.getStats().getAvgSerializedSize() -
-        PrimitiveType.BIGINT.getSlotSize(),
+    assertEquals(bigintCol.getStats().getAvgSerializedSize(),
         PrimitiveType.BIGINT.getSlotSize(), 0.0001);
     assertEquals(bigintCol.getStats().getMaxSize(), PrimitiveType.BIGINT.getSlotSize());
     assertTrue(bigintCol.getStats().hasNulls());
 
     Column floatCol = table.getColumn("float_col");
-    assertEquals(floatCol.getStats().getAvgSerializedSize() -
-        PrimitiveType.FLOAT.getSlotSize(),
+    assertEquals(floatCol.getStats().getAvgSerializedSize(),
         PrimitiveType.FLOAT.getSlotSize(), 0.0001);
     assertEquals(floatCol.getStats().getMaxSize(), PrimitiveType.FLOAT.getSlotSize());
     assertTrue(floatCol.getStats().hasNulls());
 
     Column doubleCol = table.getColumn("double_col");
-    assertEquals(doubleCol.getStats().getAvgSerializedSize() -
-        PrimitiveType.DOUBLE.getSlotSize(),
+    assertEquals(doubleCol.getStats().getAvgSerializedSize(),
         PrimitiveType.DOUBLE.getSlotSize(), 0.0001);
     assertEquals(doubleCol.getStats().getMaxSize(), PrimitiveType.DOUBLE.getSlotSize());
     assertTrue(doubleCol.getStats().hasNulls());
 
     Column timestampCol = table.getColumn("timestamp_col");
-    assertEquals(timestampCol.getStats().getAvgSerializedSize() -
-        PrimitiveType.TIMESTAMP.getSlotSize(),
+    assertEquals(timestampCol.getStats().getAvgSerializedSize(),
         PrimitiveType.TIMESTAMP.getSlotSize(), 0.0001);
     assertEquals(timestampCol.getStats().getMaxSize(),
         PrimitiveType.TIMESTAMP.getSlotSize());
@@ -512,11 +502,9 @@ public class CatalogTest {
     assertTrue(table instanceof IncompleteTable);
     incompleteTable = (IncompleteTable) table;
     assertTrue(incompleteTable.getCause() instanceof TableLoadingException);
-    assertEquals("Failed to load metadata for table: bad_serde\n" +
-        "CAUSED BY: InvalidStorageDescriptorException: " +
-        "Impala does not support tables of this type. REASON: SerDe" +
+    assertEquals("Impala does not support tables of this type. REASON: SerDe" +
         " library 'org.apache.hadoop.hive.serde2.binarysortable.BinarySortableSerDe' " +
-        "is not supported.", incompleteTable.getCause().getMessage());
+        "is not supported.", incompleteTable.getCause().getCause().getMessage());
   }
 
   // This table has metadata set so the escape is \n, which is also the tuple delim. This

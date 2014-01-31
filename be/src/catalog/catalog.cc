@@ -25,6 +25,13 @@
 using namespace std;
 using namespace impala;
 
+DEFINE_bool(load_catalog_in_background, true,
+    "If true, loads catalog metadata in the background. If false, metadata is loaded "
+    "lazily (on access).");
+DEFINE_int32(num_metadata_loading_threads, 16,
+    "(Advanced) The number of metadata loading threads (degree of parallelism) to use "
+    "when loading catalog metadata.");
+
 DECLARE_int32(non_impala_java_vlog);
 
 // Describes one method to look up in a Catalog object
@@ -41,14 +48,15 @@ struct Catalog::MethodDescriptor {
 
 Catalog::Catalog() {
   MethodDescriptor methods[] = {
-    {"<init>", "(II)V", &catalog_ctor_},
+    {"<init>", "(ZIII)V", &catalog_ctor_},
     {"updateCatalog", "([B)[B", &update_metastore_id_},
     {"execDdl", "([B)[B", &exec_ddl_id_},
     {"resetMetadata", "([B)[B", &reset_metadata_id_},
     {"getTableNames", "([B)[B", &get_table_names_id_},
     {"getDbNames", "([B)[B", &get_db_names_id_},
     {"getCatalogObject", "([B)[B", &get_catalog_object_id_},
-    {"getCatalogObjects", "(J)[B", &get_catalog_objects_id_}};
+    {"getCatalogObjects", "(J)[B", &get_catalog_objects_id_},
+    {"prioritizeLoad", "([B)V", &prioritize_load_id_}};
 
   JNIEnv* jni_env = getJNIEnv();
   // Create an instance of the java class JniCatalog
@@ -60,8 +68,11 @@ Catalog::Catalog() {
     LoadJniMethod(jni_env, &(methods[i]));
   }
 
+  jboolean load_in_background = FLAGS_load_catalog_in_background;
+  jint num_metadata_loading_threads = FLAGS_num_metadata_loading_threads;
   jobject catalog = jni_env->NewObject(catalog_class_, catalog_ctor_,
-      FlagToTLogLevel(FLAGS_v), FlagToTLogLevel(FLAGS_non_impala_java_vlog));
+      load_in_background, num_metadata_loading_threads, FlagToTLogLevel(FLAGS_v),
+      FlagToTLogLevel(FLAGS_non_impala_java_vlog));
   EXIT_IF_EXC(jni_env);
   EXIT_IF_ERROR(JniUtil::LocalToGlobalRef(jni_env, catalog, &catalog_));
 }
@@ -118,4 +129,8 @@ Status Catalog::GetTableNames(const string& db, const string* pattern,
   params.__set_db(db);
   if (pattern != NULL) params.__set_pattern(*pattern);
   return JniUtil::CallJniMethod(catalog_, get_table_names_id_, params, table_names);
+}
+
+Status Catalog::PrioritizeLoad(const TPrioritizeLoadRequest& req) {
+  return JniUtil::CallJniMethod(catalog_, prioritize_load_id_, req);
 }

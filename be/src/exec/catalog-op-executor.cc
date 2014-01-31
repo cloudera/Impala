@@ -18,7 +18,7 @@
 #include "common/status.h"
 #include "service/impala-server.h"
 #include "util/string-parser.h"
-
+#include <thrift/protocol/TDebugProtocol.h>
 #include "gen-cpp/CatalogService.h"
 #include "gen-cpp/CatalogService_types.h"
 
@@ -160,5 +160,16 @@ Status CatalogOpExecutor::GetCatalogObject(const TCatalogObject& object_desc,
   TGetCatalogObjectResponse response;
   client->GetCatalogObject(response, request);
   *result = response.catalog_object;
+  return Status::OK;
+}
+
+Status CatalogOpExecutor::PrioritizeLoad(const TPrioritizeLoadRequest& req,
+    TPrioritizeLoadResponse* result) {
+  const TNetworkAddress& address =
+      MakeNetworkAddress(FLAGS_catalog_service_host, FLAGS_catalog_service_port);
+  Status status;
+  CatalogServiceConnection client(client_cache_, address, &status);
+  RETURN_IF_ERROR(status);
+  client->PrioritizeLoad(*result, req);
   return Status::OK;
 }

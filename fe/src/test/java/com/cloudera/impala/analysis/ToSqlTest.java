@@ -30,8 +30,8 @@ public class ToSqlTest extends AnalyzerTest {
     try {
       AnalysisContext analysisCtxt = new AnalysisContext(catalog_,
           Catalog.DEFAULT_DB, new User(System.getProperty("user.name")));
-
-      AnalysisContext.AnalysisResult analysisResult = analysisCtxt.analyze(query);
+      analysisCtxt.analyze(query);
+      AnalysisContext.AnalysisResult analysisResult = analysisCtxt.getAnalysisResult();
       Preconditions.checkNotNull(analysisResult.getStmt());
       return analysisResult;
     } catch (Exception e) {

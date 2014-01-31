@@ -78,18 +78,23 @@ class Catalog {
   Status GetTableNames(const std::string& db, const std::string* pattern,
       TGetTablesResult* table_names);
 
+  // Prioritizes the loading of metadata for the catalog objects specified in the
+  // TPrioritizeLoadRequest.
+  Status PrioritizeLoad(const TPrioritizeLoadRequest& req);
+
  private:
   // Descriptor of Java Catalog class itself, used to create a new instance.
   jclass catalog_class_;
 
   jobject catalog_;  // instance of com.cloudera.impala.service.JniCatalog
-  jmethodID update_metastore_id_;  // CatalogServiceFrontend.updateMetaastore()
-  jmethodID exec_ddl_id_;  // CatalogServiceFrontend.execDdl()
-  jmethodID reset_metadata_id_;  // CatalogServiceFrontend.resetMetdata()
-  jmethodID get_catalog_object_id_;  // CatalogServiceFrontend.getCatalogObject()
-  jmethodID get_catalog_objects_id_;  // CatalogServiceFrontend.getCatalogObjects()
-  jmethodID get_db_names_id_; // CatalogServiceFrontend.getDbNames()
-  jmethodID get_table_names_id_; // CatalogServiceFrontend.getTableNames()
+  jmethodID update_metastore_id_;  // JniCatalog.updateMetaastore()
+  jmethodID exec_ddl_id_;  // JniCatalog.execDdl()
+  jmethodID reset_metadata_id_;  // JniCatalog.resetMetdata()
+  jmethodID get_catalog_object_id_;  // JniCatalog.getCatalogObject()
+  jmethodID get_catalog_objects_id_;  // JniCatalog.getCatalogObjects()
+  jmethodID get_db_names_id_; // JniCatalog.getDbNames()
+  jmethodID get_table_names_id_; // JniCatalog.getTableNames()
+  jmethodID prioritize_load_id_; // JniCatalog.prioritizeLoad()
   jmethodID catalog_ctor_;
 
   struct MethodDescriptor;

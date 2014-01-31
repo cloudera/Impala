@@ -34,19 +34,19 @@ PLAN FRAGMENT 0
   3:HASH JOIN
   |  join op: INNER JOIN
   |  hash predicates:
-  |    b.id = COUNT(id)
+  |    COUNT(id) = b.id
   |
-  |----1:AGGREGATE (finalize)
-  |    |  output: COUNT(id)
-  |    |  group by: int_col, tinyint_col
-  |    |  having: COUNT(id) < 10
-  |    |
-  |    0:SCAN HDFS
-  |       table=functional.alltypes #partitions=24/24 size=478.45KB
+  |----2:SCAN HDFS
+  |       table=functional.alltypessmall #partitions=4/4 size=6.32KB compact
+  |       predicates: b.id < 10
   |
-  2:SCAN HDFS
-     table=functional.alltypessmall #partitions=4/4 size=6.32KB
-     predicates: b.id < 10
+  1:AGGREGATE (finalize)
+  |  output: COUNT(id)
+  |  group by: int_col, tinyint_col
+  |  having: COUNT(id) < 10
+  |
+  0:SCAN HDFS
+     table=functional.alltypes #partitions=24/24 size=478.45KB
 ====
 # single-table test case: partitions are pruned due to predicate inference
 select count(*) from functional.alltypes
@@ -276,11 +276,11 @@ NODE 0:
   HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypes/year=2009/month=1/090101.txt 0:20433
   HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypes/year=2009/month=2/090201.txt 0:18555
 NODE 1:
-  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypessmall/year=2009/month=2/090201.txt 0:1621
   HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypessmall/year=2009/month=1/090101.txt 0:1610
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypessmall/year=2009/month=2/090201.txt 0:1621
 NODE 2:
-  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypestiny/year=2009/month=2/090201.txt 0:115
   HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypestiny/year=2009/month=1/090101.txt 0:115
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypestiny/year=2009/month=2/090201.txt 0:115
 ---- DISTRIBUTEDPLAN
 PLAN FRAGMENT 0
   PARTITION: UNPARTITIONED
@@ -386,11 +386,11 @@ NODE 0:
   HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypes/year=2009/month=1/090101.txt 0:20433
   HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypes/year=2009/month=2/090201.txt 0:18555
 NODE 1:
-  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypessmall/year=2009/month=2/090201.txt 0:1621
   HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypessmall/year=2009/month=1/090101.txt 0:1610
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypessmall/year=2009/month=2/090201.txt 0:1621
 NODE 2:
-  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypestiny/year=2009/month=2/090201.txt 0:115
   HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypestiny/year=2009/month=1/090101.txt 0:115
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypestiny/year=2009/month=2/090201.txt 0:115
 ---- DISTRIBUTEDPLAN
 PLAN FRAGMENT 0
   PARTITION: UNPARTITIONED
@@ -655,8 +655,8 @@ NODE 0:
   HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypes/year=2009/month=1/090101.txt 0:20433
   HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypes/year=2009/month=2/090201.txt 0:18555
 NODE 1:
-  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypessmall/year=2009/month=2/090201.txt 0:1621
   HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypessmall/year=2009/month=1/090101.txt 0:1610
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypessmall/year=2009/month=2/090201.txt 0:1621
 ---- DISTRIBUTEDPLAN
 PLAN FRAGMENT 0
   PARTITION: UNPARTITIONED
@@ -847,10 +847,10 @@ NODE 0:
   HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypes/year=2009/month=1/090101.txt 0:20433
   HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypes/year=2009/month=2/090201.txt 0:18555
 NODE 1:
-  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypessmall/year=2009/month=2/090201.txt 0:1621
   HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypessmall/year=2009/month=1/090101.txt 0:1610
-  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypessmall/year=2009/month=4/090401.txt 0:1621
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypessmall/year=2009/month=2/090201.txt 0:1621
   HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypessmall/year=2009/month=3/090301.txt 0:1620
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypessmall/year=2009/month=4/090401.txt 0:1621
 ---- DISTRIBUTEDPLAN
 PLAN FRAGMENT 0
   PARTITION: UNPARTITIONED
@@ -1074,25 +1074,25 @@ PLAN FRAGMENT 0
   5:HASH JOIN
   |  join op: INNER JOIN
   |  hash predicates:
-  |    a.id = functional.alltypesagg.id
+  |    functional.alltypesagg.id = a.id
   |
-  |----4:SELECT
-  |    |  predicates: functional.alltypesagg.month = 1
+  |----2:HASH JOIN
+  |    |  join op: INNER JOIN
+  |    |  hash predicates:
+  |    |    a.year = b.year
+  |    |    a.int_col = b.int_col
+  |    |  other predicates: a.id + b.id = 17
   |    |
-  |    3:SCAN HDFS
-  |       table=functional.alltypesagg #partitions=10/10 size=743.67KB compact
-  |       limit: 10
+  |    |----1:SCAN HDFS
+  |    |       table=functional.alltypessmall #partitions=4/4 size=6.32KB compact
+  |    |
+  |    0:SCAN HDFS
+  |       table=functional.alltypes #partitions=12/24 size=238.68KB compact
   |
-  2:HASH JOIN
-  |  join op: INNER JOIN
-  |  hash predicates:
-  |    a.year = b.year
-  |    a.int_col = b.int_col
-  |  other predicates: a.id + b.id = 17
+  4:SELECT
+  |  predicates: functional.alltypesagg.month = 1
   |
-  |----1:SCAN HDFS
-  |       table=functional.alltypessmall #partitions=4/4 size=6.32KB compact
-  |
-  0:SCAN HDFS
-     table=functional.alltypes #partitions=12/24 size=238.68KB
+  3:SCAN HDFS
+     table=functional.alltypesagg #partitions=10/10 size=743.67KB
+     limit: 10
 ====

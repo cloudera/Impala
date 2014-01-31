@@ -205,8 +205,12 @@ public class ColumnStats {
   }
 
   public void update(PrimitiveType colType, TColumnStats stats) {
+    initColStats(colType);
     avgSize_ = Double.valueOf(stats.getAvg_size()).floatValue();
-    avgSerializedSize_ = colType.getSlotSize() + avgSize_;
+    if (colType == PrimitiveType.STRING ||
+        colType == PrimitiveType.BINARY) {
+      avgSerializedSize_ = colType.getSlotSize() + avgSize_;
+    }
     maxSize_ = stats.getMax_size();
     numDistinctValues_ = stats.getNum_distinct_values();
     numNulls_ = stats.getNum_nulls();

@@ -89,6 +89,20 @@ class CatalogServiceThriftIf : public CatalogServiceIf {
     VLOG_RPC << "GetCatalogObject(): response=" << ThriftDebugString(resp);
   }
 
+  // Prioritizes the loading of metadata for one or more catalog objects. Currently only
+  // used for loading tables/views because they are the only type of object that is loaded
+  // lazily.
+  virtual void PrioritizeLoad(TPrioritizeLoadResponse& resp,
+      const TPrioritizeLoadRequest& req) {
+    VLOG_RPC << "PrioritizeLoad(): request=" << ThriftDebugString(req);
+    Status status = catalog_server_->catalog()->PrioritizeLoad(req);
+    if (!status.ok()) LOG(ERROR) << status.GetErrorMsg();
+    TStatus thrift_status;
+    status.ToThrift(&thrift_status);
+    resp.__set_status(thrift_status);
+    VLOG_RPC << "PrioritizeLoad(): response=" << ThriftDebugString(resp);
+  }
+
  private:
   CatalogServer* catalog_server_;
 };
