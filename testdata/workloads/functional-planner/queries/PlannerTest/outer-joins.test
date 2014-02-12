@@ -39,7 +39,7 @@ PLAN FRAGMENT 0
   |
   |----2:SCAN HDFS
   |       table=functional.testtbl #partitions=0/1 size=0B compact
-  |       predicates: t3.id > 0, t3.zip = 94720
+  |       predicates: t3.id > 0, t3.id IS NOT NULL, t3.zip = 94720
   |
   3:HASH JOIN
   |  join op: LEFT OUTER JOIN
@@ -99,7 +99,7 @@ PLAN FRAGMENT 2
 
   2:SCAN HDFS
      table=functional.testtbl #partitions=0/1 size=0B
-     predicates: t3.id > 0, t3.zip = 94720
+     predicates: t3.id > 0, t3.id IS NOT NULL, t3.zip = 94720
 
 PLAN FRAGMENT 3
   PARTITION: RANDOM
@@ -134,7 +134,7 @@ PLAN FRAGMENT 0
   |
   |----2:SCAN HDFS
   |       table=functional.testtbl #partitions=0/1 size=0B compact
-  |       predicates: a3.id > 0, a3.zip = 94720
+  |       predicates: a3.id > 0, a3.id IS NOT NULL, a3.zip = 94720
   |
   3:HASH JOIN
   |  join op: LEFT OUTER JOIN
@@ -194,7 +194,7 @@ PLAN FRAGMENT 2
 
   2:SCAN HDFS
      table=functional.testtbl #partitions=0/1 size=0B
-     predicates: a3.id > 0, a3.zip = 94720
+     predicates: a3.id > 0, a3.id IS NOT NULL, a3.zip = 94720
 
 PLAN FRAGMENT 3
   PARTITION: RANDOM
@@ -258,9 +258,9 @@ from functional.testtbl t1 right outer join functional.testtbl t2 on (
     and t3.zip = 94720
   )
 where
-# t1 predicate in where clause is applied by last last
+# t1 predicate in where clause is applied by scan and last join
 t1.id > 0
-# t2 predicate in where clause is applied by last last
+# t2 predicate in where clause is applied by last join
 and t2.id is null
 # t3 predicate in where clause is applied by scan
 and t3.id is not null
@@ -295,7 +295,7 @@ PLAN FRAGMENT 0
   |
   0:SCAN HDFS
      table=functional.testtbl #partitions=0/1 size=0B
-     predicates: t1.id > 0
+     predicates: t1.id > 0, t1.id IS NOT NULL
 ---- DISTRIBUTEDPLAN
 PLAN FRAGMENT 0
   PARTITION: UNPARTITIONED
@@ -368,7 +368,7 @@ PLAN FRAGMENT 5
 
   0:SCAN HDFS
      table=functional.testtbl #partitions=0/1 size=0B
-     predicates: t1.id > 0
+     predicates: t1.id > 0, t1.id IS NOT NULL
 ====
 # the same thing with subqueries; should produce the same result
 select *
@@ -405,7 +405,7 @@ PLAN FRAGMENT 0
   |
   0:SCAN HDFS
      table=functional.testtbl #partitions=0/1 size=0B
-     predicates: a1.id > 0
+     predicates: a1.id > 0, a1.id IS NOT NULL
 ---- DISTRIBUTEDPLAN
 PLAN FRAGMENT 0
   PARTITION: UNPARTITIONED
@@ -478,7 +478,7 @@ PLAN FRAGMENT 5
 
   0:SCAN HDFS
      table=functional.testtbl #partitions=0/1 size=0B
-     predicates: a1.id > 0
+     predicates: a1.id > 0, a1.id IS NOT NULL
 ====
 # right outer join requires the join op to be partitioned, otherwise non-matches cause
 # duplicates
