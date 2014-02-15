@@ -216,6 +216,7 @@ PLAN FRAGMENT 0
   |  join op: INNER JOIN
   |  hash predicates:
   |    functional.alltypes.id = int_col
+  |    COUNT(a.bigint_col) = int_col
   |
   |----1:SCAN HDFS
   |       table=functional.alltypes #partitions=24/24 size=478.45KB compact
@@ -265,6 +266,7 @@ PLAN FRAGMENT 1
   |  join op: INNER JOIN (BROADCAST)
   |  hash predicates:
   |    functional.alltypes.id = int_col
+  |    COUNT(a.bigint_col) = int_col
   |
   |----15:EXCHANGE
   |
