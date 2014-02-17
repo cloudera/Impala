@@ -39,12 +39,14 @@ import com.cloudera.impala.catalog.PrimitiveType;
 import com.cloudera.impala.catalog.Udf;
 import com.cloudera.impala.common.AnalysisException;
 import com.cloudera.impala.common.ImpalaException;
+import com.cloudera.impala.testutil.ImpaladTestCatalog;
+import com.cloudera.impala.testutil.TestUtils;
 import com.cloudera.impala.thrift.TExpr;
 import com.google.common.base.Preconditions;
 
 public class AnalyzerTest {
   protected final static Logger LOG = LoggerFactory.getLogger(AnalyzerTest.class);
-  protected static ImpaladCatalog catalog_ = ImpaladCatalog.createForTesting(
+  protected static ImpaladCatalog catalog_ = new ImpaladTestCatalog(
       AuthorizationConfig.createAuthDisabledConfig());
 
   protected Analyzer analyzer_;
