@@ -220,6 +220,7 @@ PLAN FRAGMENT 0
   |
   |----1:SCAN HDFS
   |       table=functional.alltypes #partitions=24/24 size=478.45KB compact
+  |       predicates: functional.alltypes.int_col > 1
   |
   7:HASH JOIN
   |  join op: INNER JOIN
@@ -249,6 +250,7 @@ PLAN FRAGMENT 0
   |
   0:SCAN HDFS
      table=functional.alltypes #partitions=24/24 size=478.45KB
+     predicates: functional.alltypes.id > 1
 ---- DISTRIBUTEDPLAN
 PLAN FRAGMENT 0
   PARTITION: UNPARTITIONED
@@ -280,6 +282,7 @@ PLAN FRAGMENT 1
   |
   0:SCAN HDFS
      table=functional.alltypes #partitions=24/24 size=478.45KB
+     predicates: functional.alltypes.id > 1
 
 PLAN FRAGMENT 2
   PARTITION: RANDOM
@@ -290,6 +293,7 @@ PLAN FRAGMENT 2
 
   1:SCAN HDFS
      table=functional.alltypes #partitions=24/24 size=478.45KB
+     predicates: functional.alltypes.int_col > 1
 
 PLAN FRAGMENT 3
   PARTITION: UNPARTITIONED
