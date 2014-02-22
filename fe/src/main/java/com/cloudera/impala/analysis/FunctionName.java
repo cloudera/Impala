@@ -26,8 +26,8 @@ public class FunctionName {
   private String db_;
   private String fn_;
 
-  public FunctionName(String db, String fn) {
-    db_ = db;
+  public FunctionName(String dbName, String fn) {
+    db_ = dbName;
     fn_ = fn.toLowerCase();
     if (db_ != null) db_ = db_.toLowerCase();
   }
