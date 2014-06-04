@@ -66,6 +66,14 @@ public class ArithmeticExpr extends Expr {
     if (e2 != null) children_.add(e2);
   }
 
+  /**
+   * Copy c'tor used in clone().
+   */
+  protected ArithmeticExpr(ArithmeticExpr other) {
+    super(other);
+    op_ = other.op_;
+  }
+
   public static void initBuiltins(Db db) {
     for (ColumnType t: ColumnType.getNumericTypes()) {
       db.addBuiltin(ScalarFunction.createBuiltinOperator(
@@ -234,4 +242,7 @@ public class ArithmeticExpr extends Expr {
           "for '%s' with operand types %s and %s", toSql(), t0, t1));
     }
   }
+
+  @Override
+  public Expr clone() { return new ArithmeticExpr(this); }
 }

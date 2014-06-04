@@ -40,7 +40,6 @@ import com.cloudera.impala.analysis.SlotDescriptor;
 import com.cloudera.impala.analysis.SlotId;
 import com.cloudera.impala.analysis.SlotRef;
 import com.cloudera.impala.analysis.TupleDescriptor;
-import com.cloudera.impala.catalog.AuthorizationException;
 import com.cloudera.impala.catalog.Column;
 import com.cloudera.impala.catalog.HdfsFileFormat;
 import com.cloudera.impala.catalog.HdfsPartition;
@@ -123,8 +122,7 @@ public class HdfsScanNode extends ScanNode {
    * Populate conjuncts_, partitions_, and scanRanges_.
    */
   @Override
-  public void init(Analyzer analyzer)
-      throws InternalException, AuthorizationException {
+  public void init(Analyzer analyzer) throws InternalException {
     ArrayList<Expr> bindingPredicates = analyzer.getBoundPredicates(tupleIds_.get(0));
     conjuncts_.addAll(bindingPredicates);
 
@@ -463,8 +461,7 @@ public class HdfsScanNode extends ScanNode {
    * Populate partitions_ based on all applicable conjuncts and remove
    * conjuncts used for filtering from conjuncts_.
    */
-  private void prunePartitions(Analyzer analyzer)
-      throws InternalException, AuthorizationException {
+  private void prunePartitions(Analyzer analyzer) throws InternalException {
     DescriptorTable descTbl = analyzer.getDescTbl();
     // loop through all partitions and prune based on applicable conjuncts;
     // start with creating a collection of partition filters for the applicable conjuncts
@@ -562,8 +559,7 @@ public class HdfsScanNode extends ScanNode {
    * filters that could not be evaluated from the partition key values.
    */
   private void evalPartitionFiltersInBe(List<HdfsPartitionFilter> filters,
-      HashSet<Long> matchingPartitionIds, Analyzer analyzer)
-      throws InternalException, AuthorizationException {
+      HashSet<Long> matchingPartitionIds, Analyzer analyzer) throws InternalException {
     HashMap<Long, HdfsPartition> partitionMap = tbl_.getPartitionMap();
     // Set of partition ids that pass a filter
     HashSet<Long> matchingIds = Sets.newHashSet();

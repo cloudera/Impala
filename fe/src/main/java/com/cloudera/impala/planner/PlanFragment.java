@@ -107,7 +107,7 @@ public class PlanFragment {
   }
 
   public void setOutputExprs(ArrayList<Expr> outputExprs) {
-    this.outputExprs_ = Expr.cloneList(outputExprs, null);
+    outputExprs_ = Expr.cloneList(outputExprs);
   }
 
   /**
