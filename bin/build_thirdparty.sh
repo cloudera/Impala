@@ -142,6 +142,7 @@ if [ $BUILD_ALL -eq 1 ] || [ $BUILD_THRIFT -eq 1 ]; then
   ./bootstrap.sh
   chmod 755 configure
   CPPFLAGS="-I${THRIFT_HOME}/include" PY_PREFIX=${THRIFT_HOME}/python ./configure \
+    --with-java=no --with-php=no \
     --prefix=${THRIFT_HOME} --with-thriftpath=${THRIFT_HOME}
   make
   make install
