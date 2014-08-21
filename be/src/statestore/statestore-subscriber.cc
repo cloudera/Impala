@@ -78,6 +78,10 @@ class StatestoreSubscriberThriftIf : public StatestoreSubscriberIf {
     response.__set_skipped(response.skipped);
   }
 
+  virtual void KeepAlive(TKeepAliveResponse& response, const TKeepAliveRequest& request) {
+    subscriber_->KeepAlive(request.registration_id);
+  }
+
  private:
   StatestoreSubscriber* subscriber_;
 };
@@ -260,6 +264,10 @@ void StatestoreSubscriber::RecoveryModeChecker() {
   }
 }
 
+void StatestoreSubscriber::KeepAlive(const TUniqueId& registration_id) {
+  failure_detector_->UpdateHeartbeat(STATESTORE_ID, true);
+}
+
 Status StatestoreSubscriber::UpdateState(const TopicDeltaMap& incoming_topic_deltas,
     const TUniqueId& registration_id, vector<TTopicDelta>* subscriber_topic_updates,
     bool* skipped) {
@@ -345,11 +353,7 @@ Status StatestoreSubscriber::UpdateState(const TopicDeltaMap& incoming_topic_del
     }
     sw.Stop();
     heartbeat_duration_metric_->Update(sw.ElapsedTime() / (1000.0 * 1000.0 * 1000.0));
-    // Do this while holding lock_ so that the double-check in RecoveryModeChecker will
-    // definitely see the most recent state.
-    failure_detector_->UpdateHeartbeat(STATESTORE_ID, true);
   } else {
-    failure_detector_->UpdateHeartbeat(STATESTORE_ID, true);
     *skipped = true;
   }
   return Status::OK;

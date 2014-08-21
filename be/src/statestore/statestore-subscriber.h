@@ -219,19 +219,19 @@ class StatestoreSubscriber {
   // Subscriber thrift implementation, needs to access UpdateState
   friend class StatestoreSubscriberThriftIf;
 
-  // Called when the statestore sends a heartbeat. Each registered callback is called
+  // Called when the statestore sends a topic update. Each registered callback is called
   // in turn with the given map of incoming_topic_deltas from the statestore. Each
-  // TTopicDelta sent from the statestore to the subscriber will contain the topic name,
-  // a list of additions to the topic, a list of deletions from the topic, and the
-  // version range the update covers. A from_version of 0 indicates a non-delta update.
-  // In response, any updates to the topic by the subscriber are aggregated in
-  // subscriber_topic_updates and returned to the statestore. Each update is a
-  // TTopicDelta that contains a list of additions to the topic and a list of deletions
-  // from the topic. Additionally, if a subscriber has received an unexpected delta
-  // update version range, they can request a new delta update by setting the
-  // "from_version" field of the TTopicDelta response. The next statestore update will
-  // be based off the version the subscriber responds with.
-  // If the subscriber is in recovery mode, this method returns immediately.
+  // TTopicDelta sent from the statestore to the subscriber will contain the topic name, a
+  // list of additions to the topic, a list of deletions from the topic, and the version
+  // range the update covers. A from_version of 0 indicates a non-delta update.  In
+  // response, any updates to the topic by the subscriber are aggregated in
+  // subscriber_topic_updates and returned to the statestore. Each update is a TTopicDelta
+  // that contains a list of additions to the topic and a list of deletions from the
+  // topic. Additionally, if a subscriber has received an unexpected delta update version
+  // range, they can request a new delta update by setting the "from_version" field of the
+  // TTopicDelta response. The next statestore update will be based off the version the
+  // subscriber responds with.  If the subscriber is in recovery mode, this method returns
+  // immediately.
   //
   // Returns an error if some error was encountered (e.g. the supplied registration ID was
   // unexpected), and OK otherwise. The output parameter 'skipped' is set to true if the
@@ -241,6 +241,10 @@ class StatestoreSubscriber {
   Status UpdateState(const TopicDeltaMap& incoming_topic_deltas,
       const TUniqueId& registration_id,
       std::vector<TTopicDelta>* subscriber_topic_updates, bool* skipped);
+
+  // Called when the statestore sends a keep-alive heartbeat. Updates the failure
+  // detector.
+  void KeepAlive(const TUniqueId& registration_id);
 
   // Run in a separate thread. In a loop, check failure_detector_ to see if the
   // statestore is still sending heartbeats. If not, enter 'recovery mode'
