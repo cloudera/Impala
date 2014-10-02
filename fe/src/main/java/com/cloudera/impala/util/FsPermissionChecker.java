@@ -95,8 +95,8 @@ public class FsPermissionChecker {
       }
 
       for (AclEntry e: aclStatus_.getEntries()) {
-        if (e.getType() == AclEntryType.MASK) {
-          if (shouldApplyMask(e)) mask_ = e;
+        if (e.getType() == AclEntryType.MASK && e.getScope() != AclEntryScope.DEFAULT) {
+          mask_ = e;
         } else if (isApplicableAcl(e)) {
           entriesByTypes_.get(e.getType()).add(e);
         }
@@ -108,6 +108,8 @@ public class FsPermissionChecker {
      * ACLs (e.g. user::r-x), and all group ACLs.
      */
     private boolean shouldApplyMask(AclEntry acl) {
+      if (mask_ == null) return false;
+
       switch (acl.getType()) {
         case USER:
           return acl.getName() != null;
@@ -155,7 +157,7 @@ public class FsPermissionChecker {
         for (AclEntry e: entriesByTypes_.get(t)) {
           // If there is an applicable mask, 'action' is allowed iff both the mask and
           // the underlying ACL permit it.
-          if (mask_ != null) {
+          if (shouldApplyMask(e)) {
             return mask_.getPermission().implies(action) &&
                 e.getPermission().implies(action);
           }
