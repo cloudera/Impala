@@ -37,7 +37,16 @@ parser.add_option("--transport", dest="transport", default="buffered",
 options, args = parser.parse_args()
 
 hs2_host, hs2_port = options.hs2_hostport.split(':')
-hs2_transport = create_transport(hs2_host, hs2_port, "hiveserver2", options.transport)
+#hs2_transport = create_transport(hs2_host, hs2_port, "hiveserver2", options.transport)
+if options.transport == "plain_sasl":
+  # Here we supply a bogus username of "foo" and a bogus password of "bar".
+  # We just have to supply *something*, else HS2 will block waiting for user
+  # input.  Any bogus username and password are accepted.
+  hs2_transport = create_transport(hs2_host, hs2_port, "hiveserver2", options.transport,
+                                   "foo", "bar")
+else:
+  hs2_transport = create_transport(hs2_host, hs2_port, "hiveserver2", options.transport)
+
 protocol = TBinaryProtocol.TBinaryProtocol(hs2_transport)
 hs2_client = TCLIService.Client(protocol)
 
