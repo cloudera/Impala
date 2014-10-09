@@ -1,0 +1,166 @@
+select * from functional_seq.alltypes t1 limit 5
+---- PLAN
+00:SCAN HDFS [functional_seq.alltypes t1]
+   partitions=24/24 files=24 size=562.59KB
+   limit: 5
+---- DISTRIBUTEDPLAN
+00:SCAN HDFS [functional_seq.alltypes t1]
+   partitions=24/24 files=24 size=562.59KB
+   limit: 5
+====
+# Query is over the limit of 8 rows to be optimized, will distribute the query
+select * from functional.alltypes t1 limit 10
+---- PLAN
+00:SCAN HDFS [functional.alltypes t1]
+   partitions=24/24 files=24 size=478.45KB
+   limit: 10
+---- DISTRIBUTEDPLAN
+01:EXCHANGE [UNPARTITIONED]
+|  limit: 10
+|
+00:SCAN HDFS [functional.alltypes t1]
+   partitions=24/24 files=24 size=478.45KB
+   limit: 10
+====
+# Query is optimized, run on coordinator only
+select * from functional.alltypes t1 limit 5
+---- PLAN
+00:SCAN HDFS [functional.alltypes t1]
+   partitions=24/24 files=24 size=478.45KB
+   limit: 5
+---- DISTRIBUTEDPLAN
+00:SCAN HDFS [functional.alltypes t1]
+   partitions=24/24 files=24 size=478.45KB
+   limit: 5
+====
+# If a predicate is applied the optimization is disabled
+select * from functional.alltypes t1 where t1.id < 99 limit 5
+---- PLAN
+00:SCAN HDFS [functional.alltypes t1]
+   partitions=24/24 files=24 size=478.45KB
+   predicates: t1.id < 99
+   limit: 5
+---- DISTRIBUTEDPLAN
+01:EXCHANGE [UNPARTITIONED]
+|  limit: 5
+|
+00:SCAN HDFS [functional.alltypes t1]
+   partitions=24/24 files=24 size=478.45KB
+   predicates: t1.id < 99
+   limit: 5
+====
+# No optimization for hbase tables
+select * from functional_hbase.alltypes t1 where t1.id < 99 limit 5
+---- PLAN
+00:SCAN HBASE [functional_hbase.alltypes t1]
+   predicates: t1.id < 99
+   limit: 5
+---- DISTRIBUTEDPLAN
+01:EXCHANGE [UNPARTITIONED]
+|  limit: 5
+|
+00:SCAN HBASE [functional_hbase.alltypes t1]
+   predicates: t1.id < 99
+   limit: 5
+====
+# Applies optimization for small queries in hbase
+select * from functional_hbase.alltypes t1 limit 5
+---- PLAN
+00:SCAN HBASE [functional_hbase.alltypes t1]
+   limit: 5
+---- DISTRIBUTEDPLAN
+00:SCAN HBASE [functional_hbase.alltypes t1]
+   limit: 5
+====
+insert into
+  functional_hbase.alltypes
+  values (1, 1, true, "1999-12-01", 2.0, 1.0, 1, 12, 2, "abs",
+  cast(now() as timestamp), 1, 1999)
+---- PLAN
+WRITE TO HBASE table=functional_hbase.alltypes
+|
+00:UNION
+   constant-operands=1
+---- DISTRIBUTEDPLAN
+WRITE TO HBASE table=functional_hbase.alltypes
+|
+00:UNION
+   constant-operands=1
+====
+create table tm as select * from functional_hbase.alltypes limit 5
+---- PLAN
+WRITE TO HDFS [default.tm, OVERWRITE=false]
+|  partitions=1
+|
+00:SCAN HBASE [functional_hbase.alltypes]
+   limit: 5
+---- DISTRIBUTEDPLAN
+WRITE TO HDFS [default.tm, OVERWRITE=false]
+|  partitions=1
+|
+00:SCAN HBASE [functional_hbase.alltypes]
+   limit: 5
+====
+create table tm as select * from functional_hbase.alltypes limit 50
+---- PLAN
+WRITE TO HDFS [default.tm, OVERWRITE=false]
+|  partitions=1
+|
+00:SCAN HBASE [functional_hbase.alltypes]
+   limit: 50
+---- DISTRIBUTEDPLAN
+WRITE TO HDFS [default.tm, OVERWRITE=false]
+|  partitions=1
+|
+01:EXCHANGE [UNPARTITIONED]
+|  limit: 50
+|
+00:SCAN HBASE [functional_hbase.alltypes]
+   limit: 50
+====
+select * from functional_hbase.alltypes limit 5
+union all
+select * from functional_hbase.alltypes limit 2
+---- PLAN
+00:UNION
+|
+|--02:SCAN HBASE [functional_hbase.alltypes]
+|     limit: 2
+|
+01:SCAN HBASE [functional_hbase.alltypes]
+   limit: 5
+---- DISTRIBUTEDPLAN
+00:UNION
+|
+|--02:SCAN HBASE [functional_hbase.alltypes]
+|     limit: 2
+|
+01:SCAN HBASE [functional_hbase.alltypes]
+   limit: 5
+====
+select * from functional_hbase.alltypes limit 5
+union all
+select * from functional_hbase.alltypes limit 5
+---- PLAN
+00:UNION
+|
+|--02:SCAN HBASE [functional_hbase.alltypes]
+|     limit: 5
+|
+01:SCAN HBASE [functional_hbase.alltypes]
+   limit: 5
+---- DISTRIBUTEDPLAN
+00:UNION
+|
+|--04:EXCHANGE [UNPARTITIONED]
+|  |  limit: 5
+|  |
+|  02:SCAN HBASE [functional_hbase.alltypes]
+|     limit: 5
+|
+03:EXCHANGE [UNPARTITIONED]
+|  limit: 5
+|
+01:SCAN HBASE [functional_hbase.alltypes]
+   limit: 5
+====
