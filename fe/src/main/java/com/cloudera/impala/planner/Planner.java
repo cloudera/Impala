@@ -2048,8 +2048,10 @@ public class Planner {
       UnionNode allMerge =
           createUnionPlan(analyzer, unionStmt, unionStmt.getAllOperands());
       // for unionStmt, baseTblResultExprs = resultExprs
-      if (result != null) allMerge.addChild(result,
-          unionStmt.getDistinctAggInfo().getGroupingExprs());
+      if (result != null) {
+        allMerge.addChild(result,
+            unionStmt.getDistinctAggInfo().getGroupingExprs());
+      }
       result = allMerge;
     }
 
