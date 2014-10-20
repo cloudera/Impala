@@ -290,6 +290,10 @@ public class PlannerTest {
       throws CatalogException {
     String query = testCase.getQuery();
     LOG.info("running query " + query);
+    if (query.isEmpty()) {
+      throw new IllegalStateException("Cannot plan empty query in line: " +
+          testCase.getStartingLineNum());
+    }
     TQueryCtx queryCtx = TestUtils.createQueryContext(
         dbName, System.getProperty("user.name"));
     queryCtx.request.query_options.setExplain_level(TExplainLevel.STANDARD);
@@ -417,6 +421,7 @@ public class PlannerTest {
        testCase.getSectionContents(Section.DISTRIBUTEDPLAN);
    // Test case has no expected distributed plan. Do not test it.
    if (expectedPlan == null || expectedPlan.isEmpty()) return;
+
    String query = testCase.getQuery();
    String expectedErrorMsg = getExpectedErrorMessage(expectedPlan);
    queryCtx.request.getQuery_options().setNum_nodes(
