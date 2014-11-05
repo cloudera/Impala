@@ -419,6 +419,9 @@ public class HBaseTable extends Table {
         long currentRowCount = 0;
 
         HRegionInfo info = location.getRegionInfo();
+        // Ignore offline regions during split or merge
+        if (info.isOffline()) continue;
+
         // Get the size on hdfs
         currentHdfsSize += getHdfsSize(info);
 
@@ -439,6 +442,10 @@ public class HBaseTable extends Table {
           for (int i = 0; i < ROW_COUNT_ESTIMATE_BATCH_SIZE; i++) {
             Result r = rs.next();
             if (r == null) break;
+            // Returned empty result, does not affect the estimate as
+            // an empty result does not require space on disk.
+            // See IMPALA-1451
+            if (r.isEmpty()) continue;
             currentRowCount += 1;
             for (KeyValue kv : r.list()) {
               // some extra row size added to make up for shared overhead
