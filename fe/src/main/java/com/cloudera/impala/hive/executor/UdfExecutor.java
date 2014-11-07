@@ -308,14 +308,19 @@ public class UdfExecutor {
       }
       case STRING: {
         byte[] bytes = null;
+        int length = 0;
         if (obj instanceof byte[]) {
           bytes = (byte[]) obj;
+          length = bytes.length;
         } else if (obj instanceof BytesWritable) {
           bytes = ((BytesWritable)obj).getBytes();
+          length = ((BytesWritable)obj).getLength();
         } else if (obj instanceof Text) {
           bytes = ((Text)obj).getBytes();
+          length = ((Text)obj).getLength();
         } else if (obj instanceof String) {
           bytes = ((String)obj).getBytes();
+          length = bytes.length;
         } else {
           throw new ImpalaRuntimeException("Unexpected return type: " + obj.getClass());
         }
@@ -329,7 +334,7 @@ public class UdfExecutor {
         UnsafeUtil.Copy(outBufferStringPtr_, bytes, 0, bytes.length);
         UnsafeUtil.UNSAFE.putInt(
             outputBufferPtr_ + ImpalaStringWritable.STRING_VALUE_LEN_OFFSET,
-            bytes.length);
+            length);
         return;
       }
       case TIMESTAMP:
