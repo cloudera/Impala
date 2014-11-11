@@ -569,6 +569,7 @@ Status LdapAuthProvider::WrapClientTransport(const string& hostname,
 }
 
 Status NoAuthProvider::GetServerTransportFactory(shared_ptr<TTransportFactory>* factory) {
+  // No Sasl - yawn.  Here, have a regular old buffered transport.
   factory->reset(new TBufferedTransportFactory());
   return Status::OK;
 }
