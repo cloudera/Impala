@@ -81,8 +81,8 @@ select udf_test.hive_lower(n_name) from tpch.nation order by 1 limit 5
 ---- TYPES
 STRING
 ====
-# Test identity functions
 ---- QUERY
+# Test identity functions
 select udf_test.identity(true);
 ---- TYPES
 boolean
