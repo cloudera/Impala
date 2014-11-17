@@ -55,8 +55,6 @@ DECLARE_bool(enable_rm);
 DECLARE_int32(rm_default_cpu_vcores);
 DECLARE_string(rm_default_memory);
 
-// Admission control is disabled by default (CDH4 only) due to HUE-994, Hue doesn't
-// close queries (fixed in CDH5). Default is false on CDH5.
 DEFINE_bool(disable_admission_control, true, "Disables admission control.");
 DEFINE_bool(require_username, false, "Requires that a user be provided in order to "
     "schedule requests. If enabled and a user is not provided, requests will be "
