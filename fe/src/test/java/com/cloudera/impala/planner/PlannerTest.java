@@ -701,7 +701,7 @@ public class PlannerTest {
   }
 
   @Test
-  public void TestSmallQueryOptimization() {
+  public void testSmallQueryOptimization() {
     TQueryOptions options = new TQueryOptions();
     options.setExec_single_node_rows_threshold(8);
     runPlannerTestFile("small-query-opt", options);

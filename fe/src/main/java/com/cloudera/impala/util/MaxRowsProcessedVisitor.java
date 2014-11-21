@@ -14,6 +14,8 @@
 
 package com.cloudera.impala.util;
 
+import com.cloudera.impala.planner.CrossJoinNode;
+import com.cloudera.impala.planner.HashJoinNode;
 import com.cloudera.impala.planner.PlanNode;
 import com.cloudera.impala.planner.ScanNode;
 
@@ -34,16 +36,18 @@ public class MaxRowsProcessedVisitor implements Visitor<PlanNode> {
       ScanNode scan = (ScanNode) caller;
       if (scan.isTableMissingTableStats() && !scan.hasLimit()) {
         abort_ = true;
-        result_ = -1;
         return;
       }
       result_ = Math.max(result_, tmp);
+    } else if (caller instanceof HashJoinNode || caller instanceof CrossJoinNode) {
+      // Revisit when multiple scan nodes can be executed in a single fragment, IMPALA-561
+      abort_ = true;
+      return;
     } else {
       long in = caller.getInputCardinality();
       long out = caller.getCardinality();
       if ((in == -1) || (out == -1)) {
         abort_ = true;
-        result_ = -1;
         return;
       }
       result_ = Math.max(result_, Math.max(in, out));
@@ -51,6 +55,6 @@ public class MaxRowsProcessedVisitor implements Visitor<PlanNode> {
   }
 
   public long get() {
-    return result_;
+    return abort_ ? -1 : result_;
   }
 }
