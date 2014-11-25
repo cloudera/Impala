@@ -10,6 +10,8 @@ import org.slf4j.LoggerFactory;
 import com.cloudera.impala.analysis.AnalysisContext;
 import com.cloudera.impala.analysis.Expr;
 import com.cloudera.impala.analysis.InsertStmt;
+import com.cloudera.impala.catalog.HBaseTable;
+import com.cloudera.impala.catalog.Table;
 import com.cloudera.impala.common.ImpalaException;
 import com.cloudera.impala.common.PrintUtils;
 import com.cloudera.impala.common.RuntimeEnv;
@@ -86,7 +88,7 @@ public class Planner {
     if (ctx_.isInsertOrCtas()) {
       resultExprs = ctx_.getAnalysisResult().getInsertStmt().getResultExprs();
     } else {
-      resultExprs = ctx_.getQueryStmt().getBaseTblResultExprs();
+      resultExprs = ctx_.getQueryStmt().getResultExprs();
     }
     resultExprs = Expr.substituteList(resultExprs,
         rootFragment.getPlanRoot().getOutputSmap(), ctx_.getRootAnalyzer(), true);
