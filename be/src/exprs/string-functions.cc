@@ -561,3 +561,132 @@ StringVal StringFunctions::ParseUrlKey(FunctionContext* ctx, const StringVal& ur
 }
 
 }
+
+
+std::string Vowels = "AEIOU";
+bool isVowel(char c) {
+    return Vowels.find(c)!=Vowels.npos;
+}
+StringVal StringFunctions::NYSIIS(FunctionContext* context, const StringVal& val) {
+    if (val.is_null) return StringVal::null();
+
+    std::string input((const char *)val.ptr, val.len);
+
+    //Transform to upper case, skip non character
+    int len = input.length();
+    int newlen = 0;
+    for (int i = 0; i < len; i++)
+        if (input[i]>='a' && input[i]<='z')
+            input[newlen++] = toupper(input[i]);
+        else if (input[i]>='A' && input[i]<='Z')
+            input[newlen++] = input[i];
+    input.resize(newlen);
+    if (newlen == 0)return StringVal();
+
+    //Translate first characters of name: MAC->MCC, KN->N, K->C, PH->FF, PF->FF, SCH->SSS
+    if (input.compare(0, 3, "MAC") == 0) input[1] = 'C';//MAC->MCC
+    else if (input.compare(0, 2, "KN") == 0) input.replace(0, 2, "N");
+    else if (input[0] == 'K') input[0] = 'C';
+    else if (input.compare(0, 2, "PH") == 0) input[0] = 'F', input[1]= 'F';
+    else if (input.compare(0, 2, "PF") == 0) input[0] = 'F', input[1]='F';
+    else if (input.compare(0, 3, "SCH") == 0) input[1] = 'S', input[2] = 'S';//SCH->SSS
+    
+    //Translate last characters of name: EE->Y, IE->Y, DT, RT, RD, NT, ND->D
+    if (input.length() >= 2) {
+        if (input.compare(input.length()-2, 2, "EE") == 0 ||
+            input.compare(input.length()-2, 2, "IE") == 0 ) {
+                input.replace(input.length()-2, 2, "Y");
+        }
+        else if (input.compare(input.length()-2, 2, "DT") == 0 ||
+            input.compare(input.length()-2, 2, "RT") == 0 ||
+            input.compare(input.length()-2, 2, "RD") == 0 ||
+            input.compare(input.length()-2, 2, "NT") == 0 ||
+            input.compare(input.length()-2, 2, "ND") == 0 ) {
+                input.replace(input.length()-2, 2, "D");
+        }
+    }
+
+    /*
+    First character of key = first character of name.
+    Translate remaining characters by following rules, incrementing by one character each time:
+    EV->AF else A, E, I, O, U->A
+    Q->G, Z->S, M->N
+    KN->N else K->C
+    SCH->SSS, PH->FF
+    H->If previous or next is nonvowel, previous.
+    W->If previous is vowel, previous.
+    Add current to key if current is not same as the last key character.
+    */
+
+    len = input.length();
+    input.append(" ");
+    for (int i = 1; i < len; i++) {
+        char prev = input[i - 1];
+        char curr = input[i];
+        char next = input[i + 1];
+ 
+        if (curr == 'E' && next == 'V')
+            input.replace(i, 2, "AF");
+ 
+        else if (isVowel(curr))
+            input[i] = 'A';
+ 
+        else if (curr == 'Q')
+            input[i] = 'G';
+ 
+        else if (curr == 'Z')
+            input[i] = 'S';
+ 
+        else if (curr == 'M')
+            input[i] = 'N';
+ 
+        else if (curr == 'K' && next == 'N')
+            input[i] = 'N';
+ 
+        else if (curr == 'K')
+            input[i] = 'C';
+ 
+        else if (input.compare(i, 3, "SCH") == 0)
+            input.replace(i, 3, "SSS");
+ 
+        else if (curr == 'P' && next == 'H')
+            input.replace(i, 2, "FF");
+ 
+        else if (curr == 'H' && (!isVowel(prev) || !isVowel(next)))
+            input[i] = prev;
+ 
+        else if (curr == 'W' && isVowel(prev))
+            input[i] = prev;
+ 
+        if (input[i] == prev) {
+            input.erase(i--,1);
+            len--;
+        }
+    }
+    input.resize(input.length() - 1); // We've added a space
+
+    /*
+    If last character is S, remove it.
+    If last characters are AY, replace with Y.
+    If last character is A, remove it. 
+    */
+    int lastPos = input.length() - 1;
+    if (lastPos > 1) {
+ 
+        if (input.compare(lastPos - 1, 2, "AY") == 0)
+            input.replace(lastPos -1, 2, "Y");
+ 
+        else if (input[lastPos] == 'S')
+            input.erase(lastPos, 1);
+ 
+        else if (input[lastPos] == 'A')
+            input.erase(lastPos, 1);
+    }
+ 
+    if (input.length() > 6)
+        input.resize(6);
+    
+    StringVal result(context, input.length()); 
+    memcpy(result.ptr, input.c_str(), input.length());
+    return result;
+}
