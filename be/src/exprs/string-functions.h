@@ -75,6 +75,7 @@ class StringFunctions {
   static StringVal ParseUrlKey(FunctionContext*, const StringVal& url,
                                const StringVal& key, const StringVal& part);
   static void ParseUrlClose(FunctionContext*, FunctionContext::FunctionStateScope);
+  static StringVal NYSIIS(FunctionContext* context, const StringVal& val);
 };
 
 }
