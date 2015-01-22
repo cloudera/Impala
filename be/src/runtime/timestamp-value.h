@@ -56,11 +56,6 @@ class TimestampValue {
         date_(tv->date_) {
   }
 
-  TimestampValue& operator=(const boost::posix_time::ptime& t) {
-    *this =  TimestampValue(t);
-    return *this;
-  }
-
   void ToPtime(boost::posix_time::ptime* ptp) const {
     *ptp = boost::posix_time::ptime(this->date_, this->time_of_day_);
   }
@@ -103,6 +98,11 @@ class TimestampValue {
   const boost::gregorian::date& get_date() const { return date_; }
   const boost::posix_time::time_duration& get_time() const { return time_of_day_; }
 
+  bool HasDate() const { return !date_.is_special(); }
+  bool HasTime() const { return !time_of_day_.is_special(); }
+  bool HasDateOrTime() const { return HasDate() || HasTime(); }
+  bool HasDateAndTime() const { return HasDate() && HasTime(); }
+
   std::string DebugString() const {
     std::stringstream ss;
     if (!this->date_.is_special()) {
@@ -124,6 +124,16 @@ class TimestampValue {
   bool operator<=(const TimestampValue& other) const {
     return this->date_ < other.date_ || (this->date_ == other.date_ &&
         (this->time_of_day_ <= other.time_of_day_));
+  }
+
+  // Converts from UTC to local time in-place. The caller must ensure the TimestampValue
+  // this function is called upon has both a valid date and time.
+  void UtcToLocal();
+
+  TimestampValue& operator=(const boost::posix_time::ptime& ptime) {
+    date_ = ptime.date();
+    time_of_day_ = ptime.time_of_day();
+    return *this;
   }
   bool operator>=(const TimestampValue& other) const {
     return this->date_ > other.date_ ||
