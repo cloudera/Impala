@@ -1267,6 +1267,67 @@ bad_parquet
 field STRING
 ====
 ---- DATASET
+-- IMPALA-1658: Timestamps written by Hive are local-to-UTC adjusted.
+functional
+---- BASE_TABLE_NAME
+alltypesagg_hive_13_1
+---- COLUMNS
+id int
+bool_col boolean
+tinyint_col tinyint
+smallint_col smallint
+int_col int
+bigint_col bigint
+float_col float
+double_col double
+date_string_col string
+string_col string
+timestamp_col timestamp
+year int
+month int
+day int
+---- LOAD
+`hadoop fs -mkdir /test-warehouse/alltypesagg_hive_13_1_parquet && \
+hadoop fs -put -f ${IMPALA_HOME}/testdata/data/alltypesagg_hive_13_1.parquet \
+/test-warehouse/alltypesagg_hive_13_1_parquet/
+====
+---- DATASET
+-- Parquet file with invalid metadata size in the file footer.
+functional
+---- BASE_TABLE_NAME
+bad_metadata_len
+---- COLUMNS
+field TINYINT
+---- LOAD
+`hadoop fs -mkdir -p /test-warehouse/bad_metadata_len_parquet && hadoop fs -put -f \
+${IMPALA_HOME}/testdata/data/bad_metadata_len.parquet \
+/test-warehouse/bad_metadata_len_parquet/
+====
+---- DATASET
+-- Parquet file with invalid column dict_page_offset.
+functional
+---- BASE_TABLE_NAME
+bad_dict_page_offset
+---- COLUMNS
+field TINYINT
+---- LOAD
+`hadoop fs -mkdir -p /test-warehouse/bad_dict_page_offset_parquet && hadoop fs -put -f \
+${IMPALA_HOME}/testdata/data/bad_dict_page_offset.parquet \
+/test-warehouse/bad_dict_page_offset_parquet/
+====
+---- DATASET
+-- Parquet file with invalid column total_compressed_size.
+functional
+---- BASE_TABLE_NAME
+bad_compressed_size
+---- COLUMNS
+field TINYINT
+---- LOAD
+`hadoop fs -mkdir -p /test-warehouse/bad_compressed_size_parquet && hadoop fs -put -f \
+${IMPALA_HOME}/testdata/data/bad_compressed_size.parquet \
+/test-warehouse/bad_compressed_size_parquet/
+====
+---- DATASET
 functional
 ---- BASE_TABLE_NAME
 bad_serde
