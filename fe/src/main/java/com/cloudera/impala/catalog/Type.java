@@ -483,6 +483,7 @@ public abstract class Type {
       case DOUBLE: return java.sql.Types.DOUBLE;
       case TIMESTAMP: return java.sql.Types.TIMESTAMP;
       case STRING: return java.sql.Types.VARCHAR;
+      case VARCHAR: return java.sql.Types.VARCHAR;
       case BINARY: return java.sql.Types.BINARY;
       case DECIMAL: return java.sql.Types.DECIMAL;
       default:
