@@ -60,6 +60,7 @@ std::string PrintTStmtType(const TStmtType::type& type);
 std::string PrintQueryState(const beeswax::QueryState::type& type);
 std::string PrintEncoding(const parquet::Encoding::type& type);
 std::string PrintAsHex(const char* bytes, int64_t len);
+std::string PrintPath(const std::vector<int>& path);
 
 // Parse 's' into a TUniqueId object.  The format of s needs to be the output format
 // from PrintId.  (<hi_part>:<low_part>)
