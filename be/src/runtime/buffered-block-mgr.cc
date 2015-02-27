@@ -383,8 +383,8 @@ Status BufferedBlockMgr::MemLimitTooLowError(Client* client) {
 
 Status BufferedBlockMgr::GetNewBlock(Client* client, Block* unpin_block, Block** block,
     int64_t len) {
-  DCHECK_LE(len, max_block_size_) << "Cannot request blocks bigger than max_len";
-
+  DCHECK_LE(len, max_block_size_) << "Cannot request block bigger than max_len";
+  DCHECK_NE(len, 0) << "Cannot request block of zero size";
   *block = NULL;
   Block* new_block = NULL;
 
@@ -395,9 +395,10 @@ Status BufferedBlockMgr::GetNewBlock(Client* client, Block* unpin_block, Block**
     DCHECK(new_block->Validate()) << endl << new_block->DebugString();
     DCHECK_EQ(new_block->client_, client);
 
-    if (len >= 0 && len < max_block_size_) {
+    if (len > 0 && len < max_block_size_) {
       DCHECK(unpin_block == NULL);
       if (client->tracker_->TryConsume(len)) {
+        // TODO: Have a cache of unused blocks of size 'len' (0, max_block_size_)
         uint8_t* buffer = new uint8_t[len];
         new_block->buffer_desc_ = obj_pool_.Add(new BufferDescriptor(buffer, len));
         new_block->buffer_desc_->block = new_block;
