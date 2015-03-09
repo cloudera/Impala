@@ -93,7 +93,9 @@ public class SingleNodePlanner {
    */
   public PlanNode createSingleNodePlan() throws ImpalaException {
     QueryStmt queryStmt = ctx_.getQueryStmt();
-    Analyzer analyzer = ctx_.getRootAnalyzer();
+    // Use the stmt's analyzer which is not necessarily the root analyzer
+    // to detect empty result sets.
+    Analyzer analyzer = queryStmt.getAnalyzer();
     analyzer.computeEquivClasses();
 
     // Mark slots referenced by output exprs as materialized, prior to generating the
