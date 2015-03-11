@@ -335,6 +335,7 @@ Status DiskIoMgr::RegisterContext(hdfsFS hdfs, RequestContext** request_context,
 }
 
 void DiskIoMgr::UnregisterContext(RequestContext* reader) {
+  // Blocking cancel (waiting for disks completion).
   CancelContext(reader, true);
 
   // All the disks are done with clean, validate nothing is leaking.
