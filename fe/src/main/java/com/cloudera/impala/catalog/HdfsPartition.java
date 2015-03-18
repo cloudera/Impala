@@ -502,7 +502,6 @@ public class HdfsPartition implements Comparable<HdfsPartition> {
   public org.apache.hadoop.hive.metastore.api.Partition toHmsPartition() {
     if (cachedMsPartitionDescriptor_ == null) return null;
     Preconditions.checkNotNull(table_.getNonPartitionFieldSchemas());
-    // Update the serde library class based on the currently used file format.
     org.apache.hadoop.hive.metastore.api.StorageDescriptor storageDescriptor =
         new org.apache.hadoop.hive.metastore.api.StorageDescriptor(
             table_.getNonPartitionFieldSchemas(), location_,
