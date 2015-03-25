@@ -1,0 +1,28 @@
+From c0c498efd985a6f9bacc0ae9ced5c00703c0a8d9 Mon Sep 17 00:00:00 2001
+From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
+Date: Tue, 11 Nov 2014 18:39:57 +0000
+Subject: [PATCH 90/94] CLOUDERA-BUILD use jetty 6.1.26.cloudera.4
+
+Reason: CVE-2014-3566
+Author: Matteo Bertozzi
+Ref: CDH-22630
+---
+ pom.xml |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/pom.xml b/pom.xml
+index 77e4e2b..907ee7d 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -993,7 +993,7 @@
+     <jackson.version>1.8.8</jackson.version>
+     <jasper.version>5.5.23</jasper.version>
+     <jaxb-api.version>2.1</jaxb-api.version>
+-    <jetty.version>6.1.26.cloudera.3</jetty.version>
++    <jetty.version>6.1.26.cloudera.4</jetty.version>
+     <jetty.jspapi.version>6.1.14</jetty.jspapi.version>
+     <jersey.version>1.8</jersey.version>
+     <jruby.version>1.6.8</jruby.version>
+-- 
+1.7.0.4
+
