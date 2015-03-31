@@ -114,3 +114,19 @@ class TestAggregationQueries(ImpalaTestSuite):
       pytest.xfail("HBase returns columns in alphabetical order for select distinct *, "
                    "making the result verication to fail.")
     self.run_test_case('QueryTest/distinct', vector)
+
+class TestTPCHAggregationQueries(ImpalaTestSuite):
+  # Uses the TPC-H dataset in order to have larger aggregations.
+
+  @classmethod
+  def get_workload(cls):
+    return 'tpch'
+
+  @classmethod
+  def add_test_dimensions(cls):
+    super(TestTPCHAggregationQueries, cls).add_test_dimensions()
+    cls.TestMatrix.add_constraint(lambda v:\
+        v.get_value('table_format').file_format in ['parquet'])
+
+  def test_tpch_aggregations(self, vector):
+    self.run_test_case('tpch-aggregations', vector)
