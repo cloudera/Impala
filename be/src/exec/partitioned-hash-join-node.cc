@@ -752,6 +752,7 @@ Status PartitionedHashJoinNode::GetNext(RuntimeState* state, RowBatch* out_batch
         *eos = true;
         break;
       }
+      if (out_batch->AtCapacity()) break;
     }
 
     if (join_op_ == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN) {
@@ -763,21 +764,21 @@ Status PartitionedHashJoinNode::GetNext(RuntimeState* state, RowBatch* out_batch
 
       if (null_probe_output_idx_ >= 0) {
         RETURN_IF_ERROR(OutputNullAwareNullProbe(state, out_batch));
-        if (out_batch->AtCapacity()) return Status::OK;
+        if (out_batch->AtCapacity()) break;
         continue;
       }
 
       if (nulls_build_batch_.get() != NULL) {
         RETURN_IF_ERROR(OutputNullAwareProbeRows(state, out_batch));
-        if (out_batch->AtCapacity()) return Status::OK;
+        if (out_batch->AtCapacity()) break;
         continue;
       }
     }
 
     // Finish up the current batch.
     {
-      // Putting SCOPED_TIMER in ProcessProbeBatch() causes weird exception handling IR in
-      // the xcompiled function, so call it here instead.
+      // Putting SCOPED_TIMER in ProcessProbeBatch() causes weird exception handling IR
+      // in the xcompiled function, so call it here instead.
       int rows_added = 0;
       SCOPED_TIMER(probe_timer_);
       if (process_probe_batch_fn_ == NULL || ht_ctx_->level() != 0) {
