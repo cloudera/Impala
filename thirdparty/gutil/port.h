@@ -462,6 +462,15 @@ inline void* memrchr(const void* bytes, int find_char, size_t len) {
 #define ATTRIBUTE_NO_ADDRESS_SAFETY_ANALYSIS
 #endif
 
+// Tell ThreadSanitizer to ignore a given function. This can dramatically reduce
+// the running time and memory requirements for racy code when TSAN is active.
+// GCC does not support this attribute at the time of this writing (GCC 4.8).
+#if defined(__llvm__)
+#define ATTRIBUTE_NO_SANITIZE_THREAD \
+    __attribute__((no_sanitize_thread))
+#else
+#define ATTRIBUTE_NO_SANITIZE_THREAD
+#endif
 
 #ifndef HAVE_ATTRIBUTE_SECTION  // may have been pre-set to 0, e.g. for Darwin
 #define HAVE_ATTRIBUTE_SECTION 1
@@ -549,6 +558,40 @@ inline void* memrchr(const void* bytes, int find_char, size_t len) {
 #define MUST_USE_RESULT __attribute__ ((warn_unused_result))
 #else
 #define MUST_USE_RESULT
+#endif
+
+// Annotate a virtual method indicating it must be overriding a virtual
+// method in the parent class.
+// Use like:
+//   virtual void foo() OVERRIDE;
+#if defined(COMPILER_MSVC)
+#define OVERRIDE override
+#elif defined(__clang__)
+#define OVERRIDE override
+#elif defined(COMPILER_GCC) && __cplusplus >= 201103 && \
+      (__GNUC__ * 10000 + __GNUC_MINOR__ * 100) >= 40700
+// GCC 4.7 supports explicit virtual overrides when C++11 support is enabled.
+#define OVERRIDE override
+#else
+#define OVERRIDE
+#endif
+
+// Annotate a virtual method indicating that subclasses must not override it,
+// or annotate a class to indicate that it cannot be subclassed.
+// Use like:
+//   virtual void foo() FINAL;
+//   class B FINAL : public A {};
+#if defined(COMPILER_MSVC)
+// TODO(jered): Change this to "final" when chromium no longer uses MSVC 2010.
+#define FINAL sealed
+#elif defined(__clang__)
+#define FINAL final
+#elif defined(COMPILER_GCC) && __cplusplus >= 201103 && \
+      (__GNUC__ * 10000 + __GNUC_MINOR__ * 100) >= 40700
+// GCC 4.7 supports explicit virtual overrides when C++11 support is enabled.
+#define FINAL final
+#else
+#define FINAL
 #endif
 
 #if defined(__GNUC__)
@@ -998,7 +1041,7 @@ inline int isinf(double x) {
   return 0;
 }
 
-// #include "conflict-signal.h"
+// #include "kudu/conflict-signal.h"
 typedef void (*sig_t)(int);
 
 // These actually belong in errno.h but there's a name confilict in errno
@@ -1042,7 +1085,7 @@ typedef short int16_t;
 #endif  // _MSC_VER
 
 #ifdef STL_MSVC  // not always the same as _MSC_VER
-#include "base/port_hash.h"
+#include "kudu/base/port_hash.h"
 #else
 struct PortableHashBase { };
 #endif

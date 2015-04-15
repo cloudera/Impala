@@ -866,10 +866,6 @@ char *FastInt64ToBuffer(int64 i, char* buffer) {
   return buffer;
 }
 
-// Offset into buffer where FastInt32ToBuffer places the end of string
-// null character.  Also used by FastInt32ToBufferLeft
-static const int kFastInt32ToBufferOffset = 11;
-
 char *FastInt32ToBuffer(int32 i, char* buffer) {
   FastInt32ToBufferLeft(i, buffer);
   return buffer;
@@ -912,13 +908,6 @@ char *FastHex32ToBuffer(uint32 value, char* buffer) {
 // division and modulo operations.
 extern const char two_ASCII_digits[100][2];  // from strutil.cc
 
-static inline void PutTwoDigits(int i, char* p) {
-  DCHECK_GE(i, 0);
-  DCHECK_LT(i, 100);
-  p[0] = two_ASCII_digits[i][0];
-  p[1] = two_ASCII_digits[i][1];
-}
-
 // ----------------------------------------------------------------------
 // FastInt32ToBufferLeft()
 // FastUInt32ToBufferLeft()
@@ -936,7 +925,7 @@ static inline void PutTwoDigits(int i, char* p) {
 // ----------------------------------------------------------------------
 
 char* FastUInt32ToBufferLeft(uint32 u, char* buffer) {
-  int digits;
+  uint digits;
   const char *ASCII_digits = NULL;
   // The idea of this implementation is to trim the number of divides to as few
   // as possible by using multiplication and subtraction rather than mod (%),
@@ -1030,7 +1019,7 @@ char* FastInt32ToBufferLeft(int32 i, char* buffer) {
 }
 
 char* FastUInt64ToBufferLeft(uint64 u64, char* buffer) {
-  int digits;
+  uint digits;
   const char *ASCII_digits = NULL;
 
   uint32 u = static_cast<uint32>(u64);
