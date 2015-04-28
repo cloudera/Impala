@@ -18,6 +18,7 @@ INCLUDE_DIRECTORIES($ENV{IMPALA_HOME}/thirdparty/)
 INCLUDE_DIRECTORIES(${GLOG_INCLUDE_DIR})
 
 add_library(gutil
+atomicops-internals-x86.cc
 bits.cc
 stringprintf.cc
 strings/memutil.cc
