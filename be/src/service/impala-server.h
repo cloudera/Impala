@@ -918,17 +918,17 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
       QueryLocations;
   QueryLocations query_locations_;
 
-  // A map from unique backend ID to the corresponding TNetworkAddress of that backend.
-  // Used to track membership updates from the statestore so queries can be cancelled
-  // when a backend is removed. It's not enough to just cancel fragments that are running
-  // based on the deletions mentioned in the most recent statestore heartbeat; sometimes
-  // cancellations are skipped and the statestore, at its discretion, may send only
-  // a delta of the current membership so we need to compute any deletions.
-  // TODO: Currently there are multiple locations where cluster membership is tracked,
-  // here and in the scheduler. This should be consolidated so there is a single component
-  // (the scheduler?) that tracks this information and calls other interested components.
-  typedef boost::unordered_map<std::string, TNetworkAddress> BackendAddressMap;
-  BackendAddressMap known_backends_;
+  /// A map from unique backend ID to the corresponding TBackendDescriptor of that backend.
+  /// Used to track membership updates from the statestore so queries can be cancelled
+  /// when a backend is removed. It's not enough to just cancel fragments that are running
+  /// based on the deletions mentioned in the most recent statestore heartbeat; sometimes
+  /// cancellations are skipped and the statestore, at its discretion, may send only
+  /// a delta of the current membership so we need to compute any deletions.
+  /// TODO: Currently there are multiple locations where cluster membership is tracked,
+  /// here and in the scheduler. This should be consolidated so there is a single component
+  /// (the scheduler?) that tracks this information and calls other interested components.
+  typedef boost::unordered_map<std::string, TBackendDescriptor> BackendDescriptorMap;
+  BackendDescriptorMap known_backends_;
 
   // Generate unique session id for HiveServer2 session
   boost::uuids::random_generator uuid_generator_;

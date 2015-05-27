@@ -147,11 +147,6 @@ public class View extends Table {
   public String getInlineViewDef() { return inlineViewDef_; }
 
   @Override
-  public int getNumNodes() {
-    throw new IllegalStateException("Cannot call getNumNodes() on a view.");
-  }
-
-  @Override
   public boolean isVirtualTable() { return true; }
   public boolean isLocalView() { return isLocalView_; }
 

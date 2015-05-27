@@ -41,7 +41,11 @@ class Frontend {
   Status UpdateCatalogCache(const TUpdateCatalogCacheRequest& req,
       TUpdateCatalogCacheResponse *resp);
 
-  // Call FE to get explain plan
+  /// Request to update the Impalad frontend cluster membership snapshot.  The
+  /// TUpdateMembershipRequest contains the latest set of hosts.
+  Status UpdateMembership(const TUpdateMembershipRequest& req);
+
+  /// Call FE to get explain plan
   Status GetExplainPlan(const TQueryCtx& query_ctx, std::string* explain_string);
 
   // Call FE to get TExecRequest.
@@ -163,6 +167,7 @@ class Frontend {
   jmethodID get_hadoop_configs_id_;  // JniFrontend.getAllHadoopConfigs()
   jmethodID check_config_id_; // JniFrontend.checkConfiguration()
   jmethodID update_catalog_cache_id_; // JniFrontend.updateCatalogCache()
+  jmethodID update_membership_id_; // JniFrontend.updateMembership()
   jmethodID get_table_names_id_; // JniFrontend.getTableNames
   jmethodID describe_table_id_; // JniFrontend.describeTable
   jmethodID show_create_table_id_; // JniFrontend.showCreateTable

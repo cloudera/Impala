@@ -73,9 +73,4 @@ public class InlineView extends Table {
     throw new UnsupportedOperationException(
         "Inline View should not generate Thrift representation");
   }
-
-  @Override
-  public int getNumNodes() {
-    throw new UnsupportedOperationException("InlineView.getNumNodes() not supported");
-  }
 }
