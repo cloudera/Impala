@@ -66,6 +66,6 @@ ADD_LIBRARY(gutil
 
 # Disable warnings which trigger a lot in the Google code:
 SET_TARGET_PROPERTIES(gutil PROPERTIES
-  COMPILE_FLAGS "-funsigned-char -Wno-deprecated -Wno-char-subscripts -fPIC")
+  COMPILE_FLAGS "${CXX_COMMON_FLAGS} -funsigned-char -Wno-deprecated -Wno-char-subscripts -fPIC")
 
 SET(GUTIL_LIBS gutil)
