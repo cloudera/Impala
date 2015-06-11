@@ -127,13 +127,16 @@ export IMPALA_SQUEASEL_VERSION=3.3
 # packaging jobs, the path contains ~ so we'll just install somewhere else.
 export IMPALA_CYRUS_SASL_INSTALL_DIR=/tmp/impala-build/cyrus-sasl-${IMPALA_CYRUS_SASL_VERSION}/build
 
-export IMPALA_HADOOP_VERSION=2.6.0-cdh5.4.0-SNAPSHOT
-export IMPALA_HBASE_VERSION=1.0.0-cdh5.4.0-SNAPSHOT
-export IMPALA_HIVE_VERSION=1.1.0-cdh5.4.0-SNAPSHOT
-export IMPALA_SENTRY_VERSION=1.4.0-cdh5.4.0-SNAPSHOT
-export IMPALA_LLAMA_VERSION=1.0.0-cdh5.4.0-SNAPSHOT
+# We don't have .x-SNAPSHOT build, the next upcoming one is the latest build.
+# Please increase the piont release version when cut new release branch so that
+# the thirdparty dependencies will be the latest.
+export IMPALA_HADOOP_VERSION=2.6.0-cdh5.4.4-SNAPSHOT
+export IMPALA_HBASE_VERSION=1.0.0-cdh5.4.4-SNAPSHOT
+export IMPALA_HIVE_VERSION=1.1.0-cdh5.4.4-SNAPSHOT
+export IMPALA_SENTRY_VERSION=1.4.0-cdh5.4.4-SNAPSHOT
+export IMPALA_LLAMA_VERSION=1.0.0-cdh5.4.4-SNAPSHOT
 export IMPALA_AVRO_VERSION=1.7.4
-export IMPALA_PARQUET_VERSION=1.5.0-cdh5.4.0-SNAPSHOT
+export IMPALA_PARQUET_VERSION=1.5.0-cdh5.4.4-SNAPSHOT
 export IMPALA_THRIFT_VERSION=0.9.0
 export IMPALA_LLVM_VERSION=3.3
 export IMPALA_MINIKDC_VERSION=1.0.0
