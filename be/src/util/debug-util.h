@@ -19,6 +19,8 @@
 #include <string>
 #include <sstream>
 
+#include <thrift/protocol/TDebugProtocol.h>
+
 #include "gen-cpp/JniCatalog_types.h"
 #include "gen-cpp/Descriptors_types.h"
 #include "gen-cpp/Exprs_types.h"
@@ -65,9 +67,14 @@ std::string PrintTMetricKind(const TMetricKind::type& type);
 std::string PrintTUnit(const TUnit::type& type);
 std::string PrintPath(const std::vector<int>& path);
 
-// Parse 's' into a TUniqueId object.  The format of s needs to be the output format
-// from PrintId.  (<hi_part>:<low_part>)
-// Returns true if parse succeeded.
+// Convenience wrapper around Thrift's debug string function
+template<typename ThriftStruct> std::string PrintThrift(const ThriftStruct& t) {
+  return apache::thrift::ThriftDebugString(t);
+}
+
+/// Parse 's' into a TUniqueId object.  The format of s needs to be the output format
+/// from PrintId.  (<hi_part>:<low_part>)
+/// Returns true if parse succeeded.
 bool ParseId(const std::string& s, TUniqueId* id);
 
 // Returns a string "<product version number> (build <build hash>)"
