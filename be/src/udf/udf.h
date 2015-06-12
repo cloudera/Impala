@@ -113,7 +113,11 @@ class FunctionContext {
   // available.
   const char* user() const;
 
-  // Returns the query_id for the current query.
+  /// Returns the effective user for authorization purposes. If a delegated user is
+  /// configured, returns that user, otherwise returns the same as user().
+  const char* effective_user() const;
+
+  /// Returns the query_id for the current query.
   UniqueId query_id() const;
 
   // Sets an error for this UDF. If this is called, this will trigger the

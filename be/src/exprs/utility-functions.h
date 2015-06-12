@@ -28,9 +28,10 @@ class TupleRow;
 
 class UtilityFunctions {
  public:
-  // Implementations of the FnvHash function. Returns the Fowler-Noll-Vo hash of the
-  // input as an int64_t.
-  template <typename T> static BigIntVal FnvHash(FunctionContext* ctx, const T& input_val);
+  /// Implementations of the FnvHash function. Returns the Fowler-Noll-Vo hash of the
+  /// input as an int64_t.
+  template <typename T> static BigIntVal FnvHash(FunctionContext* ctx,
+      const T& input_val);
   static BigIntVal FnvHashString(FunctionContext* ctx, const StringVal& input_val);
   static BigIntVal FnvHashTimestamp(FunctionContext* ctx, const TimestampVal& input_val);
   static BigIntVal FnvHashDecimal(FunctionContext* ctx, const DecimalVal& input_val);
@@ -39,7 +40,11 @@ class UtilityFunctions {
   // this function.
   static StringVal User(FunctionContext* ctx);
 
-  // Implementation of the version() function. Returns the version string.
+  /// Implementation of the effective_user() builtin. Returns the username of the
+  /// effective user for authorization purposes.
+  static StringVal EffectiveUser(FunctionContext* ctx);
+
+  /// Implementation of the version() function. Returns the version string.
   static StringVal Version(FunctionContext* ctx);
 
   // Implementation of the pid() function. Returns the pid of the impalad that initiated
