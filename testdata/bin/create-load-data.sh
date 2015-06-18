@@ -106,7 +106,7 @@ function load-data {
   echo "Loading workload: ${WORKLOAD} (${EXPLORATION_STRATEGY}). Logging to: "\
       "${LOG_FILE}"
   # Use unbuffered logging by executing with 'python -u'
-  python -u ./load-data.py --workloads ${WORKLOAD} \
+  impala-python -u ./load-data.py --workloads ${WORKLOAD} \
       --exploration_strategy ${EXPLORATION_STRATEGY} ${LOAD_DATA_ARGS} &> ${LOG_FILE}
 }
 
@@ -122,7 +122,7 @@ load-data "tpcds" "core"
 ./impala-shell.sh -f ${IMPALA_HOME}/testdata/bin/create-data-source-table.sql
 # Load all the auxiliary workloads (if any exist)
 if [ -d ${IMPALA_AUX_WORKLOAD_DIR} ] && [ -d ${IMPALA_AUX_DATASET_DIR} ]; then
-  python -u ./load-data.py --workloads all --workload_dir=${IMPALA_AUX_WORKLOAD_DIR}\
+  impala-python -u ./load-data.py --workloads all --workload_dir=${IMPALA_AUX_WORKLOAD_DIR}\
       --dataset_dir=${IMPALA_AUX_DATASET_DIR} --exploration_strategy core \
       ${LOAD_DATA_ARGS}
 else

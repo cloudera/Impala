@@ -34,7 +34,7 @@ HADOOP_CLIENT_OPTS=-Xmx2024m hive --service metastore -p $HIVE_METASTORE_PORT \
     > ${LOGDIR}/hive-metastore.out 2>&1 &
 
 # Wait for the Metastore to come up because HiveServer2 relies on it being live.
-python ${CLUSTER_BIN}/wait-for-metastore.py --transport=${METASTORE_TRANSPORT}
+${CLUSTER_BIN}/wait-for-metastore.py --transport=${METASTORE_TRANSPORT}
 
 # Starts a HiveServer2 instance on the port specified by the HIVE_SERVER2_THRIFT_PORT
 # environment variable.
