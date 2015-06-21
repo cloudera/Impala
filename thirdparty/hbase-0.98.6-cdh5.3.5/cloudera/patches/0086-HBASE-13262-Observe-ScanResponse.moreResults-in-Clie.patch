@@ -1,0 +1,983 @@
+From 7116bb5f94743144019db88973fe5a495d21adbe Mon Sep 17 00:00:00 2001
+From: Josh Elser <elserj@apache.org>
+Date: Sat, 28 Mar 2015 18:56:48 -0700
+Subject: [PATCH 86/92] HBASE-13262 Observe ScanResponse.moreResults in ClientScanner.
+
+The RS already returns to the client whether or not it has additional
+results to be returned in a subsequent call to scan(), but the ClientScanner
+did not use or adhere to this value. Subsequently, this can lead to
+bugs around moving to the next region too early. A new method was added
+to ClientScanner in the name of testability.
+
+Encapsulate server-state into RegionServerCallable to avoid
+modifying parameterization of callable impls.
+
+Reason: Bug
+Author: Josh Elser
+Ref: CDH-26273
+---
+ .../apache/hadoop/hbase/client/ClientScanner.java  |  239 +++++++++++---------
+ .../hbase/client/ClientSmallReversedScanner.java   |    1 +
+ .../hadoop/hbase/client/ClientSmallScanner.java    |    7 +
+ .../hadoop/hbase/client/RegionServerCallable.java  |   28 +++
+ .../hadoop/hbase/client/ScannerCallable.java       |   16 +-
+ .../hbase/protobuf/generated/ClientProtos.java     |  230 +++++++++++++++----
+ .../hbase/protobuf/generated/MapReduceProtos.java  |    6 +-
+ hbase-protocol/src/main/protobuf/Client.proto      |    5 +
+ .../hadoop/hbase/regionserver/HRegionServer.java   |   11 +-
+ .../hadoop/hbase/client/TestSizeFailures.java      |  153 +++++++++++++
+ 10 files changed, 535 insertions(+), 161 deletions(-)
+ create mode 100644 hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestSizeFailures.java
+
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ClientScanner.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ClientScanner.java
+index c3caa75..d41c743 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ClientScanner.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ClientScanner.java
+@@ -329,114 +329,7 @@ public class ClientScanner extends AbstractClientScanner {
+         return null;
+       }
+       if (cache.size() == 0) {
+-        Result [] values = null;
+-        long remainingResultSize = maxScannerResultSize;
+-        int countdown = this.caching;
+-        // We need to reset it if it's a new callable that was created
+-        // with a countdown in nextScanner
+-        callable.setCaching(this.caching);
+-        // This flag is set when we want to skip the result returned.  We do
+-        // this when we reset scanner because it split under us.
+-        boolean skipFirst = false;
+-        boolean retryAfterOutOfOrderException  = true;
+-        do {
+-          try {
+-            if (skipFirst) {
+-              // Skip only the first row (which was the last row of the last
+-              // already-processed batch).
+-              callable.setCaching(1);
+-              values = this.caller.callWithRetries(callable);
+-              callable.setCaching(this.caching);
+-              skipFirst = false;
+-            }
+-            // Server returns a null values if scanning is to stop.  Else,
+-            // returns an empty array if scanning is to go on and we've just
+-            // exhausted current region.
+-            values = this.caller.callWithRetries(callable);
+-            if (skipFirst && values != null && values.length == 1) {
+-              skipFirst = false; // Already skipped, unset it before scanning again
+-              values = this.caller.callWithRetries(callable);
+-            }
+-            retryAfterOutOfOrderException  = true;
+-          } catch (DoNotRetryIOException e) {
+-            // DNRIOEs are thrown to make us break out of retries.  Some types of DNRIOEs want us
+-            // to reset the scanner and come back in again.
+-            if (e instanceof UnknownScannerException) {
+-              long timeout = lastNext + scannerTimeout;
+-              // If we are over the timeout, throw this exception to the client wrapped in
+-              // a ScannerTimeoutException. Else, it's because the region moved and we used the old
+-              // id against the new region server; reset the scanner.
+-              if (timeout < System.currentTimeMillis()) {
+-                long elapsed = System.currentTimeMillis() - lastNext;
+-                ScannerTimeoutException ex = new ScannerTimeoutException(
+-                    elapsed + "ms passed since the last invocation, " +
+-                        "timeout is currently set to " + scannerTimeout);
+-                ex.initCause(e);
+-                throw ex;
+-              }
+-            } else {
+-              // If exception is any but the list below throw it back to the client; else setup
+-              // the scanner and retry.
+-              Throwable cause = e.getCause();
+-              if ((cause != null && cause instanceof NotServingRegionException) ||
+-                (cause != null && cause instanceof RegionServerStoppedException) ||
+-                e instanceof OutOfOrderScannerNextException) {
+-                // Pass
+-                // It is easier writing the if loop test as list of what is allowed rather than
+-                // as a list of what is not allowed... so if in here, it means we do not throw.
+-              } else {
+-                throw e;
+-              }
+-            }
+-            // Else, its signal from depths of ScannerCallable that we need to reset the scanner.
+-            if (this.lastResult != null) {
+-              // The region has moved. We need to open a brand new scanner at
+-              // the new location.
+-              // Reset the startRow to the row we've seen last so that the new
+-              // scanner starts at the correct row. Otherwise we may see previously
+-              // returned rows again.
+-              // (ScannerCallable by now has "relocated" the correct region)
+-              this.scan.setStartRow(this.lastResult.getRow());
+-
+-              // Skip first row returned.  We already let it out on previous
+-              // invocation.
+-              skipFirst = true;
+-            }
+-            if (e instanceof OutOfOrderScannerNextException) {
+-              if (retryAfterOutOfOrderException) {
+-                retryAfterOutOfOrderException = false;
+-              } else {
+-                // TODO: Why wrap this in a DNRIOE when it already is a DNRIOE?
+-                throw new DoNotRetryIOException("Failed after retry of " +
+-                  "OutOfOrderScannerNextException: was there a rpc timeout?", e);
+-              }
+-            }
+-            // Clear region.
+-            this.currentRegion = null;
+-            // Set this to zero so we don't try and do an rpc and close on remote server when
+-            // the exception we got was UnknownScanner or the Server is going down.
+-            callable = null;
+-            // This continue will take us to while at end of loop where we will set up new scanner.
+-            continue;
+-          }
+-          long currentTime = System.currentTimeMillis();
+-          if (this.scanMetrics != null ) {
+-            this.scanMetrics.sumOfMillisSecBetweenNexts.addAndGet(currentTime-lastNext);
+-          }
+-          lastNext = currentTime;
+-          if (values != null && values.length > 0) {
+-            for (Result rs : values) {
+-              cache.add(rs);
+-              for (Cell kv : rs.rawCells()) {
+-                // TODO make method in Cell or CellUtil
+-                remainingResultSize -= KeyValueUtil.ensureKeyValue(kv).heapSize();
+-              }
+-              countdown--;
+-              this.lastResult = rs;
+-            }
+-          }
+-          // Values == null means server-side filter has determined we must STOP
+-        } while (remainingResultSize > 0 && countdown > 0 && nextScanner(countdown, values == null));
++        loadCache();
+       }
+ 
+       if (cache.size() > 0) {
+@@ -448,6 +341,136 @@ public class ClientScanner extends AbstractClientScanner {
+       return null;
+     }
+ 
++  /**
++   * Contact the servers to load more {@link Result}s in the cache.
++   */
++  protected void loadCache() throws IOException {
++    Result [] values = null;
++    long remainingResultSize = maxScannerResultSize;
++    int countdown = this.caching;
++    // We need to reset it if it's a new callable that was created
++    // with a countdown in nextScanner
++    callable.setCaching(this.caching);
++    // This flag is set when we want to skip the result returned.  We do
++    // this when we reset scanner because it split under us.
++    boolean skipFirst = false;
++    boolean retryAfterOutOfOrderException  = true;
++    // We don't expect that the server will have more results for us if
++    // it doesn't tell us otherwise. We rely on the size or count of results
++    boolean serverHasMoreResults = false;
++    do {
++      try {
++        if (skipFirst) {
++          // Skip only the first row (which was the last row of the last
++          // already-processed batch).
++          callable.setCaching(1);
++          values = this.caller.callWithRetries(callable);
++          callable.setCaching(this.caching);
++          skipFirst = false;
++        }
++        // Server returns a null values if scanning is to stop.  Else,
++        // returns an empty array if scanning is to go on and we've just
++        // exhausted current region.
++        values = this.caller.callWithRetries(callable);
++        if (skipFirst && values != null && values.length == 1) {
++          skipFirst = false; // Already skipped, unset it before scanning again
++          values = this.caller.callWithRetries(callable);
++        }
++        retryAfterOutOfOrderException  = true;
++      } catch (DoNotRetryIOException e) {
++        // DNRIOEs are thrown to make us break out of retries.  Some types of DNRIOEs want us
++        // to reset the scanner and come back in again.
++        if (e instanceof UnknownScannerException) {
++          long timeout = lastNext + scannerTimeout;
++          // If we are over the timeout, throw this exception to the client wrapped in
++          // a ScannerTimeoutException. Else, it's because the region moved and we used the old
++          // id against the new region server; reset the scanner.
++          if (timeout < System.currentTimeMillis()) {
++            long elapsed = System.currentTimeMillis() - lastNext;
++            ScannerTimeoutException ex = new ScannerTimeoutException(
++                elapsed + "ms passed since the last invocation, " +
++                    "timeout is currently set to " + scannerTimeout);
++            ex.initCause(e);
++            throw ex;
++          }
++        } else {
++          // If exception is any but the list below throw it back to the client; else setup
++          // the scanner and retry.
++          Throwable cause = e.getCause();
++          if ((cause != null && cause instanceof NotServingRegionException) ||
++            (cause != null && cause instanceof RegionServerStoppedException) ||
++            e instanceof OutOfOrderScannerNextException) {
++            // Pass
++            // It is easier writing the if loop test as list of what is allowed rather than
++            // as a list of what is not allowed... so if in here, it means we do not throw.
++          } else {
++            throw e;
++          }
++        }
++        // Else, its signal from depths of ScannerCallable that we need to reset the scanner.
++        if (this.lastResult != null) {
++          // The region has moved. We need to open a brand new scanner at
++          // the new location.
++          // Reset the startRow to the row we've seen last so that the new
++          // scanner starts at the correct row. Otherwise we may see previously
++          // returned rows again.
++          // (ScannerCallable by now has "relocated" the correct region)
++          this.scan.setStartRow(this.lastResult.getRow());
++
++          // Skip first row returned.  We already let it out on previous
++          // invocation.
++          skipFirst = true;
++        }
++        if (e instanceof OutOfOrderScannerNextException) {
++          if (retryAfterOutOfOrderException) {
++            retryAfterOutOfOrderException = false;
++          } else {
++            // TODO: Why wrap this in a DNRIOE when it already is a DNRIOE?
++            throw new DoNotRetryIOException("Failed after retry of " +
++              "OutOfOrderScannerNextException: was there a rpc timeout?", e);
++          }
++        }
++        // Clear region.
++        this.currentRegion = null;
++        // Set this to zero so we don't try and do an rpc and close on remote server when
++        // the exception we got was UnknownScanner or the Server is going down.
++        callable = null;
++        // This continue will take us to while at end of loop where we will set up new scanner.
++        continue;
++      }
++      long currentTime = System.currentTimeMillis();
++      if (this.scanMetrics != null ) {
++        this.scanMetrics.sumOfMillisSecBetweenNexts.addAndGet(currentTime-lastNext);
++      }
++      lastNext = currentTime;
++      if (values != null && values.length > 0) {
++        for (Result rs : values) {
++          cache.add(rs);
++          for (Cell kv : rs.rawCells()) {
++            // TODO make method in Cell or CellUtil
++            remainingResultSize -= KeyValueUtil.ensureKeyValue(kv).heapSize();
++          }
++          countdown--;
++          this.lastResult = rs;
++        }
++      }
++      // We expect that the server won't have more results for us when we exhaust
++      // the size (bytes or count) of the results returned. If the server *does* inform us that
++      // there are more results, we want to avoid possiblyNextScanner(...). Only when we actually
++      // get results is the moreResults context valid.
++      if (null != values && values.length > 0 && callable.hasMoreResultsContext()) {
++        // Only adhere to more server results when we don't have any partialResults
++        // as it keeps the outer loop logic the same.
++        serverHasMoreResults = callable.getServerHasMoreResults();
++      }
++      // Values == null means server-side filter has determined we must STOP
++      // !partialResults.isEmpty() means that we are still accumulating partial Results for a
++      // row. We should not change scanners before we receive all the partial Results for that
++      // row.
++    } while (remainingResultSize > 0 && countdown > 0 && !serverHasMoreResults
++        && nextScanner(countdown, values == null));
++  }
++
+     @Override
+     public void close() {
+       if (!scanMetricsPublished) writeScanMetrics();
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ClientSmallReversedScanner.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ClientSmallReversedScanner.java
+index c707e45..46ae53c 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ClientSmallReversedScanner.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ClientSmallReversedScanner.java
+@@ -135,6 +135,7 @@ public class ClientSmallReversedScanner extends ReversedClientScanner {
+         // Server returns a null values if scanning is to stop. Else,
+         // returns an empty array if scanning is to go on and we've just
+         // exhausted current region.
++        // TODO use context from server
+         values = this.caller.callWithRetries(smallScanCallable, scannerTimeout);
+         this.currentRegion = smallScanCallable.getHRegionInfo();
+         long currentTime = System.currentTimeMillis();
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ClientSmallScanner.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ClientSmallScanner.java
+index 1a29b7d..83797e4 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ClientSmallScanner.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ClientSmallScanner.java
+@@ -185,6 +185,12 @@ public class ClientSmallScanner extends ClientScanner {
+         try {
+           controller.setPriority(getTableName());
+           response = getStub().scan(controller, request);
++          if (response.hasMoreResultsInRegion()) {
++            setHasMoreResultsContext(true);
++            setServerHasMoreResults(response.getMoreResultsInRegion());
++          } else {
++            setHasMoreResultsContext(false);
++          }
+           return ResponseConverter.getResults(controller.cellScanner(),
+               response);
+         } catch (ServiceException se) {
+@@ -213,6 +219,7 @@ public class ClientSmallScanner extends ClientScanner {
+         // Server returns a null values if scanning is to stop. Else,
+         // returns an empty array if scanning is to go on and we've just
+         // exhausted current region.
++        // TODO Use the server's response about more results
+         values = this.caller.callWithRetries(smallScanCallable);
+         this.currentRegion = smallScanCallable.getHRegionInfo();
+         long currentTime = System.currentTimeMillis();
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/RegionServerCallable.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/RegionServerCallable.java
+index 5abc8d0..59a5b4f 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/RegionServerCallable.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/RegionServerCallable.java
+@@ -48,6 +48,8 @@ public abstract class RegionServerCallable<T> implements RetryingCallable<T> {
+   protected final byte[] row;
+   protected HRegionLocation location;
+   private ClientService.BlockingInterface stub;
++  protected boolean serverHasMoreResultsContext;
++  protected boolean serverHasMoreResults;
+ 
+   protected final static int MIN_WAIT_DEAD_SERVER = 10000;
+ 
+@@ -152,4 +154,30 @@ public abstract class RegionServerCallable<T> implements RetryingCallable<T> {
+     }
+     return this.location.getRegionInfo();
+   }
++
++  /**
++   * Should the client attempt to fetch more results from this region
++   * @return True if the client should attempt to fetch more results, false otherwise.
++   */
++  protected boolean getServerHasMoreResults() {
++    assert serverHasMoreResultsContext;
++    return this.serverHasMoreResults;
++  }
++
++  protected void setServerHasMoreResults(boolean serverHasMoreResults) {
++    this.serverHasMoreResults = serverHasMoreResults;
++  }
++
++  /**
++   * Did the server respond with information about whether more results might exist.
++   * Not guaranteed to respond with older server versions
++   * @return True if the server responded with information about more results.
++   */
++  protected boolean hasMoreResultsContext() {
++    return serverHasMoreResultsContext;
++  }
++
++  protected void setHasMoreResultsContext(boolean serverHasMoreResultsContext) {
++    this.serverHasMoreResultsContext = serverHasMoreResultsContext;
++  }
+ }
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ScannerCallable.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ScannerCallable.java
+index e306c5f..bf4132b 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ScannerCallable.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ScannerCallable.java
+@@ -47,7 +47,6 @@ import org.apache.hadoop.hbase.regionserver.RegionServerStoppedException;
+ import org.apache.hadoop.ipc.RemoteException;
+ import org.apache.hadoop.net.DNS;
+ 
+-import com.google.protobuf.RpcController;
+ import com.google.protobuf.ServiceException;
+ import com.google.protobuf.TextFormat;
+ 
+@@ -194,12 +193,23 @@ public class ScannerCallable extends RegionServerCallable<Result[]> {
+                   + rows + " rows from scanner=" + scannerId);
+               }
+             }
+-            if (response.hasMoreResults()
+-                && !response.getMoreResults()) {
++            // moreResults is only used for the case where a filter exhausts all elements
++            if (response.hasMoreResults() && !response.getMoreResults()) {
+               scannerId = -1L;
+               closed = true;
++              // Implied that no results were returned back, either.
+               return null;
+             }
++            // moreResultsInRegion explicitly defines when a RS may choose to terminate a batch due
++            // to size or quantity of results in the response.
++            if (response.hasMoreResultsInRegion()) {
++              // Set what the RS said
++              setHasMoreResultsContext(true);
++              setServerHasMoreResults(response.getMoreResultsInRegion());
++            } else {
++              // Server didn't respond whether it has more results or not.
++              setHasMoreResultsContext(false);
++            }
+           } catch (ServiceException se) {
+             throw ProtobufUtil.getRemoteException(se);
+           }
+diff --git a/hbase-protocol/src/main/java/org/apache/hadoop/hbase/protobuf/generated/ClientProtos.java b/hbase-protocol/src/main/java/org/apache/hadoop/hbase/protobuf/generated/ClientProtos.java
+index ab6a68c..a123f89 100644
+--- a/hbase-protocol/src/main/java/org/apache/hadoop/hbase/protobuf/generated/ClientProtos.java
++++ b/hbase-protocol/src/main/java/org/apache/hadoop/hbase/protobuf/generated/ClientProtos.java
+@@ -17087,6 +17087,28 @@ public final class ClientProtos {
+      */
+     org.apache.hadoop.hbase.protobuf.generated.ClientProtos.ResultOrBuilder getResultsOrBuilder(
+         int index);
++
++    // optional bool more_results_in_region = 8;
++    /**
++     * <code>optional bool more_results_in_region = 8;</code>
++     *
++     * <pre>
++     * A server may choose to limit the number of results returned to the client for
++     * reasons such as the size in bytes or quantity of results accumulated. This field
++     * will true when more results exist in the current region.
++     * </pre>
++     */
++    boolean hasMoreResultsInRegion();
++    /**
++     * <code>optional bool more_results_in_region = 8;</code>
++     *
++     * <pre>
++     * A server may choose to limit the number of results returned to the client for
++     * reasons such as the size in bytes or quantity of results accumulated. This field
++     * will true when more results exist in the current region.
++     * </pre>
++     */
++    boolean getMoreResultsInRegion();
+   }
+   /**
+    * Protobuf type {@code ScanResponse}
+@@ -17189,6 +17211,11 @@ public final class ClientProtos {
+               results_.add(input.readMessage(org.apache.hadoop.hbase.protobuf.generated.ClientProtos.Result.PARSER, extensionRegistry));
+               break;
+             }
++            case 64: {
++              bitField0_ |= 0x00000008;
++              moreResultsInRegion_ = input.readBool();
++              break;
++            }
+           }
+         }
+       } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+@@ -17402,12 +17429,41 @@ public final class ClientProtos {
+       return results_.get(index);
+     }
+ 
++    // optional bool more_results_in_region = 8;
++    public static final int MORE_RESULTS_IN_REGION_FIELD_NUMBER = 8;
++    private boolean moreResultsInRegion_;
++    /**
++     * <code>optional bool more_results_in_region = 8;</code>
++     *
++     * <pre>
++     * A server may choose to limit the number of results returned to the client for
++     * reasons such as the size in bytes or quantity of results accumulated. This field
++     * will true when more results exist in the current region.
++     * </pre>
++     */
++    public boolean hasMoreResultsInRegion() {
++      return ((bitField0_ & 0x00000008) == 0x00000008);
++    }
++    /**
++     * <code>optional bool more_results_in_region = 8;</code>
++     *
++     * <pre>
++     * A server may choose to limit the number of results returned to the client for
++     * reasons such as the size in bytes or quantity of results accumulated. This field
++     * will true when more results exist in the current region.
++     * </pre>
++     */
++    public boolean getMoreResultsInRegion() {
++      return moreResultsInRegion_;
++    }
++
+     private void initFields() {
+       cellsPerResult_ = java.util.Collections.emptyList();
+       scannerId_ = 0L;
+       moreResults_ = false;
+       ttl_ = 0;
+       results_ = java.util.Collections.emptyList();
++      moreResultsInRegion_ = false;
+     }
+     private byte memoizedIsInitialized = -1;
+     public final boolean isInitialized() {
+@@ -17436,6 +17492,9 @@ public final class ClientProtos {
+       for (int i = 0; i < results_.size(); i++) {
+         output.writeMessage(5, results_.get(i));
+       }
++      if (((bitField0_ & 0x00000008) == 0x00000008)) {
++        output.writeBool(8, moreResultsInRegion_);
++      }
+       getUnknownFields().writeTo(output);
+     }
+ 
+@@ -17470,6 +17529,10 @@ public final class ClientProtos {
+         size += com.google.protobuf.CodedOutputStream
+           .computeMessageSize(5, results_.get(i));
+       }
++      if (((bitField0_ & 0x00000008) == 0x00000008)) {
++        size += com.google.protobuf.CodedOutputStream
++          .computeBoolSize(8, moreResultsInRegion_);
++      }
+       size += getUnknownFields().getSerializedSize();
+       memoizedSerializedSize = size;
+       return size;
+@@ -17512,6 +17575,11 @@ public final class ClientProtos {
+       }
+       result = result && getResultsList()
+           .equals(other.getResultsList());
++      result = result && (hasMoreResultsInRegion() == other.hasMoreResultsInRegion());
++      if (hasMoreResultsInRegion()) {
++        result = result && (getMoreResultsInRegion()
++            == other.getMoreResultsInRegion());
++      }
+       result = result &&
+           getUnknownFields().equals(other.getUnknownFields());
+       return result;
+@@ -17545,6 +17613,10 @@ public final class ClientProtos {
+         hash = (37 * hash) + RESULTS_FIELD_NUMBER;
+         hash = (53 * hash) + getResultsList().hashCode();
+       }
++      if (hasMoreResultsInRegion()) {
++        hash = (37 * hash) + MORE_RESULTS_IN_REGION_FIELD_NUMBER;
++        hash = (53 * hash) + hashBoolean(getMoreResultsInRegion());
++      }
+       hash = (29 * hash) + getUnknownFields().hashCode();
+       memoizedHashCode = hash;
+       return hash;
+@@ -17675,6 +17747,8 @@ public final class ClientProtos {
+         } else {
+           resultsBuilder_.clear();
+         }
++        moreResultsInRegion_ = false;
++        bitField0_ = (bitField0_ & ~0x00000020);
+         return this;
+       }
+ 
+@@ -17729,6 +17803,10 @@ public final class ClientProtos {
+         } else {
+           result.results_ = resultsBuilder_.build();
+         }
++        if (((from_bitField0_ & 0x00000020) == 0x00000020)) {
++          to_bitField0_ |= 0x00000008;
++        }
++        result.moreResultsInRegion_ = moreResultsInRegion_;
+         result.bitField0_ = to_bitField0_;
+         onBuilt();
+         return result;
+@@ -17790,6 +17868,9 @@ public final class ClientProtos {
+             }
+           }
+         }
++        if (other.hasMoreResultsInRegion()) {
++          setMoreResultsInRegion(other.getMoreResultsInRegion());
++        }
+         this.mergeUnknownFields(other.getUnknownFields());
+         return this;
+       }
+@@ -18400,6 +18481,63 @@ public final class ClientProtos {
+         return resultsBuilder_;
+       }
+ 
++      // optional bool more_results_in_region = 8;
++      private boolean moreResultsInRegion_ ;
++      /**
++       * <code>optional bool more_results_in_region = 8;</code>
++       *
++       * <pre>
++       * A server may choose to limit the number of results returned to the client for
++       * reasons such as the size in bytes or quantity of results accumulated. This field
++       * will true when more results exist in the current region.
++       * </pre>
++       */
++      public boolean hasMoreResultsInRegion() {
++        return ((bitField0_ & 0x00000020) == 0x00000020);
++      }
++      /**
++       * <code>optional bool more_results_in_region = 8;</code>
++       *
++       * <pre>
++       * A server may choose to limit the number of results returned to the client for
++       * reasons such as the size in bytes or quantity of results accumulated. This field
++       * will true when more results exist in the current region.
++       * </pre>
++       */
++      public boolean getMoreResultsInRegion() {
++        return moreResultsInRegion_;
++      }
++      /**
++       * <code>optional bool more_results_in_region = 8;</code>
++       *
++       * <pre>
++       * A server may choose to limit the number of results returned to the client for
++       * reasons such as the size in bytes or quantity of results accumulated. This field
++       * will true when more results exist in the current region.
++       * </pre>
++       */
++      public Builder setMoreResultsInRegion(boolean value) {
++        bitField0_ |= 0x00000020;
++        moreResultsInRegion_ = value;
++        onChanged();
++        return this;
++      }
++      /**
++       * <code>optional bool more_results_in_region = 8;</code>
++       *
++       * <pre>
++       * A server may choose to limit the number of results returned to the client for
++       * reasons such as the size in bytes or quantity of results accumulated. This field
++       * will true when more results exist in the current region.
++       * </pre>
++       */
++      public Builder clearMoreResultsInRegion() {
++        bitField0_ = (bitField0_ & ~0x00000020);
++        moreResultsInRegion_ = false;
++        onChanged();
++        return this;
++      }
++
+       // @@protoc_insertion_point(builder_scope:ScanResponse)
+     }
+ 
+@@ -30586,51 +30724,51 @@ public final class ClientProtos {
+       "uest\022 \n\006region\030\001 \001(\0132\020.RegionSpecifier\022\023" +
+       "\n\004scan\030\002 \001(\0132\005.Scan\022\022\n\nscanner_id\030\003 \001(\004\022" +
+       "\026\n\016number_of_rows\030\004 \001(\r\022\025\n\rclose_scanner" +
+-      "\030\005 \001(\010\022\025\n\rnext_call_seq\030\006 \001(\004\"y\n\014ScanRes",
+-      "ponse\022\030\n\020cells_per_result\030\001 \003(\r\022\022\n\nscann" +
+-      "er_id\030\002 \001(\004\022\024\n\014more_results\030\003 \001(\010\022\013\n\003ttl" +
+-      "\030\004 \001(\r\022\030\n\007results\030\005 \003(\0132\007.Result\"\263\001\n\024Bul" +
+-      "kLoadHFileRequest\022 \n\006region\030\001 \002(\0132\020.Regi" +
+-      "onSpecifier\0225\n\013family_path\030\002 \003(\0132 .BulkL" +
+-      "oadHFileRequest.FamilyPath\022\026\n\016assign_seq" +
+-      "_num\030\003 \001(\010\032*\n\nFamilyPath\022\016\n\006family\030\001 \002(\014" +
+-      "\022\014\n\004path\030\002 \002(\t\"\'\n\025BulkLoadHFileResponse\022" +
+-      "\016\n\006loaded\030\001 \002(\010\"a\n\026CoprocessorServiceCal" +
+-      "l\022\013\n\003row\030\001 \002(\014\022\024\n\014service_name\030\002 \002(\t\022\023\n\013",
+-      "method_name\030\003 \002(\t\022\017\n\007request\030\004 \002(\014\"9\n\030Co" +
+-      "processorServiceResult\022\035\n\005value\030\001 \001(\0132\016." +
+-      "NameBytesPair\"d\n\031CoprocessorServiceReque" +
+-      "st\022 \n\006region\030\001 \002(\0132\020.RegionSpecifier\022%\n\004" +
+-      "call\030\002 \002(\0132\027.CoprocessorServiceCall\"]\n\032C" +
+-      "oprocessorServiceResponse\022 \n\006region\030\001 \002(" +
+-      "\0132\020.RegionSpecifier\022\035\n\005value\030\002 \002(\0132\016.Nam" +
+-      "eBytesPair\"{\n\006Action\022\r\n\005index\030\001 \001(\r\022 \n\010m" +
+-      "utation\030\002 \001(\0132\016.MutationProto\022\021\n\003get\030\003 \001" +
+-      "(\0132\004.Get\022-\n\014service_call\030\004 \001(\0132\027.Coproce",
+-      "ssorServiceCall\"Y\n\014RegionAction\022 \n\006regio" +
+-      "n\030\001 \002(\0132\020.RegionSpecifier\022\016\n\006atomic\030\002 \001(" +
+-      "\010\022\027\n\006action\030\003 \003(\0132\007.Action\"\221\001\n\021ResultOrE" +
+-      "xception\022\r\n\005index\030\001 \001(\r\022\027\n\006result\030\002 \001(\0132" +
+-      "\007.Result\022!\n\texception\030\003 \001(\0132\016.NameBytesP" +
+-      "air\0221\n\016service_result\030\004 \001(\0132\031.Coprocesso" +
+-      "rServiceResult\"f\n\022RegionActionResult\022-\n\021" +
+-      "resultOrException\030\001 \003(\0132\022.ResultOrExcept" +
+-      "ion\022!\n\texception\030\002 \001(\0132\016.NameBytesPair\"f" +
+-      "\n\014MultiRequest\022#\n\014regionAction\030\001 \003(\0132\r.R",
+-      "egionAction\022\022\n\nnonceGroup\030\002 \001(\004\022\035\n\tcondi" +
+-      "tion\030\003 \001(\0132\n.Condition\"S\n\rMultiResponse\022" +
+-      "/\n\022regionActionResult\030\001 \003(\0132\023.RegionActi" +
+-      "onResult\022\021\n\tprocessed\030\002 \001(\0102\261\002\n\rClientSe" +
+-      "rvice\022 \n\003Get\022\013.GetRequest\032\014.GetResponse\022" +
+-      ")\n\006Mutate\022\016.MutateRequest\032\017.MutateRespon" +
+-      "se\022#\n\004Scan\022\014.ScanRequest\032\r.ScanResponse\022" +
+-      ">\n\rBulkLoadHFile\022\025.BulkLoadHFileRequest\032" +
+-      "\026.BulkLoadHFileResponse\022F\n\013ExecService\022\032" +
+-      ".CoprocessorServiceRequest\032\033.Coprocessor",
+-      "ServiceResponse\022&\n\005Multi\022\r.MultiRequest\032" +
+-      "\016.MultiResponseBB\n*org.apache.hadoop.hba" +
+-      "se.protobuf.generatedB\014ClientProtosH\001\210\001\001" +
+-      "\240\001\001"
++      "\030\005 \001(\010\022\025\n\rnext_call_seq\030\006 \001(\004\"\231\001\n\014ScanRe",
++      "sponse\022\030\n\020cells_per_result\030\001 \003(\r\022\022\n\nscan" +
++      "ner_id\030\002 \001(\004\022\024\n\014more_results\030\003 \001(\010\022\013\n\003tt" +
++      "l\030\004 \001(\r\022\030\n\007results\030\005 \003(\0132\007.Result\022\036\n\026mor" +
++      "e_results_in_region\030\010 \001(\010\"\263\001\n\024BulkLoadHF" +
++      "ileRequest\022 \n\006region\030\001 \002(\0132\020.RegionSpeci" +
++      "fier\0225\n\013family_path\030\002 \003(\0132 .BulkLoadHFil" +
++      "eRequest.FamilyPath\022\026\n\016assign_seq_num\030\003 " +
++      "\001(\010\032*\n\nFamilyPath\022\016\n\006family\030\001 \002(\014\022\014\n\004pat" +
++      "h\030\002 \002(\t\"\'\n\025BulkLoadHFileResponse\022\016\n\006load" +
++      "ed\030\001 \002(\010\"a\n\026CoprocessorServiceCall\022\013\n\003ro",
++      "w\030\001 \002(\014\022\024\n\014service_name\030\002 \002(\t\022\023\n\013method_" +
++      "name\030\003 \002(\t\022\017\n\007request\030\004 \002(\014\"9\n\030Coprocess" +
++      "orServiceResult\022\035\n\005value\030\001 \001(\0132\016.NameByt" +
++      "esPair\"d\n\031CoprocessorServiceRequest\022 \n\006r" +
++      "egion\030\001 \002(\0132\020.RegionSpecifier\022%\n\004call\030\002 " +
++      "\002(\0132\027.CoprocessorServiceCall\"]\n\032Coproces" +
++      "sorServiceResponse\022 \n\006region\030\001 \002(\0132\020.Reg" +
++      "ionSpecifier\022\035\n\005value\030\002 \002(\0132\016.NameBytesP" +
++      "air\"{\n\006Action\022\r\n\005index\030\001 \001(\r\022 \n\010mutation" +
++      "\030\002 \001(\0132\016.MutationProto\022\021\n\003get\030\003 \001(\0132\004.Ge",
++      "t\022-\n\014service_call\030\004 \001(\0132\027.CoprocessorSer" +
++      "viceCall\"Y\n\014RegionAction\022 \n\006region\030\001 \002(\013" +
++      "2\020.RegionSpecifier\022\016\n\006atomic\030\002 \001(\010\022\027\n\006ac" +
++      "tion\030\003 \003(\0132\007.Action\"\221\001\n\021ResultOrExceptio" +
++      "n\022\r\n\005index\030\001 \001(\r\022\027\n\006result\030\002 \001(\0132\007.Resul" +
++      "t\022!\n\texception\030\003 \001(\0132\016.NameBytesPair\0221\n\016" +
++      "service_result\030\004 \001(\0132\031.CoprocessorServic" +
++      "eResult\"f\n\022RegionActionResult\022-\n\021resultO" +
++      "rException\030\001 \003(\0132\022.ResultOrException\022!\n\t" +
++      "exception\030\002 \001(\0132\016.NameBytesPair\"f\n\014Multi",
++      "Request\022#\n\014regionAction\030\001 \003(\0132\r.RegionAc" +
++      "tion\022\022\n\nnonceGroup\030\002 \001(\004\022\035\n\tcondition\030\003 " +
++      "\001(\0132\n.Condition\"S\n\rMultiResponse\022/\n\022regi" +
++      "onActionResult\030\001 \003(\0132\023.RegionActionResul" +
++      "t\022\021\n\tprocessed\030\002 \001(\0102\261\002\n\rClientService\022 " +
++      "\n\003Get\022\013.GetRequest\032\014.GetResponse\022)\n\006Muta" +
++      "te\022\016.MutateRequest\032\017.MutateResponse\022#\n\004S" +
++      "can\022\014.ScanRequest\032\r.ScanResponse\022>\n\rBulk" +
++      "LoadHFile\022\025.BulkLoadHFileRequest\032\026.BulkL" +
++      "oadHFileResponse\022F\n\013ExecService\022\032.Coproc",
++      "essorServiceRequest\032\033.CoprocessorService" +
++      "Response\022&\n\005Multi\022\r.MultiRequest\032\016.Multi" +
++      "ResponseBB\n*org.apache.hadoop.hbase.prot" +
++      "obuf.generatedB\014ClientProtosH\001\210\001\001\240\001\001"
+     };
+     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
+       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
+@@ -30732,7 +30870,7 @@ public final class ClientProtos {
+           internal_static_ScanResponse_fieldAccessorTable = new
+             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
+               internal_static_ScanResponse_descriptor,
+-              new java.lang.String[] { "CellsPerResult", "ScannerId", "MoreResults", "Ttl", "Results", });
++              new java.lang.String[] { "CellsPerResult", "ScannerId", "MoreResults", "Ttl", "Results", "MoreResultsInRegion", });
+           internal_static_BulkLoadHFileRequest_descriptor =
+             getDescriptor().getMessageTypes().get(14);
+           internal_static_BulkLoadHFileRequest_fieldAccessorTable = new
+diff --git a/hbase-protocol/src/main/java/org/apache/hadoop/hbase/protobuf/generated/MapReduceProtos.java b/hbase-protocol/src/main/java/org/apache/hadoop/hbase/protobuf/generated/MapReduceProtos.java
+index f1243c0..eeab45c 100644
+--- a/hbase-protocol/src/main/java/org/apache/hadoop/hbase/protobuf/generated/MapReduceProtos.java
++++ b/hbase-protocol/src/main/java/org/apache/hadoop/hbase/protobuf/generated/MapReduceProtos.java
+@@ -1308,7 +1308,7 @@ public final class MapReduceProtos {
+       public final boolean isInitialized() {
+         if (hasTable()) {
+           if (!getTable().isInitialized()) {
+-
++            
+             return false;
+           }
+         }
+@@ -1537,7 +1537,7 @@ public final class MapReduceProtos {
+        * <code>optional .TableSchema table = 3;</code>
+        */
+       private com.google.protobuf.SingleFieldBuilder<
+-          org.apache.hadoop.hbase.protobuf.generated.HBaseProtos.TableSchema, org.apache.hadoop.hbase.protobuf.generated.HBaseProtos.TableSchema.Builder, org.apache.hadoop.hbase.protobuf.generated.HBaseProtos.TableSchemaOrBuilder>
++          org.apache.hadoop.hbase.protobuf.generated.HBaseProtos.TableSchema, org.apache.hadoop.hbase.protobuf.generated.HBaseProtos.TableSchema.Builder, org.apache.hadoop.hbase.protobuf.generated.HBaseProtos.TableSchemaOrBuilder> 
+           getTableFieldBuilder() {
+         if (tableBuilder_ == null) {
+           tableBuilder_ = new com.google.protobuf.SingleFieldBuilder<
+@@ -1654,7 +1654,7 @@ public final class MapReduceProtos {
+        * <code>optional .RegionInfo region = 4;</code>
+        */
+       private com.google.protobuf.SingleFieldBuilder<
+-          org.apache.hadoop.hbase.protobuf.generated.HBaseProtos.RegionInfo, org.apache.hadoop.hbase.protobuf.generated.HBaseProtos.RegionInfo.Builder, org.apache.hadoop.hbase.protobuf.generated.HBaseProtos.RegionInfoOrBuilder>
++          org.apache.hadoop.hbase.protobuf.generated.HBaseProtos.RegionInfo, org.apache.hadoop.hbase.protobuf.generated.HBaseProtos.RegionInfo.Builder, org.apache.hadoop.hbase.protobuf.generated.HBaseProtos.RegionInfoOrBuilder> 
+           getRegionFieldBuilder() {
+         if (regionBuilder_ == null) {
+           regionBuilder_ = new com.google.protobuf.SingleFieldBuilder<
+diff --git a/hbase-protocol/src/main/protobuf/Client.proto b/hbase-protocol/src/main/protobuf/Client.proto
+index 537c1d4..be26fd9 100644
+--- a/hbase-protocol/src/main/protobuf/Client.proto
++++ b/hbase-protocol/src/main/protobuf/Client.proto
+@@ -276,6 +276,11 @@ message ScanResponse {
+   // This field is mutually exclusive with cells_per_result (since the Cells will
+   // be inside the pb'd Result)
+   repeated Result results = 5;
++
++  // A server may choose to limit the number of results returned to the client for
++  // reasons such as the size in bytes or quantity of results accumulated. This field
++  // will true when more results exist in the current region.
++  optional bool more_results_in_region = 8;
+ }
+ 
+ /**
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
+index 0d15693..ee5adf4 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
+@@ -3240,14 +3240,16 @@ public class HRegionServer implements ClientProtos.ClientService.BlockingInterfa
+             try {
+               int i = 0;
+               synchronized(scanner) {
++                boolean moreRows = false;
+                 while (i < rows) {
+                   // Stop collecting results if maxScannerResultSize is set and we have exceeded it
+                   if ((maxScannerResultSize < Long.MAX_VALUE) &&
+                       (currentScanResultSize >= maxResultSize)) {
++                    builder.setMoreResultsInRegion(true);
+                     break;
+                   }
+                   // Collect values to be returned here
+-                  boolean moreRows = scanner.nextRaw(values);
++                  moreRows = scanner.nextRaw(values);
+                   if (!values.isEmpty()) {
+                     for (Cell cell : values) {
+                       KeyValue kv = KeyValueUtil.ensureKeyValue(cell);
+@@ -3262,6 +3264,13 @@ public class HRegionServer implements ClientProtos.ClientService.BlockingInterfa
+                   }
+                   values.clear();
+                 }
++                if (currentScanResultSize >= maxResultSize || i >= rows || moreRows) {
++                  // We stopped prematurely
++                  builder.setMoreResultsInRegion(true);
++                } else {
++                  // We didn't get a single batch
++                  builder.setMoreResultsInRegion(false);
++                }
+               }
+               region.readRequestsCount.add(i);
+               region.getMetrics().updateScanNext(totalKvSize);
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestSizeFailures.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestSizeFailures.java
+new file mode 100644
+index 0000000..8f7c224
+--- /dev/null
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestSizeFailures.java
+@@ -0,0 +1,153 @@
++/**
++ *
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hbase.client;
++
++import static org.junit.Assert.assertEquals;
++
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.Arrays;
++import java.util.LinkedList;
++import java.util.List;
++import java.util.TreeSet;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.hbase.HBaseTestingUtility;
++import org.apache.hadoop.hbase.LargeTests;
++import org.apache.hadoop.hbase.TableName;
++import org.apache.hadoop.hbase.util.Bytes;
++import org.junit.AfterClass;
++import org.junit.BeforeClass;
++import org.junit.Test;
++import org.junit.experimental.categories.Category;
++
++@Category(LargeTests.class)
++public class TestSizeFailures {
++  final Log LOG = LogFactory.getLog(getClass());
++  protected final static HBaseTestingUtility TEST_UTIL = new HBaseTestingUtility();
++  private static byte[] FAMILY = Bytes.toBytes("testFamily");
++  protected static int SLAVES = 1;
++
++  /**
++   * @throws java.lang.Exception
++   */
++  @BeforeClass
++  public static void setUpBeforeClass() throws Exception {
++    // Uncomment the following lines if more verbosity is needed for
++    // debugging (see HBASE-12285 for details).
++    // ((Log4JLogger)RpcServer.LOG).getLogger().setLevel(Level.ALL);
++    // ((Log4JLogger)RpcClient.LOG).getLogger().setLevel(Level.ALL);
++    // ((Log4JLogger)ScannerCallable.LOG).getLogger().setLevel(Level.ALL);
++    Configuration conf = TEST_UTIL.getConfiguration();
++    conf.setBoolean("hbase.table.sanity.checks", true); // ignore sanity checks in the server
++    TEST_UTIL.startMiniCluster(SLAVES);
++  }
++
++  /**
++   * @throws java.lang.Exception
++   */
++  @AfterClass
++  public static void tearDownAfterClass() throws Exception {
++    TEST_UTIL.shutdownMiniCluster();
++  }
++
++  /**
++   * Basic client side validation of HBASE-13262
++   */
++  @Test
++  public void testScannerSeesAllRecords() throws Exception {
++    final int NUM_ROWS = 1000 * 1000, NUM_COLS = 10;
++    final TableName TABLENAME = TableName.valueOf("testScannerSeesAllRecords");
++    List<byte[]> qualifiers = new ArrayList<byte[]>();
++    for (int i = 1; i <= 10; i++) {
++      qualifiers.add(Bytes.toBytes(Integer.toString(i)));
++    }
++
++    byte[][] splits = new byte[9][2];
++    for (int i = 1; i < 10; i++) {
++      int split = 48 + i;
++      splits[i - 1][0] = (byte) (split >>> 8);
++      splits[i - 1][0] = (byte) (split);
++    }
++
++    HTable table = TEST_UTIL.createTable(TABLENAME, FAMILY, splits);
++
++    List<Put> puts = new LinkedList<Put>();
++    for (int i = 0; i < NUM_ROWS; i++) {
++      Put p = new Put(Bytes.toBytes(Integer.toString(i)));
++      for (int j = 0; j < NUM_COLS; j++) {
++        byte[] value = new byte[50];
++        Bytes.random(value);
++        p.add(FAMILY, Bytes.toBytes(Integer.toString(j)), value);
++      }
++      puts.add(p);
++
++      if (puts.size() == 1000) {
++        Object[] results = new Object[1000];
++        try {
++          table.batch(puts, results);
++        } catch (IOException e) {
++          LOG.error("Failed to write data", e);
++          LOG.debug("Errors: " + Arrays.toString(results));
++        }
++
++        puts.clear();
++      }
++    }
++
++    if (puts.size() > 0) {
++      Object[] results = new Object[puts.size()];
++      try {
++        table.batch(puts, results);
++      } catch (IOException e) {
++        LOG.error("Failed to write data", e);
++        LOG.debug("Errors: " + Arrays.toString(results));
++      }
++    }
++
++    // Flush the memstore to disk
++    TEST_UTIL.flush(TABLENAME);
++
++    TreeSet<Integer> rows = new TreeSet<Integer>();
++    long rowsObserved = 0l;
++    long entriesObserved = 0l;
++    Scan s = new Scan();
++    s.addFamily(FAMILY);
++    s.setMaxResultSize(-1);
++    s.setBatch(-1);
++    s.setCaching(500);
++    ResultScanner scanner = table.getScanner(s);
++    // Read all the records in the table
++    for (Result result : scanner) {
++      rowsObserved++;
++      String row = new String(result.getRow());
++      rows.add(Integer.parseInt(row));
++      while (result.advance()) {
++        entriesObserved++;
++        // result.current();
++      }
++    }
++
++    // Verify that we see 1M rows and 10M cells
++    assertEquals(NUM_ROWS, rowsObserved);
++    assertEquals(NUM_ROWS * NUM_COLS, entriesObserved);
++  }
++}
+-- 
+1.7.0.4
+
