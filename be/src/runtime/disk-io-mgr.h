@@ -208,8 +208,9 @@ class DiskIoMgr {
     // release from the current tracker and added to the new one.
     void SetMemTracker(MemTracker* tracker);
 
-    // Returns the buffer to the IoMgr. This must be called for every buffer
-    // returned by GetNext()/Read() that did not return an error. This is non-blocking.
+    /// Returns the buffer to the IoMgr. This must be called for every buffer
+    /// returned by GetNext()/Read() that did not return an error. This is non-blocking.
+    /// After calling this, the buffer descriptor is invalid and cannot be accessed.
     void Return();
 
    private:
