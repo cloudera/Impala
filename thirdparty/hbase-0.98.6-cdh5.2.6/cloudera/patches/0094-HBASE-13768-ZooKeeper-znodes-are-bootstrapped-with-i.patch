@@ -1,0 +1,42 @@
+From 13f4242f28c00bfe80f55732e9b9e2125cad41ae Mon Sep 17 00:00:00 2001
+From: Enis Soztutar <enis@apache.org>
+Date: Tue, 2 Jun 2015 14:43:26 -0700
+Subject: [PATCH 94/99] HBASE-13768 ZooKeeper znodes are bootstrapped with
+ insecure ACLs in a secure configuration (ADDENDUM for
+ meta znode)
+
+Reason: Bug
+Author: Enis Soztutar
+Ref: CDH-27913
+---
+ .../hadoop/hbase/zookeeper/ZooKeeperWatcher.java   |    1 +
+ .../hbase/zookeeper/TestZooKeeperWatcher.java      |    1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/zookeeper/ZooKeeperWatcher.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/zookeeper/ZooKeeperWatcher.java
+index 165341b..640528e 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/zookeeper/ZooKeeperWatcher.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/zookeeper/ZooKeeperWatcher.java
+@@ -198,6 +198,7 @@ public class ZooKeeperWatcher implements Watcher, Abortable, Closeable {
+     // than service lookup case is not a recommended design pattern.
+     return
+         node.equals(baseZNode) ||
++        node.equals(metaServerZNode) ||
+         node.equals(getMasterAddressZNode()) ||
+         node.equals(clusterIdZNode)||
+         node.equals(rsZNode) ||
+diff --git a/hbase-client/src/test/java/org/apache/hadoop/hbase/zookeeper/TestZooKeeperWatcher.java b/hbase-client/src/test/java/org/apache/hadoop/hbase/zookeeper/TestZooKeeperWatcher.java
+index 4b585c3..6315a25 100644
+--- a/hbase-client/src/test/java/org/apache/hadoop/hbase/zookeeper/TestZooKeeperWatcher.java
++++ b/hbase-client/src/test/java/org/apache/hadoop/hbase/zookeeper/TestZooKeeperWatcher.java
+@@ -37,6 +37,7 @@ public class TestZooKeeperWatcher {
+       "testIsClientReadable", null, false);
+ 
+     assertTrue(watcher.isClientReadable(watcher.baseZNode));
++    assertTrue(watcher.isClientReadable(watcher.metaServerZNode));
+     assertTrue(watcher.isClientReadable(watcher.getMasterAddressZNode()));
+     assertTrue(watcher.isClientReadable(watcher.clusterIdZNode));
+     assertTrue(watcher.isClientReadable(watcher.tableZNode));
+-- 
+1.7.9.5
+

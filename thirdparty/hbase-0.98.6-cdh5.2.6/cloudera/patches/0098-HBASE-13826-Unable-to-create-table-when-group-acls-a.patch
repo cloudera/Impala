@@ -1,0 +1,39 @@
+From c6ae36d8b349558a0c768bbbdd75058c879901dc Mon Sep 17 00:00:00 2001
+From: Srikanth Srungarapu <ssrungarapu@cloudera.com>
+Date: Tue, 2 Jun 2015 23:21:11 -0700
+Subject: [PATCH 98/99] HBASE-13826 Unable to create table when group acls are
+ appropriately set; ADDENDUM - Get rid of connection
+ api in unit test
+
+Reason: Bug
+Author: Srikanth Srungarapu
+Ref: CDH-28330
+---
+ .../security/access/TestAccessController2.java     |    9 +++++----
+ 1 file changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/security/access/TestAccessController2.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/security/access/TestAccessController2.java
+index b3f014d..1569d64 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/security/access/TestAccessController2.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/security/access/TestAccessController2.java
+@@ -202,12 +202,13 @@ public class TestAccessController2 extends SecureTestUtil {
+     AccessTestAction createAction = new AccessTestAction() {
+       @Override
+       public Object run() throws Exception {
++        HBaseAdmin admin = new HBaseAdmin(TEST_UTIL.getConfiguration());
+         HTableDescriptor desc = new HTableDescriptor(TEST_TABLE.getTableName());
+         desc.addFamily(new HColumnDescriptor(TEST_FAMILY));
+-        try (Connection connection = ConnectionFactory.createConnection(TEST_UTIL.getConfiguration())) {
+-          try (Admin admin = connection.getAdmin()) {
+-            admin.createTable(desc);
+-          }
++        try {
++          admin.createTable(desc);
++        } finally {
++          admin.close();
+         }
+         return null;
+       }
+-- 
+1.7.9.5
+
