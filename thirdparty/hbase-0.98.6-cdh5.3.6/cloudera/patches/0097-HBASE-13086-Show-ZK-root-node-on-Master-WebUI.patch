@@ -1,0 +1,59 @@
+From d571d5fc80e67a8efec5ecabe25b7d2d21b5b62c Mon Sep 17 00:00:00 2001
+From: Nick Dimiduk <ndimiduk@apache.org>
+Date: Tue, 24 Feb 2015 19:03:20 -0800
+Subject: [PATCH 097/115] HBASE-13086 Show ZK root node on Master WebUI
+
+Reason: Supportability
+Author: Nick Dimiduk
+Ref: CDH-27913
+---
+ .../hadoop/hbase/zookeeper/ZooKeeperWatcher.java   |    7 +++++++
+ .../hbase/tmpl/master/MasterStatusTmpl.jamon       |    7 ++++++-
+ 2 files changed, 13 insertions(+), 1 deletion(-)
+
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/zookeeper/ZooKeeperWatcher.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/zookeeper/ZooKeeperWatcher.java
+index e0a8c77..280e3d1 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/zookeeper/ZooKeeperWatcher.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/zookeeper/ZooKeeperWatcher.java
+@@ -299,6 +299,13 @@ public class ZooKeeperWatcher implements Watcher, Abortable, Closeable {
+   }
+ 
+   /**
++   * @return the base znode of this zookeeper connection instance.
++   */
++  public String getBaseZNode() {
++    return baseZNode;
++  }
++
++  /**
+    * Method called from ZooKeeper for events and connection status.
+    * <p>
+    * Valid events are passed along to listeners.  Connection status changes
+diff --git a/hbase-server/src/main/jamon/org/apache/hadoop/hbase/tmpl/master/MasterStatusTmpl.jamon b/hbase-server/src/main/jamon/org/apache/hadoop/hbase/tmpl/master/MasterStatusTmpl.jamon
+index de39251..abb1874 100644
+--- a/hbase-server/src/main/jamon/org/apache/hadoop/hbase/tmpl/master/MasterStatusTmpl.jamon
++++ b/hbase-server/src/main/jamon/org/apache/hadoop/hbase/tmpl/master/MasterStatusTmpl.jamon
+@@ -206,7 +206,7 @@ AssignmentManager assignmentManager = master.getAssignmentManager();
+         <section>
+             <& BackupMasterStatusTmpl; master = master &>
+         </section>
+-	</%if>    
++	</%if>
+ 
+ 
+         <section>
+@@ -247,6 +247,11 @@ AssignmentManager assignmentManager = master.getAssignmentManager();
+                     <td>Addresses of all registered ZK servers. For more, see <a href="/zk.jsp">zk dump</a>.</td>
+                 </tr>
+                 <tr>
++                    <td>Zookeeper Base Path</td>
++                    <td> <% master.getZooKeeperWatcher().getBaseZNode() %></td>
++                    <td>Root node of this cluster in ZK.</td>
++                </tr>
++                <tr>
+                     <td>HBase Root Directory</td>
+                     <td><% FSUtils.getRootDir(master.getConfiguration()).toString() %></td>
+                     <td>Location of HBase home directory</td>
+-- 
+1.7.9.5
+

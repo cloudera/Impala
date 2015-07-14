@@ -1,0 +1,66 @@
+From 3b958c9fb224f89c140872c13211c595aa6e54cd Mon Sep 17 00:00:00 2001
+From: Sean Busbey <busbey@apache.org>
+Date: Sat, 28 Feb 2015 19:58:30 -0600
+Subject: [PATCH 084/115] HBASE-13131 ReplicationAdmin must clean up
+ connections if constructor fails.
+
+Conflicts:
+	hbase-client/src/main/java/org/apache/hadoop/hbase/client/replication/ReplicationAdmin.java
+
+(cherry picked from commit 28032b3daa720caac034c01187d7096b0d9bc390)
+
+Reason: Bug
+Author: Sean Busbey
+Ref: CDH-25618
+---
+ .../hbase/client/replication/ReplicationAdmin.java |   33 ++++++++++++++------
+ 1 file changed, 24 insertions(+), 9 deletions(-)
+
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/replication/ReplicationAdmin.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/replication/ReplicationAdmin.java
+index 5fa199c..5e791de 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/replication/ReplicationAdmin.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/replication/ReplicationAdmin.java
+@@ -101,16 +101,31 @@ public class ReplicationAdmin implements Closeable {
+           "enable it in order to use replication");
+     }
+     this.connection = HConnectionManager.getConnection(conf);
+-    zkw = createZooKeeperWatcher();
+     try {
+-      this.replicationPeers = ReplicationFactory.getReplicationPeers(zkw, conf, this.connection);
+-      this.replicationPeers.init();
+-      this.replicationQueuesClient =
+-          ReplicationFactory.getReplicationQueuesClient(zkw, conf, this.connection);
+-      this.replicationQueuesClient.init();
+-
+-    } catch (ReplicationException e) {
+-      throw new IOException("Error initializing the replication admin client.", e);
++      zkw = createZooKeeperWatcher();
++      try {
++        this.replicationPeers = ReplicationFactory.getReplicationPeers(zkw, conf, this.connection);
++        this.replicationPeers.init();
++        this.replicationQueuesClient =
++            ReplicationFactory.getReplicationQueuesClient(zkw, conf, this.connection);
++        this.replicationQueuesClient.init();
++      } catch (Exception exception) {
++        if (zkw != null) {
++          zkw.close();
++        }
++        throw exception;
++      }
++    } catch (Exception exception) {
++      if (connection != null) {
++        connection.close();
++      }
++      if (exception instanceof IOException) {
++        throw (IOException) exception;
++      } else if (exception instanceof RuntimeException) {
++        throw (RuntimeException) exception;
++      } else {
++        throw new IOException("Error initializing the replication admin client.", exception);
++      }
+     }
+   }
+ 
+-- 
+1.7.9.5
+

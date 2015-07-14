@@ -1,0 +1,44 @@
+From 8fb1fe74f86161bfd026e4b831aa7a01fe59c3de Mon Sep 17 00:00:00 2001
+From: stack <stack@duboce.net>
+Date: Fri, 12 Jun 2015 13:04:45 -0700
+Subject: [PATCH 108/115] HBASE-11898 CoprocessorHost.Environment should cache
+ class loader instance Reason: Partner request/Bad
+ perf issue when using Coprocessors Author: Vladimir
+ Rodionov Ref: CDH-28543
+
+---
+ .../hadoop/hbase/coprocessor/CoprocessorHost.java  |    4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/coprocessor/CoprocessorHost.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/coprocessor/CoprocessorHost.java
+index abeda1f..ff27ffa 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/coprocessor/CoprocessorHost.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/coprocessor/CoprocessorHost.java
+@@ -653,6 +653,7 @@ public abstract class CoprocessorHost<E extends CoprocessorEnvironment> {
+       Collections.synchronizedList(new ArrayList<HTableInterface>());
+     private int seq;
+     private Configuration conf;
++    private ClassLoader classLoader;
+ 
+     /**
+      * Constructor
+@@ -662,6 +663,7 @@ public abstract class CoprocessorHost<E extends CoprocessorEnvironment> {
+     public Environment(final Coprocessor impl, final int priority,
+         final int seq, final Configuration conf) {
+       this.impl = impl;
++      this.classLoader = impl.getClass().getClassLoader();
+       this.priority = priority;
+       this.state = Coprocessor.State.INSTALLED;
+       this.seq = seq;
+@@ -726,7 +728,7 @@ public abstract class CoprocessorHost<E extends CoprocessorEnvironment> {
+ 
+     @Override
+     public ClassLoader getClassLoader() {
+-      return impl.getClass().getClassLoader();
++      return classLoader;
+     }
+ 
+     @Override
+-- 
+1.7.9.5
+
