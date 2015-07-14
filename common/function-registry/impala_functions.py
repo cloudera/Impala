@@ -54,7 +54,7 @@ def symbol(class_name, fn_name, templated_type = None):
 # The symbol can be empty for functions that are not yet implemented or are special-cased
 # in Expr::CreateExpr() (i.e., functions that are implemented via a custom Expr class
 # rather than a single function).
-functions = [
+visible_functions = [
   [['udf_pi'], 'DOUBLE', [], 'impala::UdfBuiltins::Pi'],
   [['udf_abs'], 'DOUBLE', ['DOUBLE'], 'impala::UdfBuiltins::Abs'],
   [['udf_lower'], 'STRING', ['STRING'], 'impala::UdfBuiltins::Lower'],

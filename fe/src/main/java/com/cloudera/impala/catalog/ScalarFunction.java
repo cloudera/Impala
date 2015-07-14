@@ -58,13 +58,13 @@ public class ScalarFunction extends Function {
    */
   public static ScalarFunction createBuiltin(String name, ArrayList<Type> argTypes,
       boolean hasVarArgs, Type retType, String symbol,
-      String prepareFnSymbol, String closeFnSymbol, boolean isOperator) {
+      String prepareFnSymbol, String closeFnSymbol, boolean userVisible) {
     Preconditions.checkNotNull(symbol);
     FunctionArgs fnArgs = new FunctionArgs(argTypes, hasVarArgs);
     ScalarFunction fn =
         new ScalarFunction(new FunctionName(Catalog.BUILTINS_DB, name), fnArgs, retType);
     fn.setBinaryType(TFunctionBinaryType.BUILTIN);
-    fn.setUserVisible(!isOperator);
+    fn.setUserVisible(userVisible);
     try {
       fn.symbolName_ = fn.lookupSymbol(symbol, TSymbolType.UDF_EVALUATE, null,
           fn.hasVarArgs(), fn.getArgs());
