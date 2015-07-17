@@ -147,9 +147,13 @@ class Expr {
 
   const std::vector<Expr*>& children() const { return children_; }
 
-  // Returns true if GetValue(NULL) can be called on this expr and always returns the same
-  // result (e.g., exprs that don't contain slotrefs). The default implementation returns
-  // true if all children are constant.
+  /// Returns an error status if the function context associated with the
+  /// expr has an error set.
+  Status GetFnContextError(ExprContext* ctx);
+
+  /// Returns true if GetValue(NULL) can be called on this expr and always returns the same
+  /// result (e.g., exprs that don't contain slotrefs). The default implementation returns
+  /// true if all children are constant.
   virtual bool IsConstant() const;
 
   // Returns the slots that are referenced by this expr tree in 'slot_ids'.
@@ -295,10 +299,10 @@ class Expr {
   std::vector<Expr*> children_;
   int output_scale_;
 
-  // Index to pass to ExprContext::fn_context() to retrieve this expr's FunctionContext.
-  // Set in RegisterFunctionContext(). -1 if this expr does not need a FunctionContext and
-  // doesn't call RegisterFunctionContext().
-  int context_index_;
+  /// Index to pass to ExprContext::fn_context() to retrieve this expr's FunctionContext.
+  /// Set in RegisterFunctionContext(). -1 if this expr does not need a FunctionContext and
+  /// doesn't call RegisterFunctionContext().
+  int fn_context_index_;
 
   // Cached codegened compute function. Exprs should set this in GetCodegendComputeFn().
   llvm::Function* ir_compute_fn_;
@@ -307,8 +311,8 @@ class Expr {
   // GetConstVal().
   boost::scoped_ptr<AnyVal> constant_val_;
 
-  // Helper function that calls ctx->Register(), sets context_index_, and returns the
-  // registered FunctionContext.
+  /// Helper function that calls ctx->Register(), sets fn_context_index_, and returns the
+  /// registered FunctionContext.
   FunctionContext* RegisterFunctionContext(
       ExprContext* ctx, RuntimeState* state, int varargs_buffer_size = 0);
 

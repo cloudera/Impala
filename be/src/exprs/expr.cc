@@ -67,6 +67,8 @@ using namespace impala_udf;
 using namespace std;
 using namespace llvm;
 
+namespace impala {
+
 const char* Expr::LLVM_CLASS_NAME = "class.impala::Expr";
 
 template<class T>
@@ -83,8 +85,8 @@ FunctionContext* Expr::RegisterFunctionContext(ExprContext* ctx, RuntimeState* s
   for (int i = 0; i < children_.size(); ++i) {
     arg_types.push_back(AnyValUtil::ColumnTypeToTypeDesc(children_[i]->type_));
   }
-  context_index_ = ctx->Register(state, return_type, arg_types, varargs_buffer_size);
-  return ctx->fn_context(context_index_);
+  fn_context_index_ = ctx->Register(state, return_type, arg_types, varargs_buffer_size);
+  return ctx->fn_context(fn_context_index_);
 }
 
 Expr::Expr(const ColumnType& type, bool is_slotref)
@@ -92,7 +94,7 @@ Expr::Expr(const ColumnType& type, bool is_slotref)
       is_slotref_(is_slotref),
       type_(type),
       output_scale_(-1),
-      context_index_(-1),
+      fn_context_index_(-1),
       ir_compute_fn_(NULL) {
 }
 
@@ -101,7 +103,7 @@ Expr::Expr(const TExprNode& node, bool is_slotref)
       is_slotref_(is_slotref),
       type_(ColumnType(node.type)),
       output_scale_(-1),
-      context_index_(-1),
+      fn_context_index_(-1),
       ir_compute_fn_(NULL) {
   if (node.__isset.fn) fn_ = node.fn;
 }
@@ -614,4 +616,14 @@ TimestampVal Expr::GetTimestampVal(ExprContext* context, TupleRow* row) {
 DecimalVal Expr::GetDecimalVal(ExprContext* context, TupleRow* row) {
   DCHECK(false) << DebugString();
   return DecimalVal::null();
+}
+
+Status Expr::GetFnContextError(ExprContext* ctx) {
+  if (fn_context_index_ != -1) {
+    FunctionContext* fn_ctx = ctx->fn_context(fn_context_index_);
+    if (fn_ctx->has_error()) return Status(fn_ctx->error_msg());
+  }
+  return Status::OK;
+}
+
 }

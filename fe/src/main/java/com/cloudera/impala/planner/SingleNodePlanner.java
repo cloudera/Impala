@@ -51,6 +51,7 @@ import com.cloudera.impala.catalog.DataSourceTable;
 import com.cloudera.impala.catalog.HBaseTable;
 import com.cloudera.impala.catalog.HdfsTable;
 import com.cloudera.impala.catalog.Type;
+import com.cloudera.impala.common.AnalysisException;
 import com.cloudera.impala.common.ImpalaException;
 import com.cloudera.impala.common.InternalException;
 import com.cloudera.impala.common.NotImplementedException;
@@ -766,7 +767,7 @@ public class SingleNodePlanner {
    * filters from the enclosing scope can be safely applied (to the grouping cols, say).
    */
   public void migrateConjunctsToInlineView(Analyzer analyzer,
-      InlineViewRef inlineViewRef) {
+      InlineViewRef inlineViewRef) throws ImpalaException {
     List<Expr> unassignedConjuncts =
         analyzer.getUnassignedConjuncts(inlineViewRef.getId().asList(), true);
     if (!canMigrateConjuncts(inlineViewRef)) {
