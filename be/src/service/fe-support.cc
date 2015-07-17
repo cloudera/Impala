@@ -111,12 +111,25 @@ Java_com_cloudera_impala_service_FeSupport_NativeEvalConstExprs(
   }
 
   vector<TColumnValue> results;
-  // Open and evaluate the exprs
+  // Open and evaluate the exprs. Also, always Close() the exprs even in case of errors.
   for (int i = 0; i < expr_ctxs.size(); ++i) {
+    Status open_status = expr_ctxs[i]->Open(&state);
+    if (!open_status.ok()) {
+      expr_ctxs[i]->Close(&state);
+      (env)->ThrowNew(JniUtil::internal_exc_class(), open_status.GetErrorMsg().c_str());
+      return result_bytes;
+    }
     TColumnValue val;
-    THROW_IF_ERROR_RET(expr_ctxs[i]->Open(&state), env,
-                       JniUtil::internal_exc_class(), result_bytes);
     expr_ctxs[i]->GetValue(NULL, false, &val);
+    // We check here if an error was set in the expression evaluated through GetValue()
+    // and throw an exception accordingly
+    Status getvalue_status = expr_ctxs[i]->root()->GetFnContextError(expr_ctxs[i]);
+    if (!getvalue_status.ok()) {
+      expr_ctxs[i]->Close(&state);
+      (env)->ThrowNew(JniUtil::internal_exc_class(), getvalue_status.GetErrorMsg().c_str());
+      return result_bytes;
+    }
+
     expr_ctxs[i]->Close(&state);
     results.push_back(val);
   }

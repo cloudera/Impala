@@ -735,7 +735,7 @@ public class Analyzer {
   /**
    * Register all conjuncts in a list of predicates as Having-clause conjuncts.
    */
-  public void registerConjuncts(List<Expr> l) {
+  public void registerConjuncts(List<Expr> l) throws AnalysisException {
     for (Expr e: l) {
       registerConjuncts(e, true);
     }
@@ -747,7 +747,8 @@ public class Analyzer {
    * an outer join, then the conjuncts conjuncts are registered such that they can only
    * be evaluated by the node implementing that join.
    */
-  public void registerOnClauseConjuncts(Expr e, TableRef rhsRef) {
+  public void registerOnClauseConjuncts(Expr e, TableRef rhsRef)
+      throws AnalysisException {
     Preconditions.checkNotNull(rhsRef);
     Preconditions.checkNotNull(e);
     List<ExprId> ojConjuncts = null;
@@ -775,7 +776,8 @@ public class Analyzer {
    * Register all conjuncts that make up 'e'. If fromHavingClause is false, this conjunct
    * is assumed to originate from a Where clause.
    */
-  public void registerConjuncts(Expr e, boolean fromHavingClause) {
+  public void registerConjuncts(Expr e, boolean fromHavingClause)
+      throws AnalysisException {
     for (Expr conjunct: e.getConjuncts()) {
       registerConjunct(conjunct);
       if (!fromHavingClause) conjunct.setIsWhereClauseConjunct();
@@ -789,8 +791,10 @@ public class Analyzer {
    * block as having an empty result set or as having an empty select-project-join
    * portion, if fromHavingClause is true or false, respectively.
    * No-op if the conjunct is not constant or is outer joined.
+   * Throws an AnalysisException if there is an error evaluating `conjunct`
    */
-  private void markConstantConjunct(Expr conjunct, boolean fromHavingClause) {
+  private void markConstantConjunct(Expr conjunct, boolean fromHavingClause)
+      throws AnalysisException {
     if (!conjunct.isConstant() || isOjConjunct(conjunct)) return;
     markConjunctAssigned(conjunct);
     if ((!fromHavingClause && !hasEmptySpjResultSet_)
@@ -804,8 +808,7 @@ public class Analyzer {
           }
         }
       } catch (InternalException ex) {
-        // Should never happen.
-        throw new IllegalStateException(ex);
+        throw new AnalysisException("Error evaluating \"" + conjunct.toSql() + "\"", ex);
       }
     }
   }
