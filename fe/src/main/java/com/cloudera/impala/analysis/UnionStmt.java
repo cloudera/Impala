@@ -59,10 +59,6 @@ public class UnionStmt extends QueryStmt {
     // map from UnionStmts result slots to our resultExprs; useful during plan generation
     private final ExprSubstitutionMap smap_ = new ExprSubstitutionMap();
 
-    // set if this operand is guaranteed to return an empty result set;
-    // used in planning when assigning conjuncts
-    private boolean isDropped_ = false;
-
     public UnionOperand(QueryStmt queryStmt, Qualifier qualifier) {
       this.queryStmt_ = queryStmt;
       this.qualifier_ = qualifier;
@@ -79,8 +75,6 @@ public class UnionStmt extends QueryStmt {
     public void setQualifier(Qualifier qualifier) { this.qualifier_ = qualifier; }
     public Analyzer getAnalyzer() { return analyzer_; }
     public ExprSubstitutionMap getSmap() { return smap_; }
-    public void drop() { isDropped_ = true; }
-    public boolean isDropped() { return isDropped_; }
 
     @Override
     public UnionOperand clone() {
