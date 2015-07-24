@@ -1810,3 +1810,10 @@ where s2 = from_unixtime(unix_timestamp(), 'yyyyMMMdd hh:mm:ss')
 ---- CATCH
 InternalException: Bad date/time conversion format: yyyyMMMdd hh:mm:ss
 ====
+---- QUERY
+# Test for IMPALA-2141: Tests for propogation of error for a UDF with constant parameters
+# in the select list.
+select madlib_vector(1.0, 2.0, NULL);
+---- RESULTS
+---- CATCH
+madlib vector entry 2 is NULL
