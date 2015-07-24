@@ -1845,6 +1845,14 @@ where s2 = from_unixtime(unix_timestamp(), 'yyyyMMMdd hh:mm:ss')
 InternalException: Bad date/time conversion format: yyyyMMMdd hh:mm:ss
 ====
 ---- QUERY
+# Test for IMPALA-2141: Tests for propogation of error for a UDF with constant parameters
+# in the select list.
+select madlib_vector(1.0, 2.0, NULL);
+---- RESULTS
+---- CATCH
+madlib vector entry 2 is NULL
+====
+---- QUERY
 # Test for IMPALA-1746: QueryExecState doesn't check for query cancellation or errors
 select dayofyear(trunc('2014-11-11', string_col)) from functional.alltypestiny limit 1;
 ---- CATCH

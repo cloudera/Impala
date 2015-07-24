@@ -78,16 +78,15 @@ class UnionNode : public ExecNode {
   // and sets child_row_idx_ to 0. May set child_eos_.
   Status OpenCurrentChild(RuntimeState* state);
 
-  // Evaluates exprs on all rows in child_row_batch_ starting from child_row_idx_,
-  // and materializes their results into *tuple.
-  // Adds *tuple into row_batch, and increments *tuple.
-  // If const_exprs is true, then the exprs are evaluated exactly once without
-  // fetching rows from child_row_batch_.
-  // Only commits tuples to row_batch if they are not filtered by conjuncts.
-  // Returns true if row_batch should be returned to caller or limit has been
-  // reached, false otherwise.
-  bool EvalAndMaterializeExprs( const std::vector<ExprContext*>& ctxs,
-                                bool const_exprs, Tuple** tuple, RowBatch* row_batch);
+  /// Evaluates exprs on all rows in child_row_batch_ starting from child_row_idx_,
+  /// and materializes their results into *tuple.
+  /// Adds *tuple into row_batch, and increments *tuple.
+  /// If const_exprs is true, then the exprs are evaluated exactly once without
+  /// fetching rows from child_row_batch_.
+  /// Only commits tuples to row_batch if they are not filtered by conjuncts.
+  /// Returns an error status if evaluating an expression results in one.
+  Status EvalAndMaterializeExprs(const std::vector<ExprContext*>& ctxs,
+      bool const_exprs, Tuple** tuple, RowBatch* row_batch);
 };
 
 }
