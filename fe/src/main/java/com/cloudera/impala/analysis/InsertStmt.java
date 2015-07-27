@@ -46,14 +46,8 @@ import com.google.common.collect.Sets;
 public class InsertStmt extends StatementBase {
   private final static Logger LOG = LoggerFactory.getLogger(InsertStmt.class);
 
-  // List of inline views that may be referenced in queryStmt.
-  private final WithClause withClause_;
-
   // Target table name as seen by the parser
   private final TableName originalTableName_;
-
-  // Target table into which to insert. May be qualified by analyze()
-  private TableName targetTableName_;
 
   // Differentiates between INSERT INTO and INSERT OVERWRITE.
   private final boolean overwrite_;
@@ -65,30 +59,9 @@ public class InsertStmt extends StatementBase {
   // User-supplied hints to control hash partitioning before the table sink in the plan.
   private final List<String> planHints_;
 
-  // Select or union whose results are to be inserted. If null, will be set after
-  // analysis.
-  private QueryStmt queryStmt_;
-
   // False if the original insert statement had a query statement, true if we need to
   // auto-generate one (for insert into tbl();) during analysis.
   private final boolean needsGeneratedQueryStatement_;
-
-  // Set in analyze(). Contains metadata of target table to determine type of sink.
-  private Table table_;
-
-  // Set in analyze(). Exprs corresponding to the partitionKeyValues,
-  private final List<Expr> partitionKeyExprs_ = new ArrayList<Expr>();
-
-  // True to force re-partitioning before the table sink, false to prevent it. Set in
-  // analyze() based on planHints_. Null if no explicit hint was given (the planner
-  // should decide whether to re-partition or not).
-  private Boolean isRepartition_ = null;
-
-  // Output expressions that produce the final results to write to the target table. May
-  // include casts, and NullLiterals where an output column isn't explicitly mentioned.
-  // Set in prepareExpressions(). The i'th expr produces the i'th column of the target
-  // table.
-  private final ArrayList<Expr> resultExprs_ = new ArrayList<Expr>();
 
   // The column permutation is specified by writing INSERT INTO tbl(col3, col1, col2...)
   //
@@ -109,6 +82,39 @@ public class InsertStmt extends StatementBase {
   // clause. Partition columns with static values may only be mentioned in the PARTITION
   // clause, where the static value is specified.
   private final List<String> columnPermutation_;
+
+  /////////////////////////////////////////
+  // BEGIN: Members that need to be reset()
+
+  // List of inline views that may be referenced in queryStmt.
+  private final WithClause withClause_;
+
+  // Target table into which to insert. May be qualified by analyze()
+  private TableName targetTableName_;
+
+  // Select or union whose results are to be inserted. If null, will be set after
+  // analysis.
+  private QueryStmt queryStmt_;
+
+  // Set in analyze(). Contains metadata of target table to determine type of sink.
+  private Table table_;
+
+  // Set in analyze(). Exprs corresponding to the partitionKeyValues,
+  private List<Expr> partitionKeyExprs_ = Lists.newArrayList();
+
+  // True to force re-partitioning before the table sink, false to prevent it. Set in
+  // analyze() based on planHints_. Null if no explicit hint was given (the planner
+  // should decide whether to re-partition or not).
+  private Boolean isRepartition_ = null;
+
+  // Output expressions that produce the final results to write to the target table. May
+  // include casts, and NullLiterals where an output column isn't explicitly mentioned.
+  // Set in prepareExpressions(). The i'th expr produces the i'th column of the target
+  // table.
+  private ArrayList<Expr> resultExprs_ = Lists.newArrayList();
+
+  // END: Members that need to be reset()
+  /////////////////////////////////////////
 
   public InsertStmt(WithClause withClause, TableName targetTable, boolean overwrite,
       List<PartitionKeyValue> partitionKeyValues, List<String> planHints,
@@ -633,6 +639,15 @@ public class InsertStmt extends StatementBase {
     // analyze() must have been called before.
     Preconditions.checkState(table_ != null);
     return DataSink.createDataSink(table_, partitionKeyExprs_, overwrite_);
+  }
+
+  /**
+   * Substitutes the result expressions and the partition key expressions with smap.
+   * Preserves the original types of those expressions during the substitution.
+   */
+  public void substituteResultExprs(ExprSubstitutionMap smap, Analyzer analyzer) {
+    resultExprs_ = Expr.substituteList(resultExprs_, smap, analyzer, true);
+    partitionKeyExprs_ = Expr.substituteList(partitionKeyExprs_, smap, analyzer, true);
   }
 
   @Override
