@@ -41,6 +41,7 @@ class ObjectPool {
     // Create the object to be pushed to the shared vector outside the critical section.
     // TODO: Consider using a lock-free structure.
     SpecificElement<T>* obj = new SpecificElement<T>(t);
+    DCHECK(obj != NULL);
     ScopedSpinLock l(&lock_);
     objects_.push_back(obj);
     return t;
