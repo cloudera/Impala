@@ -190,10 +190,10 @@ STRING
 ---- QUERY
 show table stats compute_stats_db.incremental_empty_partitioned;
 ---- RESULTS
-'1',0,0,'0B','NOT CACHED','NOT CACHED','TEXT','true',regex:.*
-'Total',0,0,'0B','0B','','','',''
+'1',0,0,'0B','NOT CACHED','NOT CACHED','TEXT','true'
+'Total',0,0,'0B','0B','','',''
 ---- TYPES
-STRING, BIGINT, BIGINT, STRING, STRING, STRING, STRING, STRING, STRING
+STRING, BIGINT, BIGINT, STRING, STRING, STRING, STRING, STRING
 ====
 ---- QUERY
 drop incremental stats compute_stats_db.alltypes_incremental partition(year=2010, month=1);
