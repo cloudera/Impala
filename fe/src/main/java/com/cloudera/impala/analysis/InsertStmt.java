@@ -168,15 +168,15 @@ public class InsertStmt extends StatementBase {
         // views and to ignore irrelevant ORDER BYs.
         Analyzer queryStmtAnalyzer = new Analyzer(analyzer);
         queryStmt_.analyze(queryStmtAnalyzer);
-
         if (analyzer.containsSubquery()) {
-          StmtRewriter.rewriteQueryStatement(queryStmt_, queryStmtAnalyzer);
-          queryStmt_ = queryStmt_.clone();
-          queryStmtAnalyzer = new Analyzer(analyzer);
-          queryStmt_.analyze(queryStmtAnalyzer);
+           StmtRewriter.rewriteQueryStatement(queryStmt_, queryStmtAnalyzer);
+           queryStmt_ = queryStmt_.clone();
+           queryStmtAnalyzer = new Analyzer(analyzer);
+           queryStmt_.analyze(queryStmtAnalyzer);
         }
-
-        selectListExprs = Expr.cloneList(queryStmt_.getBaseTblResultExprs());
+        // Use getResultExprs() and not getBaseTblResultExprs() here because the final
+        // substitution with TupleIsNullPredicate() wrapping happens in planning.
+        selectListExprs = Expr.cloneList(queryStmt_.getResultExprs());
       } catch (AnalysisException e) {
         if (analyzer.getMissingTbls().isEmpty()) throw e;
       }
