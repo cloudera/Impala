@@ -408,9 +408,9 @@ Status HdfsTextScanner::ProcessRange(int* num_tuples, bool past_scan_range) {
 
 Status HdfsTextScanner::FillByteBuffer(bool* eosr, int num_bytes) {
   *eosr = false;
-  Status status;
 
   if (decompressor_.get() == NULL) {
+    Status status;
     if (num_bytes > 0) {
       stream_->GetBytes(num_bytes, reinterpret_cast<uint8_t**>(&byte_buffer_ptr_),
                         &byte_buffer_read_size_, &status);
@@ -419,6 +419,7 @@ Status HdfsTextScanner::FillByteBuffer(bool* eosr, int num_bytes) {
       status = stream_->GetBuffer(false, reinterpret_cast<uint8_t**>(&byte_buffer_ptr_),
                                   &byte_buffer_read_size_);
     }
+    RETURN_IF_ERROR(status);
     *eosr = stream_->eosr();
   } else if (!FLAGS_debug_disable_streaming_gzip &&
       decompression_type_ == THdfsCompression::GZIP) {
@@ -430,7 +431,7 @@ Status HdfsTextScanner::FillByteBuffer(bool* eosr, int num_bytes) {
   }
 
   byte_buffer_end_ = byte_buffer_ptr_ + byte_buffer_read_size_;
-  return status;
+  return Status::OK;
 }
 
 Status HdfsTextScanner::FillByteBufferGzip(bool* eosr) {
@@ -533,6 +534,7 @@ Status HdfsTextScanner::FillByteBufferCompressedFile(bool* eosr) {
   HdfsFileDesc* desc = scan_node_->GetFileDesc(stream_->filename());
   int64_t file_size = desc->file_length;
   DCHECK_GT(file_size, 0);
+
   Status status;
   stream_->GetBytes(file_size, reinterpret_cast<uint8_t**>(&byte_buffer_ptr_),
       &byte_buffer_read_size_, &status);
