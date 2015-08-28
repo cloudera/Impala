@@ -313,15 +313,18 @@ Status PartitionedHashJoinNode::Partition::BuildHashTableInternal(
   vector<BufferedTupleStream::RowIdx> indices;
   uint32_t seed0 = ctx->seed(0);
 
-  // Allocate the partition-local hash table. Initialize the number of buckets
-  // based on the number of build rows (the number of rows is known at this point).
-  // This assumes there are no duplicates which can be wrong. However, the
-  // upside in the common case (few/no duplicates) is large and the downside
-  // when there are is low (a bit more memory; the bucket memory is small compared
-  // to the memory needed for all the build side allocations).
+  // Allocate the partition-local hash table. Initialize the number of buckets based on
+  // the number of build rows (the number of rows is known at this point). This assumes
+  // there are no duplicates which can be wrong. However, the upside in the common case
+  // (few/no duplicates) is large and the downside when there are is low (a bit more
+  // memory; the bucket memory is small compared to the memory needed for all the build
+  // side allocations).
+  // One corner case is if the stream contains tuples with zero footprint (no materialized
+  // slots). If the tuples occupy no space, this implies all rows will be duplicates, so
+  // create a small hash table, IMPALA-2256.
   // We always start with small pages in the hash table.
-  int64_t estimated_num_buckets =
-      HashTable::EstimatedNumBuckets(build_rows()->num_rows());
+  int64_t estimated_num_buckets = build_rows()->has_tuple_footprint() ?
+      HashTable::EstimatedNumBuckets(build_rows()->num_rows()) : state->batch_size() * 2;
   hash_tbl_.reset(new HashTable(state, parent_->block_mgr_client_,
       parent_->child(1)->row_desc().tuple_descriptors().size(), build_rows(),
       1 << (32 - NUM_PARTITIONING_BITS), estimated_num_buckets));
@@ -672,11 +675,17 @@ Status PartitionedHashJoinNode::PrepareNextPartition(RuntimeState* state) {
   int64_t mem_limit = mem_tracker()->SpareCapacity();
   // Try to build a hash table on top the spilled build rows.
   bool built = false;
-  if (input_partition_->EstimatedInMemSize() < mem_limit) {
+  int64_t estimated_memory = input_partition_->EstimatedInMemSize();
+  if (estimated_memory < mem_limit) {
     ht_ctx_->set_level(input_partition_->level_);
     // TODO: We disable filter on spilled partitions, but perhaps we can revisit
     // this, especially if the probe side is very big (e.g. has spilled as well).
     RETURN_IF_ERROR(input_partition_->BuildHashTable(state, &built, false));
+  } else {
+    LOG(INFO) << "In hash join id=" << id_ << " the estimated needed memory ("
+        << estimated_memory << ") for partition " << input_partition_ << " with "
+        << input_partition_->build_rows()->num_rows() << " build rows is larger "
+        << " than the mem_limit (" << mem_limit << ").";
   }
 
   if (!built) {
