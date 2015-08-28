@@ -106,12 +106,6 @@ public class AvroSchemaConverter {
     Schema schema = null;
     if (impalaType.isScalarType()) {
       schema = createScalarSchema((ScalarType) impalaType);
-    } else if (impalaType.isArrayType()) {
-      schema = createArraySchema((ArrayType) impalaType);
-    } else if (impalaType.isMapType()) {
-      schema = createMapSchema((MapType) impalaType);
-    } else if (impalaType.isStructType()) {
-      schema = createRecordSchema((StructType) impalaType);
     } else {
       throw new UnsupportedOperationException(
           impalaType.toSql() + " cannot be converted to an Avro type");
@@ -152,29 +146,4 @@ public class AvroSchemaConverter {
     return decimalSchema;
   }
 
-  private Schema createArraySchema(ArrayType impalaArrayType) {
-    Schema elementSchema = createAvroSchema(impalaArrayType.getItemType());
-    return Schema.createArray(elementSchema);
-  }
-
-  private Schema createMapSchema(MapType impalaMapType) {
-    // Map keys are always STRING according to the Avro spec.
-    Schema valueSchema = createAvroSchema(impalaMapType.getValueType());
-    return Schema.createMap(valueSchema);
-  }
-
-  private Schema createRecordSchema(StructType impalaStructType) {
-    List<Schema.Field> schemaFields = Lists.newArrayList();
-    for (StructField structField : impalaStructType.getFields()) {
-      Schema.Field avroField = new Schema.Field(structField.getName(),
-          createAvroSchema(structField.getType()), structField.getComment(), null);
-      schemaFields.add(avroField);
-    }
-    // All Avro records in a table must have the name property.
-    Schema structSchema = Schema.createRecord(
-        RECORD_NAME_PREFIX + recordCounter_, null, null, false);
-    ++recordCounter_;
-    structSchema.setFields(schemaFields);
-    return structSchema;
-  }
 }
