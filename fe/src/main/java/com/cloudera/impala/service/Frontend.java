@@ -81,6 +81,7 @@ import com.cloudera.impala.catalog.Function;
 import com.cloudera.impala.catalog.HBaseTable;
 import com.cloudera.impala.catalog.HdfsTable;
 import com.cloudera.impala.catalog.ImpaladCatalog;
+import com.cloudera.impala.catalog.InlineView;
 import com.cloudera.impala.catalog.Table;
 import com.cloudera.impala.catalog.TableId;
 import com.cloudera.impala.catalog.Type;
@@ -1014,7 +1015,7 @@ public class Frontend {
       // Skip if tuple descriptor did not come from materializing scan.
       if (!desc.isMaterialized()) continue;
       Table table = desc.getTable();
-      if (table == null) continue;
+      if (table == null || table instanceof InlineView) continue;
       Table otherTable = tableIds.get(table.getId());
       if (otherTable == table) continue; // Same table referenced twice
       if (otherTable == null) {
