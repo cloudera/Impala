@@ -239,8 +239,8 @@ class PartitionedHashJoinNode : public BlockingJoinNode {
   // initialize hash_partitions_.
   Status PrepareNextPartition(RuntimeState*);
 
-  // Iterates over all the partitions in hash_partitions_ and returns the number of rows
-  // of the largest partition (in terms of number of aggregated and unaggregated rows).
+  /// Iterates over all the partitions in hash_partitions_ and returns the number of rows
+  /// of the largest partition (in terms of number of build and probe rows).
   int64_t LargestSpilledPartition() const;
 
   // Prepares for probing the next batch.
