@@ -44,6 +44,7 @@ namespace impala {
 BufferedBlockMgr::BlockMgrsMap BufferedBlockMgr::query_to_block_mgrs_;
 SpinLock BufferedBlockMgr::static_block_mgrs_lock_;
 
+
 struct BufferedBlockMgr::Client {
   Client(BufferedBlockMgr* mgr, int num_reserved_buffers, MemTracker* tracker,
       RuntimeState* state)
@@ -71,17 +72,17 @@ struct BufferedBlockMgr::Client {
   // fixed pool of buffers regardless of if they are in the block mgr or the clients).
   MemTracker* tracker_;
 
-  // This is the common ancestor between the block mgr tracker and the client tracker.
-  // When memory is transferred to the client, we want it to stop at this tracker.
+  /// This is the common ancestor between the block mgr tracker and the client tracker.
+  /// When memory is transferred to the client, we want it to stop at this tracker.
   MemTracker* query_tracker_;
 
-  // Number of buffers reserved by this client.
+  /// Number of buffers reserved by this client.
   int num_reserved_buffers_;
 
-  // Number of buffers temporarily reserved.
+  /// Number of buffers temporarily reserved.
   int num_tmp_reserved_buffers_;
 
-  // Number of buffers pinned by this client.
+  /// Number of buffers pinned by this client.
   int num_pinned_buffers_;
 
   void PinBuffer(BufferDescriptor* buffer) {
@@ -237,15 +238,16 @@ int64_t BufferedBlockMgr::remaining_unreserved_buffers() const {
 Status BufferedBlockMgr::RegisterClient(int num_reserved_buffers, MemTracker* tracker,
     RuntimeState* state, Client** client) {
   DCHECK_GE(num_reserved_buffers, 0);
+  Client* aClient = new Client(this, num_reserved_buffers, tracker, state);
   lock_guard<mutex> lock(lock_);
-  *client = obj_pool_.Add(new Client(this, num_reserved_buffers, tracker, state));
+  *client = obj_pool_.Add(aClient);
   unfullfilled_reserved_buffers_ += num_reserved_buffers;
   return Status::OK;
 }
 
 void BufferedBlockMgr::ClearReservations(Client* client) {
-  // TODO: The modifications to the client's mem variables can be made w/o the lock.
   lock_guard<mutex> lock(lock_);
+  // TODO: Can the modifications to the client's mem variables can be made w/o the lock?
   if (client->num_pinned_buffers_ < client->num_reserved_buffers_) {
     unfullfilled_reserved_buffers_ -=
         client->num_reserved_buffers_ - client->num_pinned_buffers_;
@@ -258,6 +260,7 @@ void BufferedBlockMgr::ClearReservations(Client* client) {
 
 bool BufferedBlockMgr::TryAcquireTmpReservation(Client* client, int num_buffers) {
   lock_guard<mutex> lock(lock_);
+  // TODO: Can the modifications to the client's mem variables can be made w/o the lock?
   DCHECK_EQ(client->num_tmp_reserved_buffers_, 0);
   if (client->num_pinned_buffers_ < client->num_reserved_buffers_) {
     // If client has unused reserved buffers, we use those first.
@@ -948,7 +951,10 @@ Status BufferedBlockMgr::FindBufferForBlock(Block* block, bool* in_mem) {
     buffer_desc->block = block;
     block->buffer_desc_ = buffer_desc;
   }
-  DCHECK_NOTNULL(block->buffer_desc_);
+  DCHECK(block->buffer_desc_ != NULL);
+  DCHECK(block->buffer_desc_->len < max_block_size() || !block->is_pinned_)
+      << "Trying to pin already pinned block. "
+      << block->buffer_desc_->len << " " << block->is_pinned_;
   block->is_pinned_ = true;
   client->PinBuffer(block->buffer_desc_);
   ++total_pinned_buffers_;
