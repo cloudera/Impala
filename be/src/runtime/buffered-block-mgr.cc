@@ -380,7 +380,7 @@ void BufferedBlockMgr::Cancel() {
 
 Status BufferedBlockMgr::MemLimitTooLowError(Client* client) {
   // TODO: what to print here. We can't know the value of the entire query here.
-  Status status = Status::MEM_LIMIT_EXCEEDED;
+  Status status = Status::MemLimitExceeded();
   status.AddDetail(Substitute("The memory limit is set too low initialize the"
       " spilling operator. The minimum required memory to spill this operator is $0.",
       PrettyPrinter::Print(client->num_reserved_buffers_ * max_block_size(),
@@ -931,11 +931,10 @@ Status BufferedBlockMgr::FindBufferForBlock(Block* block, bool* in_mem) {
       if (VLOG_QUERY_IS_ON) {
         stringstream ss;
         ss << "Query id=" << query_id_ << " was unable to get minimum required buffers."
-           << endl << DebugInternal() << endl << client->DebugString()
-           << endl << GetStackTrace();
+           << endl << DebugInternal() << endl << client->DebugString();
         VLOG_QUERY << ss.str();
       }
-      Status status = Status::MEM_LIMIT_EXCEEDED;
+      Status status = Status::MemLimitExceeded();
       status.AddDetail("Query did not have enough memory to get the minimum required "
           "buffers in the block manager.");
       return status;

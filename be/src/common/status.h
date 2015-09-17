@@ -85,8 +85,11 @@ class Status {
   Status(): msg_(NULL) {}
 
   static const Status OK;
+
+  // Return a MEM_LIMIT_EXCEEDED error status.
+  static Status MemLimitExceeded();
+
   static const Status CANCELLED;
-  static const Status MEM_LIMIT_EXCEEDED;
   static const Status DEPRECATED_RPC;
 
   // copy c'tor makes copy of error detail so Status can be returned by value
