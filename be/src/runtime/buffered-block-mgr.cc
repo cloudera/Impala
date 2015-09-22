@@ -740,6 +740,8 @@ void BufferedBlockMgr::WriteComplete(Block* block, const Status& write_status) {
   if (encryption_) EncryptDone(block);
 
   // ReturnUnusedBlock() will clear the block, so save the client pointer.
+  // We have to be careful while touching the state because it may have been cleaned up by
+  // another thread.
   RuntimeState* state = block->client_->state_;
   // If the block was re-pinned when it was in the IOMgr queue, don't free it.
   if (block->is_pinned_) {
@@ -772,8 +774,12 @@ void BufferedBlockMgr::WriteComplete(Block* block, const Status& write_status) {
   DCHECK(Validate()) << endl << DebugInternal();
 
   if (!write_status.ok() || !status.ok() || is_cancelled_) {
+    VLOG_FILE << "Query: " << query_id_ << ". Write did not complete successfully: "
+        "write_status=" << write_status.GetDetail() << ", status=" << status.GetDetail()
+        << ". is_cancelled_=" << is_cancelled_;
+
     // If the instance is already cancelled, don't confuse things with these errors.
-    if (!state->is_cancelled()) {
+    if (!write_status.IsCancelled() && !state->is_cancelled()) {
       if (!write_status.ok()) {
         VLOG_QUERY << "Query: " << query_id_ << " write complete callback with error.";
         state->LogError(write_status.msg());
