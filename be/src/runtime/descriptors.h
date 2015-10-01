@@ -164,6 +164,9 @@ class TableDescriptor {
   const std::string& database() const { return database_; }
   const std::vector<std::string>& col_names() const { return col_names_; }
 
+  /// Returns "<database>.<name>"
+  std::string fully_qualified_name() const;
+
  protected:
   std::string name_;
   std::string database_;

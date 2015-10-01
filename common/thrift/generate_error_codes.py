@@ -118,6 +118,12 @@ error_codes = (
 
   ("RPC_GENERAL_ERROR", 31, "RPC Error: $0"),
   ("RPC_TIMEOUT", 32, "RPC timed out"),
+
+  ("STALE_METADATA_FILE_TOO_SHORT", 33, "Metadata for file '$0' appears stale. "
+   "Try running \\\"refresh $1\\\" to reload the file metadata."),
+
+  ("PARQUET_BAD_VERSION_NUMBER", 34, "File '$0' has an invalid version number: $1\\n"
+   "This could be due to stale metadata. Try running \\\"refresh $2\\\"."),
 )
 
 import sys

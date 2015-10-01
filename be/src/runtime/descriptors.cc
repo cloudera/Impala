@@ -15,6 +15,7 @@
 #include "runtime/descriptors.h"
 
 #include <boost/algorithm/string/join.hpp>
+#include <gutil/strings/substitute.h>
 #include <ios>
 #include <sstream>
 
@@ -31,6 +32,7 @@
 using namespace llvm;
 using namespace std;
 using namespace boost::algorithm;
+using namespace strings;
 
 namespace impala {
 
@@ -94,6 +96,10 @@ TableDescriptor::TableDescriptor(const TTableDescriptor& tdesc)
     num_cols_(tdesc.numCols),
     num_clustering_cols_(tdesc.numClusteringCols),
     col_names_(tdesc.colNames) {
+}
+
+string TableDescriptor::fully_qualified_name() const {
+  return Substitute("$0.$1", database_, name_);
 }
 
 string TableDescriptor::DebugString() const {
