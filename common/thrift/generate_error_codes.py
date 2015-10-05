@@ -124,6 +124,12 @@ error_codes = (
 
   ("PARQUET_BAD_VERSION_NUMBER", 34, "File '$0' has an invalid version number: $1\\n"
    "This could be due to stale metadata. Try running \\\"refresh $2\\\"."),
+
+  ("SCANNER_INCOMPLETE_READ", 35, "Tried to read $0 bytes but could only read $1 bytes. "
+   "This may indicate data file corruption. (file $2, byte offset: $3)"),
+
+  ("SCANNER_INVALID_READ", 36, "Invalid read of $0 bytes. This may indicate data file "
+   "corruption. (file $1, byte offset: $2)"),
 )
 
 import sys
