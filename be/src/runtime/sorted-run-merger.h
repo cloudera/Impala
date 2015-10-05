@@ -28,17 +28,17 @@ class RowBatch;
 class RowDescriptor;
 class RuntimeProfile;
 
-// SortedRunMerger is used to merge multiple sorted runs of tuples. A run is a sorted
-// sequence of row batches, which are fetched from a RunBatchSupplier function object.
-// Merging is implemented using a binary min-heap that maintains the run with the next
-// tuple in sorted order at the top of the heap.
-//
-// Merged batches of rows are retrieved from SortedRunMerger via calls to GetNext().
-// The merger is constructed with a boolean flag deep_copy_input.
-// If true, sorted output rows are deep copied into the data pool of the output batch.
-// If false, GetNext() only copies tuple pointers (TupleRows) into the output batch,
-// and transfers resource ownership from the input batches to the output batch when
-// an input batch is processed.
+/// SortedRunMerger is used to merge multiple sorted runs of tuples. A run is a sorted
+/// sequence of row batches, which are fetched from a RunBatchSupplier function object.
+/// Merging is implemented using a binary min-heap that maintains the run with the next
+/// tuple in sorted order at the top of the heap.
+///
+/// Merged batches of rows are retrieved from SortedRunMerger via calls to GetNext().
+/// The merger is constructed with a boolean flag deep_copy_input.
+/// If true, sorted output rows are deep copied into the data pool of the output batch.
+/// If false, GetNext() only copies tuple pointers (TupleRows) into the output batch,
+/// and transfers resource ownership from the input batches to the output batch when
+/// an input batch is processed.
 class SortedRunMerger {
  public:
   // Function that returns the next batch of rows from an input sorted run. The batch
@@ -49,9 +49,9 @@ class SortedRunMerger {
   SortedRunMerger(const TupleRowComparator& compare_less_than, RowDescriptor* row_desc,
       RuntimeProfile* profile, bool deep_copy_input);
 
-  // Prepare this merger to merge and return rows from the sorted runs in 'input_runs'
-  // Retrieves the first batch from each run and sets up the binary heap implementing
-  // the priority queue.
+  /// Prepare this merger to merge and return rows from the sorted runs in 'input_runs'.
+  /// Retrieves the first batch from each run and sets up the binary heap implementing
+  /// the priority queue.
   Status Prepare(const std::vector<RunBatchSupplier>& input_runs);
 
   // Return the next batch of sorted rows from this merger.

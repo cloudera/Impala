@@ -1314,3 +1314,25 @@ on (a.id = b.id and b.int_col < 10)
 ---- TYPES
 INT, INT
 ====
+---- QUERY
+# Regression test for IMPALA-2265.
+SET mem_limit=150m;
+SELECT lag(-180, 13) over (ORDER BY t1.int_col ASC, t2.int_col ASC) AS int_col
+FROM alltypes t1 CROSS JOIN alltypes t2 LIMIT 10
+---- RESULTS
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+---- TYPES
+SMALLINT
+====
+---- QUERY
+set mem_limit=0
+====
