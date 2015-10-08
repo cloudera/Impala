@@ -57,13 +57,14 @@ static char uppercase(char c);
 
 // SSLContext implementation
 SSLContext::SSLContext() {
-  ctx_ = SSL_CTX_new(TLSv1_method());
+  ctx_ = SSL_CTX_new(SSLv23_method());
   if (ctx_ == NULL) {
     string errors;
     buildErrors(errors);
     throw TSSLException("SSL_CTX_new: " + errors);
   }
   SSL_CTX_set_mode(ctx_, SSL_MODE_AUTO_RETRY);
+  SSL_CTX_set_options(ctx_, SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3);
 }
 
 SSLContext::~SSLContext() {
@@ -598,7 +599,7 @@ void buildErrors(string& errors, int errno_copy) {
  * Default implementation of AccessManager
  */
 Decision DefaultClientAccessManager::verify(const sockaddr_storage& sa)
-  throw() { 
+  throw() {
   (void) sa;
   return SKIP;
 }

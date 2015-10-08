@@ -90,7 +90,7 @@ typedef int SOCKET;
 
 #include "squeasel.h"
 
-#define MONGOOSE_VERSION "3.9"
+#define SQUEASEL_VERSION "3.9"
 #define PASSWORDS_FILE_NAME ".htpasswd"
 #define CGI_ENVIRONMENT_SIZE 4096
 #define MAX_CGI_ENVIR_VARS 64
@@ -210,9 +210,9 @@ enum {
   PROTECT_URI, AUTHENTICATION_DOMAIN, SSI_EXTENSIONS, THROTTLE,
   ACCESS_LOG_FILE, ENABLE_DIRECTORY_LISTING, ERROR_LOG_FILE,
   GLOBAL_PASSWORDS_FILE, INDEX_FILES, ENABLE_KEEP_ALIVE, ACCESS_CONTROL_LIST,
-  EXTRA_MIME_TYPES, LISTENING_PORTS, DOCUMENT_ROOT, SSL_CERTIFICATE,
-  NUM_THREADS, RUN_AS_USER, REWRITE, HIDE_FILES, REQUEST_TIMEOUT,
-  NUM_OPTIONS
+  EXTRA_MIME_TYPES, LISTENING_PORTS, DOCUMENT_ROOT, SSL_CERTIFICATE, SSL_PRIVATE_KEY,
+  SSL_PRIVATE_KEY_PASSWORD, NUM_THREADS, RUN_AS_USER, REWRITE, HIDE_FILES,
+  REQUEST_TIMEOUT, NUM_OPTIONS
 };
 
 static const char *config_options[] = {
@@ -236,6 +236,8 @@ static const char *config_options[] = {
   "listening_ports", "8080",
   "document_root",  NULL,
   "ssl_certificate", NULL,
+  "ssl_private_key", NULL,
+  "ssl_private_key_password", NULL,
   "num_threads", "50",
   "run_as_user", NULL,
   "url_rewrite_patterns", NULL,
@@ -421,7 +423,7 @@ static struct sq_connection *fc(const struct sq_context *ctx) {
 }
 
 const char *sq_version(void) {
-  return MONGOOSE_VERSION;
+  return SQUEASEL_VERSION;
 }
 
 struct sq_request_info *sq_get_request_info(struct sq_connection *conn) {
@@ -4167,6 +4169,15 @@ static unsigned long ssl_id_callback(void) {
   return (unsigned long) pthread_self();
 }
 
+static int ssl_password_callback(char *password, int size, int unused, void *data) {
+  struct sq_context *ctx = (struct sq_context*)data;
+  strncpy(password, ctx->config[SSL_PRIVATE_KEY_PASSWORD], size);
+  // See https://www.openssl.org/docs/manmaster/ssl/SSL_CTX_set_default_passwd_cb.html
+  // which strongly hints that password must be NULL terminated.
+  password[size - 1] = '\0';
+  return strlen(password);
+}
+
 // Dynamically load SSL library. Set up ctx->ssl_ctx pointer.
 static int set_ssl_option(struct sq_context *ctx) {
   int i, size;
@@ -4179,6 +4190,9 @@ static int set_ssl_option(struct sq_context *ctx) {
     return 1;
   }
 
+  const char *private_key = ctx->config[SSL_PRIVATE_KEY];
+  if (private_key == NULL) private_key = pem;
+
   // Initialize SSL library
   SSL_library_init();
   SSL_load_error_strings();
@@ -4190,12 +4204,17 @@ static int set_ssl_option(struct sq_context *ctx) {
 
   SSL_CTX_set_options(ctx->ssl_ctx, SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3);
 
+  if (ctx->config[SSL_PRIVATE_KEY_PASSWORD] != NULL) {
+    SSL_CTX_set_default_passwd_cb(ctx->ssl_ctx, ssl_password_callback);
+    SSL_CTX_set_default_passwd_cb_userdata(ctx->ssl_ctx, ctx);
+  }
+
   // If user callback returned non-NULL, that means that user callback has
   // set up certificate itself. In this case, skip sertificate setting.
   if ((ctx->callbacks.init_ssl == NULL ||
        !ctx->callbacks.init_ssl(ctx->ssl_ctx, ctx->user_data)) &&
       (SSL_CTX_use_certificate_file(ctx->ssl_ctx, pem, 1) == 0 ||
-       SSL_CTX_use_PrivateKey_file(ctx->ssl_ctx, pem, 1) == 0)) {
+       SSL_CTX_use_PrivateKey_file(ctx->ssl_ctx, private_key, 1) == 0)) {
     cry(fc(ctx), "%s: cannot open %s: %s", __func__, pem, ssl_error());
     return 0;
   }
