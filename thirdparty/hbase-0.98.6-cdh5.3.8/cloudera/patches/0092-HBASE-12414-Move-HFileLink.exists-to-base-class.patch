@@ -1,0 +1,93 @@
+From 5f5115d3f82e14fa6e1cc96e838262751ba47f81 Mon Sep 17 00:00:00 2001
+From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
+Date: Tue, 4 Nov 2014 12:25:51 +0000
+Subject: [PATCH 092/126] HBASE-12414 Move HFileLink.exists() to base class
+
+Reason: Improvement
+Author: Matteo Bertozzi
+Ref: CDH-19006
+---
+ .../java/org/apache/hadoop/hbase/io/FileLink.java  |   29 ++++++++++++++------
+ .../java/org/apache/hadoop/hbase/io/HFileLink.java |    9 ------
+ 2 files changed, 20 insertions(+), 18 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/io/FileLink.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/io/FileLink.java
+index 3789148..c73614e 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/io/FileLink.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/io/FileLink.java
+@@ -337,22 +337,33 @@ public class FileLink {
+   public String toString() {
+     StringBuilder str = new StringBuilder(getClass().getName());
+     str.append(" locations=[");
+-    int i = 0;
+-    for (Path location: locations) {
+-      if (i++ > 0) str.append(", ");
+-      str.append(location.toString());
++    for (int i = 0; i < locations.length; ++i) {
++      if (i > 0) str.append(", ");
++      str.append(locations[i].toString());
+     }
+     str.append("]");
+     return str.toString();
+   }
+ 
+   /**
++   * @return true if the file pointed by the link exists
++   */
++  public boolean exists(final FileSystem fs) throws IOException {
++    for (int i = 0; i < locations.length; ++i) {
++      if (fs.exists(locations[i])) {
++        return true;
++      }
++    }
++    return false;
++  }
++
++  /**
+    * @return the path of the first available link.
+    */
+   public Path getAvailablePath(FileSystem fs) throws IOException {
+-    for (Path path: locations) {
+-      if (fs.exists(path)) {
+-        return path;
++    for (int i = 0; i < locations.length; ++i) {
++      if (fs.exists(locations[i])) {
++        return locations[i];
+       }
+     }
+     throw new FileNotFoundException("Unable to open link: " + this);
+@@ -366,9 +377,9 @@ public class FileLink {
+    * @throws IOException on unexpected error.
+    */
+   public FileStatus getFileStatus(FileSystem fs) throws IOException {
+-    for (Path path: locations) {
++    for (int i = 0; i < locations.length; ++i) {
+       try {
+-        return fs.getFileStatus(path);
++        return fs.getFileStatus(locations[i]);
+       } catch (FileNotFoundException e) {
+         // Try another file location
+       }
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/io/HFileLink.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/io/HFileLink.java
+index 5b2b874..53cc98b 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/io/HFileLink.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/io/HFileLink.java
+@@ -246,15 +246,6 @@ public class HFileLink extends FileLink {
+   }
+ 
+   /**
+-   * Returns true if the HFileLink exists
+-   */
+-  public boolean exists(final FileSystem fs) throws IOException {
+-    return fs.exists(this.originPath) ||
+-           fs.exists(this.tempPath) ||
+-           fs.exists(this.archivePath);
+-  }
+-
+-  /**
+    * Create a new HFileLink name
+    *
+    * @param hfileRegionInfo - Linked HFile Region Info
+-- 
+1.7.9.5
+

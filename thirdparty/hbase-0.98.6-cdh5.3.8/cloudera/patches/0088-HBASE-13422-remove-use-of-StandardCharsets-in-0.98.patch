@@ -1,0 +1,94 @@
+From 369b39dfab98645ae34d9e0b9fb01b4c86f7347f Mon Sep 17 00:00:00 2001
+From: Sean Busbey <busbey@apache.org>
+Date: Wed, 8 Apr 2015 02:08:42 -0500
+Subject: [PATCH 088/126] HBASE-13422 remove use of StandardCharsets in 0.98
+
+Reason: Bug
+Author: Sean Busbey
+Ref: CDH-27466
+---
+ .../client/TestClientSmallReversedScanner.java     |    7 +++----
+ .../hbase/client/TestClientSmallScanner.java       |    7 +++----
+ 2 files changed, 6 insertions(+), 8 deletions(-)
+
+diff --git a/hbase-client/src/test/java/org/apache/hadoop/hbase/client/TestClientSmallReversedScanner.java b/hbase-client/src/test/java/org/apache/hadoop/hbase/client/TestClientSmallReversedScanner.java
+index 07cb156..7c1c1b3 100644
+--- a/hbase-client/src/test/java/org/apache/hadoop/hbase/client/TestClientSmallReversedScanner.java
++++ b/hbase-client/src/test/java/org/apache/hadoop/hbase/client/TestClientSmallReversedScanner.java
+@@ -21,7 +21,6 @@ import static org.junit.Assert.assertEquals;
+ import static org.junit.Assert.assertTrue;
+ 
+ import java.io.IOException;
+-import java.nio.charset.StandardCharsets;
+ import java.util.Iterator;
+ import java.util.List;
+ import java.util.concurrent.ExecutorService;
+@@ -186,7 +185,7 @@ public class TestClientSmallReversedScanner {
+       for (int i = 3; i >= 1 && iter.hasNext(); i--) {
+         Result result = iter.next();
+         byte[] row = result.getRow();
+-        assertEquals("row" + i, new String(row, StandardCharsets.UTF_8));
++        assertEquals("row" + i, new String(row, "UTF-8"));
+         assertEquals(1, result.getMap().size());
+       }
+       assertTrue(csrs.closed);
+@@ -263,7 +262,7 @@ public class TestClientSmallReversedScanner {
+       for (int i = 3; i >= 2 && iter.hasNext(); i--) {
+         Result result = iter.next();
+         byte[] row = result.getRow();
+-        assertEquals("row" + i, new String(row, StandardCharsets.UTF_8));
++        assertEquals("row" + i, new String(row, "UTF-8"));
+         assertEquals(1, result.getMap().size());
+       }
+ 
+@@ -274,7 +273,7 @@ public class TestClientSmallReversedScanner {
+ 
+       assertEquals(1, results.size());
+       Result result = results.get(0);
+-      assertEquals("row1", new String(result.getRow(), StandardCharsets.UTF_8));
++      assertEquals("row1", new String(result.getRow(), "UTF-8"));
+       assertEquals(1, result.getMap().size());
+ 
+       assertTrue(csrs.closed);
+diff --git a/hbase-client/src/test/java/org/apache/hadoop/hbase/client/TestClientSmallScanner.java b/hbase-client/src/test/java/org/apache/hadoop/hbase/client/TestClientSmallScanner.java
+index 42734c2..b3bfcea 100644
+--- a/hbase-client/src/test/java/org/apache/hadoop/hbase/client/TestClientSmallScanner.java
++++ b/hbase-client/src/test/java/org/apache/hadoop/hbase/client/TestClientSmallScanner.java
+@@ -21,7 +21,6 @@ import static org.junit.Assert.assertEquals;
+ import static org.junit.Assert.assertTrue;
+ 
+ import java.io.IOException;
+-import java.nio.charset.StandardCharsets;
+ import java.util.List;
+ import java.util.concurrent.ExecutorService;
+ import java.util.concurrent.Executors;
+@@ -180,7 +179,7 @@ public class TestClientSmallScanner {
+       for (int i = 1; i <= 3; i++) {
+         Result result = results.get(i - 1);
+         byte[] row = result.getRow();
+-        assertEquals("row" + i, new String(row, StandardCharsets.UTF_8));
++        assertEquals("row" + i, new String(row, "UTF-8"));
+         assertEquals(1, result.getMap().size());
+       }
+ 
+@@ -251,7 +250,7 @@ public class TestClientSmallScanner {
+       for (int i = 1; i <= 2; i++) {
+         Result result = results.get(i - 1);
+         byte[] row = result.getRow();
+-        assertEquals("row" + i, new String(row, StandardCharsets.UTF_8));
++        assertEquals("row" + i, new String(row, "UTF-8"));
+         assertEquals(1, result.getMap().size());
+       }
+ 
+@@ -262,7 +261,7 @@ public class TestClientSmallScanner {
+ 
+       assertEquals(1, results.size());
+       Result result = results.get(0);
+-      assertEquals("row3", new String(result.getRow(), StandardCharsets.UTF_8));
++      assertEquals("row3", new String(result.getRow(), "UTF-8"));
+       assertEquals(1, result.getMap().size());
+       assertTrue(css.closed);
+     } finally {
+-- 
+1.7.9.5
+

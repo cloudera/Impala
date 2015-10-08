@@ -1,0 +1,39 @@
+From afa7e51a33cd1b4f358e10d8d6ad2f0d669018c6 Mon Sep 17 00:00:00 2001
+From: Andrew Purtell <apurtell@apache.org>
+Date: Tue, 17 Mar 2015 15:05:46 -0700
+Subject: [PATCH 089/126] HBASE-13269 Limit result array preallocation to
+ avoid OOME with large scan caching values
+
+Reason: Bug
+Author: Andrew Purtell
+Ref: CDH-27468
+---
+ .../hadoop/hbase/regionserver/HRegionServer.java   |    5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
+index ee5adf4..5557ee1 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
+@@ -20,6 +20,7 @@ package org.apache.hadoop.hbase.regionserver;
+ 
+ import java.io.IOException;
+ import java.io.InterruptedIOException;
++import java.lang.Math;
+ import java.lang.Thread.UncaughtExceptionHandler;
+ import java.lang.annotation.Retention;
+ import java.lang.annotation.RetentionPolicy;
+@@ -3207,7 +3208,9 @@ public class HRegionServer implements ClientProtos.ClientService.BlockingInterfa
+           // Remove lease while its being processed in server; protects against case
+           // where processing of request takes > lease expiration time.
+           lease = leases.removeLease(scannerName);
+-          List<Result> results = new ArrayList<Result>(rows);
++          // Limit the initial allocation of the result array to the minimum
++          // of 'rows' or 100
++          List<Result> results = new ArrayList<Result>(Math.min(rows, 100));
+           long currentScanResultSize = 0;
+           long totalKvSize = 0;
+ 
+-- 
+1.7.9.5
+
