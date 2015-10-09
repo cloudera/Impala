@@ -115,7 +115,9 @@ Java_com_cloudera_impala_service_FeSupport_NativeEvalConstExprs(
   for (int i = 0; i < expr_ctxs.size(); ++i) {
     Status open_status = expr_ctxs[i]->Open(&state);
     if (!open_status.ok()) {
-      expr_ctxs[i]->Close(&state);
+      for (int j = i; j < expr_ctxs.size(); ++j) {
+        expr_ctxs[j]->Close(&state);
+      }
       (env)->ThrowNew(JniUtil::internal_exc_class(), open_status.GetErrorMsg().c_str());
       return result_bytes;
     }
@@ -125,7 +127,9 @@ Java_com_cloudera_impala_service_FeSupport_NativeEvalConstExprs(
     // and throw an exception accordingly
     Status getvalue_status = expr_ctxs[i]->root()->GetFnContextError(expr_ctxs[i]);
     if (!getvalue_status.ok()) {
-      expr_ctxs[i]->Close(&state);
+      for (int j = i; j < expr_ctxs.size(); ++j) {
+        expr_ctxs[j]->Close(&state);
+      }
       (env)->ThrowNew(JniUtil::internal_exc_class(), getvalue_status.GetErrorMsg().c_str());
       return result_bytes;
     }
