@@ -17,6 +17,7 @@
 
 
 #include "runtime/descriptors.h"
+#include "thrift/protocol/TDebugProtocol.h"
 
 #include "common/names.h"
 
@@ -32,80 +33,102 @@ TupleDescBuilder& DescriptorTblBuilder::DeclareTuple() {
 }
 
 // item_id of -1 indicates no itemTupleId
-static TSlotDescriptor MakeSlotDescriptor(int id, int parent_id, const ColumnType& type,
-    int slot_idx, int byte_offset, int item_id) {
+static TSlotDescriptor MakeSlotDescriptor(int id, int parent_id,
+    const Slot& slot, int slot_idx, int byte_offset, int item_id) {
   int null_byte = slot_idx / 8;
   int null_bit = slot_idx % 8;
   TSlotDescriptor slot_desc;
   slot_desc.__set_id(id);
   slot_desc.__set_parent(parent_id);
-  slot_desc.__set_slotType(type.ToThrift());
-  // For now no tests depend on the materialized path being populated correctly.
-  slot_desc.__set_materializedPath(vector<int>());
+  slot_desc.__set_slotType(slot.slot_type.ToThrift());
+  slot_desc.__set_materializedPath(vector<int>(1, slot_idx));
   slot_desc.__set_byteOffset(byte_offset);
   slot_desc.__set_nullIndicatorByte(null_byte);
   slot_desc.__set_nullIndicatorBit(null_bit);
   slot_desc.__set_slotIdx(slot_idx);
-  slot_desc.__set_isMaterialized(true);
+  slot_desc.__set_isMaterialized(slot.materialized);
   if (item_id != -1) slot_desc.__set_itemTupleId(item_id);
   return slot_desc;
 }
 
-static TTupleDescriptor MakeTupleDescriptor(int id, int byte_size, int num_null_bytes) {
+static TTupleDescriptor MakeTupleDescriptor(int id, int byte_size, int num_null_bytes,
+    int table_id = -1) {
   TTupleDescriptor tuple_desc;
   tuple_desc.__set_id(id);
   tuple_desc.__set_byteSize(byte_size);
   tuple_desc.__set_numNullBytes(num_null_bytes);
+  if (table_id != -1) tuple_desc.__set_tableId(table_id);
   return tuple_desc;
+}
+
+void DescriptorTblBuilder::SetTableDescriptor(const TTableDescriptor& table_desc) {
+  DCHECK(thrift_desc_tbl_.tableDescriptors.empty())
+      << "Only one TableDescriptor can be set.";
+  thrift_desc_tbl_.tableDescriptors.push_back(table_desc);
 }
 
 DescriptorTbl* DescriptorTblBuilder::Build() {
   DescriptorTbl* desc_tbl;
-  TDescriptorTable thrift_desc_tbl;
   int tuple_id = 0;
-  int slot_id = 0;
+  int slot_id = tuples_descs_.size(); // First ids reserved for TupleDescriptors
 
   for (int i = 0; i < tuples_descs_.size(); ++i) {
-    BuildTuple(tuples_descs_[i]->slot_types(), &thrift_desc_tbl, &tuple_id, &slot_id);
+    BuildTuple(tuples_descs_[i]->slots(), &thrift_desc_tbl_, &tuple_id, &slot_id);
   }
 
-  Status status = DescriptorTbl::Create(obj_pool_, thrift_desc_tbl, &desc_tbl);
+  Status status = DescriptorTbl::Create(obj_pool_, thrift_desc_tbl_, &desc_tbl);
   DCHECK(status.ok());
   return desc_tbl;
 }
 
 TTupleDescriptor DescriptorTblBuilder::BuildTuple(
-    const vector<ColumnType>& slot_types, TDescriptorTable* thrift_desc_tbl,
+    const vector<Slot>& slots, TDescriptorTable* thrift_desc_tbl,
     int* next_tuple_id, int* slot_id) {
   // We never materialize struct slots (there's no in-memory representation of structs,
   // instead the materialized fields appear directly in the tuple), but array types can
   // still have a struct item type. In this case, the array item tuple contains the
   // "inlined" struct fields.
-  if (slot_types.size() == 1 && slot_types[0].type == TYPE_STRUCT) {
-    return BuildTuple(slot_types[0].children, thrift_desc_tbl, next_tuple_id, slot_id);
+  if (slots.size() == 1 && slots[0].slot_type.type == TYPE_STRUCT) {
+    vector<Slot> child_slots;
+    BOOST_FOREACH(const ColumnType& child, slots[0].slot_type.children) {
+      child_slots.push_back(Slot(child, true));
+    }
+    return BuildTuple(child_slots, thrift_desc_tbl, next_tuple_id, slot_id);
   }
 
-  int num_null_bytes = BitUtil::Ceil(slot_types.size(), 8);
+  int num_null_bytes = BitUtil::Ceil(slots.size(), 8);
   int byte_offset = num_null_bytes;
   int tuple_id = *next_tuple_id;
   ++(*next_tuple_id);
 
-  for (int i = 0; i < slot_types.size(); ++i) {
-    DCHECK_NE(slot_types[i].type, TYPE_STRUCT);
+  for (int i = 0; i < slots.size(); ++i) {
+    DCHECK_NE(slots[i].slot_type.type, TYPE_STRUCT);
     int item_id = -1;
-    if (slot_types[i].IsCollectionType()) {
+    if (slots[i].slot_type.IsCollectionType()) {
+      vector<Slot> child_slots;
+      BOOST_FOREACH(const ColumnType& child, slots[0].slot_type.children) {
+        child_slots.push_back(Slot(child, true));
+      }
       TTupleDescriptor item_desc =
-          BuildTuple(slot_types[i].children, thrift_desc_tbl, next_tuple_id, slot_id);
+          BuildTuple(child_slots, thrift_desc_tbl, next_tuple_id, slot_id);
       item_id = item_desc.id;
     }
 
     thrift_desc_tbl->slotDescriptors.push_back(
-        MakeSlotDescriptor(*slot_id, tuple_id, slot_types[i], i, byte_offset, item_id));
-    byte_offset += slot_types[i].GetSlotSize();
+        MakeSlotDescriptor(*slot_id, tuple_id, slots[i], i, byte_offset, item_id));
+    byte_offset += slots[i].slot_type.GetSlotSize();
     ++(*slot_id);
   }
 
-  TTupleDescriptor result = MakeTupleDescriptor(tuple_id, byte_offset, num_null_bytes);
+  TTupleDescriptor result;
+
+  // If someone set a table descriptor pass that id along to the tuple descriptor.
+  if (thrift_desc_tbl_.tableDescriptors.empty()) {
+    result = MakeTupleDescriptor(tuple_id, byte_offset, num_null_bytes);
+  } else {
+    result = MakeTupleDescriptor(tuple_id, byte_offset, num_null_bytes,
+                                 thrift_desc_tbl_.tableDescriptors[0].id);
+  }
   thrift_desc_tbl->tupleDescriptors.push_back(result);
   return result;
 }

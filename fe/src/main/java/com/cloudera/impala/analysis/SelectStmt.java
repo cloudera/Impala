@@ -50,7 +50,7 @@ public class SelectStmt extends QueryStmt {
 
   protected SelectList selectList_;
   protected final ArrayList<String> colLabels_; // lower case column labels
-  protected final List<TableRef> tableRefs_;
+  protected final FromClause fromClause_;
   protected Expr whereClause_;
   protected ArrayList<Expr> groupingExprs_;
   protected final Expr havingClause_;  // original having clause
@@ -76,24 +76,24 @@ public class SelectStmt extends QueryStmt {
   /////////////////////////////////////////
 
   SelectStmt(SelectList selectList,
-             List<TableRef> tableRefList,
+             FromClause fromClause,
              Expr wherePredicate, ArrayList<Expr> groupingExprs,
              Expr havingPredicate, ArrayList<OrderByElement> orderByElements,
              LimitElement limitElement) {
     super(orderByElements, limitElement);
-    selectList_ = selectList;
-    if (tableRefList == null) {
-      tableRefs_ = Lists.newArrayList();
+    this.selectList_ = selectList;
+    if (fromClause == null) {
+      this.fromClause_ = new FromClause();
     } else {
-      tableRefs_ = tableRefList;
+      this.fromClause_ = fromClause;
     }
-    whereClause_ = wherePredicate;
-    groupingExprs_ = groupingExprs;
-    havingClause_ = havingPredicate;
-    colLabels_ = Lists.newArrayList();
+    this.whereClause_ = wherePredicate;
+    this.groupingExprs_ = groupingExprs;
+    this.havingClause_ = havingPredicate;
+    this.colLabels_ = Lists.newArrayList();
     // Set left table refs to ensure correct toSql() before analysis.
-    for (int i = 1; i < tableRefs_.size(); ++i) {
-      tableRefs_.get(i).setLeftTblRef(tableRefs_.get(i - 1));
+    for (int i = 1; i < fromClause_.size(); ++i) {
+      fromClause_.get(i).setLeftTblRef(fromClause_.get(i - 1));
     }
   }
 
@@ -107,7 +107,7 @@ public class SelectStmt extends QueryStmt {
    */
   public Expr getHavingPred() { return havingPred_; }
 
-  public List<TableRef> getTableRefs() { return tableRefs_; }
+  public List<TableRef> getTableRefs() { return fromClause_.getTableRefs(); }
   public boolean hasWhereClause() { return whereClause_ != null; }
   public boolean hasGroupByClause() { return groupingExprs_ != null; }
   public Expr getWhereClause() { return whereClause_; }
@@ -146,30 +146,7 @@ public class SelectStmt extends QueryStmt {
     if (isAnalyzed()) return;
     super.analyze(analyzer);
 
-    // Start out with table refs to establish aliases.
-    TableRef leftTblRef = null;  // the one to the left of tblRef
-    for (int i = 0; i < tableRefs_.size(); ++i) {
-      // Resolve and replace non-InlineViewRef table refs with a BaseTableRef,
-      // CollectionTableRef or ViewRef.
-      TableRef tblRef = tableRefs_.get(i);
-      tblRef = analyzer.resolveTableRef(tblRef);
-      Preconditions.checkNotNull(tblRef);
-      tableRefs_.set(i, tblRef);
-      tblRef.setLeftTblRef(leftTblRef);
-      try {
-        tblRef.analyze(analyzer);
-      } catch (AnalysisException e) {
-        // Only re-throw the exception if no tables are missing.
-        if (analyzer.getMissingTbls().isEmpty()) throw e;
-      }
-      leftTblRef = tblRef;
-    }
-
-    // All tableRefs have been analyzed, but at least one table was found missing.
-    // There is no reason to proceed with analysis past this point.
-    if (!analyzer.getMissingTbls().isEmpty()) {
-      throw new AnalysisException("Found missing tables. Aborting analysis.");
-    }
+    fromClause_.analyze(analyzer);
 
     // analyze plan hints from select list
     selectList_.analyzePlanHints(analyzer);
@@ -228,7 +205,7 @@ public class SelectStmt extends QueryStmt {
     }
 
     if (TreeNode.contains(resultExprs_, AnalyticExpr.class)) {
-      if (tableRefs_.isEmpty()) {
+      if (fromClause_.isEmpty()) {
         throw new AnalysisException("Analytic expressions require FROM clause.");
       }
 
@@ -352,7 +329,7 @@ public class SelectStmt extends QueryStmt {
   protected void resolveInlineViewRefs(Analyzer analyzer)
       throws AnalysisException {
     // Gather the inline view substitution maps from the enclosed inline views
-    for (TableRef tblRef: tableRefs_) {
+    for (TableRef tblRef: fromClause_) {
       if (tblRef instanceof InlineViewRef) {
         InlineViewRef inlineViewRef = (InlineViewRef) tblRef;
         baseTblSmap_ =
@@ -368,7 +345,7 @@ public class SelectStmt extends QueryStmt {
 
   public List<TupleId> getTableRefIds() {
     List<TupleId> result = Lists.newArrayList();
-    for (TableRef ref: tableRefs_) {
+    for (TableRef ref: fromClause_) {
       result.add(ref.getId());
     }
     return result;
@@ -398,11 +375,11 @@ public class SelectStmt extends QueryStmt {
    * list (even for inline views, etc.)
    */
   private void expandStar(Analyzer analyzer) throws AnalysisException {
-    if (tableRefs_.isEmpty()) {
+    if (fromClause_.isEmpty()) {
       throw new AnalysisException("'*' expression in select list requires FROM clause.");
     }
     // expand in From clause order
-    for (TableRef tableRef: tableRefs_) {
+    for (TableRef tableRef: fromClause_) {
       if (analyzer.isSemiJoined(tableRef.getId())) continue;
       Path resolvedPath = new Path(tableRef.getDesc(), Collections.<String>emptyList());
       Preconditions.checkState(resolvedPath.resolve());
@@ -501,7 +478,7 @@ public class SelectStmt extends QueryStmt {
     }
 
     // If we're computing an aggregate, we must have a FROM clause.
-    if (tableRefs_.size() == 0) {
+    if (fromClause_.isEmpty()) {
       throw new AnalysisException(
           "aggregation without a FROM clause is not allowed");
     }
@@ -846,12 +823,7 @@ public class SelectStmt extends QueryStmt {
       strBuilder.append((i+1 != selectList_.getItems().size()) ? ", " : "");
     }
     // From clause
-    if (!tableRefs_.isEmpty()) {
-      strBuilder.append(" FROM ");
-      for (int i = 0; i < tableRefs_.size(); ++i) {
-        strBuilder.append(tableRefs_.get(i).toSql());
-      }
-    }
+    if (!fromClause_.isEmpty()) { strBuilder.append(fromClause_.toSql()); }
     // Where clause
     if (whereClause_ != null) {
       strBuilder.append(" WHERE ");
@@ -898,7 +870,7 @@ public class SelectStmt extends QueryStmt {
       // Return the tuple id produced in the final aggregation step.
       tupleIdList.add(aggInfo_.getResultTupleId());
     } else {
-      for (TableRef tblRef: tableRefs_) {
+      for (TableRef tblRef: fromClause_) {
         // Don't include materialized tuple ids from semi-joined table
         // refs (see IMPALA-1526)
         if (tblRef.getJoinOp().isLeftSemiJoin()) continue;
@@ -920,7 +892,7 @@ public class SelectStmt extends QueryStmt {
   private SelectStmt(SelectStmt other) {
     super(other);
     selectList_ = other.selectList_.clone();
-    tableRefs_ = TableRef.cloneTableRefList(other.tableRefs_);
+    fromClause_ = other.fromClause_.clone();
     whereClause_ = (other.whereClause_ != null) ? other.whereClause_.clone() : null;
     groupingExprs_ =
         (other.groupingExprs_ != null) ? Expr.cloneList(other.groupingExprs_) : null;
@@ -934,7 +906,7 @@ public class SelectStmt extends QueryStmt {
 
   @Override
   public void collectTableRefs(List<TableRef> tblRefs) {
-    for (TableRef tblRef: tableRefs_) {
+    for (TableRef tblRef: fromClause_) {
       if (tblRef instanceof InlineViewRef) {
         InlineViewRef inlineViewRef = (InlineViewRef) tblRef;
         inlineViewRef.getViewStmt().collectTableRefs(tblRefs);
@@ -949,8 +921,8 @@ public class SelectStmt extends QueryStmt {
     super.reset();
     selectList_.reset();
     colLabels_.clear();
-    for (int i = 0; i < tableRefs_.size(); ++i) {
-      TableRef origTblRef = tableRefs_.get(i);
+    for (int i = 0; i < fromClause_.size(); ++i) {
+      TableRef origTblRef = fromClause_.get(i);
       if (origTblRef.isResolved() && !(origTblRef instanceof InlineViewRef)) {
         // Replace resolved table refs with unresolved ones.
         TableRef newTblRef = new TableRef(origTblRef);
@@ -961,9 +933,9 @@ public class SelectStmt extends QueryStmt {
         // changing the WITH-clause analysis to register local views that have
         // fully-qualified table refs, and then remove the full qualification here.
         newTblRef.rawPath_ = origTblRef.getResolvedPath().getFullyQualifiedRawPath();
-        tableRefs_.set(i, newTblRef);
+        fromClause_.set(i, newTblRef);
       }
-      tableRefs_.get(i).reset();
+      fromClause_.get(i).reset();
     }
     baseTblSmap_.clear();
     if (whereClause_ != null) whereClause_.reset();
@@ -988,7 +960,7 @@ public class SelectStmt extends QueryStmt {
     // limit 1 clause
     if (limitElement_ != null && limitElement_.getLimit() == 1) return true;
     // No from clause (base tables or inline views)
-    if (tableRefs_.isEmpty()) return true;
+    if (fromClause_.isEmpty()) return true;
     // Aggregation with no group by and no DISTINCT
     if (hasAggInfo() && !hasGroupByClause() && !selectList_.isDistinct()) return true;
     // In all other cases, return false.

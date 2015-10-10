@@ -43,23 +43,33 @@ public class StmtRewriter {
   public static StatementBase rewrite(AnalysisResult analysisResult)
       throws AnalysisException {
     // Analyzed stmt that contains a query statement with subqueries to be rewritten.
-    StatementBase stmt = analysisResult.getStmt();
-    Preconditions.checkState(stmt.isAnalyzed());
-    // Analyzed query statement to be rewritten.
-    QueryStmt queryStmt = null;
-    if (stmt instanceof QueryStmt) {
-      queryStmt = (QueryStmt) analysisResult.getStmt();
-    } else if (stmt instanceof InsertStmt) {
-      queryStmt = ((InsertStmt) analysisResult.getStmt()).getQueryStmt();
-    } else if (stmt instanceof CreateTableAsSelectStmt) {
-      queryStmt = ((CreateTableAsSelectStmt) analysisResult.getStmt()).getQueryStmt();
+    StatementBase rewrittenStmt = null;
+    if (analysisResult.getStmt() instanceof QueryStmt) {
+      QueryStmt analyzedStmt = (QueryStmt)analysisResult.getStmt();
+      rewriteQueryStatement(analyzedStmt, analysisResult.getAnalyzer());
+      rewrittenStmt = analyzedStmt.clone();
+    } else if (analysisResult.getStmt() instanceof InsertStmt) {
+      // For an InsertStmt, rewrites are performed during its analysis.
+      // Clone the insert stmt to reset its analysis state.
+      rewrittenStmt = ((InsertStmt)analysisResult.getStmt()).clone();
+    } else if (analysisResult.getStmt() instanceof CreateTableAsSelectStmt) {
+      // For a CTAS, rewrites are performed during its analysis.
+      CreateTableAsSelectStmt ctasStmt =
+          (CreateTableAsSelectStmt)analysisResult.getStmt();
+      // Create a new CTAS from the original create statement and the
+      // rewritten insert statement.
+      Preconditions.checkNotNull(analysisResult.getTmpCreateTableStmt());
+      rewrittenStmt = new CreateTableAsSelectStmt(analysisResult.getTmpCreateTableStmt(),
+          ctasStmt.getQueryStmt().clone());
+    } else if (analysisResult.isUpdateStmt()) {
+      throw new AnalysisException("Update performs internal rewrite only.");
+    } else if (analysisResult.isDeleteStmt()) {
+      throw new AnalysisException("Delete performs internal rewrite only.");
     } else {
       throw new AnalysisException("Unsupported statement containing subqueries: " +
-          stmt.toSql());
+          analysisResult.getStmt().toSql());
     }
-    rewriteQueryStatement(queryStmt, queryStmt.getAnalyzer());
-    stmt.reset();
-    return stmt;
+    return rewrittenStmt;
   }
 
   /**
@@ -88,10 +98,12 @@ public class StmtRewriter {
   private static void rewriteSelectStatement(SelectStmt stmt, Analyzer analyzer)
       throws AnalysisException {
     // Rewrite all the subqueries in the FROM clause.
-    for (TableRef tblRef: stmt.tableRefs_) {
+    for (TableRef tblRef: stmt.fromClause_) {
       if (!(tblRef instanceof InlineViewRef)) continue;
       InlineViewRef inlineViewRef = (InlineViewRef)tblRef;
       rewriteQueryStatement(inlineViewRef.getViewStmt(), inlineViewRef.getAnalyzer());
+      // Reset the state of the underlying stmt since it was rewritten
+      inlineViewRef.setRewrittenViewStmt(inlineViewRef.getViewStmt().clone());
     }
     // Rewrite all the subqueries in the WHERE clause.
     if (stmt.hasWhereClause()) {
@@ -193,7 +205,7 @@ public class StmtRewriter {
    */
   private static void rewriteWhereClauseSubqueries(SelectStmt stmt, Analyzer analyzer)
      throws AnalysisException {
-    int numTableRefs = stmt.tableRefs_.size();
+    int numTableRefs = stmt.fromClause_.size();
     ArrayList<Expr> exprsWithSubqueries = Lists.newArrayList();
     ExprSubstitutionMap smap = new ExprSubstitutionMap();
     // Replace all BetweenPredicates that contain subqueries with their
@@ -295,9 +307,7 @@ public class StmtRewriter {
     rewriteSelectStatement((SelectStmt) subquery.getStatement(), subquery.getAnalyzer());
     // Create a new Subquery with the rewritten stmt and use a substitution map
     // to replace the original subquery from the expr.
-    QueryStmt rewrittenStmt = subquery.getStatement().clone();
-    rewrittenStmt.reset();
-    Subquery newSubquery = new Subquery(rewrittenStmt);
+    Subquery newSubquery = new Subquery(subquery.getStatement().clone());
     newSubquery.analyze(analyzer);
     ExprSubstitutionMap smap = new ExprSubstitutionMap();
     smap.put(subquery, newSubquery);
@@ -352,7 +362,13 @@ public class StmtRewriter {
       // For correlated subqueries that are eligible for rewrite by transforming
       // into a join, a LIMIT clause has no effect on the results, so we can
       // safely remove it.
-      subqueryStmt.limitElement_ = new LimitElement(null, null);
+      subqueryStmt.limitElement_ = null;
+    }
+
+    if (expr instanceof ExistsPredicate) {
+      // For uncorrelated subqueries, we limit the number of rows returned by the
+      // subquery.
+      if (onClauseConjuncts.isEmpty()) subqueryStmt.setLimit(1);
     }
 
     // Update the subquery's select list and/or its GROUP BY clause by adding
@@ -369,11 +385,11 @@ public class StmtRewriter {
 
     // Analyzing the inline view triggers reanalysis of the subquery's select statement.
     // However the statement is already analyzed and since statement analysis is not
-    // idempotent, the analysis needs to be reset.
-    inlineView.reset();
+    // idempotent, the analysis needs to be reset (by a call to clone()).
+    inlineView = (InlineViewRef)inlineView.clone();
     inlineView.analyze(analyzer);
-    inlineView.setLeftTblRef(stmt.tableRefs_.get(stmt.tableRefs_.size() - 1));
-    stmt.tableRefs_.add(inlineView);
+    inlineView.setLeftTblRef(stmt.fromClause_.get(stmt.fromClause_.size() - 1));
+    stmt.fromClause_.add(inlineView);
     JoinOperator joinOp = JoinOperator.LEFT_SEMI_JOIN;
 
     // Create a join conjunct from the expr that contains a subquery.
@@ -546,7 +562,7 @@ public class StmtRewriter {
    * replacing an unqualified star item.
    */
   private static void replaceUnqualifiedStarItems(SelectStmt stmt, int tableIdx) {
-    Preconditions.checkState(tableIdx < stmt.tableRefs_.size());
+    Preconditions.checkState(tableIdx < stmt.fromClause_.size());
     ArrayList<SelectListItem> newItems = Lists.newArrayList();
     for (int i = 0; i < stmt.selectList_.getItems().size(); ++i) {
       SelectListItem item = stmt.selectList_.getItems().get(i);
@@ -557,7 +573,7 @@ public class StmtRewriter {
       // '*' needs to be replaced by tbl1.*,...,tbln.*, where
       // tbl1,...,tbln are the visible tableRefs in stmt.
       for (int j = 0; j < tableIdx; ++j) {
-        TableRef tableRef = stmt.tableRefs_.get(j);
+        TableRef tableRef = stmt.fromClause_.get(j);
         if (tableRef.getJoinOp() == JoinOperator.LEFT_SEMI_JOIN ||
             tableRef.getJoinOp() == JoinOperator.LEFT_ANTI_JOIN) {
           continue;

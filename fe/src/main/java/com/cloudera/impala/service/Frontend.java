@@ -32,6 +32,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
+import com.cloudera.impala.catalog.KuduTable;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hive.service.cli.thrift.TGetColumnsReq;
@@ -701,6 +702,8 @@ public class Frontend {
       return ((HBaseTable) table).getTableStats();
     } else if (table instanceof DataSourceTable) {
       return ((DataSourceTable) table).getTableStats();
+    } else if (table instanceof KuduTable) {
+      return ((KuduTable) table).getTableStats();
     } else {
       throw new InternalException("Invalid table class: " + table.getClass());
     }
@@ -908,7 +911,8 @@ public class Frontend {
 
     // create TQueryExecRequest
     Preconditions.checkState(analysisResult.isQueryStmt() || analysisResult.isDmlStmt()
-        || analysisResult.isCreateTableAsSelectStmt());
+        || analysisResult.isCreateTableAsSelectStmt() || analysisResult.isUpdateStmt()
+        || analysisResult.isDeleteStmt());
 
     TQueryExecRequest queryExecRequest = new TQueryExecRequest();
     // create plan
@@ -1029,10 +1033,8 @@ public class Frontend {
         metadata.addToColumns(colDesc);
       }
       result.setResult_set_metadata(metadata);
-    } else {
-      Preconditions.checkState(analysisResult.isInsertStmt() ||
-          analysisResult.isCreateTableAsSelectStmt());
-
+    } else if (analysisResult.isInsertStmt() ||
+        analysisResult.isCreateTableAsSelectStmt()) {
       // For CTAS the overall TExecRequest statement type is DDL, but the
       // query_exec_request should be DML
       result.stmt_type =
@@ -1054,6 +1056,11 @@ public class Frontend {
             hdfsTable.getHdfsBaseDir() + "/_impala_insert_staging");
         queryExecRequest.setFinalize_params(finalizeParams);
       }
+    } else {
+      Preconditions.checkState(analysisResult.isUpdateStmt()
+          || analysisResult.isDeleteStmt());
+      result.stmt_type = TStmtType.DML;
+      result.query_exec_request.stmt_type = TStmtType.DML;
     }
 
     validateTableIds(analysisResult.getAnalyzer(), result);

@@ -28,6 +28,9 @@ enum TDataSinkType {
 enum TTableSinkType {
   HDFS,
   HBASE
+  KUDU_INSERT
+  KUDU_UPDATE
+  KUDU_DELETE
 }
 
 // Sink which forwards data to a remote plan fragment,
@@ -50,11 +53,22 @@ struct THdfsTableSink {
   2: required bool overwrite
 }
 
+// Structure to encapsulate specific options that are passed down to the KuduTableSink
+struct TKuduTableSink {
+  // The position in this vector is equal to the position in the output
+  // expressions of the sink and holds the index into the Kudu schema
+  1: optional list<i32> referenced_columns;
+
+  // Defines if duplicate or not found keys should be ignored
+  2: optional bool ignore_not_found_or_duplicate;
+}
+
 // Union type of all table sinks.
 struct TTableSink {
   1: required Types.TTableId  target_table_id
   2: required TTableSinkType type
   3: optional THdfsTableSink  hdfs_table_sink
+  4: optional TKuduTableSink kudu_table_sink
 }
 
 struct TDataSink {
