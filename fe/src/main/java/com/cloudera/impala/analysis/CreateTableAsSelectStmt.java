@@ -19,6 +19,7 @@ import java.util.EnumSet;
 import com.cloudera.impala.authorization.Privilege;
 import com.cloudera.impala.catalog.Db;
 import com.cloudera.impala.catalog.HdfsTable;
+import com.cloudera.impala.catalog.KuduTable;
 import com.cloudera.impala.catalog.MetaStoreClientPool.MetaStoreClient;
 import com.cloudera.impala.catalog.Table;
 import com.cloudera.impala.catalog.TableId;
@@ -53,9 +54,9 @@ public class CreateTableAsSelectStmt extends StatementBase {
   public CreateTableAsSelectStmt(CreateTableStmt createStmt, QueryStmt queryStmt) {
     Preconditions.checkNotNull(queryStmt);
     Preconditions.checkNotNull(createStmt);
-    createStmt_ = createStmt;
-    insertStmt_ = new InsertStmt(null, createStmt.getTblName(), false,
-        null, null, queryStmt, null);
+    this.createStmt_ = createStmt;
+    this.insertStmt_ = new InsertStmt(null, createStmt.getTblName(), false,
+        null, null, queryStmt, null, false);
     cleanupStmt_ = new DropTableOrViewStmt(createStmt.getTblName(), true, true);
   }
 
@@ -144,10 +145,10 @@ public class CreateTableAsSelectStmt extends StatementBase {
       // this query, just assign it the invalid table ID. The CatalogServer will assign
       // this table a proper ID once it is created there as part of the CTAS execution.
       Table table = Table.fromMetastoreTable(TableId.createInvalidId(), db, msTbl);
-      Preconditions.checkState(table != null && table instanceof HdfsTable);
+      Preconditions.checkState(table != null && (table instanceof HdfsTable ||
+          table instanceof KuduTable));
 
-      HdfsTable hdfsTable = (HdfsTable) table;
-      hdfsTable.load(hdfsTable, client.getHiveClient(), msTbl);
+      table.load(table, client.getHiveClient(), msTbl);
       insertStmt_.setTargetTable(table);
     } catch (TableLoadingException e) {
       throw new AnalysisException(e.getMessage(), e);

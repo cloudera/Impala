@@ -23,6 +23,7 @@ import com.cloudera.impala.catalog.StructField;
 import com.cloudera.impala.catalog.RowFormat;
 import com.cloudera.impala.catalog.View;
 import com.cloudera.impala.common.AnalysisException;
+import com.cloudera.impala.common.Pair;
 import com.cloudera.impala.analysis.ColumnDef;
 import com.cloudera.impala.analysis.UnionStmt.UnionOperand;
 import com.cloudera.impala.analysis.UnionStmt.Qualifier;
@@ -231,15 +232,17 @@ parser code {:
 // List of keywords. Please keep them sorted alphabetically.
 terminal
   KW_ADD, KW_AGGREGATE, KW_ALL, KW_ALTER, KW_ANALYTIC, KW_AND, KW_ANTI, KW_API_VERSION,
-  KW_ARRAY, KW_AS, KW_ASC, KW_AVRO, KW_BETWEEN, KW_BIGINT, KW_BINARY, KW_BOOLEAN, KW_BY,
-  KW_CACHED, KW_CASCADE, KW_CASE, KW_CAST, KW_CHANGE, KW_CHAR, KW_CLASS, KW_CLOSE_FN, KW_COLUMN,
-  KW_COLUMNS, KW_COMMENT, KW_COMPUTE, KW_CREATE, KW_CROSS, KW_CURRENT, KW_DATA,
-  KW_DATABASE, KW_DATABASES, KW_DATE, KW_DATETIME, KW_DECIMAL, KW_DELIMITED, KW_DESC,
-  KW_DESCRIBE, KW_DISTINCT, KW_DIV, KW_DOUBLE, KW_DROP, KW_ELSE, KW_END, KW_ESCAPED,
-  KW_EXISTS, KW_EXPLAIN, KW_EXTERNAL, KW_FALSE, KW_FIELDS,
+  KW_ARRAY, KW_AS, KW_ASC, KW_AVRO, KW_BETWEEN, KW_BIGINT, KW_BINARY, KW_BOOLEAN,
+  KW_BUCKETS, KW_BY,
+  KW_CACHED, KW_CASCADE, KW_CASE, KW_CAST, KW_CHANGE, KW_CHAR, KW_CLASS, KW_CLOSE_FN,
+  KW_COLUMN, KW_COLUMNS, KW_COMMENT, KW_COMPUTE, KW_CREATE, KW_CROSS, KW_CURRENT, KW_DATA,
+  KW_DATABASE, KW_DATABASES, KW_DATE, KW_DATETIME, KW_DECIMAL, KW_DELETE, KW_DELIMITED,
+  KW_DESC, KW_DESCRIBE, KW_DISTINCT, KW_DISTRIBUTE, KW_DIV, KW_DOUBLE, KW_DROP, KW_ELSE,
+  KW_END, KW_ESCAPED, KW_EXISTS, KW_EXPLAIN, KW_EXTERNAL, KW_FALSE, KW_FIELDS,
   KW_FILEFORMAT, KW_FILES, KW_FINALIZE_FN,
   KW_FIRST, KW_FLOAT, KW_FOLLOWING, KW_FOR, KW_FORMAT, KW_FORMATTED, KW_FROM, KW_FULL,
-  KW_FUNCTION, KW_FUNCTIONS, KW_GRANT, KW_GROUP, KW_HAVING, KW_IF, KW_IN, KW_INCREMENTAL,
+  KW_FUNCTION, KW_FUNCTIONS, KW_GRANT, KW_GROUP, KW_HASH,
+  KW_IGNORE, KW_HAVING, KW_IF, KW_IN, KW_INCREMENTAL,
   KW_INIT_FN, KW_INNER, KW_INPATH, KW_INSERT, KW_INT, KW_INTERMEDIATE, KW_INTERVAL,
   KW_INTO, KW_INVALIDATE, KW_IS, KW_JOIN, KW_LAST, KW_LEFT, KW_LIKE, KW_LIMIT, KW_LINES,
   KW_LOAD, KW_LOCATION, KW_MAP, KW_MERGE_FN, KW_METADATA, KW_NOT, KW_NULL, KW_NULLS,
@@ -249,11 +252,11 @@ terminal
   KW_REPLACE, KW_REPLICATION, KW_RESTRICT, KW_RETURNS,
   KW_REVOKE, KW_RIGHT, KW_RLIKE, KW_ROLE,
   KW_ROLES, KW_ROW, KW_ROWS, KW_SCHEMA, KW_SCHEMAS, KW_SELECT, KW_SEMI, KW_SEQUENCEFILE,
-  KW_SERDEPROPERTIES, KW_SERIALIZE_FN, KW_SET, KW_SHOW, KW_SMALLINT, KW_STORED,
+  KW_SERDEPROPERTIES, KW_SERIALIZE_FN, KW_SET, KW_SHOW, KW_SMALLINT, KW_SPLIT, KW_STORED,
   KW_STRAIGHT_JOIN, KW_STRING, KW_STRUCT, KW_SYMBOL, KW_TABLE, KW_TABLES,
   KW_TBLPROPERTIES, KW_TERMINATED, KW_TEXTFILE, KW_THEN, KW_TIMESTAMP,
   KW_TINYINT, KW_TRUNCATE, KW_STATS, KW_TO, KW_TRUE, KW_UNBOUNDED, KW_UNCACHED,
-  KW_UNION, KW_UPDATE_FN, KW_USE, KW_USING,
+  KW_UNION, KW_UPDATE, KW_UPDATE_FN, KW_USE, KW_USING,
   KW_VALUES, KW_VARCHAR, KW_VIEW, KW_WHEN, KW_WHERE, KW_WITH;
 
 terminal COLON, SEMICOLON, COMMA, DOT, DOTDOTDOT, STAR, LPAREN, RPAREN, LBRACKET,
@@ -336,7 +339,8 @@ nonterminal ArrayList<CaseWhenClause> case_when_clause_list;
 nonterminal FunctionParams function_params;
 nonterminal ArrayList<String> dotted_path;
 nonterminal SlotRef slot_ref;
-nonterminal ArrayList<TableRef> from_clause, table_ref_list;
+nonterminal FromClause from_clause;
+nonterminal ArrayList<TableRef> table_ref_list;
 nonterminal WithClause opt_with_clause;
 nonterminal ArrayList<View> with_view_def_list;
 nonterminal View with_view_def;
@@ -349,6 +353,10 @@ nonterminal TypeDef type_def;
 nonterminal Type type;
 nonterminal Expr sign_chain_expr;
 nonterminal InsertStmt insert_stmt;
+nonterminal UpdateStmt2 update_stmt;
+nonterminal DeleteStmt delete_stmt;
+nonterminal ArrayList<String> opt_delete_from;
+nonterminal ArrayList<Pair<SlotRef, Expr>> update_set_expr_list;
 nonterminal StatementBase explain_stmt;
 // Optional partition spec
 nonterminal PartitionSpec opt_partition_spec;
@@ -377,6 +385,13 @@ nonterminal CreateDataSrcStmt create_data_src_stmt;
 nonterminal DropDataSrcStmt drop_data_src_stmt;
 nonterminal ShowDataSrcsStmt show_data_srcs_stmt;
 nonterminal StructField struct_field_def;
+nonterminal DistributeComponent distribute_hash_component;
+nonterminal ArrayList<DistributeComponent> distribute_hash_component_list;
+nonterminal ArrayList<DistributeComponent> opt_distribute_component_list;
+nonterminal ArrayList<DistributeComponent> distribute_component_list;
+nonterminal DistributeComponent distribute_range_component;
+nonterminal ArrayList<ArrayList<LiteralExpr>> split_row_list;
+nonterminal ArrayList<LiteralExpr> literal_list;
 nonterminal ColumnDef column_def, view_column_def;
 nonterminal ArrayList<ColumnDef> column_def_list, view_column_def_list;
 nonterminal ArrayList<ColumnDef> partition_column_defs, view_column_defs;
@@ -449,6 +464,7 @@ nonterminal CreateUdaStmt create_uda_stmt;
 nonterminal ShowFunctionsStmt show_functions_stmt;
 nonterminal DropFunctionStmt drop_function_stmt;
 nonterminal TFunctionCategory opt_function_category;
+nonterminal Boolean opt_modify_ignore;
 
 precedence left KW_OR;
 precedence left KW_AND;
@@ -464,6 +480,8 @@ precedence left KW_ORDER, KW_BY, KW_LIMIT;
 precedence left LPAREN, RPAREN;
 // Support chaining of timestamp arithmetic exprs.
 precedence left KW_INTERVAL;
+
+precedence left KW_TBLPROPERTIES;
 
 // These tokens need to be at the end for function_def_args_map to accept
 // no keys. Otherwise, the grammar has shift/reduce conflicts.
@@ -486,6 +504,10 @@ stmt ::=
   {: RESULT = query; :}
   | insert_stmt:insert
   {: RESULT = insert; :}
+  | update_stmt:update
+  {: RESULT = update; :}
+  | delete_stmt:delete
+  {: RESULT = delete; :}
   | use_stmt:use
   {: RESULT = use; :}
   | show_tables_stmt:show_tables
@@ -615,26 +637,93 @@ explain_stmt ::=
      ctas_stmt.setIsExplain();
      RESULT = ctas_stmt;
   :}
+  | KW_EXPLAIN update_stmt:update
+  {:
+     update.setIsExplain();
+     RESULT = update;
+  :}
+  | KW_EXPLAIN delete_stmt:delete
+  {:
+     delete.setIsExplain();
+     RESULT = delete;
+  :}
   ;
 
 // Insert statements have two optional clauses: the column permutation (INSERT into
 // tbl(col1,...) etc) and the PARTITION clause. If the column permutation is present, the
 // query statement clause is optional as well.
 insert_stmt ::=
-  opt_with_clause:w KW_INSERT KW_OVERWRITE opt_kw_table table_name:table LPAREN
+  opt_with_clause:w KW_INSERT KW_OVERWRITE opt_modify_ignore:ignore
+  opt_kw_table table_name:table
+  LPAREN opt_ident_list:col_perm RPAREN partition_clause:list opt_plan_hints:hints
+  opt_query_stmt:query
+  {: RESULT = new InsertStmt(w, table, true, list, hints, query, col_perm, ignore); :}
+  | opt_with_clause:w KW_INSERT KW_OVERWRITE
+  opt_modify_ignore:ignore opt_kw_table table_name:table
+  partition_clause:list opt_plan_hints:hints query_stmt:query
+  {: RESULT = new InsertStmt(w, table, true, list, hints, query, null, ignore); :}
+  | opt_with_clause:w KW_INSERT
+  opt_modify_ignore:ignore KW_INTO opt_kw_table table_name:table LPAREN
   opt_ident_list:col_perm RPAREN partition_clause:list opt_plan_hints:hints
   opt_query_stmt:query
-  {: RESULT = new InsertStmt(w, table, true, list, hints, query, col_perm); :}
-  | opt_with_clause:w KW_INSERT KW_OVERWRITE opt_kw_table table_name:table
+  {: RESULT = new InsertStmt(w, table, false, list, hints, query, col_perm, ignore); :}
+  | opt_with_clause:w KW_INSERT
+  opt_modify_ignore:ignore KW_INTO opt_kw_table table_name:table
   partition_clause:list opt_plan_hints:hints query_stmt:query
-  {: RESULT = new InsertStmt(w, table, true, list, hints, query, null); :}
-  | opt_with_clause:w KW_INSERT KW_INTO opt_kw_table table_name:table LPAREN
-  opt_ident_list:col_perm RPAREN partition_clause:list opt_plan_hints:hints
-  opt_query_stmt:query
-  {: RESULT = new InsertStmt(w, table, false, list, hints, query, col_perm); :}
-  | opt_with_clause:w KW_INSERT KW_INTO opt_kw_table table_name:table
-  partition_clause:list opt_plan_hints:hints query_stmt:query
-  {: RESULT = new InsertStmt(w, table, false, list, hints, query, null); :}
+  {: RESULT = new InsertStmt(w, table, false, list, hints, query, null, ignore); :}
+  ;
+
+// Update statements have an optional WHERE and optional FROM clause.
+update_stmt ::=
+  KW_UPDATE opt_modify_ignore:ignore dotted_path:target_table
+  KW_SET update_set_expr_list:values
+  where_clause:where_predicate
+  {:
+    FromClause from_clause = new FromClause(
+        Lists.newArrayList(new TableRef(target_table, null)));
+    RESULT = new UpdateStmt2(target_table, from_clause, values, where_predicate, ignore);
+  :}
+  | KW_UPDATE opt_modify_ignore:ignore dotted_path:target_table
+  KW_SET update_set_expr_list:values
+    from_clause:tables where_clause:where_predicate
+  {: RESULT = new UpdateStmt2(target_table, tables, values, where_predicate, ignore); :}
+  ;
+
+update_set_expr_list ::=
+  slot_ref:slot EQUAL expr:e
+  {:
+    ArrayList<Pair<SlotRef, Expr>> tmp =
+        Lists.newArrayList(new Pair<SlotRef, Expr>(slot, e));
+    RESULT = tmp;
+  :}
+  | update_set_expr_list:list COMMA slot_ref:slot EQUAL expr:e
+  {:
+    list.add(new Pair(slot, e));
+    RESULT = list;
+  :}
+  ;
+
+// A DELETE statement comes in two main representations, the DELETE keyword with a path
+// specification as the target table with an optional FROM keyword or the DELETE
+// keyword followed by a table alias or reference and a full FROM clause. In all cases
+// a WHERE clause may be present.
+delete_stmt ::=
+  KW_DELETE opt_modify_ignore:ignore opt_delete_from:target_table  where_clause:where
+  {:
+    FromClause from_clause = new FromClause(
+        Lists.newArrayList(new TableRef(target_table, null)));
+    RESULT = new DeleteStmt(target_table, from_clause, where, ignore);
+  :}
+  | KW_DELETE opt_modify_ignore:ignore dotted_path:target_table from_clause:from
+  where_clause:where
+  {: RESULT = new DeleteStmt(target_table, from, where, ignore); :}
+  ;
+
+opt_delete_from ::=
+  KW_FROM dotted_path:target_table
+  {: RESULT = target_table; :}
+  | dotted_path:target_table
+  {: RESULT = target_table; :}
   ;
 
 opt_query_stmt ::=
@@ -654,6 +743,13 @@ opt_ident_list ::=
 opt_kw_table ::=
   KW_TABLE
   | /* empty */
+  ;
+
+opt_modify_ignore ::=
+  KW_IGNORE
+  {: RESULT = true; :}
+  | /* empty */
+  {: RESULT = false; :}
   ;
 
 show_roles_stmt ::=
@@ -862,16 +958,33 @@ create_tbl_as_select_stmt ::=
   KW_CREATE external_val:external KW_TABLE if_not_exists_val:if_not_exists
   table_name:table comment_val:comment row_format_val:row_format
   serde_properties:serde_props file_format_create_table_val:file_format
-  location_val:location cache_op_val:cache_op tbl_properties:tbl_props
+  location_val:location cache_op_val:cache_op
+  distribute_component_list:distribute tbl_properties:tbl_props
   KW_AS query_stmt:query
   {:
     // Initialize with empty List of columns and partition columns. The
     // columns will be added from the query statement during analysis
     CreateTableStmt create_stmt = new CreateTableStmt(table, new ArrayList<ColumnDef>(),
         new ArrayList<ColumnDef>(), external, comment, row_format,
-        file_format, location, cache_op, if_not_exists, tbl_props, serde_props);
+        file_format, location, cache_op, if_not_exists, tbl_props, serde_props,
+        distribute);
     RESULT = new CreateTableAsSelectStmt(create_stmt, query);
   :}
+  | KW_CREATE external_val:external KW_TABLE if_not_exists_val:if_not_exists
+    table_name:table comment_val:comment row_format_val:row_format
+    serde_properties:serde_props file_format_create_table_val:file_format
+    location_val:location cache_op_val:cache_op tbl_properties:tbl_props
+    KW_AS query_stmt:query
+  {:
+    // Initialize with empty List of columns and partition columns. The
+    // columns will be added from the query statement during analysis
+    CreateTableStmt create_stmt = new CreateTableStmt(table, new ArrayList<ColumnDef>(),
+      new ArrayList<ColumnDef>(), external, comment, row_format,
+      file_format, location, cache_op, if_not_exists, tbl_props, serde_props,
+      null);
+    RESULT = new CreateTableAsSelectStmt(create_stmt, query);
+  :}
+
   ;
 
 // Create unpartitioned tables with and without column definitions.
@@ -885,11 +998,12 @@ create_unpartitioned_tbl_stmt ::=
   table_name:table LPAREN column_def_list:col_defs RPAREN comment_val:comment
   row_format_val:row_format serde_properties:serde_props
   file_format_create_table_val:file_format location_val:location cache_op_val:cache_op
+  opt_distribute_component_list:distribute
   tbl_properties:tbl_props
   {:
     RESULT = new CreateTableStmt(table, col_defs, new ArrayList<ColumnDef>(), external,
         comment, row_format, file_format, location, cache_op, if_not_exists, tbl_props,
-        serde_props);
+        serde_props, distribute);
   :}
   | KW_CREATE external_val:external KW_TABLE if_not_exists_val:if_not_exists
     table_name:table comment_val:comment row_format_val:row_format
@@ -898,7 +1012,7 @@ create_unpartitioned_tbl_stmt ::=
   {:
     RESULT = new CreateTableStmt(table, new ArrayList<ColumnDef>(),
         new ArrayList<ColumnDef>(), external, comment, row_format, file_format,
-        location, cache_op, if_not_exists, tbl_props, serde_props);
+        location, cache_op, if_not_exists, tbl_props, serde_props, null);
   :}
   | KW_CREATE external_val:external KW_TABLE if_not_exists_val:if_not_exists
     table_name:table LPAREN column_def_list:col_defs RPAREN
@@ -913,6 +1027,78 @@ create_unpartitioned_tbl_stmt ::=
   :}
   ;
 
+
+// The DISTRIBUTE clause contains any number of HASH() clauses followed by exactly zero
+// or one RANGE clause
+opt_distribute_component_list ::=
+  distribute_component_list:list
+  {: RESULT = list; :}
+  | /* empty */
+  {: RESULT = null; :}
+  ;
+
+distribute_component_list ::=
+  KW_DISTRIBUTE KW_BY distribute_hash_component_list:list
+  {: RESULT = list; :}
+  | KW_DISTRIBUTE KW_BY distribute_range_component:rng
+  {: RESULT = Lists.newArrayList(rng); :}
+  | KW_DISTRIBUTE KW_BY distribute_hash_component_list:list COMMA distribute_range_component:rng
+  {:
+    list.add(rng);
+    RESULT = list;
+  :}
+  ;
+
+// A list of HASH distribution clauses used for flexible partitioning
+distribute_hash_component_list ::=
+  distribute_hash_component:dc
+  {: RESULT = Lists.newArrayList(dc); :}
+  | distribute_hash_component_list:list COMMA distribute_hash_component:d
+  {:
+    list.add(d);
+    RESULT = list;
+  :}
+  ;
+
+// The column list for a HASH clause is optional.
+distribute_hash_component ::=
+  KW_HASH LPAREN ident_list:cols RPAREN KW_INTO
+    INTEGER_LITERAL:buckets KW_BUCKETS
+  {: RESULT = new DistributeComponent(DistributeComponent.Type.HASH, cols, buckets); :}
+  | KW_HASH KW_INTO INTEGER_LITERAL:buckets KW_BUCKETS
+  {: RESULT = new DistributeComponent(DistributeComponent.Type.HASH, null, buckets); :}
+  ;
+
+// The column list for a RANGE clause is optional.
+distribute_range_component ::=
+  KW_RANGE LPAREN ident_list:cols RPAREN KW_SPLIT KW_ROWS
+  LPAREN split_row_list:list RPAREN
+  {: RESULT = new DistributeComponent(DistributeComponent.Type.RANGE, cols, list); :}
+  | KW_RANGE KW_SPLIT KW_ROWS LPAREN split_row_list:list RPAREN
+  {: RESULT = new DistributeComponent(DistributeComponent.Type.RANGE, null, list); :}
+  ;
+
+split_row_list ::=
+  LPAREN literal_list:l RPAREN
+  {: RESULT = Lists.<ArrayList<LiteralExpr>>newArrayList(l); :}
+  | split_row_list:list COMMA LPAREN literal_list:l RPAREN
+  {:
+    list.add(l);
+    RESULT = list;
+  :}
+  ;
+
+literal_list ::=
+  literal:l
+  {: RESULT = Lists.newArrayList(l); :}
+  | literal_list:list COMMA literal:l
+  {:
+    list.add(l);
+    RESULT = list;
+  :}
+  ;
+
+
 // Create partitioned tables with and without column definitions.
 // TODO: Clean up by consolidating everything after the column defs and
 // partition clause into a CreateTableParams.
@@ -926,7 +1112,7 @@ create_partitioned_tbl_stmt ::=
   {:
     RESULT = new CreateTableStmt(table, col_defs, partition_col_defs, external, comment,
         row_format, file_format, location, cache_op, if_not_exists, tbl_props,
-        serde_props);
+        serde_props, null);
   :}
   | KW_CREATE external_val:external KW_TABLE if_not_exists_val:if_not_exists
     table_name:table KW_PARTITIONED KW_BY
@@ -937,7 +1123,7 @@ create_partitioned_tbl_stmt ::=
   {:
     RESULT = new CreateTableStmt(table, new ArrayList<ColumnDef>(), partition_col_defs,
         external, comment, row_format, file_format, location, cache_op, if_not_exists,
-        tbl_props, serde_props);
+        tbl_props, serde_props, null);
   :}
   ;
 
@@ -1720,14 +1906,14 @@ select_stmt ::=
   :}
   |
     select_clause:selectList
-    from_clause:tableRefList
+    from_clause:fromClause
     where_clause:wherePredicate
     group_by_clause:groupingExprs
     having_clause:havingPredicate
     opt_order_by_clause:orderByClause
     opt_limit_offset_clause:limitOffsetClause
   {:
-    RESULT = new SelectStmt(selectList, tableRefList, wherePredicate, groupingExprs,
+    RESULT = new SelectStmt(selectList, fromClause, wherePredicate, groupingExprs,
                             havingPredicate, orderByClause, limitOffsetClause);
   :}
   ;
@@ -1816,7 +2002,7 @@ function_name ::=
 
 from_clause ::=
   KW_FROM table_ref_list:l
-  {: RESULT = l; :}
+  {: RESULT = new FromClause(l); :}
   ;
 
 table_ref_list ::=

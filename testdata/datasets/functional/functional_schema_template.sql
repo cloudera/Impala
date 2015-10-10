@@ -645,6 +645,19 @@ delimited fields terminated by ','  escaped by '\\'
 INSERT OVERWRITE TABLE {db_name}{db_suffix}.{table_name} SELECT * FROM {db_name}.{table_name};
 ---- LOAD
 LOAD DATA LOCAL INPATH '{impala_home}/testdata/DimTbl/data.csv' OVERWRITE INTO TABLE {db_name}{db_suffix}.{table_name};
+---- CREATE_KUDU
+create table {db_name}{db_suffix}.{table_name} (
+  id bigint,
+  name string,
+  zip int
+)
+distribute by range(id) split rows ((1003), (1007))
+tblproperties (
+  'storage_handler' = 'com.cloudera.kudu.hive.KuduStorageHandler',
+  'kudu.master_addresses' = '127.0.0.1:7051',
+  'kudu.table_name' = '{table_name}',
+  'kudu.key_columns' = 'id'
+);
 ====
 ---- DATASET
 functional
@@ -1085,6 +1098,18 @@ delimited fields terminated by ','
 INSERT OVERWRITE TABLE {db_name}{db_suffix}.{table_name} SELECT * FROM {db_name}.{table_name};
 ---- LOAD
 LOAD DATA LOCAL INPATH '{impala_home}/testdata/TinyTable/data.csv' OVERWRITE INTO TABLE {db_name}{db_suffix}.{table_name};
+---- CREATE_KUDU
+create table {db_name}{db_suffix}.{table_name} (
+  a string,
+  b string
+)
+distribute by range(a) split rows (('b'), ('d'))
+tblproperties (
+  'storage_handler' = 'com.cloudera.kudu.hive.KuduStorageHandler',
+  'kudu.master_addresses' = '127.0.0.1:7051',
+  'kudu.table_name' = '{table_name}',
+  'kudu.key_columns' = 'a'
+);
 ====
 ---- DATASET
 functional
@@ -1098,6 +1123,17 @@ delimited fields terminated by ','
 INSERT OVERWRITE TABLE {db_name}{db_suffix}.{table_name} SELECT * FROM {db_name}.{table_name};
 ---- LOAD
 LOAD DATA LOCAL INPATH '{impala_home}/testdata/TinyIntTable/data.csv' OVERWRITE INTO TABLE {db_name}{db_suffix}.{table_name};
+---- CREATE_KUDU
+create table {db_name}{db_suffix}.{table_name} (
+  int_col int
+)
+distribute by range(int_col) split rows ((2), (4), (6), (8))
+tblproperties (
+  'storage_handler' = 'com.cloudera.kudu.hive.KuduStorageHandler',
+  'kudu.master_addresses' = '127.0.0.1:7051',
+  'kudu.table_name' = '{table_name}',
+  'kudu.key_columns' = 'int_col'
+);
 ====
 ---- DATASET
 functional
@@ -1238,6 +1274,21 @@ DELIMITED FIELDS TERMINATED BY ','
 INSERT OVERWRITE TABLE {db_name}{db_suffix}.{table_name} SELECT * FROM {db_name}.{table_name};
 ---- LOAD
 LOAD DATA LOCAL INPATH '{impala_home}/testdata/ImpalaDemoDataset/DEC_00_SF3_P077_with_ann_noheader.csv' OVERWRITE INTO TABLE {db_name}{db_suffix}.{table_name};
+---- CREATE_KUDU
+create table {db_name}{db_suffix}.{table_name} (
+  id string,
+  zip string,
+  description1 string,
+  description2 string,
+  income int
+)
+distribute by range(id, zip) split rows (('8600000US01475', '01475'), ('8600000US63121', '63121'), ('8600000US84712', '84712'))
+tblproperties (
+  'storage_handler' = 'com.cloudera.kudu.hive.KuduStorageHandler',
+  'kudu.master_addresses' = '127.0.0.1:7051',
+  'kudu.table_name' = '{table_name}',
+  'kudu.key_columns' = 'id, zip'
+);
 ====
 ---- DATASET
 functional

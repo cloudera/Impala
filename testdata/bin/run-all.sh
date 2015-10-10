@@ -20,6 +20,7 @@
 if [ "$1" == "-format" ]; then
   echo "Formatting cluster"
   HDFS_FORMAT_CLUSTER="-format"
+  KUDU_FORMAT_CLUSTER="--format=True"
 elif [[ $1 ]]; then
   echo "Usage: run-all.sh [-format]"
   echo "[-format] : Format the mini-dfs cluster before starting"
@@ -52,6 +53,10 @@ if [[ ${DEFAULT_FS} == "hdfs://localhost:20500" ]]; then
   echo " --> Starting Hive Server and Metastore Service"
   $IMPALA_HOME/testdata/bin/run-hive-server.sh 2>&1 | \
       tee ${IMPALA_TEST_CLUSTER_LOG_DIR}/run-hive-server.log
+
+  echo " --> Starting Kudu"
+  $IMPALA_HOME/testdata/bin/run-kudu.sh ${KUDU_FORMAT_CLUSTER-} > \
+      tee ${IMPALA_TEST_CLUSTER_LOG_DIR}/run-kudu.log 2>&1
 else
   # With Isilon, we only start the Hive metastore.
   #   - HDFS is not started becuase Isilon is used as the defaultFs in core-site

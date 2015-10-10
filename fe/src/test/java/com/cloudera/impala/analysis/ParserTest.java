@@ -69,8 +69,8 @@ public class ParserTest {
     Expr firstExpr = selectStmt.getSelectList().getItems().get(0).getExpr();
     // Check the class of the first select-list expression.
     assertTrue(String.format(
-        "Expression is of class '%s'. Expected class '%s'",
-          firstExpr.getClass().getSimpleName(), cl.getSimpleName()),
+            "Expression is of class '%s'. Expected class '%s'",
+            firstExpr.getClass().getSimpleName(), cl.getSimpleName()),
         firstExpr.getClass().equals(cl));
     return parseNode;
   }
@@ -87,7 +87,10 @@ public class ParserTest {
     } catch (Exception e) {
       if (expectedErrorString != null) {
         String errorString = parser.getErrorMsg(stmt);
-        assertTrue(errorString.startsWith(expectedErrorString));
+        StringBuilder message = new StringBuilder();
+        message.append("Got: ");
+        message.append(errorString).append("\nExpected: ").append(expectedErrorString);
+        assertTrue(message.toString(), errorString.startsWith(expectedErrorString));
       }
       return;
     }
@@ -549,11 +552,11 @@ public class ParserTest {
              "nulls first");
     ParsesOk("select int_col from alltypes order by true, false, NULL");
     ParserError("select int_col, string_col, bigint_col, count(*) from alltypes " +
-                "order by by string_col asc desc");
+        "order by by string_col asc desc");
     ParserError("select int_col, string_col, bigint_col, count(*) from alltypes " +
-                "nulls first");
+        "nulls first");
     ParserError("select int_col, string_col, bigint_col, count(*) from alltypes " +
-                "order by string_col nulls");
+        "order by string_col nulls");
     ParserError("select int_col, string_col, bigint_col, count(*) from alltypes " +
                 "order by string_col nulls first asc");
     ParserError("select int_col, string_col, bigint_col, count(*) from alltypes " +
@@ -1542,6 +1545,44 @@ public class ParserTest {
         "select a from src where b > 5");
     ParserError("insert into table t partition [shuffle] (pk1=10 pk2=20) " +
         "select a from src where b > 5");
+
+    ParsesOk("insert ignore into table t values (1,2,3)");
+  }
+
+  @Test
+  public void TestUpdate() {
+    ParsesOk("update t set x = 3 where a < b");
+    ParsesOk("update t set x = (3 + length(\"hallo\")) where a < 'adasas'");
+    ParsesOk("update t set x = 3");
+    ParsesOk("update t set x=3, x=4 from a.b t where b = 10");
+    ParsesOk("update ignore t set x = 3");
+    ParsesOk("update ignore t set x=3, x=4 from a.b t where b = 10");
+    ParserError("update t");
+    ParserError("update t set x < 3");
+    ParserError("update t set x");
+    ParserError("update t set 4 = x");
+    ParserError("update from t set x = 3");
+    ParserError("update t where x = 4");
+    ParserError("update t a set a = 10  where x = 4");
+    ParserError("update t a from t b where set a = 10 x = 4");
+    ParserError("update (select * from functional_kudu.testtbl) a set name = '10'");
+  }
+
+  @Test
+  public void TestDelete() {
+    ParsesOk("delete from t");
+    ParsesOk("delete ignore from t");
+    ParsesOk("delete a from t a");
+    ParsesOk("delete a from t a join b on a.id = b.id where true");
+    ParsesOk("delete a from t a join b where true");
+    ParsesOk("delete ignore a from t a join b where true");
+    ParsesOk("delete t from t");
+    ParsesOk("delete t from t where a < b");
+    ParsesOk("delete a from t a where a < b");
+    ParsesOk("delete FROM t where a < b");
+    ParsesOk("delete t where a < b");
+    ParsesOk("delete t");
+    ParserError("delete t join f on t.id = f.id");
   }
 
   @Test
@@ -2161,7 +2202,7 @@ public class ParserTest {
         " WITH REPLICATION = 4");
     ParsesOk("CREATE TABLE Foo (i int) PARTITIONED BY(j int) CACHED IN 'myPool'");
     ParsesOk("CREATE TABLE Foo (i int) PARTITIONED BY(j int) LOCATION '/a' " +
-          "CACHED IN 'myPool'");
+        "CACHED IN 'myPool'");
     ParserError("CREATE TABLE Foo (i int) CACHED IN myPool");
     ParserError("CREATE TABLE Foo (i int) PARTITIONED BY(j int) CACHED IN");
     ParserError("CREATE TABLE Foo (i int) CACHED 'myPool'");
@@ -2206,6 +2247,40 @@ public class ParserTest {
         "ROW FORMAT DELIMITED");
     ParserError("CREATE TABLE Foo (i int) PARTITIONED BY (j string) PRODUCED BY DATA " +
         "SOURCE Foo(\"\")");
+
+
+    // Flexible partitioning
+    ParsesOk("CREATE TABLE Foo (i int) DISTRIBUTE BY HASH(i) INTO 4 BUCKETS");
+    ParsesOk("CREATE TABLE Foo (i int) DISTRIBUTE BY HASH(i) INTO 4 BUCKETS, " +
+        "HASH(a) INTO 2 BUCKETS");
+    ParsesOk("CREATE TABLE Foo (i int) DISTRIBUTE BY HASH INTO 4 BUCKETS");
+    ParsesOk("CREATE TABLE Foo (i int, k int) DISTRIBUTE BY HASH INTO 4 BUCKETS," +
+        " HASH(k) INTO 4 BUCKETS");
+    ParserError("CREATE TABLE Foo (i int) DISTRIBUTE BY HASH(i)");
+
+    // Range partitioning, the split rows are not validated in the parser
+    ParsesOk("CREATE TABLE Foo (i int) DISTRIBUTE BY RANGE(i) " +
+        "SPLIT ROWS ((1, 2.0, 'asdas'))");
+    ParsesOk("CREATE TABLE Foo (i int) DISTRIBUTE BY RANGE " +
+        "SPLIT ROWS ((1, 2.0, 'asdas'))");
+
+    ParsesOk("CREATE TABLE Foo (i int) DISTRIBUTE BY RANGE(i) " +
+            "SPLIT ROWS (('asdas'))");
+
+    ParsesOk("CREATE TABLE Foo (i int) DISTRIBUTE BY RANGE(i) " +
+        "SPLIT ROWS ((1, 2.0, 'asdas'), (2,3.0, 'adas'))");
+
+    ParserError("CREATE TABLE Foo (i int) DISTRIBUTE BY RANGE(i) " +
+        "SPLIT ROWS ()");
+    ParserError("CREATE TABLE Foo (i int) DISTRIBUTE BY RANGE(i)");
+
+    // Combine both
+    ParsesOk("CREATE TABLE Foo (i int) DISTRIBUTE BY HASH(i) INTO 4 BUCKETS, RANGE(i) " +
+        "SPLIT ROWS ((1, 2.0, 'asdas'))");
+
+    // Can only have one range clause
+    ParserError("CREATE TABLE Foo (i int) DISTRIBUTE BY HASH(i) INTO 4 BUCKETS, RANGE(i) " +
+        "SPLIT ROWS ((1, 2.0, 'asdas')), RANGE(i) SPLIT ROWS ((1, 2.0, 'asdas'))");
   }
 
   @Test
@@ -2357,6 +2432,11 @@ public class ParserTest {
     // Column and partition definitions not allowed
     ParserError("CREATE TABLE Foo(i int) AS SELECT 1");
     ParserError("CREATE TABLE Foo PARTITIONED BY(i int) AS SELECT 1");
+
+    // Flexible partitioning
+    ParsesOk("CREATE TABLE Foo DISTRIBUTE BY HASH(i) INTO 4 BUCKETS AS SELECT 1");
+    ParsesOk("CREATE TABLE Foo DISTRIBUTE BY HASH(a) INTO 4 BUCKETS " +
+        "TBLPROPERTIES ('a'='b', 'c'='d') AS SELECT * from bar");
   }
 
   @Test
@@ -2568,9 +2648,9 @@ public class ParserTest {
         "c, b, c from t\n" +
         "^\n" +
         "Encountered: IDENTIFIER\n" +
-        "Expected: ALTER, COMPUTE, CREATE, DESCRIBE, DROP, EXPLAIN, GRANT, " +
+        "Expected: ALTER, COMPUTE, CREATE, DELETE, DESCRIBE, DROP, EXPLAIN, GRANT, " +
         "INSERT, INVALIDATE, LOAD, REFRESH, REVOKE, SELECT, SET, SHOW, TRUNCATE, " +
-        "USE, VALUES, WITH\n");
+        "UPDATE, USE, VALUES, WITH\n");
 
     // missing select list
     ParserError("select from t",

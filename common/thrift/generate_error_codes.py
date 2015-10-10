@@ -197,6 +197,10 @@ error_codes = (
 
   ("SCANNER_INVALID_READ", 63, "Invalid read of $0 bytes. This may indicate data file "
    "corruption. (file $1, byte offset: $2)"),
+
+  ("KUDU_IMPALA_TYPE_MISSING", 64, "Kudu type $0 is not available in Impala."),
+
+  ("IMPALA_KUDU_TYPE_MISSING", 65, "Impala type $0 is not available in Kudu."),
 )
 
 import sys

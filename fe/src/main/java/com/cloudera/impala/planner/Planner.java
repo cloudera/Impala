@@ -27,6 +27,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 
+
 /**
  * Creates an executable plan from an analyzed parse tree and query options.
  */
@@ -81,12 +82,29 @@ public class Planner {
       fragments = Lists.newArrayList(new PlanFragment(
           ctx_.getNextFragmentId(), singleNodePlan, DataPartition.UNPARTITIONED));
     } else {
-      singleNodePlanner.validatePlan(singleNodePlan);
       // create distributed plan
       fragments = distributedPlanner.createPlanFragments(singleNodePlan);
     }
 
     PlanFragment rootFragment = fragments.get(fragments.size() - 1);
+
+    if (ctx_.isInsertOrCtas()) {
+      InsertStmt insertStmt = ctx_.getAnalysisResult().getInsertStmt();
+      if (!ctx_.isSingleNodeExec()) {
+        // repartition on partition keys
+        rootFragment = distributedPlanner.createInsertFragment(
+            rootFragment, insertStmt, ctx_.getRootAnalyzer(), fragments);
+      }
+      // set up table sink for root fragment
+      rootFragment.setSink(insertStmt.createDataSink());
+    } else if (ctx_.isUpdate()) {
+      // Set up update sink for root fragment
+      rootFragment.setSink(ctx_.getAnalysisResult().getUpdateStmt().createDataSink());
+    } else if (ctx_.isDelete()) {
+      // Set up delete sink for root fragment
+      rootFragment.setSink(ctx_.getAnalysisResult().getDeleteStmt().createDataSink());
+    }
+
     ExprSubstitutionMap rootNodeSmap = rootFragment.getPlanRoot().getOutputSmap();
     ColumnLineageGraph graph = ctx_.getRootAnalyzer().getColumnLineageGraph();
     List<Expr> resultExprs = null;
@@ -97,13 +115,6 @@ public class Planner {
       resultExprs = insertStmt.getResultExprs();
       targetTable = insertStmt.getTargetTable();
       graph.addTargetColumnLabels(targetTable);
-      if (!ctx_.isSingleNodeExec()) {
-        // repartition on partition keys
-        rootFragment = distributedPlanner.createInsertFragment(
-            rootFragment, insertStmt, ctx_.getRootAnalyzer(), fragments);
-      }
-      // set up table sink for root fragment
-      rootFragment.setSink(insertStmt.createDataSink());
     } else {
       QueryStmt queryStmt = ctx_.getQueryStmt();
       queryStmt.substituteResultExprs(rootNodeSmap, ctx_.getRootAnalyzer());

@@ -45,6 +45,16 @@ if [ -z $IMPALA_HOME ]; then
   fi
 fi
 
+# Set a default value for Kudu binary distribution, this is temporary only
+# TODO: replace with packaged path once beta is there
+export KUDU_HOME=${KUDU_HOME:-"$IMPALA_HOME/../kudu"}
+export KUDU_CLIENT_ROOT=${KUDU_CLIENT_ROOT:-"$KUDU_HOME/kudu-cli-export"}
+export KUDU_CLIENT_CMAKE_MODULE=${KUDU_CLIENT_CMAKE_MODULE:-"$KUDU_CLIENT_ROOT/usr/local/share/kuduClient"}
+export KUDU_BIN_HOME=${KUDU_BIN_HOME:-"$IMPALA_HOME/../kudu-bin"}
+export KUDU_MASTER=${KUDU_MASTER:-"127.0.0.1"}
+export KUDU_MASTER_PORT=${KUDU_MASTER_PORT:-"7051"}
+export KUDU_JAVA_VERSION=0.1.0-SNAPSHOT
+
 export CDH_MAJOR_VERSION=5
 export HADOOP_LZO=${HADOOP_LZO-~/hadoop-lzo}
 export IMPALA_LZO=${IMPALA_LZO-~/Impala-lzo}
@@ -264,6 +274,8 @@ LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:`dirname ${LIB_JVM}`:`dirname ${LIB_HDFS}`"
 LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${IMPALA_HOME}/be/build/debug/service"
 LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${IMPALA_HOME}/thirdparty/snappy-${IMPALA_SNAPPY_VERSION}/build/lib"
 LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:$IMPALA_LZO/build"
+LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:$KUDU_CLIENT_ROOT/usr/local/lib"
+LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:$KUDU_CLIENT_ROOT/usr/local/lib64"
 
 if [[ -n "$IMPALA_TOOLCHAIN" ]]; then
   LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${IMPALA_TOOLCHAIN}/gcc-${IMPALA_GCC_VERSION}/lib64"
