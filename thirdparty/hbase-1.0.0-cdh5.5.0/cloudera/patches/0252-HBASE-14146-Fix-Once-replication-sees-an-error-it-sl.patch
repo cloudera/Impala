@@ -1,0 +1,37 @@
+From 56fa1792a9dace88d5f505800afb62cf4fb2b48e Mon Sep 17 00:00:00 2001
+From: Elliott Clark <eclark@apache.org>
+Date: Wed, 22 Jul 2015 14:50:16 -0700
+Subject: [PATCH 252/268] HBASE-14146 Fix Once replication sees an error it slows down forever
+
+Reason: Bug
+Author: Elliott Clark
+Ref: CDH-31924
+---
+ .../regionserver/ReplicationSource.java            |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/ReplicationSource.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/ReplicationSource.java
+index 794a3e1..8ca3772 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/ReplicationSource.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/ReplicationSource.java
+@@ -663,7 +663,7 @@ public class ReplicationSource extends Thread
+    * written to when this method was called
+    */
+   protected void shipEdits(boolean currentWALisBeingWrittenTo, List<WAL.Entry> entries) {
+-    int sleepMultiplier = 1;
++    int sleepMultiplier = 0;
+     if (entries.isEmpty()) {
+       LOG.warn("Was given 0 edits to ship");
+       return;
+@@ -698,6 +698,8 @@ public class ReplicationSource extends Thread
+ 
+         if (!replicated) {
+           continue;
++        } else {
++          sleepMultiplier = Math.max(sleepMultiplier-1, 0);
+         }
+ 
+         if (this.lastLoggedPosition != this.repLogReader.getPosition()) {
+-- 
+1.7.0.4
+

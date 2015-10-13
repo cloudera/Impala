@@ -1,0 +1,27 @@
+From 53d4ceed8c3c5ca389154f2c37933d06995ad514 Mon Sep 17 00:00:00 2001
+From: Andrew Purtell <apurtell@apache.org>
+Date: Thu, 16 Jul 2015 18:27:30 -0700
+Subject: [PATCH 261/268] HBASE-14050 NPE in org.apache.hadoop.hbase.ipc.RpcServer.readAndProcess
+
+Reason: Bug
+Author: Andrew Purtell
+Ref: CDH-31924
+---
+ .../org/apache/hadoop/hbase/ipc/RpcServer.java     |    1 -
+ 1 files changed, 0 insertions(+), 1 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/RpcServer.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/RpcServer.java
+index f62131e..b08c9b9 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/RpcServer.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/RpcServer.java
+@@ -1807,7 +1807,6 @@ public class RpcServer implements RpcServerInterface {
+     protected synchronized void close() {
+       disposeSasl();
+       data = null;
+-      this.dataLengthBuffer = null;
+       if (!channel.isOpen())
+         return;
+       try {socket.shutdownOutput();} catch(Exception ignored) {} // FindBugs DE_MIGHT_IGNORE
+-- 
+1.7.0.4
+
