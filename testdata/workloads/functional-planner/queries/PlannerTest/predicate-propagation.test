@@ -1185,7 +1185,7 @@ SELECT count(*) FROM
 |  hash predicates: n.n_regionkey = r_regionkey
 |
 |--03:SCAN HDFS [tpch_parquet.region r]
-|     partitions=1/1 files=1 size=900B
+|     partitions=1/1 files=1 size=895B
 |     predicates: r.r_regionkey = 1
 |
 02:NESTED LOOP JOIN [CROSS JOIN]
