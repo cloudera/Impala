@@ -1,7 +1,7 @@
 From d8a6a765ef2da3ebf58e1798c354831cca5cc3e6 Mon Sep 17 00:00:00 2001
 From: anoopsjohn <anoopsamjohn@gmail.com>
 Date: Tue, 16 Jun 2015 17:17:03 +0530
-Subject: [PATCH 239/268] HBASE-13886 Return empty value when the mob file is corrupt instead of throwing exceptions. (Jingcheng)
+Subject: [PATCH 239/269] HBASE-13886 Return empty value when the mob file is corrupt instead of throwing exceptions. (Jingcheng)
 
 Conflicts:
 	hbase-server/src/main/java/org/apache/hadoop/hbase/mob/MobUtils.java

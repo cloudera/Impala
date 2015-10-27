@@ -1,7 +1,7 @@
 From 0be5b5715a3393ada062be43436a1f7ef304703f Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Sat, 6 Dec 2014 08:47:14 -0800
-Subject: [PATCH 065/268] HBASE-12646 SnapshotInfo tool does not find mob data in snapshots
+Subject: [PATCH 065/269] HBASE-12646 SnapshotInfo tool does not find mob data in snapshots
 
 Adds MobPath to HFileLink Resolver
 

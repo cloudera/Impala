@@ -1,7 +1,7 @@
 From 772dbe03568940cace931012df4c0fa3d8f633e6 Mon Sep 17 00:00:00 2001
 From: Ashish Singhi <ashish.singhi@huawei.com>
 Date: Mon, 15 Jun 2015 11:27:59 -0700
-Subject: [PATCH 262/268] HBASE-13901 Error while calling watcher on creating and deleting an HBase table
+Subject: [PATCH 262/269] HBASE-13901 Error while calling watcher on creating and deleting an HBase table
 
 Reason: Bug
 Author: Ashish Singhi

@@ -1,7 +1,7 @@
 From 8bbe3742e80b313a1d34b966c7e009c1509594ef Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Tue, 17 Mar 2015 19:38:39 +0000
-Subject: [PATCH 115/268] HBASE-13253 LoadIncrementalHFiles unify hfiles discovery
+Subject: [PATCH 115/269] HBASE-13253 LoadIncrementalHFiles unify hfiles discovery
 
 Reason: Bug
 Author: Matteo Bertozzi

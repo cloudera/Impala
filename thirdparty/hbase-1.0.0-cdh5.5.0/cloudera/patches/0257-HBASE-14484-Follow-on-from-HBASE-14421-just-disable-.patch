@@ -1,7 +1,7 @@
 From c26441cc8ad9acb49dc3583a98955956f061b3e3 Mon Sep 17 00:00:00 2001
 From: stack <stack@duboce.net>
 Date: Tue, 29 Sep 2015 17:32:08 -0700
-Subject: [PATCH 257/268]     HBASE-14484 Follow-on from HBASE-14421, just disable TestFastFail* until someone digs in and fixes it
+Subject: [PATCH 257/269]     HBASE-14484 Follow-on from HBASE-14421, just disable TestFastFail* until someone digs in and fixes it
      HBASE-14472 TestHCM and TestRegionServerNoMaster fixes (Just backported change to TestHCM)
      HBASE-14435 thrift tests don't have test-specific hbase-site.xml so 'BindException: Address already in use' because info port is not turned off
      HBASE-14421 TestFastFail* are flakey (included all amendments too in this commit).

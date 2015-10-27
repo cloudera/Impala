@@ -1,7 +1,7 @@
 From 27abce5337213573ebef24e7650fd105b808c074 Mon Sep 17 00:00:00 2001
 From: Srikanth Srungarapu <ssrungarapu@cloudera.com>
 Date: Wed, 1 Apr 2015 23:18:27 -0700
-Subject: [PATCH 253/268] HBASE-13091 Split ZK Quorum on Master WebUI (Jean-Marc Spaggiari)
+Subject: [PATCH 253/269] HBASE-13091 Split ZK Quorum on Master WebUI (Jean-Marc Spaggiari)
 
 Reason: Supportability
 Author: Srikanth Srungarapu

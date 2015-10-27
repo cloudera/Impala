@@ -1,7 +1,7 @@
 From c9584b83c7b1a59ec93f7124669e5085561ada86 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Fri, 29 May 2015 16:39:03 +0100
-Subject: [PATCH 155/268] HBASE-13779 Calling table.exists() before table.get() end up with an empty Result + addendum
+Subject: [PATCH 155/269] HBASE-13779 Calling table.exists() before table.get() end up with an empty Result + addendum
 
 Reason: Bug
 Author: Matteo Bertozzi

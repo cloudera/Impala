@@ -1,7 +1,7 @@
 From 52edda5067ec470bab80de3bd0b289f2960562ba Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@cloudera.com>
 Date: Tue, 10 Mar 2015 04:56:15 -0500
-Subject: [PATCH 109/268] Partial Revert "HBASE-10573 Use Netty 4"
+Subject: [PATCH 109/269] Partial Revert "HBASE-10573 Use Netty 4"
 
 This reverts portions of commit b6646596c6aac2b6f91976eaad4993802d671f8e that require netty 4
 

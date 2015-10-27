@@ -1,7 +1,7 @@
 From 26e0d507c62469f87bce202a44c3ffea151bd930 Mon Sep 17 00:00:00 2001
 From: stack <stack@apache.org>
 Date: Tue, 30 Dec 2014 11:37:13 -0800
-Subject: [PATCH 101/268] HBASE-12772 TestPerColumnFamilyFlush failing -- ADDENDUM
+Subject: [PATCH 101/269] HBASE-12772 TestPerColumnFamilyFlush failing -- ADDENDUM
 
 Conflicts:
 	hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestPerColumnFamilyFlush.java

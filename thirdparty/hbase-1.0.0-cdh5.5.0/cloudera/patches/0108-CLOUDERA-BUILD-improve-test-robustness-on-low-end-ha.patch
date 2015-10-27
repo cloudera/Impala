@@ -1,7 +1,7 @@
 From a68d7321d989a80d5a76f0c55f85fe8b1de37084 Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@cloudera.com>
 Date: Tue, 10 Mar 2015 11:02:35 -0500
-Subject: [PATCH 108/268] CLOUDERA-BUILD improve test robustness on low-end hardware with longer timeout.
+Subject: [PATCH 108/269] CLOUDERA-BUILD improve test robustness on low-end hardware with longer timeout.
 
 Ref: CDH-24807
 ---

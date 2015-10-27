@@ -1,7 +1,7 @@
 From ef8ff699ab25d99d7bcb29ceaa8ff933df561868 Mon Sep 17 00:00:00 2001
 From: stack <stack@apache.org>
 Date: Fri, 30 Jan 2015 15:27:08 -0800
-Subject: [PATCH 211/268] HBASE-6778 Deprecate Chore; its a thread per task when we should have one thread to do all tasks
+Subject: [PATCH 211/269] HBASE-6778 Deprecate Chore; its a thread per task when we should have one thread to do all tasks
 
 Reason: Cleanup
 Author: Jonathan Lawlor

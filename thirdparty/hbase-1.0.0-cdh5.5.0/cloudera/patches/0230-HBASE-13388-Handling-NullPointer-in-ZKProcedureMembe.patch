@@ -1,7 +1,7 @@
 From 1a3a27aa665224c6196c3dd1feefec19164dfab1 Mon Sep 17 00:00:00 2001
 From: Andrew Purtell <apurtell@apache.org>
 Date: Thu, 2 Apr 2015 14:17:26 -0700
-Subject: [PATCH 230/268] HBASE-13388 Handling NullPointer in ZKProcedureMemberRpcs while getting ZNode data
+Subject: [PATCH 230/269] HBASE-13388 Handling NullPointer in ZKProcedureMemberRpcs while getting ZNode data
 
 Reason: Bug
 Author: Vikas Vishwakarma

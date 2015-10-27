@@ -1,7 +1,7 @@
 From 53e878109bdea180de0163014d9032bf38afbbcd Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Wed, 1 Jul 2015 09:20:25 -0700
-Subject: [PATCH 169/268] HBASE-13995 ServerName is not fully case insensitive
+Subject: [PATCH 169/269] HBASE-13995 ServerName is not fully case insensitive
 
 Reason: Bug
 Author: Matteo Bertozzi

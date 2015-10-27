@@ -1,7 +1,7 @@
 From 28b98286c4aefb89576734a011859dbc0c11bd80 Mon Sep 17 00:00:00 2001
 From: stack <stack@apache.org>
 Date: Tue, 10 Feb 2015 21:19:14 -0800
-Subject: [PATCH 214/268] HBASE-13007 Fix the test timeouts being caused by ChoreService
+Subject: [PATCH 214/269] HBASE-13007 Fix the test timeouts being caused by ChoreService
 
 Reason: Bug
 Author: Jonathan Lawlor

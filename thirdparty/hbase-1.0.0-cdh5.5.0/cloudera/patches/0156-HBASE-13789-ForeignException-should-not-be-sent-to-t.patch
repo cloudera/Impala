@@ -1,7 +1,7 @@
 From ce1928e25a1d1911b5e485710a0fe93b396ec5f9 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Fri, 29 May 2015 19:32:42 +0100
-Subject: [PATCH 156/268] HBASE-13789 ForeignException should not be sent to the client
+Subject: [PATCH 156/269] HBASE-13789 ForeignException should not be sent to the client
 
 Reason: Bug
 Author: Matteo Bertozzi

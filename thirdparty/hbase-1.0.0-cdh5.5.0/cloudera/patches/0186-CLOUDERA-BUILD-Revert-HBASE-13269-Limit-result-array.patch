@@ -1,7 +1,7 @@
 From 834f828024ebf5361a27629219c1acd210af1a49 Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@cloudera.com>
 Date: Fri, 31 Jul 2015 00:01:14 -0700
-Subject: [PATCH 186/268] CLOUDERA-BUILD Revert "HBASE-13269 Limit result array preallocation to avoid OOME with large scan caching values"
+Subject: [PATCH 186/269] CLOUDERA-BUILD Revert "HBASE-13269 Limit result array preallocation to avoid OOME with large scan caching values"
 
 Reason: New Feature
 Author: Esteban Gutierrez

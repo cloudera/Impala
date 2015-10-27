@@ -1,7 +1,7 @@
 From c56e9c197a6e6ad0f7a132d1337c60171f66b6ce Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Mon, 20 Apr 2015 14:27:47 -0700
-Subject: [PATCH 195/268] HBASE-13514 Fix test failures in TestScannerHeartbeatMessages caused by incorrect setting of hbase.rpc.timeout (Jonathan Lawlor)
+Subject: [PATCH 195/269] HBASE-13514 Fix test failures in TestScannerHeartbeatMessages caused by incorrect setting of hbase.rpc.timeout (Jonathan Lawlor)
 
 Reason: Bug
 Author: Jonathan Lawlor

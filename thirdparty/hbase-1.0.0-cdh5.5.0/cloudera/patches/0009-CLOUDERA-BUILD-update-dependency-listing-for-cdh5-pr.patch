@@ -1,7 +1,7 @@
 From a622b753ec6962302de71973b72ba9ba596e73f1 Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@apache.org>
 Date: Fri, 23 Jan 2015 09:20:04 -0600
-Subject: [PATCH 009/268] CLOUDERA-BUILD update dependency listing for cdh5 profile.
+Subject: [PATCH 009/269] CLOUDERA-BUILD update dependency listing for cdh5 profile.
 
 * move some dep scopes back to compile from test
 * add cdh5 profile where missing

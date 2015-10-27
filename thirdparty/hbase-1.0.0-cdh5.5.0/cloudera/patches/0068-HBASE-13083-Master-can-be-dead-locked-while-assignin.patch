@@ -1,7 +1,7 @@
 From 970cf164bbcc24067f52a77411b5ee1a51b6deba Mon Sep 17 00:00:00 2001
 From: stack <stack@apache.org>
 Date: Mon, 23 Feb 2015 21:17:01 -0800
-Subject: [PATCH 068/268] HBASE-13083 Master can be dead-locked while assigning META. (Andrey Stepachev)
+Subject: [PATCH 068/269] HBASE-13083 Master can be dead-locked while assigning META. (Andrey Stepachev)
 
 Reason: Bug
 Author: Andrey Stepachev

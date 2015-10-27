@@ -1,7 +1,7 @@
 From baecf0ab4f95a21828f509ef8ff55090d9c29e5f Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@cloudera.com>
 Date: Tue, 24 Jun 2014 18:05:47 -0700
-Subject: [PATCH 210/268] HBASE-7972 allow configuring the TCP backlog on thrift services.
+Subject: [PATCH 210/269] HBASE-7972 allow configuring the TCP backlog on thrift services.
 
 Author: Jean-Daniel Cryans
 Ammending-Author: Esteban Gutierrez

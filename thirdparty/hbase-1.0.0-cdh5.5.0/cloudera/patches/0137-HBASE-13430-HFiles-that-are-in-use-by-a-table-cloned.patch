@@ -1,7 +1,7 @@
 From d6f142d6459a46a1a0acd970dbfa21344775efa0 Mon Sep 17 00:00:00 2001
 From: Tobi Vollebregt <tobi@squareup.com>
 Date: Sat, 18 Apr 2015 09:47:43 +0100
-Subject: [PATCH 137/268] HBASE-13430 HFiles that are in use by a table cloned from a snapshot may be deleted when that snapshot is deleted
+Subject: [PATCH 137/269] HBASE-13430 HFiles that are in use by a table cloned from a snapshot may be deleted when that snapshot is deleted
 
 Reason: Bug
 Author: Tobi Vollebregt

@@ -1,7 +1,7 @@
 From caa9114b0241936d76e1dc50c33ddb609046532a Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@cloudera.com>
 Date: Thu, 4 Jun 2015 23:20:39 -0700
-Subject: [PATCH 162/268] CLOUDERA-BUILD Usage of deprecated memstore upperLimit and lowerLimit properties should precede newer memstore configuration properties
+Subject: [PATCH 162/269] CLOUDERA-BUILD Usage of deprecated memstore upperLimit and lowerLimit properties should precede newer memstore configuration properties
 
 Author: Esteban Gutierrez
 Reason: Backward compatibility

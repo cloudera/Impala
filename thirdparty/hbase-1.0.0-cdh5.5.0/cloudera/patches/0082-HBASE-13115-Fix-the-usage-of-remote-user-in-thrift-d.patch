@@ -1,7 +1,7 @@
 From a28a9f1e85f8fce9d923b58bc45ea89d3590c298 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Tue, 3 Mar 2015 06:48:56 -0800
-Subject: [PATCH 082/268] HBASE-13115 Fix the usage of remote user in thrift doAs implementation (Srikanth Srungarapu)
+Subject: [PATCH 082/269] HBASE-13115 Fix the usage of remote user in thrift doAs implementation (Srikanth Srungarapu)
 
 Reason: Bug
 Author: Srikanth Srungarapu

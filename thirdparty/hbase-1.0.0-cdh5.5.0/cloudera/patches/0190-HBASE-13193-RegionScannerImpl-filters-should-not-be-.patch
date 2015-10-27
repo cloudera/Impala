@@ -1,7 +1,7 @@
 From 0ff06e26a400dab725880493ebe43e2988c6b621 Mon Sep 17 00:00:00 2001
 From: stack <stack@apache.org>
 Date: Mon, 16 Mar 2015 13:26:34 -0700
-Subject: [PATCH 190/268] HBASE-13193 RegionScannerImpl filters should not be reset if a partial Result is returned (Jonathan Lawlor)
+Subject: [PATCH 190/269] HBASE-13193 RegionScannerImpl filters should not be reset if a partial Result is returned (Jonathan Lawlor)
 
 Reason: Bug
 Author: Jonathan Lawlor

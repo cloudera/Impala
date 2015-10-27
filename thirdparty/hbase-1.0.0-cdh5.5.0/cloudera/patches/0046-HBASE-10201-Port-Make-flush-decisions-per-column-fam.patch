@@ -1,7 +1,7 @@
 From 44dd6e505ce245aa9fd26f4a730bffd328db8a52 Mon Sep 17 00:00:00 2001
 From: zhangduo <zhangduo@wandoujia.com>
 Date: Sat, 13 Dec 2014 12:49:38 +0800
-Subject: [PATCH 046/268] HBASE-10201 Port 'Make flush decisions per column family' to trunk
+Subject: [PATCH 046/269] HBASE-10201 Port 'Make flush decisions per column family' to trunk
   - Addendum changes TestPerColumnFamilyFlush to LargeTest
   - Addendum fixes typo of putIfAbsent (Duo Zhang)
 

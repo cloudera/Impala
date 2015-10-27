@@ -1,7 +1,7 @@
 From 20e0c62867bc10634fb3d4c2f33cda8c71a5be0b Mon Sep 17 00:00:00 2001
 From: stack <stack@apache.org>
 Date: Fri, 6 Feb 2015 19:45:25 -0800
-Subject: [PATCH 212/268] HBASE-12982 Adding timeouts to TestChoreService
+Subject: [PATCH 212/269] HBASE-12982 Adding timeouts to TestChoreService
 
 Reason: Bug
 Author: Michael Stack

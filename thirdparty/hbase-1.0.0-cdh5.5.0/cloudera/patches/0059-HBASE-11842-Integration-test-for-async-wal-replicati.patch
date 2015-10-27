@@ -1,7 +1,7 @@
 From e90fc5edf74f7549ae85168986911616c7bcda70 Mon Sep 17 00:00:00 2001
 From: Enis Soztutar <enis@apache.org>
 Date: Sun, 22 Feb 2015 21:29:12 -0800
-Subject: [PATCH 059/268] HBASE-11842 Integration test for async wal replication to secondary regions
+Subject: [PATCH 059/269] HBASE-11842 Integration test for async wal replication to secondary regions
 
 Reason: Task
 Author: Enis Soztutar

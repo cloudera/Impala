@@ -1,7 +1,7 @@
 From f88ea3b5d103d614240c759037ae68324d098fdc Mon Sep 17 00:00:00 2001
 From: Srikanth Srungarapu <ssrungarapu@cloudera.com>
 Date: Fri, 22 May 2015 11:45:21 -0700
-Subject: [PATCH 146/268] CLOUDERA-BUILD Revamp hbase shell to get rid of jruby's vulnerable jquery file
+Subject: [PATCH 146/269] CLOUDERA-BUILD Revamp hbase shell to get rid of jruby's vulnerable jquery file
 
 Reason: Product Requirement
 Author: Srikanth Srungarapu

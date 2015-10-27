@@ -1,7 +1,7 @@
 From 1ebf4e096fe9cec632fe9fe25d5c0cddc76625d4 Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@apache.org>
 Date: Mon, 20 Apr 2015 00:31:57 -0500
-Subject: [PATCH 133/268] HBASE-13498 Add more docs and a basic check for storage policy handling.
+Subject: [PATCH 133/269] HBASE-13498 Add more docs and a basic check for storage policy handling.
 
 Conflicts:
 	hbase-common/src/main/java/org/apache/hadoop/hbase/HConstants.java

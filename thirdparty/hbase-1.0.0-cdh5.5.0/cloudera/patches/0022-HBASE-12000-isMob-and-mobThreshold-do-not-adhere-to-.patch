@@ -1,7 +1,7 @@
 From 5cbf4517663eebabaa6aa4c81d4a4fb79b8ac07a Mon Sep 17 00:00:00 2001
 From: Misty Stanley-Jones <mstanleyjones@cloudera.com>
 Date: Wed, 17 Sep 2014 12:46:10 +1000
-Subject: [PATCH 022/268] HBASE-12000 isMob and mobThreshold do not adhere to naming conventions
+Subject: [PATCH 022/269] HBASE-12000 isMob and mobThreshold do not adhere to naming conventions
 
 Reason: MOB Feature
 Author: Misty Stanley Jones

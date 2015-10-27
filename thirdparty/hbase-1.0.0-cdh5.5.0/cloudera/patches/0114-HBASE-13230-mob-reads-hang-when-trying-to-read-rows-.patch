@@ -1,7 +1,7 @@
 From e372f9e34a270f79de402c3e8985ab96437d460f Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Fri, 13 Mar 2015 10:37:52 -0700
-Subject: [PATCH 114/268] HBASE-13230 [mob] reads hang when trying to read rows with large mobs (>10MB)
+Subject: [PATCH 114/269] HBASE-13230 [mob] reads hang when trying to read rows with large mobs (>10MB)
 
 Conflicts:
 	hbase-client/src/main/java/org/apache/hadoop/hbase/ipc/AsyncServerResponseHandler.java

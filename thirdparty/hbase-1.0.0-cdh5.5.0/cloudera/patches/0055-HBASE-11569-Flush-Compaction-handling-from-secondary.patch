@@ -1,7 +1,7 @@
 From 69c6fd1d4d741cd9eba087f791f4e48c2f2880fa Mon Sep 17 00:00:00 2001
 From: Enis Soztutar <enis@apache.org>
 Date: Fri, 13 Feb 2015 11:08:24 -0800
-Subject: [PATCH 055/268] HBASE-11569 Flush / Compaction handling from secondary region replicas
+Subject: [PATCH 055/269] HBASE-11569 Flush / Compaction handling from secondary region replicas
 
 Reason: Task
 Author: Enis Soztutar

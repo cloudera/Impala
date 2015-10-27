@@ -1,7 +1,7 @@
 From 73c0beaac5e605b9c7606eda296e4b5101511963 Mon Sep 17 00:00:00 2001
 From: Josh Elser <elserj@apache.org>
 Date: Sat, 28 Mar 2015 18:56:51 -0700
-Subject: [PATCH 130/268] HBASE-13262 Observe ScanResponse.moreResults in ClientScanner.
+Subject: [PATCH 130/269] HBASE-13262 Observe ScanResponse.moreResults in ClientScanner.
 
 The RS already returns to the client whether or not it has additional
 results to be returned in a subsequent call to scan(), but the ClientScanner

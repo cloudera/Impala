@@ -1,7 +1,7 @@
 From d5d12aa9ba2a8f6465b636c516ab619b4df9378c Mon Sep 17 00:00:00 2001
 From: stack <stack@apache.org>
 Date: Wed, 11 Feb 2015 20:46:41 -0800
-Subject: [PATCH 215/268] HBASE-13007 Fix the test timeouts being caused by ChoreService ADDENDUM
+Subject: [PATCH 215/269] HBASE-13007 Fix the test timeouts being caused by ChoreService ADDENDUM
 
 Reason: Bug
 Author: Jonathan Lawlor

@@ -1,7 +1,7 @@
 From 08b1e747c824981b4174c34f6fefbdc4a6cc57dc Mon Sep 17 00:00:00 2001
 From: Srikanth Srungarapu <ssrungarapu@cloudera.com>
 Date: Thu, 3 Sep 2015 11:49:40 -0700
-Subject: [PATCH 220/268] HBASE-14261 Enhance Chaos Monkey framework by adding zookeeper and datanode fault injections.
+Subject: [PATCH 220/269] HBASE-14261 Enhance Chaos Monkey framework by adding zookeeper and datanode fault injections.
 
 Reason: Improvement
 Author: Srikanth Srungarapu

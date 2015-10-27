@@ -1,7 +1,7 @@
 From cb0eae0ddccaa9392ee6439681ff8a422bccadb2 Mon Sep 17 00:00:00 2001
 From: Andrew Purtell <apurtell@apache.org>
 Date: Thu, 3 Sep 2015 17:48:45 -0700
-Subject: [PATCH 259/268] HBASE-14359 HTable#close will hang forever if unchecked error/exception thrown in AsyncProcess#sendMultiAction (Victor Xu)
+Subject: [PATCH 259/269] HBASE-14359 HTable#close will hang forever if unchecked error/exception thrown in AsyncProcess#sendMultiAction (Victor Xu)
 
 Reason: Bug
 Author: Andrew Purtell

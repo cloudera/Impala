@@ -1,7 +1,7 @@
 From 3e24357883a3e6802ed6c8c4e70e4755ae17530f Mon Sep 17 00:00:00 2001
 From: Lars Hofhansl <larsh@apache.org>
 Date: Tue, 12 May 2015 21:27:55 -0700
-Subject: [PATCH 247/268] HBASE-13618 ReplicationSource is too eager to remove sinks.
+Subject: [PATCH 247/269] HBASE-13618 ReplicationSource is too eager to remove sinks.
 
 Reason: Bug
 Author: Lars Hofhansl

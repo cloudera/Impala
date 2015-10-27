@@ -1,7 +1,7 @@
 From 271cd3929c711b2e128be5b2fb187705a2381814 Mon Sep 17 00:00:00 2001
 From: Srikanth Srungarapu <ssrungarapu@cloudera.com>
 Date: Tue, 2 Jun 2015 22:37:41 -0700
-Subject: [PATCH 160/268] HBASE-13826 Unable to create table when group acls are appropriately set.
+Subject: [PATCH 160/269] HBASE-13826 Unable to create table when group acls are appropriately set.
 
 Reason: Bug
 Author: Srikanth Srungarapu

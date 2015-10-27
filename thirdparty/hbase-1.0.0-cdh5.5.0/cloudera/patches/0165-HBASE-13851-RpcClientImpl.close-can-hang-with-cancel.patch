@@ -1,7 +1,7 @@
 From 0a5939bf484dfed69642f50b276ecb20d324127d Mon Sep 17 00:00:00 2001
 From: Enis Soztutar <enis@apache.org>
 Date: Sat, 6 Jun 2015 14:01:33 -0700
-Subject: [PATCH 165/268] HBASE-13851 RpcClientImpl.close() can hang with cancelled replica RPCs
+Subject: [PATCH 165/269] HBASE-13851 RpcClientImpl.close() can hang with cancelled replica RPCs
 
 Reason: Bug
 Author: Enis Soztutar

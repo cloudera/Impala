@@ -1,7 +1,7 @@
 From e699b903641a6c39f9c1d1bafaa041daaee84e00 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Fri, 27 Mar 2015 16:40:44 +0100
-Subject: [PATCH 127/268] HBASE-12749 Tighten HFileLink api to enable non-snapshot uses (addendum)
+Subject: [PATCH 127/269] HBASE-12749 Tighten HFileLink api to enable non-snapshot uses (addendum)
 
 Reason: Bug
 Author: Jonathan Hsieh

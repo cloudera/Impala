@@ -1,7 +1,7 @@
 From 59f6713ba02bd338230473b1ec6de10c24f69436 Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@apache.org>
 Date: Fri, 24 Jul 2015 15:34:40 -0700
-Subject: [PATCH 181/268] HBASE-13089 Fix test compilation error on building against htrace-3.2.0-incubating
+Subject: [PATCH 181/269] HBASE-13089 Fix test compilation error on building against htrace-3.2.0-incubating
 
 Reason: Compatibility
 Author: Esteban Gutierrez

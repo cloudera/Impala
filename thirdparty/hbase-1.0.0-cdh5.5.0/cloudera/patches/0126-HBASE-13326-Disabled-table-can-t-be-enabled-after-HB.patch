@@ -1,7 +1,7 @@
 From 6bd827fa80b2bb15ae8880dc4fe0e7d145a79381 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Wed, 25 Mar 2015 20:10:27 +0000
-Subject: [PATCH 126/268] HBASE-13326 Disabled table can't be enabled after HBase is restarted
+Subject: [PATCH 126/269] HBASE-13326 Disabled table can't be enabled after HBase is restarted
 
 Reason: Bug
 Author: Andrey Stepachev

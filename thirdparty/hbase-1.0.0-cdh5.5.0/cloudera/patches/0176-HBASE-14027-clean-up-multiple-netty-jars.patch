@@ -1,7 +1,7 @@
 From 48ee5fec5670ac1baae838554987f2bcf2d03b96 Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@apache.org>
 Date: Mon, 6 Jul 2015 17:00:51 -0500
-Subject: [PATCH 176/268] HBASE-14027 clean up multiple netty jars.
+Subject: [PATCH 176/269] HBASE-14027 clean up multiple netty jars.
 
 (cherry picked from commit 37e273b8bb7b895a1e143ecf9dfdff29e03e4837)
 

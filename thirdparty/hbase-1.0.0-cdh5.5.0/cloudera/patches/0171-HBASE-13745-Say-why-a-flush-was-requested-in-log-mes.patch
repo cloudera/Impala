@@ -1,7 +1,7 @@
 From c6c8296948c865adede1c1c2c72b49fe45ab81f7 Mon Sep 17 00:00:00 2001
 From: stack <stack@apache.org>
 Date: Fri, 22 May 2015 11:41:22 -0700
-Subject: [PATCH 171/268] HBASE-13745 Say why a flush was requested in log message
+Subject: [PATCH 171/269] HBASE-13745 Say why a flush was requested in log message
 
 Reason: Supportability
 Author: Michael Stack

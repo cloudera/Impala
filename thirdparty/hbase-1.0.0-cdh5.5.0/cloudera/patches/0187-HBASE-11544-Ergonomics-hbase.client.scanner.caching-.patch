@@ -1,7 +1,7 @@
 From a27315f145ededb8621d845cdd09bc039e110ea2 Mon Sep 17 00:00:00 2001
 From: Jonathan Lawlor <jonathan.lawlor@cloudera.com>
 Date: Wed, 4 Feb 2015 14:07:35 -0800
-Subject: [PATCH 187/268] HBASE-11544: [Ergonomics] hbase.client.scanner.caching is dogged and will try to return batch even if it means OOME
+Subject: [PATCH 187/269] HBASE-11544: [Ergonomics] hbase.client.scanner.caching is dogged and will try to return batch even if it means OOME
 
 Reason: Bug
 Author: Jonathan Lawlor

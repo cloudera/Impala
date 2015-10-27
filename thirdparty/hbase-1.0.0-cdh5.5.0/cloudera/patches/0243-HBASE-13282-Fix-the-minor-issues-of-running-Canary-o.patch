@@ -1,7 +1,7 @@
 From 41b20bcd7f2d4d5921ffc1af81d08c38cb5fa4dd Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Fri, 20 Mar 2015 21:14:07 +0000
-Subject: [PATCH 243/268] HBASE-13282 Fix the minor issues of running Canary on kerberized environment
+Subject: [PATCH 243/269] HBASE-13282 Fix the minor issues of running Canary on kerberized environment
 
 Reason: Supportability
 Author: Srikanth Srungarapu

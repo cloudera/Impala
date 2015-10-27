@@ -1,7 +1,7 @@
 From 4bb218d5b62f7d43d8b517701bacef7966a30563 Mon Sep 17 00:00:00 2001
 From: Srikanth Srungarapu <ssrungarapu@cloudera.com>
 Date: Wed, 15 Jul 2015 14:43:33 -0700
-Subject: [PATCH 175/268] HBASE-14045 Bumping thrift version to 0.9.2.
+Subject: [PATCH 175/269] HBASE-14045 Bumping thrift version to 0.9.2.
 
 Reason: Improvement
 Author: Srikanth Srungarapu

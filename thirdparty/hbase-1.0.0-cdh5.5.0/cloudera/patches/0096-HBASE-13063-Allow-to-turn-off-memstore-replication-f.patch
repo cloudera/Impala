@@ -1,7 +1,7 @@
 From daf5269c1bdca81f63948464a7e8ee38759cacd7 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Tue, 10 Mar 2015 10:02:04 +0000
-Subject: [PATCH 096/268] HBASE-13063 Allow to turn off memstore replication for region replicas
+Subject: [PATCH 096/269] HBASE-13063 Allow to turn off memstore replication for region replicas
 
 Reason: Task
 Author: Matteo Bertozzi

@@ -1,7 +1,7 @@
 From 325bd14523dd7c967fa7c0c240201b9af63d2349 Mon Sep 17 00:00:00 2001
 From: Andrew Purtell <apurtell@apache.org>
 Date: Fri, 7 Aug 2015 15:08:26 -0700
-Subject: [PATCH 251/268] HBASE-12865 WALs may be deleted before they are replicated to peers
+Subject: [PATCH 251/269] HBASE-12865 WALs may be deleted before they are replicated to peers
 
 Reason: Bug
 Author: He Liangliang

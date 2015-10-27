@@ -1,7 +1,7 @@
 From 98ae122960858cf530e649d2073baab9cb5f6ffb Mon Sep 17 00:00:00 2001
 From: Lars Hofhansl <larsh@apache.org>
 Date: Sun, 5 Jul 2015 12:18:59 -0700
-Subject: [PATCH 202/268] HBASE-13329 ArrayIndexOutOfBoundsException in CellComparator#getMinimumMidpointArray.
+Subject: [PATCH 202/269] HBASE-13329 ArrayIndexOutOfBoundsException in CellComparator#getMinimumMidpointArray.
 
 (cherry picked from commit 4b934b5734238675e27aaf426e4236e61c57d538)
 

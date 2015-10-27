@@ -1,7 +1,7 @@
 From b247694545e50ede0818610d08b021a142048a0c Mon Sep 17 00:00:00 2001
 From: Ramkrishna <ramkrishna.s.vasudevan@intel.com>
 Date: Fri, 21 Nov 2014 08:52:11 +0530
-Subject: [PATCH 033/268] HBASE-12486 - Move the mob table name tag to the 2nd one (Jingcheng Du)
+Subject: [PATCH 033/269] HBASE-12486 - Move the mob table name tag to the 2nd one (Jingcheng Du)
 
 Reason: Bug
 Author: Li Jiajia

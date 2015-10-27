@@ -1,7 +1,7 @@
 From abcfdd95144ce998158465c02eb81526c4d8f700 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Thu, 19 Mar 2015 07:01:21 +0000
-Subject: [PATCH 119/268] HBASE-13235 Revisit the security auditing semantics (Srikanth Srungarapu)
+Subject: [PATCH 119/269] HBASE-13235 Revisit the security auditing semantics (Srikanth Srungarapu)
 
 Reason: Improvement
 Author: Srikanth Srungarapu

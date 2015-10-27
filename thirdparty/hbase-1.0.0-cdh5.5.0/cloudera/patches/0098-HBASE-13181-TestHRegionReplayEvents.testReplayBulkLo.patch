@@ -1,7 +1,7 @@
 From a52281185fcd04bc8ab92c3eff7f617671755bd7 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Tue, 10 Mar 2015 17:21:34 +0000
-Subject: [PATCH 098/268] HBASE-13181 TestHRegionReplayEvents.testReplayBulkLoadEvent fails frequently
+Subject: [PATCH 098/269] HBASE-13181 TestHRegionReplayEvents.testReplayBulkLoadEvent fails frequently
 
 ---
  .../hadoop/hbase/regionserver/TestBulkLoad.java    |   35 ++++++++++++--------

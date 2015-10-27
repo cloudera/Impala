@@ -1,7 +1,7 @@
 From 10f16538be96847746a67ce474dc959fb449dfd5 Mon Sep 17 00:00:00 2001
 From: Rajesh Nishtala <rajeshn@fb.com>
 Date: Tue, 7 Apr 2015 12:36:30 -0700
-Subject: [PATCH 144/268] HBASE-13413 Create an integration test for Replication
+Subject: [PATCH 144/269] HBASE-13413 Create an integration test for Replication
 
 Reason: Add integration test for replication
 Author: Rajesh Nishtala

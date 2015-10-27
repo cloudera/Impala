@@ -1,7 +1,7 @@
 From 2a7b352b7654575075e4be403eb18320a5cbb5fe Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Wed, 24 Dec 2014 08:18:48 -0800
-Subject: [PATCH 066/268] HBASE-12758 treat mob region as any other region when generating rs manifest
+Subject: [PATCH 066/269] HBASE-12758 treat mob region as any other region when generating rs manifest
 
 Reason: MOB Feature
 Author: Jingcheng Du

@@ -1,7 +1,7 @@
 From 679a3b6008053db59b9d43b2cc17a9dc6d044d15 Mon Sep 17 00:00:00 2001
 From: Apekshit(Appy) Sharma <appy@cloudera.com>
 Date: Tue, 2 Jun 2015 14:17:46 -0700
-Subject: [PATCH 157/268] Dependency already removed from trunk by HBASE-8674. Somehow still exists in cdh pom.xml.
+Subject: [PATCH 157/269] Dependency already removed from trunk by HBASE-8674. Somehow still exists in cdh pom.xml.
 
 Author: Apekshit
 Reason: Unwanted slow dependency

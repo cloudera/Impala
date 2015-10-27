@@ -1,7 +1,7 @@
 From 7941b456de8c804cbc130f038927b52a858c755e Mon Sep 17 00:00:00 2001
 From: Andrew Purtell <apurtell@apache.org>
 Date: Thu, 30 Apr 2015 12:54:55 -0700
-Subject: [PATCH 178/268] HBASE-13420 RegionEnvironment.offerExecutionLatency Blocks Threads under Heavy Load
+Subject: [PATCH 178/269] HBASE-13420 RegionEnvironment.offerExecutionLatency Blocks Threads under Heavy Load
 
 (cherry picked from commit a17a3607ed76b4d99ee24b6aece1354cfa071c4b)
 

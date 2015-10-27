@@ -1,7 +1,7 @@
 From d3f909724e15501694f505afeb7c55ed8827be42 Mon Sep 17 00:00:00 2001
 From: Srikanth Srungarapu <ssrungarapu@cloudera.com>
 Date: Fri, 10 Apr 2015 13:44:19 -0700
-Subject: [PATCH 255/268] HBASE-13436 Include user name in ADE for scans
+Subject: [PATCH 255/269] HBASE-13436 Include user name in ADE for scans
 
 Reason: Supportability
 Author: Srikanth Srungarapu

@@ -1,7 +1,7 @@
 From 2d8735014c64a43839fb5abae325e509ff123bf9 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Thu, 26 Feb 2015 07:08:16 -0800
-Subject: [PATCH 138/268] HBASE-13111 truncate_preserve command is failing with undefined method error
+Subject: [PATCH 138/269] HBASE-13111 truncate_preserve command is failing with undefined method error
 
 Reason: Bug
 Author: Ashish Singhi

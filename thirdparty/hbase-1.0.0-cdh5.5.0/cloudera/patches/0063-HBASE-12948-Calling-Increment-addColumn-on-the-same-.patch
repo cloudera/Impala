@@ -1,7 +1,7 @@
 From 3f36b1d17c67f58668f930a36f54026d9dfc0b11 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Tue, 17 Feb 2015 12:42:32 -0800
-Subject: [PATCH 063/268] HBASE-12948 Calling Increment#addColumn on the same column multiple times produces wrong result
+Subject: [PATCH 063/269] HBASE-12948 Calling Increment#addColumn on the same column multiple times produces wrong result
 
 Reason: Bug
 Author: hongyu bi

@@ -1,7 +1,7 @@
 From 56fb5b24f5df89f381c22c52fe4efc08e37c520d Mon Sep 17 00:00:00 2001
 From: Matt Warhaftig <mwarhaftig@gmail.com>
 Date: Wed, 15 Apr 2015 00:29:34 -0400
-Subject: [PATCH 131/268] HBASE-13350 Log warnings for sanity check failures when checks disabled.
+Subject: [PATCH 131/269] HBASE-13350 Log warnings for sanity check failures when checks disabled.
 
 Reason: Improvement
 Author: Matt Warhaftig

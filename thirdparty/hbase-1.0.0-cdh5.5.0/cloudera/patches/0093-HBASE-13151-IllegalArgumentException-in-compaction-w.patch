@@ -1,7 +1,7 @@
 From 253f0371d00aafb03e07a58520340bc42da4099e Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Thu, 5 Mar 2015 11:48:09 -0800
-Subject: [PATCH 093/268] HBASE-13151 IllegalArgumentException in compaction when table has a namespace (Jingcheng Du)
+Subject: [PATCH 093/269] HBASE-13151 IllegalArgumentException in compaction when table has a namespace (Jingcheng Du)
 
 Conflicts:
 	hbase-server/src/test/java/org/apache/hadoop/hbase/mob/mapreduce/TestMobSweeper.java

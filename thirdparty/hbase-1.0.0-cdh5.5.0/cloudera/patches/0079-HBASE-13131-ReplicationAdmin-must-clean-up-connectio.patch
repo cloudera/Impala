@@ -1,7 +1,7 @@
 From 07ddc276ef76ab91ecda94d455390faab59a6633 Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@apache.org>
 Date: Sat, 28 Feb 2015 19:58:30 -0600
-Subject: [PATCH 079/268] HBASE-13131 ReplicationAdmin must clean up connections if constructor fails.
+Subject: [PATCH 079/269] HBASE-13131 ReplicationAdmin must clean up connections if constructor fails.
 
 (cherry picked from commit 9769fb6d94d2ba3e41b1ff288d15a9a6d32ea9df)
 

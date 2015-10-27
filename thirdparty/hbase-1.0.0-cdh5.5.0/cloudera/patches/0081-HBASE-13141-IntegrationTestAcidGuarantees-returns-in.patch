@@ -1,7 +1,7 @@
 From 6a4b618de8e5940bf7ab3613904dff57fb2ec485 Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Mon, 2 Mar 2015 21:25:47 -0800
-Subject: [PATCH 081/268] HBASE-13141 IntegrationTestAcidGuarantees returns incorrect values for getColumnFamilies
+Subject: [PATCH 081/269] HBASE-13141 IntegrationTestAcidGuarantees returns incorrect values for getColumnFamilies
 
 Reason: MOB testing
 Author: Jonathan Hsieh

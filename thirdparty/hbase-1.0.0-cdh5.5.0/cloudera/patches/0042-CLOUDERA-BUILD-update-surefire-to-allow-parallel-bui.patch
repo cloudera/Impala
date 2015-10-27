@@ -1,7 +1,7 @@
 From a88fd6f374b9ef2e94782868f25478a6dacf82f1 Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@cloudera.com>
 Date: Thu, 29 Jan 2015 16:25:12 -0600
-Subject: [PATCH 042/268] CLOUDERA-BUILD update surefire to allow parallel builds.
+Subject: [PATCH 042/269] CLOUDERA-BUILD update surefire to allow parallel builds.
 
 Avoid SUREFIRE-1121 by bumping to Surefire 2.18.1
 

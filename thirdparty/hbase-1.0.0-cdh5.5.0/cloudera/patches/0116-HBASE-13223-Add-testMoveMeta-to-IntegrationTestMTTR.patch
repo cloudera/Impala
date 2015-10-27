@@ -1,7 +1,7 @@
 From 502b9cedd8c91ea80f6726a173dedcede501f148 Mon Sep 17 00:00:00 2001
 From: Dima Spivak <dspivak@cloudera.com>
 Date: Mon, 16 Mar 2015 18:22:51 -0700
-Subject: [PATCH 116/268] HBASE-13223 Add testMoveMeta to IntegrationTestMTTR
+Subject: [PATCH 116/269] HBASE-13223 Add testMoveMeta to IntegrationTestMTTR
 
 Reason: New Feature
 Author: Dima Spivak

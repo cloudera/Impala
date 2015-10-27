@@ -1,7 +1,7 @@
 From 180db5021cd99d7e0a1c5e33b67052643eec6d58 Mon Sep 17 00:00:00 2001
 From: Andrew Purtell <apurtell@apache.org>
 Date: Fri, 25 Sep 2015 14:02:59 -0700
-Subject: [PATCH 249/268] HBASE-14492 Increase REST server header buffer size from 8k to 64k (Huaxiang Sun)
+Subject: [PATCH 249/269] HBASE-14492 Increase REST server header buffer size from 8k to 64k (Huaxiang Sun)
 
 Reason: Bugfix
 Author: Andrew Purtell

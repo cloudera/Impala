@@ -1,7 +1,7 @@
 From 8c41ed9283b2010a46427e0a62e0723160514367 Mon Sep 17 00:00:00 2001
 From: Apekshit(Appy) Sharma <appy@cloudera.com>
 Date: Thu, 20 Aug 2015 00:30:00 -0700
-Subject: [PATCH 205/268] HBASE-14148 Default HBase web pages to be non-framable.
+Subject: [PATCH 205/269] HBASE-14148 Default HBase web pages to be non-framable.
  * Sends X-Frame-Options header
  * configured via hbase.http.filter.xframeoptions.mode
  * defaults to DENY

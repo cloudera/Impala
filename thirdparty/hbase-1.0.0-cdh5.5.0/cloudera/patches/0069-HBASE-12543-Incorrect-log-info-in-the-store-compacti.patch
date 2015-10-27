@@ -1,7 +1,7 @@
 From c21c9f67646ed03c72f548c38efe16988cdfedd6 Mon Sep 17 00:00:00 2001
 From: Ramkrishna <ramkrishna.s.vasudevan@intel.com>
 Date: Fri, 21 Nov 2014 15:28:37 +0530
-Subject: [PATCH 069/268] HBASE-12543 Incorrect log info in the store compaction of mob (Jiajia Li)
+Subject: [PATCH 069/269] HBASE-12543 Incorrect log info in the store compaction of mob (Jiajia Li)
 
 Reason: MOB feature
 Author: Jiajia Li

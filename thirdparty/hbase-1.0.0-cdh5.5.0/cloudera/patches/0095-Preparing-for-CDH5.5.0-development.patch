@@ -1,7 +1,7 @@
 From 0405ddcc38182e38e834f51d630da93efe09d09a Mon Sep 17 00:00:00 2001
 From: Jenkins slave <kitchen-build@cloudera.com>
 Date: Mon, 9 Mar 2015 07:45:37 -0700
-Subject: [PATCH 095/268] Preparing for CDH5.5.0 development
+Subject: [PATCH 095/269] Preparing for CDH5.5.0 development
 
 ---
  hbase-annotations/pom.xml    |    2 +-

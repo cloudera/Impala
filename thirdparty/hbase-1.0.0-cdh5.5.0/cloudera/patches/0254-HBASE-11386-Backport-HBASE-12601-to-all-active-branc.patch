@@ -1,7 +1,7 @@
 From 880e1698fac7436b601858816b57834c49a4ad1a Mon Sep 17 00:00:00 2001
 From: Ashish Singhi <ashish.singhi@huawei.com>
 Date: Thu, 2 Apr 2015 10:37:02 +0530
-Subject: [PATCH 254/268] HBASE-11386 Backport HBASE-12601 to all active branches other than master
+Subject: [PATCH 254/269] HBASE-11386 Backport HBASE-12601 to all active branches other than master
 
 The correct JIRA nubmer is HBASE-13386, not HBASE-11386.
 

@@ -1,7 +1,7 @@
 From 8a5e72770c53b19116ec7082dc6a7a35367b9a6c Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Tue, 3 Feb 2015 20:07:23 -0800
-Subject: [PATCH 206/268] HBASE-12957 region_mover#isSuccessfulScan may be extremely slow on region with lots of expired data (Hongyu Bi)
+Subject: [PATCH 206/269] HBASE-12957 region_mover#isSuccessfulScan may be extremely slow on region with lots of expired data (Hongyu Bi)
 
 Reason: Bug
 Author: Hongyu Bi

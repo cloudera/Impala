@@ -1,7 +1,7 @@
 From d90aad0904458d9b35289c4ef2766069c80b5018 Mon Sep 17 00:00:00 2001
 From: Devaraj Das <ddas@apache.org>
 Date: Fri, 6 Feb 2015 07:48:32 -0800
-Subject: [PATCH 044/268] HBASE-11568 Async WAL replication for region replicas (Enis Soztutar)
+Subject: [PATCH 044/269] HBASE-11568 Async WAL replication for region replicas (Enis Soztutar)
 
 Reason: Task
 Author: Devaraj Das

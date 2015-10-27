@@ -1,7 +1,7 @@
 From 16278d246df1ab76c81a71e9f9b058be0986d08a Mon Sep 17 00:00:00 2001
 From: Apekshit(Appy) Sharma <appy@cloudera.com>
 Date: Fri, 18 Sep 2015 10:30:47 -0700
-Subject: [PATCH 228/268] Changes:
+Subject: [PATCH 228/269] Changes:
  - Fixes security docs to suggest use of 'privacy' instead of 'auth-conf' for 'hbase.rpc.protection' property.
  - Changes SaslUtil to accept both kinds of values (privacy/integrity/authentication OR auth-conf/auth-int/auth) to be backward compatible with wrong doc.
  - Change thrift's property 'hbase.thrift.security.qop' to use same set of values(privacy/integrity/authentication) as '{hadoop,hbase}.rpc.protection'.  auth/auth-int/auth-conf are supported too for backward compat.

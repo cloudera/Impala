@@ -1,7 +1,7 @@
 From d855d044a76815113a67a818ab5615b6244a25de Mon Sep 17 00:00:00 2001
 From: anoopsjohn <anoopsamjohn@gmail.com>
 Date: Thu, 25 Sep 2014 09:47:57 +0530
-Subject: [PATCH 028/268] HBASE-12030 Wrong compaction report and assert when MOB compaction switches to minor.
+Subject: [PATCH 028/269] HBASE-12030 Wrong compaction report and assert when MOB compaction switches to minor.
 
 Conflicts:
 	hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestMobCompaction.java

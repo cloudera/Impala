@@ -1,7 +1,7 @@
 From 7de3a9d35a32936864b8201a603a6402e4871977 Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Thu, 30 Oct 2014 06:50:13 -0700
-Subject: [PATCH 034/268] HBASE-11683 Metrics for MOB (Jingcheng Du)
+Subject: [PATCH 034/269] HBASE-11683 Metrics for MOB (Jingcheng Du)
 
 Conflicts:
 	hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionServerWrapper.java

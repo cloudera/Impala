@@ -1,7 +1,7 @@
 From d78c6d3256de9624a62b256b2486820e68c07d90 Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Fri, 6 Feb 2015 05:37:13 -0800
-Subject: [PATCH 074/268] HBASE-11861 Native MOB Compaction mechanisms (Jingcheng Du)
+Subject: [PATCH 074/269] HBASE-11861 Native MOB Compaction mechanisms (Jingcheng Du)
 
 Reason: MOB feature
 Author: Jingcheng Du

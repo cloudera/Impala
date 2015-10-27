@@ -1,3 +1,9 @@
+commit 647f184356a5427749b0997f0f1129bfe71a7248
+Author: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
+Date:   Tue Oct 13 11:00:51 2015 -0700
+
+    CLOUDERA-BUILD Add pre-commit hook
+
 commit 48e13ff2dea454be4f7cb2833d07c6bc9e835c2a
 Author: Jenkins <dev-kitchen@cloudera.com>
 Date:   Mon Oct 12 15:49:50 2015 -0700

@@ -1,7 +1,7 @@
 From cdf934880bd787bdea80d02c89af307c50f2b3f4 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Mon, 9 Feb 2015 12:15:23 -0800
-Subject: [PATCH 213/268] HBASE-12992 TestChoreService doesn't close services, that can break test on slow virtual hosts (Andrey Stepachev)
+Subject: [PATCH 213/269] HBASE-12992 TestChoreService doesn't close services, that can break test on slow virtual hosts (Andrey Stepachev)
 
 Reason: Bug
 Author: Andrey Stepachev

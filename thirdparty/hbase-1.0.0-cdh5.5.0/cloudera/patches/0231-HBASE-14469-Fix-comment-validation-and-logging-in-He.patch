@@ -1,7 +1,7 @@
 From 22fac7662e4a8f7281e35fc193383df894d3fb4d Mon Sep 17 00:00:00 2001
 From: Apekshit(Appy) Sharma <appy@cloudera.com>
 Date: Thu, 24 Sep 2015 22:59:30 -0700
-Subject: [PATCH 231/268] HBASE-14469 Fix comment, validation and logging in HeapMemorySizeUtil.getGlobalMemStoreLowerMark.
+Subject: [PATCH 231/269] HBASE-14469 Fix comment, validation and logging in HeapMemorySizeUtil.getGlobalMemStoreLowerMark.
 
 Reason: Improvement
 Author: Apekshit Sharma

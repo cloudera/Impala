@@ -1,7 +1,7 @@
 From 53a1211cb84040549bc80b20e8660eaea7f2fab7 Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Thu, 4 Sep 2014 05:41:21 -0700
-Subject: [PATCH 016/268] HBASE-11643 Read and write MOB in HBase (Jingcheng Du)
+Subject: [PATCH 016/269] HBASE-11643 Read and write MOB in HBase (Jingcheng Du)
  Adds hfile.format.version = 3 to mob tests
 
 Reason: MOB Feature

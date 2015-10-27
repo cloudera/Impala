@@ -1,7 +1,7 @@
 From 6d6d0bc71eea256005f628822140f799abea4eda Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Wed, 4 Mar 2015 23:47:05 -0800
-Subject: [PATCH 084/268] HBASE-13012 Add shell commands to trigger the mob file compactor (Jingcheng Du and Jiajia Li)
+Subject: [PATCH 084/269] HBASE-13012 Add shell commands to trigger the mob file compactor (Jingcheng Du and Jiajia Li)
 
 Conflicts:
 	hbase-client/src/main/java/org/apache/hadoop/hbase/client/HBaseAdmin.java

@@ -1,7 +1,7 @@
 From 33b88461cd142a1b9b95d0834c79d8351d03e231 Mon Sep 17 00:00:00 2001
 From: Lars Hofhansl <larsh@apache.org>
 Date: Tue, 16 Jun 2015 12:21:49 -0700
-Subject: [PATCH 166/268] HBASE-13885 ZK watches leaks during snapshots.
+Subject: [PATCH 166/269] HBASE-13885 ZK watches leaks during snapshots.
 
 Reason: Bug
 Author: Lars Hofhansl

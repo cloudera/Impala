@@ -1,7 +1,7 @@
 From 75e64f76dad6880be96f472ad53cda41584ff44e Mon Sep 17 00:00:00 2001
 From: Jeffrey Zhong <jeffreyz@apache.org>
 Date: Fri, 27 Feb 2015 17:21:06 -0800
-Subject: [PATCH 083/268] HBASE-11571 Bulk load handling from secondary region replicas
+Subject: [PATCH 083/269] HBASE-11571 Bulk load handling from secondary region replicas
 
 Reason: Task
 Author: Jeffrey Zhon

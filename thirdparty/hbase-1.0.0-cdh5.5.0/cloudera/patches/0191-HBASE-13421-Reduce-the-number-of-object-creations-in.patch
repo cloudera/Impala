@@ -1,7 +1,7 @@
 From e40ca315e549da5a99bce7f48b8d73eb0d6a8940 Mon Sep 17 00:00:00 2001
 From: Jonathan Lawlor <jonathan.lawlor@cloudera.com>
 Date: Tue, 24 Mar 2015 15:52:46 -0700
-Subject: [PATCH 191/268] HBASE-13421 Reduce the number of object creations introduced by HBASE-11544 in scan RPC hot code paths
+Subject: [PATCH 191/269] HBASE-13421 Reduce the number of object creations introduced by HBASE-11544 in scan RPC hot code paths
 
 Reason: Bug
 Author: Jonathan Lawlor

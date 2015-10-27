@@ -1,7 +1,7 @@
 From daa93857a7373e5df72a64a8efdfd49ebc102fb0 Mon Sep 17 00:00:00 2001
 From: Nick Dimiduk <ndimiduk@apache.org>
 Date: Tue, 24 Feb 2015 19:03:20 -0800
-Subject: [PATCH 150/268] HBASE-13086 Show ZK root node on Master WebUI
+Subject: [PATCH 150/269] HBASE-13086 Show ZK root node on Master WebUI
 
 Reason: Supportability
 Author: Nick Dimiduk

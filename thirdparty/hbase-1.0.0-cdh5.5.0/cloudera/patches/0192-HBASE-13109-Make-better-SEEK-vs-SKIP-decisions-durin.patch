@@ -1,7 +1,7 @@
 From 9152d86503593feec47c30df94a969d159247375 Mon Sep 17 00:00:00 2001
 From: Lars Hofhansl <larsh@apache.org>
 Date: Wed, 4 Mar 2015 14:03:47 -0800
-Subject: [PATCH 192/268] HBASE-13109 Make better SEEK vs SKIP decisions during scanning.
+Subject: [PATCH 192/269] HBASE-13109 Make better SEEK vs SKIP decisions during scanning.
 
 Reason: Product Requirement (Compatibility)
 Author: Lars Hofhansl

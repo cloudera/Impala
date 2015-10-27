@@ -1,7 +1,7 @@
 From d50ff73890794dec38c40b4200875e318e05835e Mon Sep 17 00:00:00 2001
 From: zhangduo <zhangduo@wandoujia.com>
 Date: Wed, 6 May 2015 14:48:08 +0800
-Subject: [PATCH 179/268] HBASE-13628 Use AtomicLong as size in BoundedConcurrentLinkedQueue
+Subject: [PATCH 179/269] HBASE-13628 Use AtomicLong as size in BoundedConcurrentLinkedQueue
 
 Conflicts:
 	hbase-server/src/test/java/org/apache/hadoop/hbase/util/TestBoundedConcurrentLinkedQueue.java

@@ -1,7 +1,7 @@
 From 53d4ceed8c3c5ca389154f2c37933d06995ad514 Mon Sep 17 00:00:00 2001
 From: Andrew Purtell <apurtell@apache.org>
 Date: Thu, 16 Jul 2015 18:27:30 -0700
-Subject: [PATCH 261/268] HBASE-14050 NPE in org.apache.hadoop.hbase.ipc.RpcServer.readAndProcess
+Subject: [PATCH 261/269] HBASE-14050 NPE in org.apache.hadoop.hbase.ipc.RpcServer.readAndProcess
 
 Reason: Bug
 Author: Andrew Purtell

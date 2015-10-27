@@ -1,7 +1,7 @@
 From 84bdd514c88224c6f562acce439beee37de2b8f7 Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@apache.org>
 Date: Fri, 1 May 2015 23:53:13 -0500
-Subject: [PATCH 143/268] HBASE-13611 update clover profile to work with clover 4.x and maven 3.
+Subject: [PATCH 143/269] HBASE-13611 update clover profile to work with clover 4.x and maven 3.
 
 * change pom to use a maven 3 compat version of clover
 * add clover to javadoc plugin deps so that instrumented doclet works

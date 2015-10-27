@@ -1,7 +1,7 @@
 From 3d4436c184afe340189c93da41b22258ced8602c Mon Sep 17 00:00:00 2001
 From: Dima Spivak <dspivak@cloudera.com>
 Date: Thu, 29 Jan 2015 23:21:31 -0600
-Subject: [PATCH 056/268] HBASE-12869 Add a REST API implementation of the ClusterManager interface -- pushing the 0.98 patch on branch-1.0
+Subject: [PATCH 056/269] HBASE-12869 Add a REST API implementation of the ClusterManager interface -- pushing the 0.98 patch on branch-1.0
 
 Reason: New Feature
 Author: Dima Spivak

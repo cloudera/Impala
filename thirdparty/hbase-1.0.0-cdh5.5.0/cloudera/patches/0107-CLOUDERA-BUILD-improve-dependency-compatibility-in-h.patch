@@ -1,7 +1,7 @@
 From 1ad80d11dc9ece23d5e3e5b2a55613334bb1e7c3 Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@cloudera.com>
 Date: Tue, 10 Mar 2015 03:11:55 -0500
-Subject: [PATCH 107/268] CLOUDERA-BUILD improve dependency compatibility in hbase-client and hbase-server
+Subject: [PATCH 107/269] CLOUDERA-BUILD improve dependency compatibility in hbase-client and hbase-server
 
 Ref: CDH-24807
 ---

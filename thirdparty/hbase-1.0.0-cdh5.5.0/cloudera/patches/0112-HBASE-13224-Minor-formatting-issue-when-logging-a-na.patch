@@ -1,7 +1,7 @@
 From 08445d0d423a79875c5b8f3c72ed295e19cf0714 Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@cloudera.com>
 Date: Thu, 12 Mar 2015 19:02:09 -0700
-Subject: [PATCH 112/268] HBASE-13224 Minor formatting issue when logging a namespace scope in AuthResult#toContextString
+Subject: [PATCH 112/269] HBASE-13224 Minor formatting issue when logging a namespace scope in AuthResult#toContextString
 
 Author: Esteban Gutierrez
 Reason: Bug

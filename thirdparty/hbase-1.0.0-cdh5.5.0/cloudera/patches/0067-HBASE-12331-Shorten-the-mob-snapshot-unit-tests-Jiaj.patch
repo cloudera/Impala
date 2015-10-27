@@ -1,7 +1,7 @@
 From 6ce75dccbd2ba5a34db58eab7d5a6bd1b1529e3e Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Thu, 25 Dec 2014 14:06:26 -0800
-Subject: [PATCH 067/268] HBASE-12331 Shorten the mob snapshot unit tests (Jiajia Li)
+Subject: [PATCH 067/269] HBASE-12331 Shorten the mob snapshot unit tests (Jiajia Li)
 
 Reason: MOB Feature
 Author: Jingcheng Du

@@ -1,7 +1,7 @@
 From 058df51e07b1496206e2dbcda4752d31adbfcb47 Mon Sep 17 00:00:00 2001
 From: Enis Soztutar <enis@apache.org>
 Date: Fri, 17 Apr 2015 21:56:04 -0700
-Subject: [PATCH 168/268] HBASE-13491 Issue in FuzzyRowFilter#getNextForFuzzyRule (Anoop Sam John)
+Subject: [PATCH 168/269] HBASE-13491 Issue in FuzzyRowFilter#getNextForFuzzyRule (Anoop Sam John)
 
 Reason: Bug
 Author: Anoop Sam John

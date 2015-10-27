@@ -1,7 +1,7 @@
 From 69a618be0b24b800f3b8251c04aa58cefa8c0f13 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Wed, 17 Dec 2014 17:20:22 +0000
-Subject: [PATCH 010/268] CLOUDERA-BUILD Revert "HBASE-10573 Use Netty 4 - addendum"
+Subject: [PATCH 010/269] CLOUDERA-BUILD Revert "HBASE-10573 Use Netty 4 - addendum"
 
 ---
  .../org/apache/hadoop/hbase/client/TestHCM.java    |   19 +------------------

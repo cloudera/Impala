@@ -1,7 +1,7 @@
 From e3496681952e9b1ee7916e8773c2ee60cca062d6 Mon Sep 17 00:00:00 2001
 From: Srikanth Srungarapu <ssrungarapu@cloudera.com>
 Date: Fri, 13 Feb 2015 12:02:17 -0800
-Subject: [PATCH 054/268] CLOUDERA-BUILD Restore the usage of master rpc and info ports.
+Subject: [PATCH 054/269] CLOUDERA-BUILD Restore the usage of master rpc and info ports.
 
 Reason: Product Requirement (Compatibility)
 Author: Srikanth Srungarapu

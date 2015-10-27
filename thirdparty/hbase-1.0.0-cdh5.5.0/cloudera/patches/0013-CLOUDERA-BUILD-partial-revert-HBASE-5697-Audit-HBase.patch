@@ -1,7 +1,7 @@
 From 63ba0058e4c2c639f21fc6cdacb1af8ee8388587 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Fri, 19 Dec 2014 21:42:08 +0000
-Subject: [PATCH 013/268] CLOUDERA-BUILD partial revert HBASE-5697 Audit HBase for usage of deprecated hadoop 0.20.x, 1.x property names
+Subject: [PATCH 013/269] CLOUDERA-BUILD partial revert HBASE-5697 Audit HBase for usage of deprecated hadoop 0.20.x, 1.x property names
 
 ---
  .../hadoop/hbase/io/compress/Compression.java      |    1 +

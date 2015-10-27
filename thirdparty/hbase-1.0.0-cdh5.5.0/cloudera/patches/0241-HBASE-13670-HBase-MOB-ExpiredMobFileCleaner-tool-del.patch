@@ -1,7 +1,7 @@
 From caf090644b11d97fd625931581eee7c60b2c28d7 Mon Sep 17 00:00:00 2001
 From: anoopsjohn <anoopsamjohn@gmail.com>
 Date: Wed, 1 Jul 2015 11:26:24 +0530
-Subject: [PATCH 241/268] HBASE-13670 [HBase MOB] ExpiredMobFileCleaner tool deletes mob files later for one more day after they are expired. (Jingcheng)
+Subject: [PATCH 241/269] HBASE-13670 [HBase MOB] ExpiredMobFileCleaner tool deletes mob files later for one more day after they are expired. (Jingcheng)
 
 Reason: Bugfix
 Author: Jingcheng Du

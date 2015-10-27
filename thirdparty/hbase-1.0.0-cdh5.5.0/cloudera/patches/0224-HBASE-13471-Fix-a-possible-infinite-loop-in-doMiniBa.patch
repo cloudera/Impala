@@ -1,7 +1,7 @@
 From 2546a019bfdf41c8c8db645efc85909ebdf5231f Mon Sep 17 00:00:00 2001
 From: Rajesh Nishtala <rajeshn@fb.com>
 Date: Mon, 20 Apr 2015 17:34:25 -0700
-Subject: [PATCH 224/268] HBASE-13471 Fix a possible infinite loop in doMiniBatchMutation
+Subject: [PATCH 224/269] HBASE-13471 Fix a possible infinite loop in doMiniBatchMutation
 
 Reason: Bug
 Author: Rajesh Nishtala

@@ -1,7 +1,7 @@
 From 630fc336b28dec0a3727728fac4d499ee59e7e62 Mon Sep 17 00:00:00 2001
 From: Devaraj Das <ddas@apache.org>
 Date: Fri, 16 Jan 2015 11:23:48 -0800
-Subject: [PATCH 051/268] HBASE-11903 Directly invoking split & merge of replica regions should be disallowed
+Subject: [PATCH 051/269] HBASE-11903 Directly invoking split & merge of replica regions should be disallowed
 
 Reason: Task
 Author: Devaraj Das

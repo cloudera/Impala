@@ -1,7 +1,7 @@
 From 5b8ea9c7e1949593d0ee85566d13a5ec01f50074 Mon Sep 17 00:00:00 2001
 From: Ramkrishna <ramkrishna.s.vasudevan@intel.com>
 Date: Thu, 9 Oct 2014 09:50:39 +0530
-Subject: [PATCH 031/268] HBASE-12201 Close the writers in the MOB sweep tool (Jingcheng Du)
+Subject: [PATCH 031/269] HBASE-12201 Close the writers in the MOB sweep tool (Jingcheng Du)
 
 Reason: Bug
 Author: Jingcheng Du

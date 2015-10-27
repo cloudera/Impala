@@ -1,7 +1,7 @@
 From 1f9c1f0fe14b11b39726435e2d44c0e2a8e3b34a Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Thu, 15 Jan 2015 08:53:06 -0800
-Subject: [PATCH 132/268] HBASE-12848 Utilize Flash storage for WAL
+Subject: [PATCH 132/269] HBASE-12848 Utilize Flash storage for WAL
 
 (cherry picked from commit 2e08bb3b47b65ebbd1ac1101d0b9fbbf10fda92b)
 

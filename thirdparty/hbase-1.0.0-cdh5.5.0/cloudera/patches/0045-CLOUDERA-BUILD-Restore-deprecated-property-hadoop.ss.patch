@@ -1,7 +1,7 @@
 From 248c98bcffc9a22f8bb3934f49889f6fc4325b09 Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@cloudera.com>
 Date: Tue, 10 Feb 2015 15:51:40 -0800
-Subject: [PATCH 045/268] CLOUDERA-BUILD Restore deprecated property hadoop.ssl.enabled
+Subject: [PATCH 045/269] CLOUDERA-BUILD Restore deprecated property hadoop.ssl.enabled
 
 Author: Esteban Gutierrez
 Reason: Product Requirement (Compatibility)

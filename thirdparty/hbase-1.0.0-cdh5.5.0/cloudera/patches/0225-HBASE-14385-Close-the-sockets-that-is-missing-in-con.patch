@@ -1,7 +1,7 @@
 From 8c7d121d818365530b34d7981985ffdc971c097f Mon Sep 17 00:00:00 2001
 From: Srikanth Srungarapu <ssrungarapu@cloudera.com>
 Date: Wed, 9 Sep 2015 23:39:05 -0700
-Subject: [PATCH 225/268] HBASE-14385 Close the sockets that is missing in connection closure.
+Subject: [PATCH 225/269] HBASE-14385 Close the sockets that is missing in connection closure.
 
 Reason: Bug
 Author: Srikanth Srungarapu

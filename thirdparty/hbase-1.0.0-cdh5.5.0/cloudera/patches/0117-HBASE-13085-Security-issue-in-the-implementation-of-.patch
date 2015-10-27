@@ -1,7 +1,7 @@
 From bb3a5178124cec0f8bbb93b412b025a53526ee1d Mon Sep 17 00:00:00 2001
 From: Andrew Purtell <apurtell@apache.org>
 Date: Tue, 24 Feb 2015 10:18:17 -0800
-Subject: [PATCH 117/268] HBASE-13085 Security issue in the implementation of Rest gataway 'doAs' proxy user support (Jerry He)
+Subject: [PATCH 117/269] HBASE-13085 Security issue in the implementation of Rest gataway 'doAs' proxy user support (Jerry He)
 
 Reason: Bug
 Author: Jerry He

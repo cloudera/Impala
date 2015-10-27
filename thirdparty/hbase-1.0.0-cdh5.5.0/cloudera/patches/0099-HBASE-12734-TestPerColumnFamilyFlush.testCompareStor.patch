@@ -1,7 +1,7 @@
 From 029bbcf023f0dacb160eb5e38f358579409b3bae Mon Sep 17 00:00:00 2001
 From: stack <stack@apache.org>
 Date: Mon, 22 Dec 2014 08:56:33 -0800
-Subject: [PATCH 099/268] HBASE-12734 TestPerColumnFamilyFlush.testCompareStoreFileCount is flakey (zhangduo)
+Subject: [PATCH 099/269] HBASE-12734 TestPerColumnFamilyFlush.testCompareStoreFileCount is flakey (zhangduo)
 
 (cherry picked from commit fd232cc3b5974386abfcf07c6f6ab15d3ab6fa48)
 

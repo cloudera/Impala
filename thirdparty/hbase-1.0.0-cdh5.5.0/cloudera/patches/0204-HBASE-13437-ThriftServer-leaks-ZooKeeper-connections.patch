@@ -1,7 +1,7 @@
 From 370cb37c4bf23b4032d7946a34bd5ff6f75aa60a Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Wed, 22 Apr 2015 07:52:23 -0700
-Subject: [PATCH 204/268] HBASE-13437 ThriftServer leaks ZooKeeper connections (Winger Pun)
+Subject: [PATCH 204/269] HBASE-13437 ThriftServer leaks ZooKeeper connections (Winger Pun)
 
 Reason: Bug
 Author: Winger Pun

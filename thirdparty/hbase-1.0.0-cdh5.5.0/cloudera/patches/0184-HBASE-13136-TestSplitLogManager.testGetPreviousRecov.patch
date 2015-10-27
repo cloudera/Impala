@@ -1,7 +1,7 @@
 From ae6b6d8480f3170de6d94aaae1ca1dae512170cc Mon Sep 17 00:00:00 2001
 From: zhangduo <zhangduo@wandoujia.com>
 Date: Tue, 3 Mar 2015 08:14:57 +0800
-Subject: [PATCH 184/268] HBASE-13136 TestSplitLogManager.testGetPreviousRecoveryMode is flakey
+Subject: [PATCH 184/269] HBASE-13136 TestSplitLogManager.testGetPreviousRecoveryMode is flakey
 
 Signed-off-by: stack <stack@apache.org>
 (cherry picked from commit 6c02361e73a2c5e86861e6a754d9f61fa9c6cb80)

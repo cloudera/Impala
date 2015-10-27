@@ -1,7 +1,7 @@
 From 097230b79e9a5476a9b96251b9942152e628e9b9 Mon Sep 17 00:00:00 2001
 From: Andrew Purtell <apurtell@apache.org>
 Date: Wed, 25 Mar 2015 09:28:13 -0700
-Subject: [PATCH 125/268] HBASE-13294 Fix the critical ancient loopholes in security testing infrastructure (Srikanth Srungarapu)
+Subject: [PATCH 125/269] HBASE-13294 Fix the critical ancient loopholes in security testing infrastructure (Srikanth Srungarapu)
 
 Reason: Bug
 Author: Srikanth Srungarapu

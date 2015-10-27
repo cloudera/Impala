@@ -1,7 +1,7 @@
 From 98296dbce2ff096d29a1c08995de88d65d4cb615 Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@cloudera.com>
 Date: Mon, 20 Apr 2015 20:52:55 -0700
-Subject: [PATCH 135/268] CLOUDERA-BUILD Revert "HBASE-10018 Remove region location prefetching" - ADDENDUM
+Subject: [PATCH 135/269] CLOUDERA-BUILD Revert "HBASE-10018 Remove region location prefetching" - ADDENDUM
 
 Author: Esteban Gutierrez
 Reason: Backward compatibility

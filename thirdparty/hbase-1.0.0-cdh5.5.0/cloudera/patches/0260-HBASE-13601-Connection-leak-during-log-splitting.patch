@@ -1,7 +1,7 @@
 From 7ade081cda431548aea1e6690dfdab526b42f1f7 Mon Sep 17 00:00:00 2001
 From: Lars Hofhansl <larsh@apache.org>
 Date: Thu, 30 Apr 2015 17:05:05 -0700
-Subject: [PATCH 260/268] HBASE-13601 Connection leak during log splitting.
+Subject: [PATCH 260/269] HBASE-13601 Connection leak during log splitting.
 
 Reason: Bug
 Author: Abhishek Singh Chouhan

@@ -1,7 +1,7 @@
 From 1b4710fae5fccde850fe59900927741fb95987c9 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Mon, 30 Mar 2015 18:56:20 +0200
-Subject: [PATCH 129/268] CDH-26495 Reset hbase.table.sanity.checks to false for 5.4
+Subject: [PATCH 129/269] CDH-26495 Reset hbase.table.sanity.checks to false for 5.4
 
 Reason: Compatibility
 Author: Matteo Bertozzi

@@ -1,7 +1,7 @@
 From 8c62afc4092ff1d1fe0e9f58f6a0c382df9a8923 Mon Sep 17 00:00:00 2001
 From: Jeffrey Zhong <jeffreyz@apache.org>
 Date: Wed, 4 Feb 2015 15:52:01 -0800
-Subject: [PATCH 047/268] HBASE-11567 Write bulk load COMMIT events to WAL
+Subject: [PATCH 047/269] HBASE-11567 Write bulk load COMMIT events to WAL
 
 Reason: Task
 Author: Jeffrey Zhong

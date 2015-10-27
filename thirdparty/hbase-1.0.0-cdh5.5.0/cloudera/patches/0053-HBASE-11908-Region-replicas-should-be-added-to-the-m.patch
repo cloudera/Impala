@@ -1,7 +1,7 @@
 From d45e0c71495a68843c295d248d1722f942ad15b2 Mon Sep 17 00:00:00 2001
 From: Enis Soztutar <enis@apache.org>
 Date: Tue, 27 Jan 2015 14:42:42 -0800
-Subject: [PATCH 053/268] HBASE-11908 Region replicas should be added to the meta table at the time of table creation
+Subject: [PATCH 053/269] HBASE-11908 Region replicas should be added to the meta table at the time of table creation
 
 Reason: Task
 Author: Enis Soztutar

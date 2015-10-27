@@ -1,7 +1,7 @@
 From ad98b2afeba0fd4c709a4c1cb8db7a2d20509ca6 Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Wed, 10 Dec 2014 19:43:59 -0800
-Subject: [PATCH 038/268] HBASE-12540 TestRegionServerMetrics#testMobMetrics test failure (Jingcheng Du and Jiajia Li)
+Subject: [PATCH 038/269] HBASE-12540 TestRegionServerMetrics#testMobMetrics test failure (Jingcheng Du and Jiajia Li)
 
 Reason: Mob support
 Author: Jingcheng Du and Jiajia Li

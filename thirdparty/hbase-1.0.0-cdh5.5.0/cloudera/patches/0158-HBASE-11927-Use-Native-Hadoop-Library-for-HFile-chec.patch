@@ -1,7 +1,7 @@
 From cbeecd56d9c3d7925566834b43e0a8651ee32c97 Mon Sep 17 00:00:00 2001
 From: Apekshit(Appy) Sharma <appy@cloudera.com>
 Date: Sun, 10 May 2015 23:01:16 -0700
-Subject: [PATCH 158/268] HBASE-11927 Use Native Hadoop Library for HFile checksum. (Apekshit)
+Subject: [PATCH 158/269] HBASE-11927 Use Native Hadoop Library for HFile checksum. (Apekshit)
 
 Signed-off-by: stack <stack@apache.org>
 

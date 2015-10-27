@@ -1,7 +1,7 @@
 From 240875f1eacebcbbecee125e1347ce3ec220981e Mon Sep 17 00:00:00 2001
 From: Devaraj Das <ddas@apache.org>
 Date: Fri, 16 Jan 2015 10:54:52 -0800
-Subject: [PATCH 050/268] HBASE-11261 Handle splitting/merging of regions that have region_replication greater than one
+Subject: [PATCH 050/269] HBASE-11261 Handle splitting/merging of regions that have region_replication greater than one
 
 Reason: Task
 Author: Devaraj Das

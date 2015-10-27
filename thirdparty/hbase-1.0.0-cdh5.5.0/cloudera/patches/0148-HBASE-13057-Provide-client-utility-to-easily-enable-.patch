@@ -1,7 +1,7 @@
 From 02761b9c746b29c19c931d179da00589d750370d Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Fri, 20 Feb 2015 10:27:20 -0800
-Subject: [PATCH 148/268] HBASE-13057 Provide client utility to easily enable and disable table replication (Ashish Singhi)
+Subject: [PATCH 148/269] HBASE-13057 Provide client utility to easily enable and disable table replication (Ashish Singhi)
 
 Reason: Add integration test for replication
 Author: Ashish Singhi

@@ -1,7 +1,7 @@
 From 26011d1313fb5350b7d70ad17eed7f77bc0bf32f Mon Sep 17 00:00:00 2001
 From: anoopsjohn <anoopsamjohn@gmail.com>
 Date: Mon, 8 Jun 2015 11:17:43 +0530
-Subject: [PATCH 236/268] HBASE-13806 Check the mob files when there are mob-enabled columns in HFileCorruptionChecker. (Jingcheng)
+Subject: [PATCH 236/269] HBASE-13806 Check the mob files when there are mob-enabled columns in HFileCorruptionChecker. (Jingcheng)
 
 Reason: Bugfix
 Author: Jingcheng Du

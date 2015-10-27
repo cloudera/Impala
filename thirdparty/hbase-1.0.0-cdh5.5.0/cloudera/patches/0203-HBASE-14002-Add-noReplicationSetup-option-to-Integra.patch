@@ -1,7 +1,7 @@
 From f1a0a9327467b28ec85b0dfca1a711001411fcc4 Mon Sep 17 00:00:00 2001
 From: Dima Spivak <dspivak@cloudera.com>
 Date: Thu, 2 Jul 2015 14:48:06 -0700
-Subject: [PATCH 203/268] HBASE-14002 Add --noReplicationSetup option to IntegrationTestReplication
+Subject: [PATCH 203/269] HBASE-14002 Add --noReplicationSetup option to IntegrationTestReplication
 
     Reason: Improvement
     Author: Dima Spivak

@@ -1,7 +1,7 @@
 From 34600671c81d3d47f909169112140b75d5c21758 Mon Sep 17 00:00:00 2001
 From: Devaraj Das <ddas@apache.org>
 Date: Fri, 16 Jan 2015 10:28:37 -0800
-Subject: [PATCH 049/268] HBASE-10674 HBCK should be updated to do replica related checks
+Subject: [PATCH 049/269] HBASE-10674 HBCK should be updated to do replica related checks
 
 Reason: Task
 Author: Devaraj Das

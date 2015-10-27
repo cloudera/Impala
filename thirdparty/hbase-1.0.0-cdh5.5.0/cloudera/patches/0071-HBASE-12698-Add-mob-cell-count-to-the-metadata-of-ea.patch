@@ -1,7 +1,7 @@
 From 203f96dbf59bb2d1d7e375b88fc6c891bc8017c4 Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Thu, 25 Dec 2014 13:59:53 -0800
-Subject: [PATCH 071/268] HBASE-12698 Add mob cell count to the metadata of each mob file (Jingcheng Du)
+Subject: [PATCH 071/269] HBASE-12698 Add mob cell count to the metadata of each mob file (Jingcheng Du)
 
 Reason: MOB feature
 Author: Jingcheng Du

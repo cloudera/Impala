@@ -1,7 +1,7 @@
 From 0b7b740e457c7ae7803dec8b5013fc844eeffeff Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Mon, 22 Dec 2014 19:24:25 -0800
-Subject: [PATCH 048/268] HBASE-12749 Tighten HFileLink api to enable non-snapshot uses
+Subject: [PATCH 048/269] HBASE-12749 Tighten HFileLink api to enable non-snapshot uses
 
 ---
  .../java/org/apache/hadoop/hbase/io/FileLink.java  |   21 +++-

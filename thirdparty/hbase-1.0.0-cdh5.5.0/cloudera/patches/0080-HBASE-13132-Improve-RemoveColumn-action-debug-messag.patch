@@ -1,7 +1,7 @@
 From 27c5ac004aaa1dbf3cc2921e47476821b6918f01 Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Mon, 2 Mar 2015 10:31:19 -0800
-Subject: [PATCH 080/268] HBASE-13132 Improve RemoveColumn action debug message
+Subject: [PATCH 080/269] HBASE-13132 Improve RemoveColumn action debug message
 
 Reason: MOB testing
 Author: Jonathan Hsieh

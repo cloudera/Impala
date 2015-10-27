@@ -1,7 +1,7 @@
 From dd4c4fa40ac7580906874c5e15371b0ab3596047 Mon Sep 17 00:00:00 2001
 From: anoopsjohn <anoopsamjohn@gmail.com>
 Date: Thu, 23 Apr 2015 10:36:08 +0530
-Subject: [PATCH 198/268] HBASE-13496 Make Bytes::compareTo inlineable.
+Subject: [PATCH 198/269] HBASE-13496 Make Bytes::compareTo inlineable.
 
 Reason: Improvement
 Author: Anoop Sam John

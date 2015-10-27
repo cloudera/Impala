@@ -1,7 +1,7 @@
 From 8a11c3cf5dd70ce49628ebd488f203cad067ae5f Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@cloudera.com>
 Date: Sat, 31 Jan 2015 00:58:56 -0800
-Subject: [PATCH 001/268] CLOUDERA-BUILD Change build to point to Cloudera versions and repositories.
+Subject: [PATCH 001/269] CLOUDERA-BUILD Change build to point to Cloudera versions and repositories.
 
 ---
  hbase-annotations/pom.xml    |    2 +-

@@ -1,7 +1,7 @@
 From 540ef0736962d0123abb059a35e6ef5a0643a249 Mon Sep 17 00:00:00 2001
 From: Srikanth Srungarapu <ssrungarapu@cloudera.com>
 Date: Tue, 28 Jul 2015 15:13:40 -0700
-Subject: [PATCH 183/268] HBASE-14097 Log link to client scan troubleshooting section when scanner exceptions happen.
+Subject: [PATCH 183/269] HBASE-14097 Log link to client scan troubleshooting section when scanner exceptions happen.
 
 Reason: Supportability
 Author: Srikanth Srungarapu

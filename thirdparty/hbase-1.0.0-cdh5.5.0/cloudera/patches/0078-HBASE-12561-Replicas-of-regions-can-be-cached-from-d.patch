@@ -1,7 +1,7 @@
 From 8460624a09b8dbb2121393987d9b1ae7152e647c Mon Sep 17 00:00:00 2001
 From: Enis Soztutar <enis@apache.org>
 Date: Mon, 23 Feb 2015 11:06:17 -0800
-Subject: [PATCH 078/268] HBASE-12561 Replicas of regions can be cached from different instances of the table in MetaCache
+Subject: [PATCH 078/269] HBASE-12561 Replicas of regions can be cached from different instances of the table in MetaCache
 
 Reason: Task
 Author: Enis Soztutar

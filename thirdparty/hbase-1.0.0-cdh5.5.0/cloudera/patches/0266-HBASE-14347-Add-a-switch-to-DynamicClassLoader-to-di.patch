@@ -1,7 +1,7 @@
 From fd60b40576b3d3250e90cb5d60b662a483c52f06 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Mon, 5 Oct 2015 16:17:07 -0700
-Subject: [PATCH 266/268] HBASE-14347 Add a switch to DynamicClassLoader to disable it
+Subject: [PATCH 266/269] HBASE-14347 Add a switch to DynamicClassLoader to disable it
 
 Reason: Improvement
 Author: Huaxiang Sun

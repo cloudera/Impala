@@ -1,7 +1,7 @@
 From ecf7d3fd0f388ca869864f15058325b1879381af Mon Sep 17 00:00:00 2001
 From: Apekshit(Appy) Sharma <appy@cloudera.com>
 Date: Wed, 22 Apr 2015 20:28:14 -0700
-Subject: [PATCH 139/268] HBASE-13534 Changed Master UI to promptly display if it is a backup master. (Apekshit)
+Subject: [PATCH 139/269] HBASE-13534 Changed Master UI to promptly display if it is a backup master. (Apekshit)
 
 Author: Apekshit Sharma
 Reason: Improvement

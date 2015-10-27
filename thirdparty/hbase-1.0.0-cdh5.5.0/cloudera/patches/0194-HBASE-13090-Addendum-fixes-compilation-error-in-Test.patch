@@ -1,7 +1,7 @@
 From 4730f9b0f446430605f3a96c03e1fd4ff0f8898f Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Fri, 17 Apr 2015 17:06:31 -0700
-Subject: [PATCH 194/268] HBASE-13090 Addendum fixes compilation error in TestScannerHeartbeatMessages
+Subject: [PATCH 194/269] HBASE-13090 Addendum fixes compilation error in TestScannerHeartbeatMessages
 
 Reason: Bug
 Author: Jonathan Lawlor

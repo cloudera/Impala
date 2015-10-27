@@ -1,7 +1,7 @@
 From 64ee93df8bb61ab33e17adc8237118d5167c4b8c Mon Sep 17 00:00:00 2001
 From: Elliott Clark <eclark@apache.org>
 Date: Thu, 26 Mar 2015 11:48:19 -0700
-Subject: [PATCH 177/268] HBASE-13342 Fix incorrect interface annotations
+Subject: [PATCH 177/269] HBASE-13342 Fix incorrect interface annotations
 
 Reason: Improvement
 Author: Elliott Clark

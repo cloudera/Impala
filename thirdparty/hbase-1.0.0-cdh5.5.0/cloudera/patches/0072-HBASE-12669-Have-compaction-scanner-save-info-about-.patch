@@ -1,7 +1,7 @@
 From 411541a010d6bca2066cc43185f6f256d85f9bf4 Mon Sep 17 00:00:00 2001
 From: Ramkrishna <ramkrishna.s.vasudevan@intel.com>
 Date: Thu, 22 Jan 2015 14:52:40 +0530
-Subject: [PATCH 072/268] HBASE-12669 - Have compaction scanner save info about delete markers
+Subject: [PATCH 072/269] HBASE-12669 - Have compaction scanner save info about delete markers
  (Jingcheng Du)
 
 Reason: MOB feature

@@ -1,7 +1,7 @@
 From 9c4660079753137964b27e79aaad19d085894b7b Mon Sep 17 00:00:00 2001
 From: Ashish Singhi <ashish.singhi@huawei.com>
 Date: Thu, 19 Mar 2015 15:48:12 +0530
-Subject: [PATCH 122/268] HBASE-13241 Add tests for group level grants
+Subject: [PATCH 122/269] HBASE-13241 Add tests for group level grants
 
 Reason: Testing
 Author: Ashish Singhi

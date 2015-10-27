@@ -1,7 +1,7 @@
 From 611145e32937812cd473fc2046b49969f54099eb Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Mon, 15 Dec 2014 10:32:44 +0000
-Subject: [PATCH 003/268] CLOUDERA-BUILD add safety check to build to ensure JDK7 is being used
+Subject: [PATCH 003/269] CLOUDERA-BUILD add safety check to build to ensure JDK7 is being used
 
 ---
  pom.xml |   32 ++++++++++++++++++++++++++++----

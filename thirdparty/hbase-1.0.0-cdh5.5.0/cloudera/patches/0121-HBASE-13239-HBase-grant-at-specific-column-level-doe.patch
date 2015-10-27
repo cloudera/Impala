@@ -1,7 +1,7 @@
 From 0d4aec783c36b4289eeb2de3be9b6b208771a94e Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Sat, 14 Mar 2015 20:22:40 -0700
-Subject: [PATCH 121/268] HBASE-13239 HBase grant at specific column level does not work for Groups
+Subject: [PATCH 121/269] HBASE-13239 HBase grant at specific column level does not work for Groups
 
 Reason: Bug
 Author: Ted Yu

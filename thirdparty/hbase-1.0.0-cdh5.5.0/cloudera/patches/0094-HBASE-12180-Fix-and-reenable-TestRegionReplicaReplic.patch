@@ -1,7 +1,7 @@
 From 6983f723ec8dd6f1bf0696b2e006f7d8c0755d99 Mon Sep 17 00:00:00 2001
 From: Enis Soztutar <enis@apache.org>
 Date: Thu, 5 Mar 2015 14:59:38 -0800
-Subject: [PATCH 094/268] HBASE-12180 Fix and reenable TestRegionReplicaReplicationEndpoint
+Subject: [PATCH 094/269] HBASE-12180 Fix and reenable TestRegionReplicaReplicationEndpoint
 
 Reason: Task
 Author: Enis Soztutar

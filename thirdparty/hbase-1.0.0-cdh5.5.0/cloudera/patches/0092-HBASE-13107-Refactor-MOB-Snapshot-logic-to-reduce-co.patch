@@ -1,7 +1,7 @@
 From d3cd8b476fe739ab191ece31e2b8053f717daae1 Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Thu, 5 Mar 2015 11:29:21 -0800
-Subject: [PATCH 092/268] HBASE-13107 Refactor MOB Snapshot logic to reduce code duplication (Jingcheng Du)
+Subject: [PATCH 092/269] HBASE-13107 Refactor MOB Snapshot logic to reduce code duplication (Jingcheng Du)
 
 Reason: Mob Feature
 Author: Jingcheng Du

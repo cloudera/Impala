@@ -1,7 +1,7 @@
 From 2932e5bf25cddb3e63efcf223ffc18996716f16c Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Tue, 3 Mar 2015 04:47:58 -0800
-Subject: [PATCH 087/268] HBASE-12670 Add unit tests that exercise the added hfilelink link mob paths (Jingcheng Du)
+Subject: [PATCH 087/269] HBASE-12670 Add unit tests that exercise the added hfilelink link mob paths (Jingcheng Du)
 
 Reason: Mob Testing
 Author: Jingcheng Du

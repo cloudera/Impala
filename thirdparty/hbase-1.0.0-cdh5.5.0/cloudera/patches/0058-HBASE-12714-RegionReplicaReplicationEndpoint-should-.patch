@@ -1,7 +1,7 @@
 From e866ca162a3d4f9f11f99b034ccc0de7b6995ce0 Mon Sep 17 00:00:00 2001
 From: Enis Soztutar <enis@apache.org>
 Date: Sun, 22 Feb 2015 21:55:09 -0800
-Subject: [PATCH 058/268] HBASE-12714 RegionReplicaReplicationEndpoint should not set the RPC Codec
+Subject: [PATCH 058/269] HBASE-12714 RegionReplicaReplicationEndpoint should not set the RPC Codec
 
 Reason: Task
 Author: Enis Soztutar

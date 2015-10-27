@@ -1,7 +1,7 @@
 From db0718d80e6c76af85c14af12e50675db251f2a7 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Thu, 3 Sep 2015 10:26:27 -0700
-Subject: [PATCH 219/268] HBASE-14344 Add timeouts to TestHttpServerLifecycle
+Subject: [PATCH 219/269] HBASE-14344 Add timeouts to TestHttpServerLifecycle
 
 Reason: Test
 Author: Matteo Bertozzi

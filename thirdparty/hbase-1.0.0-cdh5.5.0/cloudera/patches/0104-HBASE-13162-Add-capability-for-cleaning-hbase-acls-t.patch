@@ -1,7 +1,7 @@
 From 1b5e17d3388460310e3c1dfb842c9a94a0e27878 Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Thu, 12 Mar 2015 17:06:27 -0700
-Subject: [PATCH 104/268] HBASE-13162 Add capability for cleaning hbase acls to hbase cleanup script (Srikanth Srungarapu)
+Subject: [PATCH 104/269] HBASE-13162 Add capability for cleaning hbase acls to hbase cleanup script (Srikanth Srungarapu)
 
 Reason: Improvement
 Author: Srikanth Srungarapu

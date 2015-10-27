@@ -1,7 +1,7 @@
 From 8d7ba4473e5fc599c3b20baf11f964ae15301448 Mon Sep 17 00:00:00 2001
 From: Elliott Clark <eclark@apache.org>
 Date: Fri, 15 May 2015 16:30:57 -0700
-Subject: [PATCH 209/268] HBASE-13700 Change Thrift2 so that number of woker threads can be passed in
+Subject: [PATCH 209/269] HBASE-13700 Change Thrift2 so that number of woker threads can be passed in
 
 (cherry picked from commit cecda74db18a553a46098602ed5c6efec160105c)
 

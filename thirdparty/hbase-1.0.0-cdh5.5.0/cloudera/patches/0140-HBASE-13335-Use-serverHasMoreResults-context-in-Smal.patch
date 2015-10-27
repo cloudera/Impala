@@ -1,7 +1,7 @@
 From 960ea9ea76825a7cdf7b8bd5c2befea146f3b803 Mon Sep 17 00:00:00 2001
 From: Josh Elser <elserj@apache.org>
 Date: Mon, 30 Mar 2015 16:55:47 -0400
-Subject: [PATCH 140/268] HBASE-13335 Use serverHasMoreResults context in SmallScanner and SmallReversedScanner.
+Subject: [PATCH 140/269] HBASE-13335 Use serverHasMoreResults context in SmallScanner and SmallReversedScanner.
 
 Use the context passed back via ScanResponse that a RegionServer
 fills in to denote whether or not more results existing in the

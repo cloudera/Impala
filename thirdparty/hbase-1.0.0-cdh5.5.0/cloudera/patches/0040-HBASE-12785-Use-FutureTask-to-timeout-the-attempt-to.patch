@@ -1,7 +1,7 @@
 From 37ca2fddf9da8bc2f434e8c38080e5c1f8066d6d Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Mon, 5 Jan 2015 14:09:58 -0800
-Subject: [PATCH 040/268] HBASE-12785 Use FutureTask to timeout the attempt to get the lock for hbck
+Subject: [PATCH 040/269] HBASE-12785 Use FutureTask to timeout the attempt to get the lock for hbck
 
 Reason: Task
 Author: Ted Yu

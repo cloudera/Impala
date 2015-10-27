@@ -1,7 +1,7 @@
 From 88fd0946d2e922b7e5f66edb4592276fc80ac263 Mon Sep 17 00:00:00 2001
 From: Enis Soztutar <enis@apache.org>
 Date: Tue, 2 Jun 2015 14:43:26 -0700
-Subject: [PATCH 159/268] HBASE-13768 ZooKeeper znodes are bootstrapped with insecure ACLs in a secure configuration (ADDENDUM for meta znode)
+Subject: [PATCH 159/269] HBASE-13768 ZooKeeper znodes are bootstrapped with insecure ACLs in a secure configuration (ADDENDUM for meta znode)
 
 Reason: Bug
 Author: Enis Soztutar

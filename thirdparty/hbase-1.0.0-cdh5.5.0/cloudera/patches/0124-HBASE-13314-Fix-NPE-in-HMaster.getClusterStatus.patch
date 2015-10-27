@@ -1,7 +1,7 @@
 From 2f9a8ccecf56aab36fa43a4ce766db9ddc970375 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Tue, 24 Mar 2015 09:28:06 +0000
-Subject: [PATCH 124/268] HBASE-13314 Fix NPE in HMaster.getClusterStatus()
+Subject: [PATCH 124/269] HBASE-13314 Fix NPE in HMaster.getClusterStatus()
 
 Reason: Bug
 Author: Matteo Bertozzi

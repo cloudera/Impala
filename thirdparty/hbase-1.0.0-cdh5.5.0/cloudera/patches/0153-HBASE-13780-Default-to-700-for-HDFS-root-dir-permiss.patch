@@ -1,7 +1,7 @@
 From b6cc4d4418e49f1aef9c65a4f3a5436db024ad8d Mon Sep 17 00:00:00 2001
 From: Andrew Purtell <apurtell@apache.org>
 Date: Wed, 27 May 2015 13:15:32 -0700
-Subject: [PATCH 153/268] HBASE-13780 Default to 700 for HDFS root dir permissions for secure deployments (Enis Soztutar)
+Subject: [PATCH 153/269] HBASE-13780 Default to 700 for HDFS root dir permissions for secure deployments (Enis Soztutar)
 
 Reason: Bug
 Author: Enis Soztutar

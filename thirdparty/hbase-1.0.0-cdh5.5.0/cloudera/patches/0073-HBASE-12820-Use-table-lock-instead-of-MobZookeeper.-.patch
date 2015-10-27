@@ -1,7 +1,7 @@
 From dbd51f02655a4fb25ffe2d70d57f02a0b0028706 Mon Sep 17 00:00:00 2001
 From: anoopsjohn <anoopsamjohn@gmail.com>
 Date: Sat, 24 Jan 2015 11:37:01 +0530
-Subject: [PATCH 073/268] HBASE-12820 Use table lock instead of MobZookeeper.(Jingcheng Du)
+Subject: [PATCH 073/269] HBASE-12820 Use table lock instead of MobZookeeper.(Jingcheng Du)
 
 Conflicts:
 	hbase-server/src/test/java/org/apache/hadoop/hbase/mob/mapreduce/TestMobSweepMapper.java

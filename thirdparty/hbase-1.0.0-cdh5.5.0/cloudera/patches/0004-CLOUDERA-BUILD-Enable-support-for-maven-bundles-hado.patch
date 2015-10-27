@@ -1,7 +1,7 @@
 From bf6bf1f1252828c3bac26b9c45c10041bf2bdf30 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Mon, 15 Dec 2014 10:40:25 +0000
-Subject: [PATCH 004/268] CLOUDERA-BUILD Enable support for maven bundles (hadoop-common dependency)
+Subject: [PATCH 004/269] CLOUDERA-BUILD Enable support for maven bundles (hadoop-common dependency)
 
 Ref: CDH-21268
 Reason: Product Requirement (Compatibility)

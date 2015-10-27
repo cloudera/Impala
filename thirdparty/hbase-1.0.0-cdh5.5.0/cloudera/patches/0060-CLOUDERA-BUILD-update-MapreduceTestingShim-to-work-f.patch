@@ -1,7 +1,7 @@
 From 5ddcfbcba6ff881d8d29b249c0ef9748b2829ad5 Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@cloudera.com>
 Date: Mon, 23 Feb 2015 00:19:21 -0600
-Subject: [PATCH 060/268] CLOUDERA-BUILD update MapreduceTestingShim to work for CDH5-MRv1.
+Subject: [PATCH 060/269] CLOUDERA-BUILD update MapreduceTestingShim to work for CDH5-MRv1.
 
 Ref: CDH-25346
 ---

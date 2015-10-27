@@ -1,7 +1,7 @@
 From cfe3a61d7cc944a89707a74ff8773aa330ee92a9 Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@cloudera.com>
 Date: Fri, 6 Mar 2015 12:51:33 -0800
-Subject: [PATCH 086/268] CLOUDERA-BUILD Revert "HBASE-10018 Remove region location prefetching"
+Subject: [PATCH 086/269] CLOUDERA-BUILD Revert "HBASE-10018 Remove region location prefetching"
 
 - Reverse scans are not supported in CDH5.0.x (HBase 0.96) this
   partial revert keeps the prefetch methods as deprecated however

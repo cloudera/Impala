@@ -1,7 +1,7 @@
 From 2a408d98c54b0feb4bc990dc23f5f92223f3e8fa Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Thu, 18 Sep 2014 01:51:15 +0100
-Subject: [PATCH 017/268] HBASE-11598 Add simple rpc throttling
+Subject: [PATCH 017/269] HBASE-11598 Add simple rpc throttling
 
 Reason: New Feature
 Author: Matteo Bertozzi

@@ -1,7 +1,7 @@
 From 6ed7eda2b4a6ee700c6d78992d19da324be8b0a8 Mon Sep 17 00:00:00 2001
 From: Jerry He <jerryjch@apache.org>
 Date: Mon, 11 May 2015 14:23:20 -0700
-Subject: [PATCH 221/268] HBASE-13217 Procedure fails due to ZK issue
+Subject: [PATCH 221/269] HBASE-13217 Procedure fails due to ZK issue
 
 Reason: Bug
 Author: Jerry He

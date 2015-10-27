@@ -1,7 +1,7 @@
 From d61a1c9ad36c3b6bfa0f9553256b37be1d48bf2b Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Wed, 24 Jun 2015 13:36:15 -0700
-Subject: [PATCH 167/268] HBASE-13958 RESTApiClusterManager calls kill() instead of suspend() and resume()
+Subject: [PATCH 167/269] HBASE-13958 RESTApiClusterManager calls kill() instead of suspend() and resume()
 
 Reason: Bug
 Author: Matteo Bertozzi

@@ -1,7 +1,7 @@
 From 020cf23d05a93d4b88079aa851f98649d18e9987 Mon Sep 17 00:00:00 2001
 From: Ramkrishna <ramkrishna.s.vasudevan@intel.com>
 Date: Fri, 31 Oct 2014 15:43:58 +0530
-Subject: [PATCH 032/268] HBASE-12392 Incorrect implementation of CompactionRequest.isRetainDeleteMarkers(Jingcheng Du)
+Subject: [PATCH 032/269] HBASE-12392 Incorrect implementation of CompactionRequest.isRetainDeleteMarkers(Jingcheng Du)
 
 Reason: Bug
 Author: Jingcheng Du

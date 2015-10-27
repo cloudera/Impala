@@ -1,7 +1,7 @@
 From af540a199c99cdf0c80cc32edce3e4388ededc90 Mon Sep 17 00:00:00 2001
 From: Enis Soztutar <enis@apache.org>
 Date: Fri, 17 Apr 2015 18:46:21 -0700
-Subject: [PATCH 161/268] HBASE-13481 Master should respect master (old) DNS/bind related configurations
+Subject: [PATCH 161/269] HBASE-13481 Master should respect master (old) DNS/bind related configurations
 
 Author: Enis Soztutar
 Reason: Backward compatibility

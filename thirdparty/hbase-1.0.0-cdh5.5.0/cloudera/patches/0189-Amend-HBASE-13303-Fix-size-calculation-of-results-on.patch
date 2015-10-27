@@ -1,7 +1,7 @@
 From 42ff5b04057d5d80ae24b1405bf786b142700e5a Mon Sep 17 00:00:00 2001
 From: Jonathan Lawlor <jonathan.lawlor@cloudera.com>
 Date: Thu, 26 Mar 2015 15:54:38 -0700
-Subject: [PATCH 189/268] Amend HBASE-13303 Fix size calculation of results on the region server
+Subject: [PATCH 189/269] Amend HBASE-13303 Fix size calculation of results on the region server
 
 Reason: Bug
 Author: Jonathan Lawlor

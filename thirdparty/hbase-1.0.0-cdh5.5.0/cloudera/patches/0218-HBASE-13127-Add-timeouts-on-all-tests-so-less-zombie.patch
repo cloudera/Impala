@@ -1,7 +1,7 @@
 From 6da837b734558e0ac06e465641729e22601ef441 Mon Sep 17 00:00:00 2001
 From: stack <stack@apache.org>
 Date: Mon, 24 Aug 2015 13:37:45 -0700
-Subject: [PATCH 218/268] HBASE-13127 Add timeouts on all tests so less zombie sightings
+Subject: [PATCH 218/269] HBASE-13127 Add timeouts on all tests so less zombie sightings
 
 Reason: Bug
 Author: Michael Stack

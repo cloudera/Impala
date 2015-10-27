@@ -1,7 +1,7 @@
 From ce4d969d2ab80c2ba4cf9aa75f51052a2dda0d28 Mon Sep 17 00:00:00 2001
 From: Jonathan Hsieh <jmhsieh@apache.org>
 Date: Tue, 17 Dec 2013 19:24:02 +0000
-Subject: [PATCH 014/268] HBASE-10188 Deprecate ServerName constructors, but make it public (Nicolas Liochon)
+Subject: [PATCH 014/269] HBASE-10188 Deprecate ServerName constructors, but make it public (Nicolas Liochon)
 
 git-svn-id: https://svn.apache.org/repos/asf/hbase/branches/0.96@1551661 13f79535-47bb-0310-9956-ffa450edef68
 

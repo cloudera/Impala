@@ -1,7 +1,7 @@
 From e9078ad9508ef765d9855103f9833558f679a09d Mon Sep 17 00:00:00 2001
 From: Liu Shaohui <liushaohui@xiaomi.com>
 Date: Thu, 2 Apr 2015 11:52:54 +0800
-Subject: [PATCH 200/268] HBASE-13366 Throw DoNotRetryIOException instead of read only IOException (Shaohui Liu)
+Subject: [PATCH 200/269] HBASE-13366 Throw DoNotRetryIOException instead of read only IOException (Shaohui Liu)
 
 Conflicts:
 	hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java

@@ -1,7 +1,7 @@
 From 7fb479f85d58450b459d0a6c909ebfaf8ec839d9 Mon Sep 17 00:00:00 2001
 From: Devaraj Das <ddas@apache.org>
 Date: Fri, 16 Jan 2015 11:49:49 -0800
-Subject: [PATCH 052/268] HBASE-12548 Improve debuggability of IntegrationTestTimeBoundedRequestsWithRegionReplicas.
+Subject: [PATCH 052/269] HBASE-12548 Improve debuggability of IntegrationTestTimeBoundedRequestsWithRegionReplicas.
 
 Reason: Task
 Author: Devaraj Das

@@ -1,7 +1,7 @@
 From 4cd7d9b073971412caa1e65789cc7af903a4abd2 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Wed, 15 Apr 2015 05:04:32 -0700
-Subject: [PATCH 207/268] HBASE-13475 Small spelling mistake in region_mover#isSuccessfulScan causes NoMethodError (Victor Xu)
+Subject: [PATCH 207/269] HBASE-13475 Small spelling mistake in region_mover#isSuccessfulScan causes NoMethodError (Victor Xu)
 
 Reason: Bug
 Author: Victor Xu

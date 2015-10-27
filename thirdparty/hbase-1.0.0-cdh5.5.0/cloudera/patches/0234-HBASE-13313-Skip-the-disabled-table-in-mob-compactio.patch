@@ -1,7 +1,7 @@
 From 81755b96c107550ed248ce047397ab027bac674c Mon Sep 17 00:00:00 2001
 From: anoopsjohn <anoopsamjohn@gmail.com>
 Date: Fri, 10 Apr 2015 13:26:47 +0530
-Subject: [PATCH 234/268] HBASE-13313 Skip the disabled table in mob compaction chore and MasterRpcServices.(Jingcheng)
+Subject: [PATCH 234/269] HBASE-13313 Skip the disabled table in mob compaction chore and MasterRpcServices.(Jingcheng)
 
 - reverts to older style is enabled check
 

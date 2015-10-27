@@ -1,7 +1,7 @@
 From 1e87ab710609f5ca0e5dd30cf903a28b1d16871c Mon Sep 17 00:00:00 2001
 From: Andrew Purtell <apurtell@apache.org>
 Date: Thu, 14 May 2015 12:37:42 -0700
-Subject: [PATCH 147/268] HBASE-13035 Backport HBASE-12867 Shell does not support custom replication endpoint specification
+Subject: [PATCH 147/269] HBASE-13035 Backport HBASE-12867 Shell does not support custom replication endpoint specification
 
 Conflicts:
 	hbase-shell/src/main/ruby/hbase.rb

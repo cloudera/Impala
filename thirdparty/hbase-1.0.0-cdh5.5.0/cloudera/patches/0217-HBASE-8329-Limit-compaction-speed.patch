@@ -1,7 +1,7 @@
 From 2eadc4e85e5b8c0f6e10975d023dde318a2527a2 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Mon, 24 Aug 2015 16:47:57 -0700
-Subject: [PATCH 217/268] HBASE-8329 Limit compaction speed
+Subject: [PATCH 217/269] HBASE-8329 Limit compaction speed
 
 Reason: New Feature
 Author: Duo Zhang

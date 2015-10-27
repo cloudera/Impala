@@ -1,7 +1,7 @@
 From f5e074357b9340e2b9fa2bf8982875484d7007ae Mon Sep 17 00:00:00 2001
 From: Ramkrishna <ramkrishna.s.vasudevan@intel.com>
 Date: Fri, 21 Nov 2014 08:53:27 +0530
-Subject: [PATCH 039/268] HBASE-12487 Explicitly flush the file name in sweep job (Jingcheng Du)
+Subject: [PATCH 039/269] HBASE-12487 Explicitly flush the file name in sweep job (Jingcheng Du)
 
 Reason: Bug
 Author: Li Jiajia

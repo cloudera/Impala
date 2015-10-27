@@ -1,7 +1,7 @@
 From 42bd0c107320036361c80225ca7f2c87cb48a2aa Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jon@cloudera.com>
 Date: Thu, 26 Feb 2015 11:11:18 -0800
-Subject: [PATCH 076/268] HBASE-13117 improve mob sweeper javadoc
+Subject: [PATCH 076/269] HBASE-13117 improve mob sweeper javadoc
 
 Reason: MOB Feature
 Author: Jonathan Hsieh

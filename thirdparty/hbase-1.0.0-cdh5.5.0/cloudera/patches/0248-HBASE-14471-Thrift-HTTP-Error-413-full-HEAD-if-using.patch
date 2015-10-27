@@ -1,7 +1,7 @@
 From bd2d27da4b486dd973a28b2ec2939e22b696e138 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Fri, 25 Sep 2015 09:22:26 -0700
-Subject: [PATCH 248/268] HBASE-14471 Thrift -  HTTP Error 413 full HEAD if using kerberos authentication (huaxiang sun)
+Subject: [PATCH 248/269] HBASE-14471 Thrift -  HTTP Error 413 full HEAD if using kerberos authentication (huaxiang sun)
 
 Reason: Bugfix
 Author: ted yu

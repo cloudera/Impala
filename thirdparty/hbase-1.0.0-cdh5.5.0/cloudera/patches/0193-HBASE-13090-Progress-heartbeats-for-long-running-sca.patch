@@ -1,7 +1,7 @@
 From 1bdabc520564cf5736659cee12fc10b3f5c0f323 Mon Sep 17 00:00:00 2001
 From: Jonathan Lawlor <jonathan.lawlor@cloudera.com>
 Date: Tue, 10 Mar 2015 14:24:07 -0700
-Subject: [PATCH 193/268] HBASE-13090 Progress heartbeats for long running scanners
+Subject: [PATCH 193/269] HBASE-13090 Progress heartbeats for long running scanners
 
 Reason: New Feature
 Author: Jonathan Lawlor

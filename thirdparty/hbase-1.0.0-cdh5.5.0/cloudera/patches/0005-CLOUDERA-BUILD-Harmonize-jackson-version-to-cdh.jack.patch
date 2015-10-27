@@ -1,7 +1,7 @@
 From 0c31d23806425aafd1b06ad5078f41114565a14b Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@cloudera.com>
 Date: Tue, 30 Sep 2014 16:14:51 -0700
-Subject: [PATCH 005/268] CLOUDERA-BUILD Harmonize jackson version to cdh.jackson.version
+Subject: [PATCH 005/269] CLOUDERA-BUILD Harmonize jackson version to cdh.jackson.version
 
 ---
  pom.xml |    2 +-

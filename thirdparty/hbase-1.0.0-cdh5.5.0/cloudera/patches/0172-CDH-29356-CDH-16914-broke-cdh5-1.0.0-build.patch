@@ -1,7 +1,7 @@
 From d17ed0e74784fc089f499027cad8148d3727d934 Mon Sep 17 00:00:00 2001
 From: stack <stack@duboce.net>
 Date: Sat, 11 Jul 2015 19:44:34 -0700
-Subject: [PATCH 172/268] CDH-29356 CDH-16914 broke cdh5-1.0.0 build
+Subject: [PATCH 172/269] CDH-29356 CDH-16914 broke cdh5-1.0.0 build
 
 ---
  .../client/ResultBoundedCompletionService.java     |    6 +++---

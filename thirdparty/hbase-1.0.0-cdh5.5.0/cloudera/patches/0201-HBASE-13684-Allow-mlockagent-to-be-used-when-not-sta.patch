@@ -1,7 +1,7 @@
 From 5781da1871c5b415e26cfbdec628a6dfed64a408 Mon Sep 17 00:00:00 2001
 From: Patrick White <pwhite@fb.com>
 Date: Tue, 5 May 2015 15:07:20 -0700
-Subject: [PATCH 201/268] HBASE-13684 Allow mlockagent to be used when not starting as root
+Subject: [PATCH 201/269] HBASE-13684 Allow mlockagent to be used when not starting as root
 
 Reson: Bug
 Author: Patrick White
