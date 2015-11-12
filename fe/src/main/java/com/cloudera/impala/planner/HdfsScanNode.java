@@ -672,14 +672,14 @@ public class HdfsScanNode extends ScanNode {
     // The local and remote assignments may overlap, but we don't know by how much so
     // conservatively assume no overlap.
     int totalNodes = Math.min(numLocalNodes + numRemoteNodes, cluster.numNodes());
-    // Tables can reside on 0 nodes (empty table), but a plan node must always be
-    // executed on at least one node.
-    numNodes_ = (cardinality == 0 || totalNodes == 0) ? 1 : totalNodes;
     // For the 5.4.x release, if all scan ranges are local, revert back to the old
     // logic of using the number of datanodes that hold blocks of the table.
     // Otherwise, some query plans may change drastically between maintence releases.
     // TODO: delete this line to use the new logic for local tables.
-    if (numLocalRanges == scanRanges_.size()) numNodes_ = tbl_.getNumNodes();
+    if (numLocalRanges == scanRanges_.size()) totalNodes = tbl_.getNumNodes();
+    // Tables can reside on 0 nodes (empty table), but a plan node must always be
+    // executed on at least one node.
+    numNodes_ = (cardinality == 0 || totalNodes == 0) ? 1 : totalNodes;
     LOG.debug("computeNumNodes localRanges=" + numLocalRanges +
         " remoteRanges=" + numRemoteRanges + " localHostSet.size=" + localHostSet.size() +
         " clusterNodes=" + cluster.numNodes());
