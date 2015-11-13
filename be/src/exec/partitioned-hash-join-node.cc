@@ -355,6 +355,8 @@ Status PartitionedHashJoinNode::Partition::BuildHashTableInternal(
         }
       }
     }
+    RETURN_IF_ERROR(state->GetQueryStatus());
+    parent_->FreeLocalAllocations();
     batch.Reset();
   }
   // The hash table fits in memory and is built.
