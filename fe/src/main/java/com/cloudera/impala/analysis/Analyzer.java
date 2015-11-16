@@ -208,15 +208,10 @@ public class Analyzer {
     // a kind of semi-join, so anti-joined tuples are also registered here.
     public final Map<TupleId, TableRef> semiJoinedTupleIds = Maps.newHashMap();
 
-    // map from right-hand side table ref of an outer join to the list of
-    // conjuncts in its On clause. There is always an entry for an outer join, but the
-    // corresponding value could be an empty list. There is no entry for non-outer joins.
-    public final Map<TableRef, List<ExprId>> conjunctsByOjClause = Maps.newHashMap();
-
     // Map from right-hand side table-ref id of an outer join to the list of
     // conjuncts in its On clause. There is always an entry for an outer join, but the
     // corresponding value could be an empty list. There is no entry for non-outer joins.
-    public final Map<TupleId, List<ExprId>> conjunctsByOjClause = Maps.newHashMap();
+    public final Map<TableRef, List<ExprId>> conjunctsByOjClause = Maps.newHashMap();
 
     // map from registered conjunct to its containing outer join On clause (represented
     // by its right-hand side table ref); this is limited to conjuncts that can only be
@@ -775,6 +770,7 @@ public class Analyzer {
       }
     }
     for (Expr conjunct: conjuncts) {
+      conjunct.setIsOnClauseConjunct(true);
       registerConjunct(conjunct);
       if (rhsRef.getJoinOp().isOuterJoin()) {
         globalState_.ojClauseByConjunct.put(conjunct.getId(), rhsRef);
@@ -789,13 +785,12 @@ public class Analyzer {
 
   /**
    * Register all conjuncts that make up 'e'. If fromHavingClause is false, this conjunct
-   * is assumed to originate from a Where clause.
+   * is assumed to originate from a WHERE or ON clause.
    */
   public void registerConjuncts(Expr e, boolean fromHavingClause)
       throws AnalysisException {
     for (Expr conjunct: e.getConjuncts()) {
       registerConjunct(conjunct);
-      if (!fromHavingClause) conjunct.setIsWhereClauseConjunct();
       markConstantConjunct(conjunct, fromHavingClause);
     }
   }
@@ -965,9 +960,9 @@ public class Analyzer {
     List<TupleId> tids = Lists.newArrayList();
     e.getIds(tids, null);
     if (tids.isEmpty()) return false;
-    if (tids.size() > 1 || isOjConjunct(e)
-        || (isOuterJoined(tids.get(0)) && e.isWhereClauseConjunct())
-        || isAntiJoinedConjunct(e) || isFullOuterJoined(e)) {
+    if (tids.size() > 1 || isOjConjunct(e) || isFullOuterJoined(e)
+        || (isOuterJoined(tids.get(0)) && !e.isOnClauseConjunct())
+        || (isAntiJoinedConjunct(e) && !isSemiJoined(tids.get(0)))) {
       return true;
     }
     return false;
@@ -1079,11 +1074,11 @@ public class Analyzer {
    * Returns true if predicate 'e' can be correctly evaluated by a tree materializing
    * 'tupleIds', otherwise false:
    * - the predicate needs to be bound by tupleIds
-   * - a Where clause predicate can only be correctly evaluated if for all outer-joined
-   *   referenced tids the last join to outer-join this tid has been materialized
    * - an On clause predicate against the non-nullable side of an Outer Join clause
    *   can only be correctly evaluated by the join node that materializes the
    *   Outer Join clause
+   * - otherwise, a predicate can only be correctly evaluated if for all outer-joined
+   *   referenced tids the last join to outer-join this tid has been materialized
    */
   public boolean canEvalPredicate(List<TupleId> tupleIds, Expr e) {
     LOG.trace("canEval: " + e.toSql() + " " + e.debugString() + " "
@@ -1093,7 +1088,7 @@ public class Analyzer {
     e.getIds(tids, null);
     if (tids.isEmpty()) return true;
 
-    if (!e.isWhereClauseConjunct()) {
+    if (e.isOnClauseConjunct()) {
       if (tids.size() > 1) {
         // If the conjunct is from the ON-clause of an anti join, check if we can
         // assign it to this node.
@@ -1218,19 +1213,16 @@ public class Analyzer {
         }
       }
 
-      // It is incorrect to propagate a Where-clause predicate into a plan subtree that
-      // is on the nullable side of an outer join if the predicate evaluates to true
-      // when all its referenced tuples are NULL. The check below is conservative
-      // because the outer-joined tuple making 'hasOuterJoinedTuple' true could be in a
-      // parent block of 'srcConjunct', in which case it is safe to propagate
-      // 'srcConjunct' within child blocks of the outer-joined parent block.
+      // It is incorrect to propagate predicates into a plan subtree that is on the
+      // nullable side of an outer join if the predicate evaluates to true when all
+      // its referenced tuples are NULL. The check below is conservative because the
+      // outer-joined tuple making 'hasOuterJoinedTuple' true could be in a parent block
+      // of 'srcConjunct', in which case it is safe to propagate 'srcConjunct' within
+      // child blocks of the outer-joined parent block.
       // TODO: Make the check precise by considering the blocks (analyzers) where the
       // outer-joined tuples in the dest slot's equivalence classes appear
       // relative to 'srcConjunct'.
-      if (srcConjunct.isWhereClauseConjunct_ && hasOuterJoinedTuple &&
-          isTrueWithNullSlots(srcConjunct)) {
-        continue;
-      }
+      if (hasOuterJoinedTuple && isTrueWithNullSlots(srcConjunct)) continue;
 
       // if srcConjunct comes out of an OJ's On clause, we need to make sure it's the
       // same as the one that makes destTid nullable

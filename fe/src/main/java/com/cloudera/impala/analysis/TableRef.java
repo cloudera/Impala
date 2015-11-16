@@ -350,8 +350,7 @@ public class TableRef implements ParseNode {
         onClauseTupleIds.addAll(tupleIds);
       }
       onClauseTupleIds_.addAll(onClauseTupleIds);
-    } else if (!isRelative() && !isCorrelated()
-        && (getJoinOp().isOuterJoin() || getJoinOp().isSemiJoin())) {
+    } else if (getJoinOp().isOuterJoin() || getJoinOp().isSemiJoin()) {
       throw new AnalysisException(
           joinOp_.toString() + " requires an ON or USING clause.");
     } else {
