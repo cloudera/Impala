@@ -81,10 +81,7 @@ class HBaseScanNode : public ScanNode {
   // Counts the total number of conversion errors for this table.
   int num_errors_;
 
-  // Pool for allocating tuple data, including all varying-length slots.
-  boost::scoped_ptr<MemPool> tuple_pool_;
-
-  // Jni helper for scanning an HBase table.
+  /// Jni helper for scanning an HBase table.
   boost::scoped_ptr<HBaseTableScanner> hbase_scanner_;
 
   // List of non-row-key slots sorted by col_pos(). Populated in Prepare().
@@ -121,7 +118,7 @@ class HBaseScanNode : public ScanNode {
   void WriteTextSlot(
       const std::string& family, const std::string& qualifier,
       void* value, int value_length, SlotDescriptor* slot,
-      RuntimeState* state, bool* error_in_row);
+      RuntimeState* state, MemPool* pool, bool* error_in_row);
 };
 
 }
