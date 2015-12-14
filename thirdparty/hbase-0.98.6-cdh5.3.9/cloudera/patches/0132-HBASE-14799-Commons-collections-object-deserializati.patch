@@ -1,0 +1,43 @@
+From 453f4bce07c14a66070acf7b0a41e2b3796251ab Mon Sep 17 00:00:00 2001
+From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
+Date: Mon, 23 Nov 2015 16:05:05 -0800
+Subject: [PATCH 132/133] HBASE-14799 Commons-collections object
+ deserialization remote command execution
+ vulnerability (addendum)
+
+Reason: Security
+Author: Andrew Purtell
+Ref: CDH-34565
+
+Change-Id: I43c33c0464926f3aac3a6564a249e36cdb8fe9c1
+---
+ .../TestHbaseObjectWritableFor96Migration.java     |    3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/security/access/TestHbaseObjectWritableFor96Migration.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/security/access/TestHbaseObjectWritableFor96Migration.java
+index fb48a44..4bbbe48 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/security/access/TestHbaseObjectWritableFor96Migration.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/security/access/TestHbaseObjectWritableFor96Migration.java
+@@ -39,6 +39,7 @@ import org.apache.hadoop.hbase.HConstants;
+ import org.apache.hadoop.hbase.HRegionInfo;
+ import org.apache.hadoop.hbase.HTableDescriptor;
+ import org.apache.hadoop.hbase.KeyValue;
++import org.apache.hadoop.hbase.MediumTests;
+ import org.apache.hadoop.hbase.client.Action;
+ import org.apache.hadoop.hbase.client.Append;
+ import org.apache.hadoop.hbase.client.Delete;
+@@ -80,9 +81,11 @@ import org.apache.hadoop.io.MapWritable;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.io.Writable;
+ import org.junit.Test;
++import org.junit.experimental.categories.Category;
+ 
+ import com.google.protobuf.Message;
+ 
++@Category(MediumTests.class)
+ public class TestHbaseObjectWritableFor96Migration {
+ 
+   @Test
+-- 
+1.7.9.5
+

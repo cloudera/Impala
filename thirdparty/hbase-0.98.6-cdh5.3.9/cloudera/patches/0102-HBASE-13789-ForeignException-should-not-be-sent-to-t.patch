@@ -1,0 +1,103 @@
+From 9f1e44b05a09559138b97eb2c11be22aadf8c17b Mon Sep 17 00:00:00 2001
+From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
+Date: Fri, 29 May 2015 11:59:51 -0700
+Subject: [PATCH 102/133] HBASE-13789 ForeignException should not be sent to
+ the client
+
+Reason: Bug
+Author: Matteo Bertozzi
+Ref: CDH-28131
+---
+ .../org/apache/hadoop/hbase/master/HMaster.java    |   17 +++++++++++++++++
+ 1 file changed, 17 insertions(+)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
+index 3ffb259..d8c9a7d 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
+@@ -76,6 +76,7 @@ import org.apache.hadoop.hbase.client.MetaScanner.MetaScannerVisitor;
+ import org.apache.hadoop.hbase.client.MetaScanner.MetaScannerVisitorBase;
+ import org.apache.hadoop.hbase.client.Result;
+ import org.apache.hadoop.hbase.coprocessor.CoprocessorHost;
++import org.apache.hadoop.hbase.errorhandling.ForeignException;
+ import org.apache.hadoop.hbase.exceptions.DeserializationException;
+ import org.apache.hadoop.hbase.exceptions.MergeRegionException;
+ import org.apache.hadoop.hbase.exceptions.UnknownProtocolException;
+@@ -1011,9 +1012,11 @@ MasterServices, Server {
+     status.setStatus("Assigning hbase:meta region");
+ 
+     RegionStates regionStates = assignmentManager.getRegionStates();
++
+     regionStates.createRegionState(HRegionInfo.FIRST_META_REGIONINFO);
+     boolean rit = this.assignmentManager
+       .processRegionInTransitionAndBlockUntilAssigned(HRegionInfo.FIRST_META_REGIONINFO);
++
+     boolean metaRegionLocation = this.catalogTracker.verifyMetaRegionLocation(timeout);
+     ServerName currentMetaServer = this.catalogTracker.getMetaLocation();
+     if (!metaRegionLocation) {
+@@ -2858,6 +2861,8 @@ MasterServices, Server {
+       this.conf);
+     try {
+       snapshotManager.takeSnapshot(snapshot);
++    } catch (ForeignException e) {
++      throw new ServiceException(e.getCause());
+     } catch (IOException e) {
+       throw new ServiceException(e);
+     }
+@@ -2908,6 +2913,8 @@ MasterServices, Server {
+       LOG.info(getClientIdAuditPrefix() + " delete " + request.getSnapshot());
+       snapshotManager.deleteSnapshot(request.getSnapshot());
+       return DeleteSnapshotResponse.newBuilder().build();
++    } catch (ForeignException e) {
++      throw new ServiceException(e.getCause());
+     } catch (IOException e) {
+       throw new ServiceException(e);
+     }
+@@ -2930,6 +2937,8 @@ MasterServices, Server {
+       boolean done = snapshotManager.isSnapshotDone(request.getSnapshot());
+       builder.setDone(done);
+       return builder.build();
++    } catch (ForeignException e) {
++      throw new ServiceException(e.getCause());
+     } catch (IOException e) {
+       throw new ServiceException(e);
+     }
+@@ -2969,6 +2978,8 @@ MasterServices, Server {
+       SnapshotDescription reqSnapshot = request.getSnapshot();
+       snapshotManager.restoreSnapshot(reqSnapshot);
+       return RestoreSnapshotResponse.newBuilder().build();
++    } catch (ForeignException e) {
++      throw new ServiceException(e.getCause());
+     } catch (IOException e) {
+       throw new ServiceException(e);
+     }
+@@ -2993,6 +3004,8 @@ MasterServices, Server {
+       boolean done = snapshotManager.isRestoreDone(snapshot);
+       builder.setDone(done);
+       return builder.build();
++    } catch (ForeignException e) {
++      throw new ServiceException(e.getCause());
+     } catch (IOException e) {
+       throw new ServiceException(e);
+     }
+@@ -3018,6 +3031,8 @@ MasterServices, Server {
+ 
+     try {
+       mpm.execProcedure(desc);
++    } catch (ForeignException e) {
++      throw new ServiceException(e.getCause());
+     } catch (IOException e) {
+       throw new ServiceException(e);
+     }
+@@ -3055,6 +3070,8 @@ MasterServices, Server {
+       boolean done = mpm.isProcedureDone(desc);
+       builder.setDone(done);
+       return builder.build();
++    } catch (ForeignException e) {
++      throw new ServiceException(e.getCause());
+     } catch (IOException e) {
+       throw new ServiceException(e);
+     }
+-- 
+1.7.9.5
+

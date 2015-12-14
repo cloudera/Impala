@@ -1,0 +1,25 @@
+From 8c2e71a8bd5cbf6e63e3957ca6afd813dda7030c Mon Sep 17 00:00:00 2001
+From: Jenkins slave <kitchen-build@cloudera.com>
+Date: Fri, 10 Jul 2015 02:45:44 -0700
+Subject: [PATCH 114/133] CLOUDERA-BUILD - fixing parent POM
+
+---
+ pom.xml |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/pom.xml b/pom.xml
+index 03dd74e..19464b7 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -32,7 +32,7 @@
+   <parent>
+     <groupId>com.cloudera.cdh</groupId>
+     <artifactId>cdh-root</artifactId>
+-    <version>5.3.5-SNAPSHOT</version>
++    <version>5.3.6-SNAPSHOT</version>
+     <relativePath/>
+     <!-- no parent resolution -->
+   </parent>
+-- 
+1.7.9.5
+
