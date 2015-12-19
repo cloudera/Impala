@@ -1,15 +1,14 @@
 From 2d8735014c64a43839fb5abae325e509ff123bf9 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Thu, 26 Feb 2015 07:08:16 -0800
-Subject: [PATCH 138/284] HBASE-13111 truncate_preserve command is failing
- with undefined method error
+Subject: [PATCH 138/286] HBASE-13111 truncate_preserve command is failing with undefined method error
 
 Reason: Bug
 Author: Ashish Singhi
 Ref: CDH-26967
 ---
  hbase-shell/src/main/ruby/hbase/admin.rb |   10 +++++-----
- 1 file changed, 5 insertions(+), 5 deletions(-)
+ 1 files changed, 5 insertions(+), 5 deletions(-)
 
 diff --git a/hbase-shell/src/main/ruby/hbase/admin.rb b/hbase-shell/src/main/ruby/hbase/admin.rb
 index 2a9ece7..8c7e1eb 100644
@@ -52,5 +51,5 @@ index 2a9ece7..8c7e1eb 100644
        # Read region info
        # FIXME: fail gracefully if can't find the region
 -- 
-1.7.9.5
+1.7.0.4
 

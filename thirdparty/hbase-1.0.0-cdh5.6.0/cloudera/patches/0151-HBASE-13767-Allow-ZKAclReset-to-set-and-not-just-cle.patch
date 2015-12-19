@@ -1,14 +1,13 @@
 From f56d54bf49a36fb66a97fec19b65f9c6831f5399 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Wed, 27 May 2015 18:30:55 +0100
-Subject: [PATCH 151/284] HBASE-13767 Allow ZKAclReset to set and not just
- clear ZK ACLs
+Subject: [PATCH 151/286] HBASE-13767 Allow ZKAclReset to set and not just clear ZK ACLs
 
 Reason: Supportability
 Author: Matteo Bertozzi
 Ref: CDH-27913
 ---
- .../org/apache/hadoop/hbase/zookeeper/ZKUtil.java  |    7 +-
+ .../org/apache/hadoop/hbase/zookeeper/ZKUtil.java  |    7 ++-
  .../apache/hadoop/hbase/zookeeper/ZkAclReset.java  |   92 +++++++++++---------
  2 files changed, 55 insertions(+), 44 deletions(-)
 
@@ -173,5 +172,5 @@ index f5a41df..9bb6bf7 100644
    }
  }
 -- 
-1.7.9.5
+1.7.0.4
 

@@ -1,7 +1,7 @@
 From ca7bbac8e4d1bd9305263ebf62c482b6ca06c059 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Fri, 2 Oct 2015 15:37:42 -0700
-Subject: [PATCH 281/284] HBASE-14547 Add more debug/trace to zk-procedure
+Subject: [PATCH 281/286] HBASE-14547 Add more debug/trace to zk-procedure
 
 Reason: Supportability
 Author: Matteo Bertozzi
@@ -9,8 +9,8 @@ Ref: CDH-31088
 ---
  .../apache/hadoop/hbase/procedure/Procedure.java   |    1 +
  .../hbase/procedure/ProcedureCoordinator.java      |   14 ++++++++-
- .../hadoop/hbase/procedure/ProcedureMember.java    |    5 +++-
- .../procedure/ZKProcedureCoordinatorRpcs.java      |   31 +++++++++++++-------
+ .../hadoop/hbase/procedure/ProcedureMember.java    |    5 ++-
+ .../procedure/ZKProcedureCoordinatorRpcs.java      |   31 +++++++++++++------
  .../hadoop/hbase/procedure/ZKProcedureUtil.java    |    8 +++++
  .../snapshot/FlushSnapshotSubprocedure.java        |    1 +
  .../snapshot/RegionServerSnapshotManager.java      |    2 +-
@@ -233,5 +233,5 @@ index 93d836d..ca0306a 100644
      Configuration conf = rss.getConfiguration();
      long timeoutMillis = conf.getLong(SNAPSHOT_TIMEOUT_MILLIS_KEY,
 -- 
-1.7.9.5
+1.7.0.4
 

@@ -1,7 +1,7 @@
 From 33b88461cd142a1b9b95d0834c79d8351d03e231 Mon Sep 17 00:00:00 2001
 From: Lars Hofhansl <larsh@apache.org>
 Date: Tue, 16 Jun 2015 12:21:49 -0700
-Subject: [PATCH 166/284] HBASE-13885 ZK watches leaks during snapshots.
+Subject: [PATCH 166/286] HBASE-13885 ZK watches leaks during snapshots.
 
 Reason: Bug
 Author: Lars Hofhansl
@@ -61,5 +61,5 @@ index 342ab22..9e0ef7f 100644
      ZKUtil.deleteNodeRecursively(watcher, getReachedBarrierNode(procedureName));
      ZKUtil.deleteNodeRecursively(watcher, getAbortZNode(procedureName));
 -- 
-1.7.9.5
+1.7.0.4
 

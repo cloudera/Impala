@@ -1,15 +1,14 @@
 From f414072d73f11cc6d5015b40b11ec4b9a86fa5f9 Mon Sep 17 00:00:00 2001
 From: anoopsjohn <anoopsamjohn@gmail.com>
 Date: Thu, 11 Jun 2015 15:32:19 +0530
-Subject: [PATCH 238/284] HBASE-13855 Race in multi threaded
- PartitionedMobCompactor causes NPE. (Jingcheng)
+Subject: [PATCH 238/286] HBASE-13855 Race in multi threaded PartitionedMobCompactor causes NPE. (Jingcheng)
 
 Reason: Bugfix
 Author: Jingcheng Du
 Ref: CDH-31077
 ---
  .../PartitionedMobFileCompactor.java               |   37 ++++++++++++++++----
- 1 file changed, 30 insertions(+), 7 deletions(-)
+ 1 files changed, 30 insertions(+), 7 deletions(-)
 
 diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/filecompactions/PartitionedMobFileCompactor.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/filecompactions/PartitionedMobFileCompactor.java
 index 6771e7b..e758ad9 100644
@@ -75,5 +74,5 @@ index 6771e7b..e758ad9 100644
          .removeMobFiles(conf, fs, tableName, mobTableDir, column.getName(), mobFilesToCompact);
      } catch (IOException e) {
 -- 
-1.7.9.5
+1.7.0.4
 

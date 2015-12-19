@@ -1,13 +1,12 @@
 From 5ddcfbcba6ff881d8d29b249c0ef9748b2829ad5 Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@cloudera.com>
 Date: Mon, 23 Feb 2015 00:19:21 -0600
-Subject: [PATCH 060/284] CLOUDERA-BUILD update MapreduceTestingShim to work
- for CDH5-MRv1.
+Subject: [PATCH 060/286] CLOUDERA-BUILD update MapreduceTestingShim to work for CDH5-MRv1.
 
 Ref: CDH-25346
 ---
  .../hbase/mapreduce/MapreduceTestingShim.java      |   10 +++++++---
- 1 file changed, 7 insertions(+), 3 deletions(-)
+ 1 files changed, 7 insertions(+), 3 deletions(-)
 
 diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/mapreduce/MapreduceTestingShim.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/mapreduce/MapreduceTestingShim.java
 index f03e11a..a109327 100644
@@ -31,5 +30,5 @@ index f03e11a..a109327 100644
          return null;
        } catch (InvocationTargetException ite) {
 -- 
-1.7.9.5
+1.7.0.4
 

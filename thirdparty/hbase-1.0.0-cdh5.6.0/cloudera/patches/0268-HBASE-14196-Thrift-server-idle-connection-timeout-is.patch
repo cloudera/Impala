@@ -1,10 +1,8 @@
 From 517d79318ad9a6629c8962375ced2586a31d06b7 Mon Sep 17 00:00:00 2001
 From: Andrew Purtell <apurtell@apache.org>
 Date: Wed, 12 Aug 2015 16:32:37 -0700
-Subject: [PATCH 268/284] HBASE-14196 Thrift server idle connection timeout
- issue (Vladimir Rodionov) HBASE-14533 Thrift client
- gets "AsyncProcess: Failed to get region location
- .... closed"
+Subject: [PATCH 268/286] HBASE-14196 Thrift server idle connection timeout issue (Vladimir Rodionov)
+ HBASE-14533 Thrift client gets "AsyncProcess: Failed to get region location .... closed"
 
 The first issue above fixes CDH-32365. The second adds a test against regression.
 
@@ -16,7 +14,7 @@ Ref: CDH-32365
  .../apache/hadoop/hbase/util/ConnectionCache.java  |    9 +-
  .../hadoop/hbase/thrift/IncrementCoalescer.java    |    8 +-
  .../hadoop/hbase/thrift/ThriftServerRunner.java    |  177 +++++++++++++++-----
- .../hadoop/hbase/thrift/TestThriftServer.java      |   38 +++++
+ .../hadoop/hbase/thrift/TestThriftServer.java      |   38 ++++
  5 files changed, 187 insertions(+), 47 deletions(-)
 
 diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ConnectionManager.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ConnectionManager.java
@@ -711,5 +709,5 @@ index 71e88d5..df42403 100644
     * Runs all of the tests under a single JUnit test method.  We
     * consolidate all testing to one method because HBaseClusterTestCase
 -- 
-1.7.9.5
+1.7.0.4
 

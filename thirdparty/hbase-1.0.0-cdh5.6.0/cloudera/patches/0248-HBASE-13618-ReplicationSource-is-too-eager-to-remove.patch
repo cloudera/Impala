@@ -1,16 +1,15 @@
 From 1896770d6941a9d2cd41f11f962038a954f58ffc Mon Sep 17 00:00:00 2001
 From: Lars Hofhansl <larsh@apache.org>
 Date: Tue, 12 May 2015 21:27:55 -0700
-Subject: [PATCH 248/284] HBASE-13618 ReplicationSource is too eager to remove
- sinks.
+Subject: [PATCH 248/286] HBASE-13618 ReplicationSource is too eager to remove sinks.
 
 Reason: Bug
 Author: Lars Hofhansl
 Ref: CDH-31924
 ---
  .../HBaseInterClusterReplicationEndpoint.java      |    1 +
- .../regionserver/ReplicationSinkManager.java       |   10 +++++++
- .../regionserver/TestReplicationSinkManager.java   |   30 ++++++++++++++++++--
+ .../regionserver/ReplicationSinkManager.java       |   10 ++++++
+ .../regionserver/TestReplicationSinkManager.java   |   30 ++++++++++++++++++-
  3 files changed, 39 insertions(+), 2 deletions(-)
 
 diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/HBaseInterClusterReplicationEndpoint.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/HBaseInterClusterReplicationEndpoint.java
@@ -106,5 +105,5 @@ index d725d21..4eb7f51 100644
    }
  
 -- 
-1.7.9.5
+1.7.0.4
 

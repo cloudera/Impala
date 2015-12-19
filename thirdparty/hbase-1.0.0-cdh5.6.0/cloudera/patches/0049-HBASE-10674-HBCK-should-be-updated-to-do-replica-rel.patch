@@ -1,8 +1,7 @@
 From 34600671c81d3d47f909169112140b75d5c21758 Mon Sep 17 00:00:00 2001
 From: Devaraj Das <ddas@apache.org>
 Date: Fri, 16 Jan 2015 10:28:37 -0800
-Subject: [PATCH 049/284] HBASE-10674 HBCK should be updated to do replica
- related checks
+Subject: [PATCH 049/286] HBASE-10674 HBCK should be updated to do replica related checks
 
 Reason: Task
 Author: Devaraj Das
@@ -10,8 +9,8 @@ Ref: CDH-16914
 ---
  .../java/org/apache/hadoop/hbase/HRegionInfo.java  |    2 +-
  .../org/apache/hadoop/hbase/util/HBaseFsck.java    |  211 ++++++++++++++++----
- .../apache/hadoop/hbase/util/HBaseFsckRepair.java  |   28 ++-
- .../apache/hadoop/hbase/util/TestHBaseFsck.java    |  193 ++++++++++++++++--
+ .../apache/hadoop/hbase/util/HBaseFsckRepair.java  |   28 +++-
+ .../apache/hadoop/hbase/util/TestHBaseFsck.java    |  193 +++++++++++++++++-
  4 files changed, 374 insertions(+), 60 deletions(-)
 
 diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/HRegionInfo.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/HRegionInfo.java
@@ -783,5 +782,5 @@ index bbc4034..c4ed3ee 100644
        HRegionInfo hriOverlap =
            createRegion(tbl.getTableDescriptor(), Bytes.toBytes("A2"), Bytes.toBytes("B"));
 -- 
-1.7.9.5
+1.7.0.4
 

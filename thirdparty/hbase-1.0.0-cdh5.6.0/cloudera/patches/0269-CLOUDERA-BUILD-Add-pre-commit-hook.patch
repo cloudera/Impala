@@ -1,11 +1,11 @@
 From cd0ad2dee9228d89de9046517fa3031a823116dd Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Tue, 13 Oct 2015 11:02:35 -0700
-Subject: [PATCH 269/284] CLOUDERA-BUILD Add pre-commit hook
+Subject: [PATCH 269/286] CLOUDERA-BUILD Add pre-commit hook
 
 ---
  cloudera/pre_commit_hook.sh |    9 +++++++++
- 1 file changed, 9 insertions(+)
+ 1 files changed, 9 insertions(+), 0 deletions(-)
  create mode 100644 cloudera/pre_commit_hook.sh
 
 diff --git a/cloudera/pre_commit_hook.sh b/cloudera/pre_commit_hook.sh
@@ -24,5 +24,5 @@ index 0000000..6b57433
 +mvn clean test -Dtest=TestAdmin1,TestAdmin2,TestFromClientSide
 +
 -- 
-1.7.9.5
+1.7.0.4
 

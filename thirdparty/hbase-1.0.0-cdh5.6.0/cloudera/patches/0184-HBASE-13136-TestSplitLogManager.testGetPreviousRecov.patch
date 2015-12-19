@@ -1,9 +1,7 @@
 From ae6b6d8480f3170de6d94aaae1ca1dae512170cc Mon Sep 17 00:00:00 2001
 From: zhangduo <zhangduo@wandoujia.com>
 Date: Tue, 3 Mar 2015 08:14:57 +0800
-Subject: [PATCH 184/284] HBASE-13136
- TestSplitLogManager.testGetPreviousRecoveryMode is
- flakey
+Subject: [PATCH 184/286] HBASE-13136 TestSplitLogManager.testGetPreviousRecoveryMode is flakey
 
 Signed-off-by: stack <stack@apache.org>
 (cherry picked from commit 6c02361e73a2c5e86861e6a754d9f61fa9c6cb80)
@@ -12,8 +10,8 @@ Reason: Bugfix
 Author: Duo Zhang
 Ref: CDH-27149
 ---
- .../ZKSplitLogManagerCoordination.java             |   30 +++++++++++++++-----
- .../apache/hadoop/hbase/zookeeper/ZKSplitLog.java  |   13 +++++++++
+ .../ZKSplitLogManagerCoordination.java             |   30 +++++++++++++++----
+ .../apache/hadoop/hbase/zookeeper/ZKSplitLog.java  |   13 ++++++++
  2 files changed, 36 insertions(+), 7 deletions(-)
 
 diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/coordination/ZKSplitLogManagerCoordination.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/coordination/ZKSplitLogManagerCoordination.java
@@ -132,5 +130,5 @@ index 325fe0d..ac942f2 100644
      String prefix = getRescanNode(zkw);
      if (path.length() <= prefix.length()) {
 -- 
-1.7.9.5
+1.7.0.4
 

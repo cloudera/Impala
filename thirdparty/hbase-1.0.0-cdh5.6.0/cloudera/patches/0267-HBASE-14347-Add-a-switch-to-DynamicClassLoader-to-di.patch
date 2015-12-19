@@ -1,8 +1,7 @@
 From aaf307eed7ee204e52bd178918ca4f7499eb8205 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Mon, 5 Oct 2015 16:17:07 -0700
-Subject: [PATCH 267/284] HBASE-14347 Add a switch to DynamicClassLoader to
- disable it
+Subject: [PATCH 267/286] HBASE-14347 Add a switch to DynamicClassLoader to disable it
 
 Reason: Improvement
 Author: Huaxiang Sun
@@ -10,8 +9,8 @@ Ref: CDH-31305
 
 Change-Id: I4b03e33bc2c9140eef62edfe86c508054243c963
 ---
- .../hadoop/hbase/util/DynamicClassLoader.java      |   27 +++++++++++++++--
- .../hadoop/hbase/util/TestDynamicClassLoader.java  |   31 ++++++++++++++++++--
+ .../hadoop/hbase/util/DynamicClassLoader.java      |   27 ++++++++++++++++-
+ .../hadoop/hbase/util/TestDynamicClassLoader.java  |   31 ++++++++++++++++++-
  2 files changed, 54 insertions(+), 4 deletions(-)
 
 diff --git a/hbase-common/src/main/java/org/apache/hadoop/hbase/util/DynamicClassLoader.java b/hbase-common/src/main/java/org/apache/hadoop/hbase/util/DynamicClassLoader.java
@@ -132,5 +131,5 @@ index 2f26f4b..612f3f8 100644
      String jarFileName = className + ".jar";
      File file = new File(TEST_UTIL.getDataTestDir().toString(), jarFileName);
 -- 
-1.7.9.5
+1.7.0.4
 

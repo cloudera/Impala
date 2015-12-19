@@ -1,7 +1,7 @@
 From 52edda5067ec470bab80de3bd0b289f2960562ba Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@cloudera.com>
 Date: Tue, 10 Mar 2015 04:56:15 -0500
-Subject: [PATCH 109/284] Partial Revert "HBASE-10573 Use Netty 4"
+Subject: [PATCH 109/286] Partial Revert "HBASE-10573 Use Netty 4"
 
 This reverts portions of commit b6646596c6aac2b6f91976eaad4993802d671f8e that require netty 4
 
@@ -22,8 +22,8 @@ Ref: CDH-24807
  hbase-server/pom.xml                               |   35 +++---
  .../hadoop/hbase/mapreduce/TableMapReduceUtil.java |    2 +-
  .../hbase/master/ClusterStatusPublisher.java       |  127 ++++++--------------
- .../filter/TestFuzzyRowAndColumnRangeFilter.java   |   19 +--
- pom.xml                                            |   32 +----
+ .../filter/TestFuzzyRowAndColumnRangeFilter.java   |   19 ++--
+ pom.xml                                            |   32 +-----
  8 files changed, 119 insertions(+), 216 deletions(-)
 
 diff --git a/hbase-client/pom.xml b/hbase-client/pom.xml
@@ -644,5 +644,5 @@ index 712c654..82a23cd 100644
            </dependency>
          </dependencies>
 -- 
-1.7.9.5
+1.7.0.4
 

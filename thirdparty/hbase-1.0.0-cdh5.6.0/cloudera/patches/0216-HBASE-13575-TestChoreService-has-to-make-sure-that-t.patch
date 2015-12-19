@@ -1,16 +1,14 @@
 From 3fcd42e7bf3bb0245c3400a9f5d0a2bbed05ce94 Mon Sep 17 00:00:00 2001
 From: stack <stack@apache.org>
 Date: Mon, 27 Apr 2015 14:23:57 -0700
-Subject: [PATCH 216/284] HBASE-13575 TestChoreService has to make sure that
- the opened ChoreService is closed for each unit
- test
+Subject: [PATCH 216/286] HBASE-13575 TestChoreService has to make sure that the opened ChoreService is closed for each unit test
 
 Reason: Bug
 Author: Stephen Yuan Jiang
 Ref: CDH-28012
 ---
  .../org/apache/hadoop/hbase/TestChoreService.java  |  762 ++++++++++----------
- 1 file changed, 400 insertions(+), 362 deletions(-)
+ 1 files changed, 400 insertions(+), 362 deletions(-)
 
 diff --git a/hbase-common/src/test/java/org/apache/hadoop/hbase/TestChoreService.java b/hbase-common/src/test/java/org/apache/hadoop/hbase/TestChoreService.java
 index 05c7770..7a543a2 100644
@@ -909,5 +907,5 @@ index 05c7770..7a543a2 100644
      assertFalse(service.scheduleChore(failChore1));
      assertFalse(failChore1.isScheduled());
 -- 
-1.7.9.5
+1.7.0.4
 

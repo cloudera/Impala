@@ -1,8 +1,7 @@
 From 9152d86503593feec47c30df94a969d159247375 Mon Sep 17 00:00:00 2001
 From: Lars Hofhansl <larsh@apache.org>
 Date: Wed, 4 Mar 2015 14:03:47 -0800
-Subject: [PATCH 192/284] HBASE-13109 Make better SEEK vs SKIP decisions
- during scanning.
+Subject: [PATCH 192/286] HBASE-13109 Make better SEEK vs SKIP decisions during scanning.
 
 Reason: Product Requirement (Compatibility)
 Author: Lars Hofhansl
@@ -10,28 +9,28 @@ Ref: CDH-27345
 ---
  .../java/org/apache/hadoop/hbase/client/Scan.java  |   17 ----
  .../java/org/apache/hadoop/hbase/HConstants.java   |    2 +-
- .../java/org/apache/hadoop/hbase/KeyValue.java     |   89 +++++++++++++++-----
+ .../java/org/apache/hadoop/hbase/KeyValue.java     |   89 +++++++++++++++----
  .../coprocessor/example/BulkDeleteEndpoint.java    |    1 +
- .../hadoop/hbase/io/HalfStoreFileReader.java       |    5 ++
+ .../hadoop/hbase/io/HalfStoreFileReader.java       |    5 +
  .../hadoop/hbase/io/hfile/BlockWithScanInfo.java   |    8 +-
  .../hadoop/hbase/io/hfile/HFileBlockIndex.java     |    6 +-
  .../hadoop/hbase/io/hfile/HFileReaderV2.java       |   18 ++--
- .../apache/hadoop/hbase/io/hfile/HFileScanner.java |    5 ++
+ .../apache/hadoop/hbase/io/hfile/HFileScanner.java |    5 +
  .../hadoop/hbase/mob/DefaultMobStoreFlusher.java   |    6 +-
  .../hbase/regionserver/ExplicitColumnTracker.java  |   15 +---
  .../hadoop/hbase/regionserver/KeyValueHeap.java    |    6 ++
  .../hadoop/hbase/regionserver/KeyValueScanner.java |    6 ++
  .../hbase/regionserver/NonLazyKeyValueScanner.java |    4 +
  .../hbase/regionserver/ScanQueryMatcher.java       |   43 +++++++++-
- .../hbase/regionserver/StoreFileScanner.java       |    5 ++
+ .../hbase/regionserver/StoreFileScanner.java       |    5 +
  .../hadoop/hbase/regionserver/StoreScanner.java    |    2 +-
  .../org/apache/hadoop/hbase/HBaseTestCase.java     |    1 -
  .../ColumnAggregationEndpointNullResponse.java     |    1 -
  .../ColumnAggregationEndpointWithErrors.java       |    1 -
  .../org/apache/hadoop/hbase/filter/TestFilter.java |    7 --
  .../hbase/filter/TestInvocationRecordFilter.java   |    1 -
- .../hadoop/hbase/regionserver/TestBlocksRead.java  |   10 +--
- .../regionserver/TestExplicitColumnTracker.java    |   64 ++------------
+ .../hadoop/hbase/regionserver/TestBlocksRead.java  |   10 +-
+ .../regionserver/TestExplicitColumnTracker.java    |   64 ++-------------
  .../hadoop/hbase/regionserver/TestHRegion.java     |    3 +-
  .../hbase/regionserver/TestQueryMatcher.java       |   20 -----
  26 files changed, 182 insertions(+), 164 deletions(-)
@@ -946,5 +945,5 @@ index 04246f1..d712666 100644
    throws IOException {
      //Moving up from the Tracker by using Gets and List<KeyValue> instead
 -- 
-1.7.9.5
+1.7.0.4
 

@@ -1,8 +1,7 @@
 From d15b28cf03ce291ba46829418c6842c33b2071f6 Mon Sep 17 00:00:00 2001
 From: Geoffrey <gjacoby@salesforce.com>
 Date: Thu, 28 May 2015 14:33:19 -0700
-Subject: [PATCH 154/284] HBASE 13796 - Fixed ZKUtil's cleaning of the
- zookeeper quorum setting
+Subject: [PATCH 154/286] HBASE 13796 - Fixed ZKUtil's cleaning of the zookeeper quorum setting
 
 Reason: Bug
 Author: Geoffrey
@@ -78,5 +77,5 @@ index 0000000..9e0f5ce
 +  }
 +}
 -- 
-1.7.9.5
+1.7.0.4
 

@@ -1,8 +1,7 @@
 From 38628db1e25e9d84b34c50e7429fb1f8432a7e8f Mon Sep 17 00:00:00 2001
-From: "Apekshit(Appy) Sharma" <appy@cloudera.com>
+From: Apekshit(Appy) Sharma <appy@cloudera.com>
 Date: Thu, 9 Jul 2015 13:46:44 -0700
-Subject: [PATCH 170/284] HBASE-13702 Add dry mode and invalid row logging to
- ImportTsv. (Apekshit)
+Subject: [PATCH 170/286] HBASE-13702 Add dry mode and invalid row logging to ImportTsv. (Apekshit)
 
 Reason: Improvement
 Author: Apekshit Sharma
@@ -899,5 +898,5 @@ index 96eea13..488d0f5 100644
  }
  
 -- 
-1.7.9.5
+1.7.0.4
 

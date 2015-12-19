@@ -1,20 +1,19 @@
 From 0aa7d765d4923d08530a75a1f001e1660517bbcf Mon Sep 17 00:00:00 2001
 From: Srikanth Srungarapu <ssrungarapu@cloudera.com>
 Date: Wed, 4 Mar 2015 20:35:58 -0800
-Subject: [PATCH 103/284] CLOUDERA-BUILD Binary incompatibilities between our
- HBase 0.98.6 and 1.0 branches
+Subject: [PATCH 103/286] CLOUDERA-BUILD Binary incompatibilities between our HBase 0.98.6 and 1.0 branches
 
 Reason: Product Requirement (Compatibility)
 Author: Srikanth Srungarapu
 Ref: CDH-24305
 ---
  .../org/apache/hadoop/hbase/client/HBaseAdmin.java |   24 +++
- .../org/apache/hadoop/hbase/client/HTable.java     |   67 +++++++-
+ .../org/apache/hadoop/hbase/client/HTable.java     |   67 ++++++++-
  .../hbase/security/access/AccessControlClient.java |  143 ++++++++++++++++
  .../hadoop/hbase/mapred/TableRecordReaderImpl.java |   20 ++-
  .../apache/hadoop/hbase/mapreduce/CopyTable.java   |  171 ++++++++++++++++++++
  .../hbase/mapreduce/TableRecordReaderImpl.java     |   26 +++
- .../hadoop/hbase/mapreduce/TestCopyTable.java      |   40 ++++-
+ .../hadoop/hbase/mapreduce/TestCopyTable.java      |   40 +++++-
  7 files changed, 485 insertions(+), 6 deletions(-)
 
 diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/HBaseAdmin.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/HBaseAdmin.java
@@ -646,5 +645,5 @@ index 5492938..5d63533 100644
 +
  }
 -- 
-1.7.9.5
+1.7.0.4
 

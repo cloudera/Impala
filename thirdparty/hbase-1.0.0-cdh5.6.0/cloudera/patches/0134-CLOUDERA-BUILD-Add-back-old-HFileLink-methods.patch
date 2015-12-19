@@ -1,14 +1,14 @@
 From c7af49b7130ce669af17d3ddf6f059693432d732 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Mon, 20 Apr 2015 08:41:14 +0100
-Subject: [PATCH 134/284] CLOUDERA-BUILD Add back old HFileLink methods
+Subject: [PATCH 134/286] CLOUDERA-BUILD Add back old HFileLink methods
 
 Reason: Compatibility
 Author: Matteo Bertozzi
 Ref: CDH-27131
 ---
  .../java/org/apache/hadoop/hbase/io/HFileLink.java |   18 ++++++++++++++++++
- 1 file changed, 18 insertions(+)
+ 1 files changed, 18 insertions(+), 0 deletions(-)
 
 diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/io/HFileLink.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/io/HFileLink.java
 index 8593cf8..034aabc 100644
@@ -40,5 +40,5 @@ index 8593cf8..034aabc 100644
     */
    public Path getOriginPath() {
 -- 
-1.7.9.5
+1.7.0.4
 

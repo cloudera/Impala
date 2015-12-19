@@ -1,15 +1,14 @@
 From f266e8990d771f0514259b32e127421a4d20aa5c Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Fri, 25 Sep 2015 09:22:26 -0700
-Subject: [PATCH 249/284] HBASE-14471 Thrift -  HTTP Error 413 full HEAD if
- using kerberos authentication (huaxiang sun)
+Subject: [PATCH 249/286] HBASE-14471 Thrift -  HTTP Error 413 full HEAD if using kerberos authentication (huaxiang sun)
 
 Reason: Bugfix
 Author: ted yu
 Ref: CDH-28378
 ---
  .../hadoop/hbase/thrift/ThriftServerRunner.java    |    1 +
- .../hadoop/hbase/thrift/TestThriftHttpServer.java  |   47 ++++++++++++++++++--
+ .../hadoop/hbase/thrift/TestThriftHttpServer.java  |   47 ++++++++++++++++++-
  2 files changed, 45 insertions(+), 3 deletions(-)
 
 diff --git a/hbase-thrift/src/main/java/org/apache/hadoop/hbase/thrift/ThriftServerRunner.java b/hbase-thrift/src/main/java/org/apache/hadoop/hbase/thrift/ThriftServerRunner.java
@@ -118,5 +117,5 @@ index 8052c03..477fce4 100644
        TProtocol prot;
        prot = new TBinaryProtocol(httpClient);
 -- 
-1.7.9.5
+1.7.0.4
 

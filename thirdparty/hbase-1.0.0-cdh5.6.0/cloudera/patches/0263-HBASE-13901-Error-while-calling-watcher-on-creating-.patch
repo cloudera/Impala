@@ -1,15 +1,14 @@
 From 9df308cc804a597fcbfb0e020d497eb455abeff2 Mon Sep 17 00:00:00 2001
 From: Ashish Singhi <ashish.singhi@huawei.com>
 Date: Mon, 15 Jun 2015 11:27:59 -0700
-Subject: [PATCH 263/284] HBASE-13901 Error while calling watcher on creating
- and deleting an HBase table
+Subject: [PATCH 263/286] HBASE-13901 Error while calling watcher on creating and deleting an HBase table
 
 Reason: Bug
 Author: Ashish Singhi
 Ref: CDH-31924
 ---
  .../org/apache/hadoop/hbase/zookeeper/ZKUtil.java  |    2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
 diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/zookeeper/ZKUtil.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/zookeeper/ZKUtil.java
 index 005339f..a3a1359 100644
@@ -25,5 +24,5 @@ index 005339f..a3a1359 100644
    }
  
 -- 
-1.7.9.5
+1.7.0.4
 

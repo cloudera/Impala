@@ -1,8 +1,7 @@
 From abcfdd95144ce998158465c02eb81526c4d8f700 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Thu, 19 Mar 2015 07:01:21 +0000
-Subject: [PATCH 119/284] HBASE-13235 Revisit the security auditing semantics
- (Srikanth Srungarapu)
+Subject: [PATCH 119/286] HBASE-13235 Revisit the security auditing semantics (Srikanth Srungarapu)
 
 Reason: Improvement
 Author: Srikanth Srungarapu
@@ -10,7 +9,7 @@ Ref: CDH-26053
 ---
  .../java/org/apache/hadoop/hbase/TableName.java    |   13 +++
  .../hbase/security/access/AccessController.java    |   88 ++++++++++++++++++--
- .../hadoop/hbase/security/access/AuthResult.java   |   77 +++++++++++++++--
+ .../hadoop/hbase/security/access/AuthResult.java   |   77 ++++++++++++++++--
  3 files changed, 166 insertions(+), 12 deletions(-)
 
 diff --git a/hbase-common/src/main/java/org/apache/hadoop/hbase/TableName.java b/hbase-common/src/main/java/org/apache/hadoop/hbase/TableName.java
@@ -333,5 +332,5 @@ index c4bc35e..bf05dc1 100644
 +  }
  }
 -- 
-1.7.9.5
+1.7.0.4
 

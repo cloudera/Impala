@@ -1,8 +1,7 @@
 From 4de2a76cff3c26153f877bfc71186fd70310132f Mon Sep 17 00:00:00 2001
 From: Jurriaan Mous <jurmous@jurmo.us>
 Date: Sun, 28 Dec 2014 13:53:03 +0100
-Subject: [PATCH 197/284] HBASE-12761 On region jump ClientScanners should get
- next row start key instead of a skip.
+Subject: [PATCH 197/286] HBASE-12761 On region jump ClientScanners should get next row start key instead of a skip.
 
 Reason: Product Requirement (Compatibility)
 Author: Jurriaan Mous
@@ -167,5 +166,5 @@ index dd5f738..bcb4f73 100644
   * This class has the logic for handling scanners for regions with and without replicas.
   * 1. A scan is attempted on the default (primary) region
 -- 
-1.7.9.5
+1.7.0.4
 

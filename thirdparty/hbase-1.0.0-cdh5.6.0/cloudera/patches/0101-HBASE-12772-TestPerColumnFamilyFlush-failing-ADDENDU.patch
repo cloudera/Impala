@@ -1,8 +1,7 @@
 From 26e0d507c62469f87bce202a44c3ffea151bd930 Mon Sep 17 00:00:00 2001
 From: stack <stack@apache.org>
 Date: Tue, 30 Dec 2014 11:37:13 -0800
-Subject: [PATCH 101/284] HBASE-12772 TestPerColumnFamilyFlush failing --
- ADDENDUM
+Subject: [PATCH 101/286] HBASE-12772 TestPerColumnFamilyFlush failing -- ADDENDUM
 
 Conflicts:
 	hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestPerColumnFamilyFlush.java
@@ -14,7 +13,7 @@ Author: stack
 Ref: CDH-25580
 ---
  .../regionserver/TestPerColumnFamilyFlush.java     |   27 ++++++++++++++------
- 1 file changed, 19 insertions(+), 8 deletions(-)
+ 1 files changed, 19 insertions(+), 8 deletions(-)
 
 diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestPerColumnFamilyFlush.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestPerColumnFamilyFlush.java
 index 7de9f40..498ec57 100644
@@ -108,5 +107,5 @@ index 7de9f40..498ec57 100644
      long memstoreFlushSize = 1024L * 1024;
      Configuration conf = TEST_UTIL.getConfiguration();
 -- 
-1.7.9.5
+1.7.0.4
 

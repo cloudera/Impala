@@ -1,9 +1,7 @@
 From a52055c28a640280e92eff0afd111f9905558bf9 Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Sat, 16 May 2015 16:45:49 -0700
-Subject: [PATCH 236/284] HBASE-13531 Flakey failure of
- TestAcidGuarantees#testMobScanAtomicity (Jingcheng
- Du)
+Subject: [PATCH 236/286] HBASE-13531 Flakey failure of TestAcidGuarantees#testMobScanAtomicity (Jingcheng Du)
 
 rd point was not properly handled in the mob scanner case.
 
@@ -17,15 +15,15 @@ Reason: Bugfix
 Author: Jingcheng Du
 Ref: CDH-31077
 ---
- .../java/org/apache/hadoop/hbase/mob/MobFile.java  |   14 ++-
+ .../java/org/apache/hadoop/hbase/mob/MobFile.java  |   14 +++-
  .../org/apache/hadoop/hbase/mob/MobFileCache.java  |    4 +-
  .../java/org/apache/hadoop/hbase/mob/MobUtils.java |    2 +-
  .../hadoop/hbase/mob/mapreduce/SweepReducer.java   |    2 +
- .../hadoop/hbase/regionserver/HMobStore.java       |   26 +++--
+ .../hadoop/hbase/regionserver/HMobStore.java       |   26 ++++-
  .../hadoop/hbase/regionserver/MobStoreScanner.java |    2 +-
  .../regionserver/ReversedMobStoreScanner.java      |    2 +-
  .../hadoop/hbase/regionserver/StoreScanner.java    |    2 +-
- .../hbase/regionserver/TestMobStoreScanner.java    |  100 +++++++++++++-------
+ .../hbase/regionserver/TestMobStoreScanner.java    |  100 +++++++++++++------
  9 files changed, 110 insertions(+), 44 deletions(-)
 
 diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/MobFile.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/MobFile.java
@@ -458,5 +456,5 @@ index 8835dac..b5b10cc 100644
      FileSystem fs = FileSystem.get(TEST_UTIL.getConfiguration());
      Assert.assertTrue(fs.exists(targetPath));
 -- 
-1.7.9.5
+1.7.0.4
 

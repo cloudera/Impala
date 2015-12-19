@@ -1,18 +1,15 @@
 From 4265a7730b872012cea95b62e400c8d91e50b34a Mon Sep 17 00:00:00 2001
 From: Nick Dimiduk <ndimiduk@apache.org>
 Date: Sun, 14 Jun 2015 15:45:10 -0700
-Subject: [PATCH 278/284] HBASE-13833
- LoadIncrementalHFile.doBulkLoad(Path,HTable)
- doesn't handle unmanaged connections when using
- SecureBulkLoad
+Subject: [PATCH 278/286] HBASE-13833 LoadIncrementalHFile.doBulkLoad(Path,HTable) doesn't handle unmanaged connections when using SecureBulkLoad
 
 Reason: Bug
 Author: Matteo Bertozzi
 Ref: CDH-31639
 ---
- .../hbase/mapreduce/LoadIncrementalHFiles.java     |   83 ++++++++++++--------
- .../hbase/mapreduce/TestLoadIncrementalHFiles.java |   81 +++++++++++--------
- 2 files changed, 99 insertions(+), 65 deletions(-)
+ .../hbase/mapreduce/LoadIncrementalHFiles.java     |   83 ++++++++++++-------
+ .../hbase/mapreduce/TestLoadIncrementalHFiles.java |   83 +++++++++++--------
+ 2 files changed, 100 insertions(+), 66 deletions(-)
 
 diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/LoadIncrementalHFiles.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/LoadIncrementalHFiles.java
 index 73c3e72..72e31f3 100644
@@ -272,5 +269,5 @@ index 87d1229..950284f 100644
  
    /**
 -- 
-1.7.9.5
+1.7.0.4
 

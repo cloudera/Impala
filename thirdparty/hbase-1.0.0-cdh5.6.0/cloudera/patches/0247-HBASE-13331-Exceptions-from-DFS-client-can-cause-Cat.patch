@@ -1,8 +1,7 @@
 From a1ac3672f88646ead20cfbb6b976b578ef829293 Mon Sep 17 00:00:00 2001
 From: Elliott Clark <eclark@apache.org>
 Date: Tue, 24 Mar 2015 13:42:29 -0700
-Subject: [PATCH 247/284] HBASE-13331 Exceptions from DFS client can cause
- CatalogJanitor to delete referenced files
+Subject: [PATCH 247/286] HBASE-13331 Exceptions from DFS client can cause CatalogJanitor to delete referenced files
 
 Summary:
 CatalogJanitor#checkDaughterInFs assumes that there are no references
@@ -17,7 +16,7 @@ Author: Elliott Clark
 Ref: CDH-31924
 ---
  .../apache/hadoop/hbase/master/CatalogJanitor.java |   19 ++++++++++++++++---
- 1 file changed, 16 insertions(+), 3 deletions(-)
+ 1 files changed, 16 insertions(+), 3 deletions(-)
 
 diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/CatalogJanitor.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/CatalogJanitor.java
 index 9d18c98..6db7802 100644
@@ -55,5 +54,5 @@ index 9d18c98..6db7802 100644
  
      boolean references = false;
 -- 
-1.7.9.5
+1.7.0.4
 

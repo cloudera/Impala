@@ -1,23 +1,13 @@
 From 140b580cd02b962a7f1d33bb382c2c4241ddd383 Mon Sep 17 00:00:00 2001
 From: stack <stack@duboce.net>
 Date: Tue, 29 Sep 2015 17:32:08 -0700
-Subject: [PATCH 258/284]     HBASE-14484 Follow-on from HBASE-14421, just
- disable TestFastFail* until someone digs in and
- fixes it     HBASE-14472 TestHCM and
- TestRegionServerNoMaster fixes (Just backported
- change to TestHCM)     HBASE-14435 thrift tests
- don't have test-specific hbase-site.xml so
- 'BindException: Address already in use' because
- info port is not turned off     HBASE-14421
- TestFastFail* are flakey (included all amendments
- too in this commit).     HBASE-14513
- TestBucketCache runs obnoxious 1k threads in a unit
- test     HBASE-15530
- TestHttpServerLifecycle#testStartedServerIsAlive
- times out (just removed this test altogether)    
- HBASE-12751 Allow RowLock to be reader writer (Just
- the part that removed the flakey
- TestVisibilityLabelsWithDistributedLogReplaa)
+Subject: [PATCH 258/286]     HBASE-14484 Follow-on from HBASE-14421, just disable TestFastFail* until someone digs in and fixes it
+     HBASE-14472 TestHCM and TestRegionServerNoMaster fixes (Just backported change to TestHCM)
+     HBASE-14435 thrift tests don't have test-specific hbase-site.xml so 'BindException: Address already in use' because info port is not turned off
+     HBASE-14421 TestFastFail* are flakey (included all amendments too in this commit).
+     HBASE-14513 TestBucketCache runs obnoxious 1k threads in a unit test
+     HBASE-15530 TestHttpServerLifecycle#testStartedServerIsAlive times out (just removed this test altogether)
+     HBASE-12751 Allow RowLock to be reader writer (Just the part that removed the flakey TestVisibilityLabelsWithDistributedLogReplaa)
 
     Author: stack <stack@apache.org>
     Date: Tue Sep 22 17:23:07 2015 -0700
@@ -25,7 +15,7 @@ Subject: [PATCH 258/284]     HBASE-14484 Follow-on from HBASE-14421, just
         Author: Stack
         Ref: CDH-32203
 ---
- .../hbase/client/TestFastFailWithoutTestUtil.java  |   24 ++-
+ .../hbase/client/TestFastFailWithoutTestUtil.java  |   24 +++-
  .../apache/hadoop/hbase/client/TestFastFail.java   |    7 +-
  .../org/apache/hadoop/hbase/client/TestHCM.java    |    9 +-
  .../hadoop/hbase/http/TestHttpServerLifecycle.java |  133 ----------------
@@ -582,5 +572,5 @@ index 0000000..2d06c0a
 +  </property>
 +</configuration>
 -- 
-1.7.9.5
+1.7.0.4
 

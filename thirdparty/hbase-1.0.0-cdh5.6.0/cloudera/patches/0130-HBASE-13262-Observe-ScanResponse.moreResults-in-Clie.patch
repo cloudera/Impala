@@ -1,8 +1,7 @@
 From 73c0beaac5e605b9c7606eda296e4b5101511963 Mon Sep 17 00:00:00 2001
 From: Josh Elser <elserj@apache.org>
 Date: Sat, 28 Mar 2015 18:56:51 -0700
-Subject: [PATCH 130/284] HBASE-13262 Observe ScanResponse.moreResults in
- ClientScanner.
+Subject: [PATCH 130/286] HBASE-13262 Observe ScanResponse.moreResults in ClientScanner.
 
 The RS already returns to the client whether or not it has additional
 results to be returned in a subsequent call to scan(), but the ClientScanner
@@ -17,10 +16,10 @@ Reason: Bug
 Author: Josh Elser
 Ref: CDH-26273
 ---
- .../apache/hadoop/hbase/client/ClientScanner.java  |  298 ++++++------
+ .../apache/hadoop/hbase/client/ClientScanner.java  |  298 +++++++------
  .../hbase/client/ClientSmallReversedScanner.java   |    1 +
  .../hadoop/hbase/client/ClientSmallScanner.java    |   20 +-
- .../hadoop/hbase/client/ScannerCallable.java       |   44 +-
+ .../hadoop/hbase/client/ScannerCallable.java       |   44 ++-
  .../hbase/client/ScannerCallableWithReplicas.java  |   16 +
  .../hadoop/hbase/client/TestClientScanner.java     |  489 ++++++++++++++++++++
  .../hbase/protobuf/generated/ClientProtos.java     |  237 ++++++++--
@@ -1590,5 +1589,5 @@ index 0000000..a77c50c
 +   }
 +}
 -- 
-1.7.9.5
+1.7.0.4
 

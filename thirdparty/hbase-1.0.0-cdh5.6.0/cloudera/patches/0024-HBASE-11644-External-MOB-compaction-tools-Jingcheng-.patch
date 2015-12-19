@@ -1,8 +1,7 @@
 From 71eb1ced9ba5a3e1756ad34efa2df07f22aee588 Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Fri, 19 Sep 2014 03:02:06 -0700
-Subject: [PATCH 024/284] HBASE-11644 External MOB compaction tools (Jingcheng
- Du)
+Subject: [PATCH 024/286] HBASE-11644 External MOB compaction tools (Jingcheng Du)
 
 Reason: MOB Feature
 Author: Jingcheng Du
@@ -14,7 +13,7 @@ Ref: CDH-19420
  .../hadoop/hbase/mob/DefaultMobCompactor.java      |    2 +-
  .../hadoop/hbase/mob/ExpiredMobFileCleaner.java    |  120 +++++
  .../org/apache/hadoop/hbase/mob/MobConstants.java  |   22 +
- .../java/org/apache/hadoop/hbase/mob/MobUtils.java |  285 +++++++++-
+ .../java/org/apache/hadoop/hbase/mob/MobUtils.java |  285 ++++++++++-
  .../org/apache/hadoop/hbase/mob/MobZookeeper.java  |  270 ++++++++++
  .../hbase/mob/mapreduce/MemStoreWrapper.java       |  184 +++++++
  .../mob/mapreduce/MobFilePathHashPartitioner.java  |   41 ++
@@ -4125,5 +4124,5 @@ index 12bdd4c..38e2c5f 100644
     * Assert the value is not store in mob.
     */
 -- 
-1.7.9.5
+1.7.0.4
 

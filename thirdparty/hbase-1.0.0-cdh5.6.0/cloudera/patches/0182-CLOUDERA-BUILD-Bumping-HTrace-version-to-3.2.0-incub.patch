@@ -1,15 +1,14 @@
 From 29cbb8183f86601c9245aa27d87e3eeef4fac3bd Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@cloudera.com>
 Date: Mon, 27 Jul 2015 22:14:16 -0700
-Subject: [PATCH 182/284] CLOUDERA-BUILD Bumping HTrace version to
- 3.2.0-incubating
+Subject: [PATCH 182/286] CLOUDERA-BUILD Bumping HTrace version to 3.2.0-incubating
 
 Author: Esteban Gutierrez
 Reason: Compatibility
 Ref: CDH-29651
 ---
  pom.xml |    2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
 diff --git a/pom.xml b/pom.xml
 index cc25997..30742ab 100644
@@ -25,5 +24,5 @@ index cc25997..30742ab 100644
      <mockito-all.version>1.10.8</mockito-all.version>
      <protobuf.version>2.5.0</protobuf.version>
 -- 
-1.7.9.5
+1.7.0.4
 

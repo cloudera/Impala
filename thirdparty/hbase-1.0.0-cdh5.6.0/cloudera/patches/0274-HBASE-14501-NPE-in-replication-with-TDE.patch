@@ -1,7 +1,7 @@
 From a86dc5ac64978d0c58741f68814f20a9cb7acd4b Mon Sep 17 00:00:00 2001
 From: Enis Soztutar <enis@apache.org>
 Date: Mon, 12 Oct 2015 20:37:34 -0700
-Subject: [PATCH 274/284] HBASE-14501 NPE in replication with TDE
+Subject: [PATCH 274/286] HBASE-14501 NPE in replication with TDE
 
 Reason: Bug
 Author: Enis Soztutar
@@ -18,10 +18,10 @@ Conflicts:
 Change-Id: Ia9e3a44e46dcb8b98e643a54fbeacc0e433f9d42
 ---
  .../java/org/apache/hadoop/hbase/KeyValue.java     |    8 +++--
- .../java/org/apache/hadoop/hbase/KeyValueUtil.java |    5 +--
+ .../java/org/apache/hadoop/hbase/KeyValueUtil.java |    5 ++-
  .../org/apache/hadoop/hbase/codec/BaseDecoder.java |   38 +++++++++++++++-----
  .../org/apache/hadoop/hbase/codec/CellCodec.java   |    1 +
- .../hbase/regionserver/wal/SecureWALCellCodec.java |    9 ++---
+ .../hbase/regionserver/wal/SecureWALCellCodec.java |    9 +----
  .../regionserver/ReplicationSource.java            |    1 +
  6 files changed, 41 insertions(+), 21 deletions(-)
 
@@ -218,5 +218,5 @@ index 8ca3772..a5fdd48 100644
      return distinctRowKeys;
    }
 -- 
-1.7.9.5
+1.7.0.4
 

@@ -1,8 +1,7 @@
 From 2a3734764d0222092bfbaa272d15683b0f6f1a42 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Mon, 13 Apr 2015 23:21:50 +0100
-Subject: [PATCH 264/284] HBASE-13457 SnapshotExistsException doesn't honor
- the DoNotRetry
+Subject: [PATCH 264/286] HBASE-13457 SnapshotExistsException doesn't honor the DoNotRetry
 
 Reason: Bug
 Author: Matteo Bertozzi
@@ -10,7 +9,7 @@ Ref: CDH-31924
 ---
  .../hbase/snapshot/SnapshotExistsException.java    |    3 +
  .../hbase/snapshot/TestSnapshotClientRetries.java  |  125 ++++++++++++++++++++
- 2 files changed, 128 insertions(+)
+ 2 files changed, 128 insertions(+), 0 deletions(-)
  create mode 100644 hbase-server/src/test/java/org/apache/hadoop/hbase/snapshot/TestSnapshotClientRetries.java
 
 diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/snapshot/SnapshotExistsException.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/snapshot/SnapshotExistsException.java
@@ -159,5 +158,5 @@ index 0000000..5168b85
 +  }
 +}
 -- 
-1.7.9.5
+1.7.0.4
 

@@ -1,15 +1,14 @@
 From 63f68948858920723fe35599b8b3f1352cd19bbf Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Fri, 20 Mar 2015 21:14:07 +0000
-Subject: [PATCH 244/284] HBASE-13282 Fix the minor issues of running Canary
- on kerberized environment
+Subject: [PATCH 244/286] HBASE-13282 Fix the minor issues of running Canary on kerberized environment
 
 Reason: Supportability
 Author: Srikanth Srungarapu
 Ref: CDH-31924
 ---
- .../java/org/apache/hadoop/hbase/AuthUtil.java     |    6 +++---
- .../java/org/apache/hadoop/hbase/tool/Canary.java  |   21 ++++++++++++--------
+ .../java/org/apache/hadoop/hbase/AuthUtil.java     |    6 ++--
+ .../java/org/apache/hadoop/hbase/tool/Canary.java  |   21 ++++++++++++-------
  2 files changed, 16 insertions(+), 11 deletions(-)
 
 diff --git a/hbase-common/src/main/java/org/apache/hadoop/hbase/AuthUtil.java b/hbase-common/src/main/java/org/apache/hadoop/hbase/AuthUtil.java
@@ -93,5 +92,5 @@ index 309a1c2..625828f 100644
    }
  }
 -- 
-1.7.9.5
+1.7.0.4
 

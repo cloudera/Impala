@@ -1,22 +1,21 @@
 From d45e0c71495a68843c295d248d1722f942ad15b2 Mon Sep 17 00:00:00 2001
 From: Enis Soztutar <enis@apache.org>
 Date: Tue, 27 Jan 2015 14:42:42 -0800
-Subject: [PATCH 053/284] HBASE-11908 Region replicas should be added to the
- meta table at the time of table creation
+Subject: [PATCH 053/286] HBASE-11908 Region replicas should be added to the meta table at the time of table creation
 
 Reason: Task
 Author: Enis Soztutar
 Ref: CDH-16914
 ---
- .../org/apache/hadoop/hbase/MetaTableAccessor.java |   54 +++++++++---
+ .../org/apache/hadoop/hbase/MetaTableAccessor.java |   54 ++++++++++--
  .../hadoop/hbase/master/RegionStateStore.java      |    8 +-
  .../apache/hadoop/hbase/master/RegionStates.java   |   17 +++-
  .../hbase/master/handler/CreateTableHandler.java   |    6 +-
  .../hbase/master/handler/TruncateTableHandler.java |    3 +-
  .../master/snapshot/CloneSnapshotHandler.java      |    5 +-
  .../master/snapshot/RestoreSnapshotHandler.java    |    5 +-
- .../hbase/regionserver/RegionMergeTransaction.java |   27 ++++--
- .../hbase/regionserver/SplitTransaction.java       |   23 ++++-
+ .../hbase/regionserver/RegionMergeTransaction.java |   27 +++++-
+ .../hbase/regionserver/SplitTransaction.java       |   23 +++++-
  .../apache/hadoop/hbase/TestMetaTableAccessor.java |   91 +++++++++++++++++++-
  .../hadoop/hbase/client/TestMetaScanner.java       |    2 +-
  .../coprocessor/TestRegionServerObserver.java      |    3 +-
@@ -578,5 +577,5 @@ index 638321c..6549825 100644
      }
  
 -- 
-1.7.9.5
+1.7.0.4
 

@@ -1,14 +1,13 @@
 From ef8ff699ab25d99d7bcb29ceaa8ff933df561868 Mon Sep 17 00:00:00 2001
 From: stack <stack@apache.org>
 Date: Fri, 30 Jan 2015 15:27:08 -0800
-Subject: [PATCH 211/284] HBASE-6778 Deprecate Chore; its a thread per task
- when we should have one thread to do all tasks
+Subject: [PATCH 211/286] HBASE-6778 Deprecate Chore; its a thread per task when we should have one thread to do all tasks
 
 Reason: Cleanup
 Author: Jonathan Lawlor
 Ref: CDH-28012
 ---
- .../hadoop/hbase/client/ConnectionManager.java     |   77 +-
+ .../hadoop/hbase/client/ConnectionManager.java     |   77 +--
  .../java/org/apache/hadoop/hbase/AuthUtil.java     |   28 +-
  .../main/java/org/apache/hadoop/hbase/Chore.java   |  149 ----
  .../java/org/apache/hadoop/hbase/ChoreService.java |  368 +++++++++
@@ -27,7 +26,7 @@ Ref: CDH-28012
  .../hbase/master/balancer/ClusterStatusChore.java  |   13 +-
  .../hadoop/hbase/master/cleaner/CleanerChore.java  |    8 +-
  .../org/apache/hadoop/hbase/quotas/QuotaCache.java |    8 +-
- .../hadoop/hbase/regionserver/HRegionServer.java   |  110 ++-
+ .../hadoop/hbase/regionserver/HRegionServer.java   |  110 ++--
  .../hbase/regionserver/HeapMemoryManager.java      |   48 +-
  .../hbase/regionserver/RegionServerServices.java   |    6 +-
  .../hbase/regionserver/ServerNonceManager.java     |   15 +-
@@ -4213,5 +4212,5 @@ index 018a417..9f2b0b8 100644
  }
 \ No newline at end of file
 -- 
-1.7.9.5
+1.7.0.4
 

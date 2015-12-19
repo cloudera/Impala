@@ -1,8 +1,7 @@
 From fba94567403bf6ad9a0c8f73346a77897db897e3 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Mon, 16 Nov 2015 09:36:05 -0800
-Subject: [PATCH 282/284] HBASE-14809 Grant / revoke Namespace admin
- permission to group
+Subject: [PATCH 282/286] HBASE-14809 Grant / revoke Namespace admin permission to group
 
 Reason: Bug
 Author: Ted Yu
@@ -444,5 +443,5 @@ index 2aabeed..18afff7 100644
    }
  }
 -- 
-1.7.9.5
+1.7.0.4
 

@@ -1,15 +1,14 @@
 From ef83a9d4246c58a9807b8b3a09c3521656b15e4e Mon Sep 17 00:00:00 2001
 From: ramkrishna <ramkrishna.s.vasudevan@gmail.com>
 Date: Wed, 24 Jun 2015 09:22:44 +0530
-Subject: [PATCH 241/284] HBASE-13932 - Add mob integrity check in
- HFilePrettyPrinter (Jingcheng du)
+Subject: [PATCH 241/286] HBASE-13932 - Add mob integrity check in HFilePrettyPrinter (Jingcheng du)
 
 Reason: Bugfix
 Author: Jingcheng Du
 Ref: CDH-31077
 ---
  .../hadoop/hbase/io/hfile/HFilePrettyPrinter.java  |  100 +++++++++++++++++++-
- 1 file changed, 99 insertions(+), 1 deletion(-)
+ 1 files changed, 99 insertions(+), 1 deletions(-)
 
 diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/HFilePrettyPrinter.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/HFilePrettyPrinter.java
 index 7b92df9..cbdff89 100644
@@ -194,5 +193,5 @@ index 7b92df9..cbdff89 100644
     * with a four-space indentation.
     */
 -- 
-1.7.9.5
+1.7.0.4
 

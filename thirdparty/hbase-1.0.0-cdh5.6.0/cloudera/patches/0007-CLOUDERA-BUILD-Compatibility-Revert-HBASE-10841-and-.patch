@@ -1,8 +1,7 @@
 From 09aa1daa814cb68b1f3224aa09654db42c05c002 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Mon, 15 Dec 2014 18:24:49 +0000
-Subject: [PATCH 007/284] CLOUDERA-BUILD Compatibility Revert HBASE-10841 and
- HBASE-12046 HTD/HCD setters should be builder-style
+Subject: [PATCH 007/286] CLOUDERA-BUILD Compatibility Revert HBASE-10841 and HBASE-12046 HTD/HCD setters should be builder-style
 
 ---
  .../org/apache/hadoop/hbase/HColumnDescriptor.java |    3 +-
@@ -13,7 +12,7 @@ Subject: [PATCH 007/284] CLOUDERA-BUILD Compatibility Revert HBASE-10841 and
  .../org/apache/hadoop/hbase/client/Delete.java     |   60 +-----------------
  .../java/org/apache/hadoop/hbase/client/Get.java   |   50 +--------------
  .../org/apache/hadoop/hbase/client/Increment.java  |   57 -----------------
- .../org/apache/hadoop/hbase/client/Mutation.java   |   24 +++----
+ .../org/apache/hadoop/hbase/client/Mutation.java   |   24 +++-----
  .../hbase/client/OperationWithAttributes.java      |    8 +--
  .../java/org/apache/hadoop/hbase/client/Put.java   |   57 -----------------
  .../java/org/apache/hadoop/hbase/client/Query.java |    9 +--
@@ -1201,5 +1200,5 @@ index a2648e9..7556f54 100644
  
    /**
 -- 
-1.7.9.5
+1.7.0.4
 

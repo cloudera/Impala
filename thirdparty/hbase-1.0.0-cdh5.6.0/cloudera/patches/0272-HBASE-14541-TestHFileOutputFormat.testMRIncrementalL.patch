@@ -1,9 +1,7 @@
 From 43473086fc1b085658eb4ce91dbd4c9fc933cd12 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Mon, 19 Oct 2015 09:22:59 -0700
-Subject: [PATCH 272/284] HBASE-14541
- TestHFileOutputFormat.testMRIncrementalLoadWithSplit
- failed due to too many splits and few retries
+Subject: [PATCH 272/286] HBASE-14541 TestHFileOutputFormat.testMRIncrementalLoadWithSplit failed due to too many splits and few retries
 
 Reason: flaky
 Author: Matteo Bertozzi
@@ -11,9 +9,9 @@ Ref: CDH-31639
 
 Change-Id: I12da719fc8bc31383b8243cd8447ad2b6e40808e
 ---
- .../hbase/mapreduce/LoadIncrementalHFiles.java     |    7 ++++++-
+ .../hbase/mapreduce/LoadIncrementalHFiles.java     |    7 +++++-
  .../hbase/mapreduce/TestLoadIncrementalHFiles.java |   22 ++++++++++++++++++++
- 2 files changed, 28 insertions(+), 1 deletion(-)
+ 2 files changed, 28 insertions(+), 1 deletions(-)
 
 diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/LoadIncrementalHFiles.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/LoadIncrementalHFiles.java
 index 05ac012..73c3e72 100644
@@ -74,5 +72,5 @@ index fd146c4..87d1229 100644
      runTest("testHFileSplit" + bloomType + "Bloom", bloomType,
          new byte[][] {
 -- 
-1.7.9.5
+1.7.0.4
 

@@ -1,12 +1,9 @@
 From 5a05d82a91609fd49aff8e91b7a60e1cb1c01b3c Mon Sep 17 00:00:00 2001
 From: Huaxiang Sun <hsun@cloudera.com>
 Date: Mon, 16 Nov 2015 10:36:44 -0800
-Subject: [PATCH 280/284] Connection Idle time 1 second is too short and the
- connection is closed too quickly by the
- ChoreService. Increase it to the default (10
- minutes) for testAll(). The patch for HBASE-14533
- is not committed to upstream yet, so this fix
- cannot be mapped to upstream.
+Subject: [PATCH 280/286] Connection Idle time 1 second is too short and the connection is closed too quickly by the ChoreService.
+ Increase it to the default (10 minutes) for testAll(). The patch for HBASE-14533 is not committed to upstream
+ yet, so this fix cannot be mapped to upstream.
 
 Reason: Bug
 Author: Huaxiang Sun
@@ -15,7 +12,7 @@ Ref: CDH-33980
 Change-Id: I52fc378e18537317b036549b6b4bd46f014da28b
 ---
  .../hadoop/hbase/thrift/TestThriftServer.java      |   14 ++++++++------
- 1 file changed, 8 insertions(+), 6 deletions(-)
+ 1 files changed, 8 insertions(+), 6 deletions(-)
 
 diff --git a/hbase-thrift/src/test/java/org/apache/hadoop/hbase/thrift/TestThriftServer.java b/hbase-thrift/src/test/java/org/apache/hadoop/hbase/thrift/TestThriftServer.java
 index df42403..5707cf8 100644
@@ -51,5 +48,5 @@ index df42403..5707cf8 100644
      handler.createTable(tn, getColumnDescriptors());
      List<Mutation> mutations = new ArrayList<Mutation>(1);
 -- 
-1.7.9.5
+1.7.0.4
 

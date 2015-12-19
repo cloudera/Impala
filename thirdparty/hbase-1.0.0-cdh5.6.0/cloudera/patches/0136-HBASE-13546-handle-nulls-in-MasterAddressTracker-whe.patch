@@ -1,8 +1,7 @@
 From d40f00b751efb49c5c59af5a92c6f6299fcb63c7 Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@apache.org>
 Date: Thu, 23 Apr 2015 22:51:35 -0500
-Subject: [PATCH 136/284] HBASE-13546 handle nulls in MasterAddressTracker
- when there is no master active.
+Subject: [PATCH 136/286] HBASE-13546 handle nulls in MasterAddressTracker when there is no master active.
 
 (cherry picked from commit d0fd2cb35db4845195ab4d64f47eebf91538558e)
 
@@ -272,5 +271,5 @@ index f205eec..fd8c4dc 100644
  
    public static class NodeCreationListener extends ZooKeeperListener {
 -- 
-1.7.9.5
+1.7.0.4
 

@@ -1,15 +1,14 @@
 From a2a09325d2f6df82fb4598f8c05725f549b4e1f9 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Thu, 12 Mar 2015 19:10:03 -0700
-Subject: [PATCH 105/284] HBASE-13162 Addendum adds InterfaceAudience
- annotation to ZkAclReset
+Subject: [PATCH 105/286] HBASE-13162 Addendum adds InterfaceAudience annotation to ZkAclReset
 
 Reason: Improvement
 Author: Ted Yu
 Ref: CDH-23748
 ---
  .../apache/hadoop/hbase/zookeeper/ZkAclReset.java  |    2 ++
- 1 file changed, 2 insertions(+)
+ 1 files changed, 2 insertions(+), 0 deletions(-)
 
 diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/zookeeper/ZkAclReset.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/zookeeper/ZkAclReset.java
 index faf0950..f5a41df 100644
@@ -32,5 +31,5 @@ index faf0950..f5a41df 100644
    private static final Log LOG = LogFactory.getLog(ZkAclReset.class);
  
 -- 
-1.7.9.5
+1.7.0.4
 

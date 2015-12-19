@@ -1,8 +1,7 @@
 From 48cef9e376ff414655ce1ab2ce98fd1de5d9c4ab Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Thu, 1 Oct 2015 13:18:22 -0700
-Subject: [PATCH 266/284] HBASE-14485 ConnectionImplementation leaks on
- construction failure
+Subject: [PATCH 266/286] HBASE-14485 ConnectionImplementation leaks on construction failure
 
 Reason: Bug
 Author: Matteo Bertozzi
@@ -218,5 +217,5 @@ index a920c32..d9c6305 100644
  
    @Rule
 -- 
-1.7.9.5
+1.7.0.4
 

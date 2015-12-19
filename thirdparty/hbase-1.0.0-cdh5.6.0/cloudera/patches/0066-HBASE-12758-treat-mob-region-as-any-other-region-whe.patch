@@ -1,15 +1,14 @@
 From 2a7b352b7654575075e4be403eb18320a5cbb5fe Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Wed, 24 Dec 2014 08:18:48 -0800
-Subject: [PATCH 066/284] HBASE-12758 treat mob region as any other region
- when generating rs manifest
+Subject: [PATCH 066/286] HBASE-12758 treat mob region as any other region when generating rs manifest
 
 Reason: MOB Feature
 Author: Jingcheng Du
 Ref: CDH-22447
 ---
- .../apache/hadoop/hbase/regionserver/HRegion.java  |   31 ++++++++++----------
- 1 file changed, 15 insertions(+), 16 deletions(-)
+ .../apache/hadoop/hbase/regionserver/HRegion.java  |   31 +++++++++----------
+ 1 files changed, 15 insertions(+), 16 deletions(-)
 
 diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
 index f2019c2..72a840b 100644
@@ -60,5 +59,5 @@ index f2019c2..72a840b 100644
  
    /**
 -- 
-1.7.9.5
+1.7.0.4
 

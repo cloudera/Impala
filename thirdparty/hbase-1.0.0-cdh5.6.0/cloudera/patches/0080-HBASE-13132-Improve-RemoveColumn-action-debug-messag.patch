@@ -1,15 +1,14 @@
 From 27c5ac004aaa1dbf3cc2921e47476821b6918f01 Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Mon, 2 Mar 2015 10:31:19 -0800
-Subject: [PATCH 080/284] HBASE-13132 Improve RemoveColumn action debug
- message
+Subject: [PATCH 080/286] HBASE-13132 Improve RemoveColumn action debug message
 
 Reason: MOB testing
 Author: Jonathan Hsieh
 Ref: CDH-23959
 ---
  .../hbase/chaos/actions/RemoveColumnAction.java    |    6 ++++--
- 1 file changed, 4 insertions(+), 2 deletions(-)
+ 1 files changed, 4 insertions(+), 2 deletions(-)
 
 diff --git a/hbase-it/src/test/java/org/apache/hadoop/hbase/chaos/actions/RemoveColumnAction.java b/hbase-it/src/test/java/org/apache/hadoop/hbase/chaos/actions/RemoveColumnAction.java
 index fc169e3..efb4413 100644
@@ -37,5 +36,5 @@ index fc169e3..efb4413 100644
      admin.modifyTable(tableName, tableDescriptor);
    }
 -- 
-1.7.9.5
+1.7.0.4
 

@@ -1,28 +1,20 @@
 From c5c6db7a033afddf78a52daf32586254d39a841d Mon Sep 17 00:00:00 2001
-From: "Apekshit(Appy) Sharma" <appy@cloudera.com>
+From: Apekshit(Appy) Sharma <appy@cloudera.com>
 Date: Fri, 18 Sep 2015 10:33:28 -0700
-Subject: [PATCH 229/284] Changes: - Fixes security docs to suggest use of
- 'privacy' instead of 'auth-conf' for
- 'hbase.rpc.protection' property. - Changes SaslUtil
- to accept both kinds of values
- (privacy/integrity/authentication OR
- auth-conf/auth-int/auth) to be backward compatible
- with wrong doc. - Change thrift's property
- 'hbase.thrift.security.qop' to use same set of
- values(privacy/integrity/authentication) as
- '{hadoop,hbase}.rpc.protection'. 
- auth/auth-int/auth-conf are supported too for
- backward compat. - added exception throwing if
- configuration has wrong value.
+Subject: [PATCH 229/286] Changes:
+ - Fixes security docs to suggest use of 'privacy' instead of 'auth-conf' for 'hbase.rpc.protection' property.
+ - Changes SaslUtil to accept both kinds of values (privacy/integrity/authentication OR auth-conf/auth-int/auth) to be backward compatible with wrong doc.
+ - Change thrift's property 'hbase.thrift.security.qop' to use same set of values(privacy/integrity/authentication) as '{hadoop,hbase}.rpc.protection'.  auth/auth-int/auth-conf are supported too for backward compat.
+ - added exception throwing if configuration has wrong value.
 
 Reason: Bug
 Author: Apekshit Sharma
 Ref: CDH-31694
 ---
  .../org/apache/hadoop/hbase/security/SaslUtil.java |   44 ++++++++++++++++----
- .../hbase/security/TestHBaseSaslRpcClient.java     |   10 +++++
+ .../hbase/security/TestHBaseSaslRpcClient.java     |   10 ++++
  .../apache/hadoop/hbase/thrift2/ThriftServer.java  |   23 +++++-----
- src/main/asciidoc/_chapters/security.adoc          |   10 ++---
+ src/main/asciidoc/_chapters/security.adoc          |   10 ++--
  4 files changed, 62 insertions(+), 25 deletions(-)
 
 diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/security/SaslUtil.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/security/SaslUtil.java
@@ -231,5 +223,5 @@ index c2a50de..e97c70b 100644
   <!-- Transparent Encryption -->
  <property>
 -- 
-1.7.9.5
+1.7.0.4
 

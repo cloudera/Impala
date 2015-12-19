@@ -1,14 +1,14 @@
 From dd4c4fa40ac7580906874c5e15371b0ab3596047 Mon Sep 17 00:00:00 2001
 From: anoopsjohn <anoopsamjohn@gmail.com>
 Date: Thu, 23 Apr 2015 10:36:08 +0530
-Subject: [PATCH 198/284] HBASE-13496 Make Bytes::compareTo inlineable.
+Subject: [PATCH 198/286] HBASE-13496 Make Bytes::compareTo inlineable.
 
 Reason: Improvement
 Author: Anoop Sam John
 Ref: CDH-27734
 ---
- .../java/org/apache/hadoop/hbase/util/Bytes.java   |   45 ++++++++++++--------
- 1 file changed, 28 insertions(+), 17 deletions(-)
+ .../java/org/apache/hadoop/hbase/util/Bytes.java   |   45 ++++++++++++-------
+ 1 files changed, 28 insertions(+), 17 deletions(-)
 
 diff --git a/hbase-common/src/main/java/org/apache/hadoop/hbase/util/Bytes.java b/hbase-common/src/main/java/org/apache/hadoop/hbase/util/Bytes.java
 index 5b47f12..e7b5caa 100644
@@ -109,5 +109,5 @@ index 5b47f12..e7b5caa 100644
            }
            offset += SIZEOF_SHORT;
 -- 
-1.7.9.5
+1.7.0.4
 

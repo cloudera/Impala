@@ -1,8 +1,7 @@
 From 07ddc276ef76ab91ecda94d455390faab59a6633 Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@apache.org>
 Date: Sat, 28 Feb 2015 19:58:30 -0600
-Subject: [PATCH 079/284] HBASE-13131 ReplicationAdmin must clean up
- connections if constructor fails.
+Subject: [PATCH 079/286] HBASE-13131 ReplicationAdmin must clean up connections if constructor fails.
 
 (cherry picked from commit 9769fb6d94d2ba3e41b1ff288d15a9a6d32ea9df)
 
@@ -10,8 +9,8 @@ Reason: Bug
 Author: Sean Busbey
 Ref: CDH-25618
 ---
- .../hbase/client/replication/ReplicationAdmin.java |   33 ++++++++++++++------
- 1 file changed, 24 insertions(+), 9 deletions(-)
+ .../hbase/client/replication/ReplicationAdmin.java |   33 ++++++++++++++-----
+ 1 files changed, 24 insertions(+), 9 deletions(-)
 
 diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/replication/ReplicationAdmin.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/replication/ReplicationAdmin.java
 index cd56261..2ada823 100644
@@ -59,5 +58,5 @@ index cd56261..2ada823 100644
    }
  
 -- 
-1.7.9.5
+1.7.0.4
 

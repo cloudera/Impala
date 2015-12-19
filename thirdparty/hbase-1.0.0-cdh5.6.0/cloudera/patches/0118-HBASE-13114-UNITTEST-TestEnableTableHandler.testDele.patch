@@ -1,8 +1,7 @@
 From 644ddc89473f1b5b60bd27255cdf95432850a947 Mon Sep 17 00:00:00 2001
 From: stack <stack@apache.org>
 Date: Tue, 10 Mar 2015 14:15:33 -0700
-Subject: [PATCH 118/284] HBASE-13114 [UNITTEST]
- TestEnableTableHandler.testDeleteForSureClearsAllTableRowsFromMeta
+Subject: [PATCH 118/286] HBASE-13114 [UNITTEST] TestEnableTableHandler.testDeleteForSureClearsAllTableRowsFromMeta
 
 Reason: Testing
 Author: stack
@@ -68,5 +67,5 @@ index 39b347d..5266975 100644
          }
        }
 -- 
-1.7.9.5
+1.7.0.4
 

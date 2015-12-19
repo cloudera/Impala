@@ -1,8 +1,7 @@
 From 6da837b734558e0ac06e465641729e22601ef441 Mon Sep 17 00:00:00 2001
 From: stack <stack@apache.org>
 Date: Mon, 24 Aug 2015 13:37:45 -0700
-Subject: [PATCH 218/284] HBASE-13127 Add timeouts on all tests so less zombie
- sightings
+Subject: [PATCH 218/286] HBASE-13127 Add timeouts on all tests so less zombie sightings
 
 Reason: Bug
 Author: Michael Stack
@@ -175,5 +174,5 @@ index 30742ab..3c614f0 100644
        -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom -Djava.net.preferIPv4Stack=true
        -Djava.awt.headless=true
 -- 
-1.7.9.5
+1.7.0.4
 

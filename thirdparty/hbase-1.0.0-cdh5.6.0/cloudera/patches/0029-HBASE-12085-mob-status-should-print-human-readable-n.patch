@@ -1,8 +1,7 @@
 From 1d4c78c1f2415d86e607f8716ffe70b22fcaec8c Mon Sep 17 00:00:00 2001
 From: anoopsjohn <anoopsamjohn@gmail.com>
 Date: Fri, 26 Sep 2014 13:29:36 +0530
-Subject: [PATCH 029/284] HBASE-12085 mob status should print human readable
- numbers.(Jingcheng Du)
+Subject: [PATCH 029/286] HBASE-12085 mob status should print human readable numbers.(Jingcheng Du)
 
 Reason: MOB Feature
 Author: Jingcheng Du
@@ -835,5 +834,5 @@ index 0000000..d6fed1e
 +</chapter>
 \ No newline at end of file
 -- 
-1.7.9.5
+1.7.0.4
 

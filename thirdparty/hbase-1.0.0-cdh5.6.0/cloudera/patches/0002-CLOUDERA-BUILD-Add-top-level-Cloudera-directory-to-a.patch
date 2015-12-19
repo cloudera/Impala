@@ -1,14 +1,13 @@
 From b8f50a59709e5b8c88f0e610dd104ac4f2763f6e Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Mon, 15 Dec 2014 10:35:33 +0000
-Subject: [PATCH 002/284] CLOUDERA-BUILD Add top level Cloudera directory to
- assembly
+Subject: [PATCH 002/286] CLOUDERA-BUILD Add top level Cloudera directory to assembly
 
 ---
  hbase-assembly/pom.xml                          |    1 +
  hbase-assembly/src/main/assembly/components.xml |    6 ++++++
  hbase-assembly/src/main/assembly/src.xml        |    7 +++++++
- 3 files changed, 14 insertions(+)
+ 3 files changed, 14 insertions(+), 0 deletions(-)
 
 diff --git a/hbase-assembly/pom.xml b/hbase-assembly/pom.xml
 index c6168e9..044b0de 100644
@@ -57,5 +56,5 @@ index b7a21a4..149122f 100644
  </fileSets>
  </assembly>
 -- 
-1.7.9.5
+1.7.0.4
 

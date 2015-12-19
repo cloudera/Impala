@@ -1,8 +1,7 @@
 From 945087f1d90b17d83364613a93e31724b1b0bac1 Mon Sep 17 00:00:00 2001
 From: Srikanth Srungarapu <ssrungarapu@cloudera.com>
 Date: Wed, 1 Apr 2015 13:55:21 -0700
-Subject: [PATCH 245/284] HBASE-13296 Fix the deletion of acl notify nodes for
- namespace.
+Subject: [PATCH 245/286] HBASE-13296 Fix the deletion of acl notify nodes for namespace.
 
 Reason: Bug
 Author: Srikanth Srungarapu
@@ -298,5 +297,5 @@ index 554b8bb..4fdb031 100644
 +  }
  }
 -- 
-1.7.9.5
+1.7.0.4
 

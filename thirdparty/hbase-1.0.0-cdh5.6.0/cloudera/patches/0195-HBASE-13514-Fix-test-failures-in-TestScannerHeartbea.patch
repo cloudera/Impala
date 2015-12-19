@@ -1,16 +1,14 @@
 From c56e9c197a6e6ad0f7a132d1337c60171f66b6ce Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Mon, 20 Apr 2015 14:27:47 -0700
-Subject: [PATCH 195/284] HBASE-13514 Fix test failures in
- TestScannerHeartbeatMessages caused by incorrect
- setting of hbase.rpc.timeout (Jonathan Lawlor)
+Subject: [PATCH 195/286] HBASE-13514 Fix test failures in TestScannerHeartbeatMessages caused by incorrect setting of hbase.rpc.timeout (Jonathan Lawlor)
 
 Reason: Bug
 Author: Jonathan Lawlor
 Ref: CDH-27345
 ---
  .../regionserver/TestScannerHeartbeatMessages.java |    5 +++--
- 1 file changed, 3 insertions(+), 2 deletions(-)
+ 1 files changed, 3 insertions(+), 2 deletions(-)
 
 diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestScannerHeartbeatMessages.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestScannerHeartbeatMessages.java
 index f86c178..76fb0be 100644
@@ -43,5 +41,5 @@ index f86c178..76fb0be 100644
    }
  
 -- 
-1.7.9.5
+1.7.0.4
 

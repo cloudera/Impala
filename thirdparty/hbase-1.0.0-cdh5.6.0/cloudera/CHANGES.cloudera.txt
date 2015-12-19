@@ -1,3 +1,27 @@
+commit f54dc0442339efeceffa5155102ce73d3be71eac
+Author: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
+Date:   Mon Nov 23 16:05:05 2015 -0800
+
+    HBASE-14799 Commons-collections object deserialization remote command execution vulnerability (addendum)
+    
+    Reason: Security
+    Author: Andrew Purtell
+    Ref: CDH-34565
+    
+    Change-Id: I43c33c0464926f3aac3a6564a249e36cdb8fe9c1
+
+commit 8b792f156c9c1ece847fca5c37cba8043ce0edae
+Author: Andrew Purtell <apurtell@apache.org>
+Date:   Tue Nov 17 11:35:32 2015 -0800
+
+    HBASE-14799 Commons-collections object deserialization remote command execution vulnerability
+    
+    Reason: Security
+    Author: Andrew Purtell
+    Ref: CDH-34565
+    
+    Change-Id: I7588a47a1817d65556a25c3b6617012df08b08a5
+
 commit 743becbe71e32e9a87b96988e45ecfb65fa3fe40
 Author: stack <stack@duboce.net>
 Date:   Mon Nov 23 15:57:21 2015 -0800

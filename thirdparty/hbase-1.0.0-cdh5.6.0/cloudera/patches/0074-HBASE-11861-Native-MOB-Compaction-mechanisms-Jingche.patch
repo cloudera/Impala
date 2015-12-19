@@ -1,8 +1,7 @@
 From d78c6d3256de9624a62b256b2486820e68c07d90 Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Fri, 6 Feb 2015 05:37:13 -0800
-Subject: [PATCH 074/284] HBASE-11861 Native MOB Compaction mechanisms
- (Jingcheng Du)
+Subject: [PATCH 074/286] HBASE-11861 Native MOB Compaction mechanisms (Jingcheng Du)
 
 Reason: MOB feature
 Author: Jingcheng Du
@@ -12,7 +11,7 @@ Ref: CDH-22449
  .../org/apache/hadoop/hbase/master/HMaster.java    |    6 +
  .../hbase/master/MobFileCompactionChore.java       |  162 +++++
  .../org/apache/hadoop/hbase/mob/MobConstants.java  |   43 ++
- .../java/org/apache/hadoop/hbase/mob/MobUtils.java |  118 +++-
+ .../java/org/apache/hadoop/hbase/mob/MobUtils.java |  118 ++++-
  .../filecompactions/MobFileCompactionRequest.java  |   64 ++
  .../mob/filecompactions/MobFileCompactor.java      |   78 +++
  .../PartitionedMobFileCompactionRequest.java       |  146 +++++
@@ -2637,5 +2636,5 @@ index 0000000..12c88b2
 +}
 \ No newline at end of file
 -- 
-1.7.9.5
+1.7.0.4
 

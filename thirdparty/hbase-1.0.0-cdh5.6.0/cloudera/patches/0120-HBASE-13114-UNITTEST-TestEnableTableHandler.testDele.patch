@@ -1,16 +1,14 @@
 From 9c44745ceafda529a37f046da766f71798796a65 Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@cloudera.com>
 Date: Wed, 18 Mar 2015 18:02:35 -0700
-Subject: [PATCH 120/284] HBASE-13114 [UNITTEST]
- TestEnableTableHandler.testDeleteForSureClearsAllTableRowsFromMeta
- - ADDENDUM
+Subject: [PATCH 120/286] HBASE-13114 [UNITTEST] TestEnableTableHandler.testDeleteForSureClearsAllTableRowsFromMeta - ADDENDUM
 
 Reason: Testing
 Author: Esteban Gutierrez
 Ref: CDH-26200
 ---
- .../master/handler/TestEnableTableHandler.java     |  109 +++++++++++++++++---
- 1 file changed, 97 insertions(+), 12 deletions(-)
+ .../master/handler/TestEnableTableHandler.java     |  109 +++++++++++++++++--
+ 1 files changed, 97 insertions(+), 12 deletions(-)
 
 diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/handler/TestEnableTableHandler.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/handler/TestEnableTableHandler.java
 index 5266975..87b6e9b 100644
@@ -177,5 +175,5 @@ index 5266975..87b6e9b 100644
 +  }
  }
 -- 
-1.7.9.5
+1.7.0.4
 

@@ -1,8 +1,7 @@
 From b858d8e49a15b9e7c0222fdd554dccdd19d677ab Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jon@cloudera.com>
 Date: Tue, 3 Mar 2015 17:15:26 -0800
-Subject: [PATCH 091/284] HBASE-13157 Add Mob compaction actions and monkeys
- to Chaos Monkey
+Subject: [PATCH 091/286] HBASE-13157 Add Mob compaction actions and monkeys to Chaos Monkey
 
 Reason: Mob Testing
 Author: Jonathan Hsieh
@@ -12,7 +11,7 @@ Ref: CDH-23959
  .../chaos/factories/MobNoKillMonkeyFactory.java    |   70 +++++++++
  .../MobSlowDeterministicMonkeyFactory.java         |  156 ++++++++++++++++++++
  .../hbase/chaos/factories/MonkeyFactory.java       |    4 +
- 4 files changed, 295 insertions(+)
+ 4 files changed, 295 insertions(+), 0 deletions(-)
  create mode 100644 hbase-it/src/test/java/org/apache/hadoop/hbase/chaos/actions/CompactMobAction.java
  create mode 100644 hbase-it/src/test/java/org/apache/hadoop/hbase/chaos/factories/MobNoKillMonkeyFactory.java
  create mode 100644 hbase-it/src/test/java/org/apache/hadoop/hbase/chaos/factories/MobSlowDeterministicMonkeyFactory.java
@@ -349,5 +348,5 @@ index f4b1c53..f3d535b 100644
  
    public static MonkeyFactory getFactory(String factoryName) {
 -- 
-1.7.9.5
+1.7.0.4
 

@@ -1,24 +1,23 @@
 From 08b1e747c824981b4174c34f6fefbdc4a6cc57dc Mon Sep 17 00:00:00 2001
 From: Srikanth Srungarapu <ssrungarapu@cloudera.com>
 Date: Thu, 3 Sep 2015 11:49:40 -0700
-Subject: [PATCH 220/284] HBASE-14261 Enhance Chaos Monkey framework by adding
- zookeeper and datanode fault injections.
+Subject: [PATCH 220/286] HBASE-14261 Enhance Chaos Monkey framework by adding zookeeper and datanode fault injections.
 
 Reason: Improvement
 Author: Srikanth Srungarapu
 Ref: CDH-26373
 ---
  .../org/apache/hadoop/hbase/ClusterManager.java    |    1 +
- .../hadoop/hbase/DistributedHBaseCluster.java      |   80 ++++++++++++-
+ .../hadoop/hbase/DistributedHBaseCluster.java      |   80 +++++++++++++-
  .../apache/hadoop/hbase/HBaseClusterManager.java   |  122 +++++++++++++++++---
  .../apache/hadoop/hbase/RESTApiClusterManager.java |    1 +
  .../apache/hadoop/hbase/chaos/actions/Action.java  |   70 ++++++++++-
  .../chaos/actions/RestartActionBaseAction.java     |   14 +++
- .../chaos/actions/RestartRandomDataNodeAction.java |   58 ++++++++++
+ .../chaos/actions/RestartRandomDataNodeAction.java |   58 +++++++++
  .../chaos/actions/RestartRandomZKNodeAction.java   |   40 +++++++
  .../hbase/chaos/factories/MonkeyFactory.java       |    7 +-
  .../ServerAndDependenciesKillingMonkeyFactory.java |   65 +++++++++++
- .../hadoop/hbase/zookeeper/ZKServerTool.java       |   32 +++--
+ .../hadoop/hbase/zookeeper/ZKServerTool.java       |   32 ++++-
  .../java/org/apache/hadoop/hbase/HBaseCluster.java |   75 ++++++++++++
  .../org/apache/hadoop/hbase/MiniHBaseCluster.java  |   50 ++++++++
  13 files changed, 581 insertions(+), 34 deletions(-)
@@ -934,5 +933,5 @@ index 7672ac1..5ac120c 100644
      this.startMaster();
    }
 -- 
-1.7.9.5
+1.7.0.4
 

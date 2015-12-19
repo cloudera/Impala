@@ -1,7 +1,7 @@
 From f34521b0b1a0e3a638b55015c3f5ccfcd22e6dfb Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Mon, 2 Nov 2015 05:03:38 -0800
-Subject: [PATCH 273/284] HBASE-14731 Add -DuseMob option to ITBLL
+Subject: [PATCH 273/286] HBASE-14731 Add -DuseMob option to ITBLL
 
 Reason: Testing
 Author: Jonathan M Hsieh
@@ -14,7 +14,7 @@ Change-Id: Ib067de4da8aa4f7fd587f162c11572d4c6e4debe
 (cherry picked from commit 80b676fd68f63c76812d81900d7439aec9013a1b)
 ---
  .../hbase/test/IntegrationTestBigLinkedList.java   |   21 ++++++++++++++++++++
- 1 file changed, 21 insertions(+)
+ 1 files changed, 21 insertions(+), 0 deletions(-)
 
 diff --git a/hbase-it/src/test/java/org/apache/hadoop/hbase/test/IntegrationTestBigLinkedList.java b/hbase-it/src/test/java/org/apache/hadoop/hbase/test/IntegrationTestBigLinkedList.java
 index e43881a..4450d6d 100644
@@ -56,5 +56,5 @@ index e43881a..4450d6d 100644
    }
  
 -- 
-1.7.9.5
+1.7.0.4
 

@@ -1,8 +1,7 @@
 From 6ce75dccbd2ba5a34db58eab7d5a6bd1b1529e3e Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Thu, 25 Dec 2014 14:06:26 -0800
-Subject: [PATCH 067/284] HBASE-12331 Shorten the mob snapshot unit tests
- (Jiajia Li)
+Subject: [PATCH 067/286] HBASE-12331 Shorten the mob snapshot unit tests (Jiajia Li)
 
 Reason: MOB Feature
 Author: Jingcheng Du
@@ -12,7 +11,7 @@ Ref: CDH-22447
  ...estoreSnapshotFromClientWithRegionReplicas.java |   30 -----------
  ...estMobSnapshotFromClientWithRegionReplicas.java |   30 -----------
  .../snapshot/TestMobSecureExportSnapshot.java      |   53 --------------------
- 4 files changed, 143 deletions(-)
+ 4 files changed, 0 insertions(+), 143 deletions(-)
  delete mode 100644 hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestMobCloneSnapshotFromClientWithRegionReplicas.java
  delete mode 100644 hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestMobRestoreSnapshotFromClientWithRegionReplicas.java
  delete mode 100644 hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestMobSnapshotFromClientWithRegionReplicas.java
@@ -187,5 +186,5 @@ index 4a89db8..0000000
 -}
 \ No newline at end of file
 -- 
-1.7.9.5
+1.7.0.4
 

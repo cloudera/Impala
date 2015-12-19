@@ -1,15 +1,14 @@
 From 1631c030a52ad7431931368188ac87125702e39b Mon Sep 17 00:00:00 2001
 From: Ramkrishna <ramkrishna.s.vasudevan@intel.com>
 Date: Fri, 31 Oct 2014 15:00:17 +0530
-Subject: [PATCH 035/284] HBASE-12391 Correct a typo in the mob metrics
- (Jingcheng Du)
+Subject: [PATCH 035/286] HBASE-12391 Correct a typo in the mob metrics (Jingcheng Du)
 
 Reason: MOB Feature
 Author: Jingcheng Du
 Ref: CDH-22448
 ---
  .../MetricsRegionServerWrapperImpl.java            |    6 +++---
- 1 file changed, 3 insertions(+), 3 deletions(-)
+ 1 files changed, 3 insertions(+), 3 deletions(-)
 
 diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionServerWrapperImpl.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionServerWrapperImpl.java
 index e61ae10..8ca644b 100644
@@ -43,5 +42,5 @@ index e61ae10..8ca644b 100644
        mobFlushedCellsCount = tempMobFlushedCellsCount;
        mobFlushedCellsSize = tempMobFlushedCellsSize;
 -- 
-1.7.9.5
+1.7.0.4
 

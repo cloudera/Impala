@@ -1,9 +1,7 @@
 From 3c6d28f590932b65855e26d6d7d0b87253b4fcb2 Mon Sep 17 00:00:00 2001
 From: anoopsjohn <anoopsamjohn@gmail.com>
 Date: Mon, 8 Jun 2015 11:17:43 +0530
-Subject: [PATCH 237/284] HBASE-13806 Check the mob files when there are
- mob-enabled columns in HFileCorruptionChecker.
- (Jingcheng)
+Subject: [PATCH 237/286] HBASE-13806 Check the mob files when there are mob-enabled columns in HFileCorruptionChecker. (Jingcheng)
 
 Reason: Bugfix
 Author: Jingcheng Du
@@ -11,7 +9,7 @@ Ref: CDH-31077
 ---
  .../hbase/util/hbck/HFileCorruptionChecker.java    |  197 ++++++++++++++++++++
  .../apache/hadoop/hbase/util/TestHBaseFsck.java    |  111 +++++++++++
- 2 files changed, 308 insertions(+)
+ 2 files changed, 308 insertions(+), 0 deletions(-)
 
 diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/util/hbck/HFileCorruptionChecker.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/util/hbck/HFileCorruptionChecker.java
 index 23dc570..a1b7c2c 100644
@@ -430,5 +428,5 @@ index c4ed3ee..9ef98f3 100644
    */
    private void doQuarantineTest(TableName table, HBaseFsck hbck, int check,
 -- 
-1.7.9.5
+1.7.0.4
 

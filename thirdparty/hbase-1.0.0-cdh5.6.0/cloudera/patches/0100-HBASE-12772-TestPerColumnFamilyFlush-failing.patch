@@ -1,7 +1,7 @@
 From 5f3730fe8176232ecaabf8f8ceda4ddc7a34148d Mon Sep 17 00:00:00 2001
 From: stack <stack@apache.org>
 Date: Mon, 29 Dec 2014 15:45:23 -0800
-Subject: [PATCH 100/284] HBASE-12772 TestPerColumnFamilyFlush failing
+Subject: [PATCH 100/286] HBASE-12772 TestPerColumnFamilyFlush failing
 
 Conflicts:
 	hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestPerColumnFamilyFlush.java
@@ -12,8 +12,8 @@ Reason: Test
 Author: stack
 Ref: CDH-25580
 ---
- .../regionserver/TestPerColumnFamilyFlush.java     |  306 ++++++++++----------
- 1 file changed, 159 insertions(+), 147 deletions(-)
+ .../regionserver/TestPerColumnFamilyFlush.java     |  308 ++++++++++----------
+ 1 files changed, 160 insertions(+), 148 deletions(-)
 
 diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestPerColumnFamilyFlush.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestPerColumnFamilyFlush.java
 index 13d998d..7de9f40 100644
@@ -362,5 +362,5 @@ index 13d998d..7de9f40 100644
      LOG.info("disable selective flush: " + Bytes.toString(FAMILY1) + "=>" + cf1StoreFileCount
          + ", " + Bytes.toString(FAMILY2) + "=>" + cf2StoreFileCount + ", "
 -- 
-1.7.9.5
+1.7.0.4
 

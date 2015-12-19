@@ -1,16 +1,14 @@
 From cb9c22f82697b4b226e73bbc5e94b40530be4e6b Mon Sep 17 00:00:00 2001
 From: Enis Soztutar <enis@apache.org>
 Date: Tue, 28 Apr 2015 17:27:46 -0700
-Subject: [PATCH 246/284] HBASE-13585 HRegionFileSystem#splitStoreFile()
- finishes without closing the file handle in some
- situation
+Subject: [PATCH 246/286] HBASE-13585 HRegionFileSystem#splitStoreFile() finishes without closing the file handle in some situation
 
 Reason: Bug
 Author: Stephen Yuan Jiang
 Ref: CDH-31924
 ---
  .../hbase/regionserver/HRegionFileSystem.java      |   48 +++++++++++---------
- 1 file changed, 27 insertions(+), 21 deletions(-)
+ 1 files changed, 27 insertions(+), 21 deletions(-)
 
 diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionFileSystem.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionFileSystem.java
 index 7c6ae65..6ca1b22 100644
@@ -76,5 +74,5 @@ index 7c6ae65..6ca1b22 100644
      // A reference to the bottom half of the hsf store file.
      Reference r =
 -- 
-1.7.9.5
+1.7.0.4
 

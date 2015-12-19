@@ -1,12 +1,11 @@
 From 0c31d23806425aafd1b06ad5078f41114565a14b Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@cloudera.com>
 Date: Tue, 30 Sep 2014 16:14:51 -0700
-Subject: [PATCH 005/284] CLOUDERA-BUILD Harmonize jackson version to
- cdh.jackson.version
+Subject: [PATCH 005/286] CLOUDERA-BUILD Harmonize jackson version to cdh.jackson.version
 
 ---
  pom.xml |    2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
 diff --git a/pom.xml b/pom.xml
 index 0321cdc..087e539 100644
@@ -22,5 +21,5 @@ index 0321cdc..087e539 100644
      <jaxb-api.version>2.1</jaxb-api.version>
      <jetty.version>6.1.26.cloudera.4</jetty.version>
 -- 
-1.7.9.5
+1.7.0.4
 

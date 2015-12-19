@@ -1,8 +1,7 @@
 From 370cb37c4bf23b4032d7946a34bd5ff6f75aa60a Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Wed, 22 Apr 2015 07:52:23 -0700
-Subject: [PATCH 204/284] HBASE-13437 ThriftServer leaks ZooKeeper connections
- (Winger Pun)
+Subject: [PATCH 204/286] HBASE-13437 ThriftServer leaks ZooKeeper connections (Winger Pun)
 
 Reason: Bug
 Author: Winger Pun
@@ -10,7 +9,7 @@ Ref: CDH-30588
 ---
  .../apache/hadoop/hbase/util/ConnectionCache.java  |    1 +
  .../hadoop/hbase/util/TestConnectionCache.java     |   53 ++++++++++++++++++++
- 2 files changed, 54 insertions(+)
+ 2 files changed, 54 insertions(+), 0 deletions(-)
  create mode 100644 hbase-server/src/test/java/org/apache/hadoop/hbase/util/TestConnectionCache.java
 
 diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/util/ConnectionCache.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/util/ConnectionCache.java
@@ -85,5 +84,5 @@ index 0000000..a04fd11
 +}
 +
 -- 
-1.7.9.5
+1.7.0.4
 

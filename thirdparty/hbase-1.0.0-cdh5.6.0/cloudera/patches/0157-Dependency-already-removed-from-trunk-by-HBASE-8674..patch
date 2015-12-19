@@ -1,15 +1,14 @@
 From 679a3b6008053db59b9d43b2cc17a9dc6d044d15 Mon Sep 17 00:00:00 2001
-From: "Apekshit(Appy) Sharma" <appy@cloudera.com>
+From: Apekshit(Appy) Sharma <appy@cloudera.com>
 Date: Tue, 2 Jun 2015 14:17:46 -0700
-Subject: [PATCH 157/284] Dependency already removed from trunk by HBASE-8674.
- Somehow still exists in cdh pom.xml.
+Subject: [PATCH 157/286] Dependency already removed from trunk by HBASE-8674. Somehow still exists in cdh pom.xml.
 
 Author: Apekshit
 Reason: Unwanted slow dependency
 Ref: CDH-28296
 ---
  pom.xml |   11 -----------
- 1 file changed, 11 deletions(-)
+ 1 files changed, 0 insertions(+), 11 deletions(-)
 
 diff --git a/pom.xml b/pom.xml
 index 3d05881..30295a5 100644
@@ -34,5 +33,5 @@ index 3d05881..30295a5 100644
    <build>
      <pluginManagement>
 -- 
-1.7.9.5
+1.7.0.4
 

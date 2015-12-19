@@ -1,8 +1,7 @@
 From 02761b9c746b29c19c931d179da00589d750370d Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Fri, 20 Feb 2015 10:27:20 -0800
-Subject: [PATCH 148/284] HBASE-13057 Provide client utility to easily enable
- and disable table replication (Ashish Singhi)
+Subject: [PATCH 148/286] HBASE-13057 Provide client utility to easily enable and disable table replication (Ashish Singhi)
 
 Reason: Add integration test for replication
 Author: Ashish Singhi
@@ -14,7 +13,7 @@ Ref: CDH-27859
  hbase-shell/src/main/ruby/shell.rb                 |    2 +
  .../shell/commands/disable_table_replication.rb    |   42 ++++
  .../shell/commands/enable_table_replication.rb     |   42 ++++
- 6 files changed, 467 insertions(+)
+ 6 files changed, 467 insertions(+), 0 deletions(-)
  create mode 100644 hbase-server/src/test/java/org/apache/hadoop/hbase/client/replication/TestReplicationAdminWithClusters.java
  create mode 100644 hbase-shell/src/main/ruby/shell/commands/disable_table_replication.rb
  create mode 100644 hbase-shell/src/main/ruby/shell/commands/enable_table_replication.rb
@@ -561,5 +560,5 @@ index 0000000..5d57f03
 +  end
 +end
 -- 
-1.7.9.5
+1.7.0.4
 

@@ -1,9 +1,7 @@
 From 0ff06e26a400dab725880493ebe43e2988c6b621 Mon Sep 17 00:00:00 2001
 From: stack <stack@apache.org>
 Date: Mon, 16 Mar 2015 13:26:34 -0700
-Subject: [PATCH 190/284] HBASE-13193 RegionScannerImpl filters should not be
- reset if a partial Result is returned (Jonathan
- Lawlor)
+Subject: [PATCH 190/286] HBASE-13193 RegionScannerImpl filters should not be reset if a partial Result is returned (Jonathan Lawlor)
 
 Reason: Bug
 Author: Jonathan Lawlor
@@ -12,7 +10,7 @@ Ref: CDH-27345
  .../apache/hadoop/hbase/client/ClientScanner.java  |  121 ++++++++++++--------
  .../apache/hadoop/hbase/regionserver/HRegion.java  |   14 ++-
  .../hadoop/hbase/regionserver/InternalScanner.java |    5 +
- .../hbase/TestPartialResultsFromClientSide.java    |   44 ++++++-
+ .../hbase/TestPartialResultsFromClientSide.java    |   44 +++++++-
  4 files changed, 132 insertions(+), 52 deletions(-)
 
 diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ClientScanner.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ClientScanner.java
@@ -303,5 +301,5 @@ index 75fa6e3..e7c3813 100644
 +  }
  }
 -- 
-1.7.9.5
+1.7.0.4
 

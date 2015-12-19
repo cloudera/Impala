@@ -1,16 +1,14 @@
 From 9fcf56c018ddaa4e0cec8c05611e01b8caabdf0e Mon Sep 17 00:00:00 2001
 From: Andrew Purtell <apurtell@apache.org>
 Date: Thu, 3 Sep 2015 17:48:45 -0700
-Subject: [PATCH 260/284] HBASE-14359 HTable#close will hang forever if
- unchecked error/exception thrown in
- AsyncProcess#sendMultiAction (Victor Xu)
+Subject: [PATCH 260/286] HBASE-14359 HTable#close will hang forever if unchecked error/exception thrown in AsyncProcess#sendMultiAction (Victor Xu)
 
 Reason: Bug
 Author: Andrew Purtell
 Ref: CDH-31924
 ---
- .../apache/hadoop/hbase/client/AsyncProcess.java   |   21 ++++++++++++--------
- 1 file changed, 13 insertions(+), 8 deletions(-)
+ .../apache/hadoop/hbase/client/AsyncProcess.java   |   21 ++++++++++++-------
+ 1 files changed, 13 insertions(+), 8 deletions(-)
 
 diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/AsyncProcess.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/AsyncProcess.java
 index c72fb0f..b4dc7a3 100644
@@ -46,5 +44,5 @@ index c72fb0f..b4dc7a3 100644
            }
          }
 -- 
-1.7.9.5
+1.7.0.4
 

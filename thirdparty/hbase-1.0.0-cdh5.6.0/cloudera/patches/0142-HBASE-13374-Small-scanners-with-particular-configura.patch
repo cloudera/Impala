@@ -1,8 +1,7 @@
 From 123d0a85f76acc2fc1d50e3409dbf1d943c773e5 Mon Sep 17 00:00:00 2001
 From: Jonathan Lawlor <jonathan.lawlor@cloudera.com>
 Date: Wed, 1 Apr 2015 13:05:30 -0700
-Subject: [PATCH 142/284] HBASE-13374 Small scanners (with particular
- configurations) do not return all rows
+Subject: [PATCH 142/286] HBASE-13374 Small scanners (with particular configurations) do not return all rows
 
 Reason: Bug
 Author: Jonathan Lawlor
@@ -236,5 +235,5 @@ index 62b5a8b..1bdd2fd 100644
     * Test from client side for get with maxResultPerCF set
     *
 -- 
-1.7.9.5
+1.7.0.4
 

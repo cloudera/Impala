@@ -1,7 +1,7 @@
 From 9c0ff1242250c35f54ebb9c21eaceea5f94847c8 Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@apache.org>
 Date: Tue, 30 Jun 2015 16:21:10 -0500
-Subject: [PATCH 271/284] HBASE-14003 work around JDK-8044053
+Subject: [PATCH 271/286] HBASE-14003 work around JDK-8044053
 
 Change-Id: Ia27857bbb15c142a0d821b179d676f16a308da2a
 Reason: jdk8
@@ -9,7 +9,7 @@ Author: Sean Busbey
 Ref: CDH-23461
 ---
  .../hadoop/hbase/wal/WALPerformanceEvaluation.java |    3 ++-
- 1 file changed, 2 insertions(+), 1 deletion(-)
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
 diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/wal/WALPerformanceEvaluation.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/wal/WALPerformanceEvaluation.java
 index 05d5e51..4b869c3 100644
@@ -26,5 +26,5 @@ index 05d5e51..4b869c3 100644
      try {
        if (rootRegionDir == null) {
 -- 
-1.7.9.5
+1.7.0.4
 

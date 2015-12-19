@@ -1,9 +1,7 @@
 From 8452e13b0ad0fa3f3346625d723ad9a307f0cec0 Mon Sep 17 00:00:00 2001
 From: Nick Dimiduk <ndimiduk@apache.org>
 Date: Fri, 19 Jun 2015 14:26:02 -0700
-Subject: [PATCH 228/284] HBASE-13933 DBE's seekBefore with tags corrupts the
- tag's offset information thus leading to incorrect
- results
+Subject: [PATCH 228/286] HBASE-13933 DBE's seekBefore with tags corrupts the tag's offset information thus leading to incorrect results
 
 Reason: Bug
 Author: Ramkrishna Vasudevan
@@ -317,5 +315,5 @@ index a642e8d..a7712b2 100644
    }
  }
 -- 
-1.7.9.5
+1.7.0.4
 

@@ -1,9 +1,7 @@
 From 0268c953cbf84e05d907b09f4c16081009729d4b Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Fri, 8 Aug 2014 13:54:53 -0700
-Subject: [PATCH 018/284] HBASE-11658 Piped commands to hbase shell should
- return non-zero if shell command failed (Sean
- Busbey)
+Subject: [PATCH 018/286] HBASE-11658 Piped commands to hbase shell should return non-zero if shell command failed (Sean Busbey)
 
 Reason: Improvement
 Author: Sean Busbey
@@ -12,7 +10,7 @@ Ref: CDH-20763
  bin/hirb.rb                                        |   99 +++++++++++++++-----
  hbase-shell/src/main/ruby/shell.rb                 |    5 +-
  hbase-shell/src/main/ruby/shell/commands.rb        |   18 ++--
- .../src/test/ruby/shell/noninteractive_test.rb     |   42 +++++++++
+ .../src/test/ruby/shell/noninteractive_test.rb     |   42 ++++++++
  hbase-shell/src/test/ruby/shell/shell_test.rb      |   10 ++
  5 files changed, 142 insertions(+), 32 deletions(-)
  create mode 100644 hbase-shell/src/test/ruby/shell/noninteractive_test.rb
@@ -292,5 +290,5 @@ index 988d09e..56b7dc8 100644
 +  end
  end
 -- 
-1.7.9.5
+1.7.0.4
 

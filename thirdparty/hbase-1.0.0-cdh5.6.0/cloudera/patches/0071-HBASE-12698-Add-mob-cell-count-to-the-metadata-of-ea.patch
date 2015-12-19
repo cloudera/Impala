@@ -1,22 +1,21 @@
 From 203f96dbf59bb2d1d7e375b88fc6c891bc8017c4 Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Thu, 25 Dec 2014 13:59:53 -0800
-Subject: [PATCH 071/284] HBASE-12698 Add mob cell count to the metadata of
- each mob file (Jingcheng Du)
+Subject: [PATCH 071/286] HBASE-12698 Add mob cell count to the metadata of each mob file (Jingcheng Du)
 
 Reason: MOB feature
 Author: Jingcheng Du
 Ref: CDH-20651
 ---
- .../hadoop/hbase/mob/DefaultMobCompactor.java      |    3 ++-
+ .../hadoop/hbase/mob/DefaultMobCompactor.java      |    3 +-
  .../hadoop/hbase/mob/DefaultMobStoreFlusher.java   |    2 +-
- .../hbase/mob/mapreduce/MemStoreWrapper.java       |   10 +++-----
+ .../hbase/mob/mapreduce/MemStoreWrapper.java       |   10 ++-----
  .../hadoop/hbase/regionserver/StoreFile.java       |   19 +++++++++++++++
  .../hbase/regionserver/TestMobCompaction.java      |   25 ++++++++++++++++++++
  5 files changed, 50 insertions(+), 9 deletions(-)
 
 diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/DefaultMobCompactor.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/DefaultMobCompactor.java
-index d0c8175..47dd0b18 100644
+index d0c8175..47dd0b1 100644
 --- a/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/DefaultMobCompactor.java
 +++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/DefaultMobCompactor.java
 @@ -219,7 +219,8 @@ public class DefaultMobCompactor extends DefaultCompactor {
@@ -181,5 +180,5 @@ index 034e80f..c651eed 100644
      Put p = new Put(Bytes.add(STARTROW, Bytes.toBytes(rowIdx)));
      p.setDurability(Durability.SKIP_WAL);
 -- 
-1.7.9.5
+1.7.0.4
 

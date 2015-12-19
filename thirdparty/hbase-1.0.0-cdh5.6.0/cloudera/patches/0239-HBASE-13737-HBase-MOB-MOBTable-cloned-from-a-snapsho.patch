@@ -1,10 +1,7 @@
 From beedeeb959d111705e44cd9c32343a008bca38ea Mon Sep 17 00:00:00 2001
 From: anoopsjohn <anoopsamjohn@gmail.com>
 Date: Tue, 16 Jun 2015 15:02:50 +0530
-Subject: [PATCH 239/284] HBASE-13737 [HBase MOB] MOBTable cloned from a
- snapshot leads to data loss, when that actual
- snapshot and main table is deleted. (Ashutosh
- Jindal)
+Subject: [PATCH 239/286] HBASE-13737 [HBase MOB] MOBTable cloned from a snapshot leads to data loss, when that actual snapshot and main table is deleted. (Ashutosh Jindal)
 
 Conflicts:
 	hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestMobSnapshotCloneIndependence.java
@@ -15,7 +12,7 @@ Ref: CDH-31077
 ---
  .../hbase/master/cleaner/HFileLinkCleaner.java     |    6 ++
  .../client/TestMobSnapshotCloneIndependence.java   |   58 ++++++++++++++++++++
- 2 files changed, 64 insertions(+)
+ 2 files changed, 64 insertions(+), 0 deletions(-)
 
 diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/cleaner/HFileLinkCleaner.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/cleaner/HFileLinkCleaner.java
 index 46e74d4..0570479 100644
@@ -131,5 +128,5 @@ index 35f89da..c9e4b3d 100644
      for (int i = 0; i < 200; i++) {
        try {
 -- 
-1.7.9.5
+1.7.0.4
 

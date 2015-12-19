@@ -1,8 +1,7 @@
 From dc3e24ee67413dbdadc831b97b4e554af9569615 Mon Sep 17 00:00:00 2001
 From: Ben Lau <benlau@yahoo-inc.com>
 Date: Wed, 7 Oct 2015 18:23:23 -0700
-Subject: [PATCH 277/284] =?UTF-8?q?HBASE-14283=20Reverse=20scan=20doesn=E2=80?=
- =?UTF-8?q?=99t=20work=20with=20HFile=20inline=20index/bloom=20blocks?=
+Subject: [PATCH 277/286] =?UTF-8?q?HBASE-14283=20Reverse=20scan=20doesn=E2=80=99t=20work=20with=20HFile=20inline=20index/bloom=20blocks?=
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -15,7 +14,7 @@ Change-Id: Icd85fc910e02c676080adad10a478e1650fde946
 Signed-off-by: Andrew Purtell <apurtell@apache.org>
 ---
  .../org/apache/hadoop/hbase/CellComparator.java    |    2 +-
- .../java/org/apache/hadoop/hbase/CellUtil.java     |   18 +-
+ .../java/org/apache/hadoop/hbase/CellUtil.java     |   18 ++-
  .../hadoop/hbase/io/hfile/HFileReaderV2.java       |    7 +-
  .../io/hfile/TestSeekBeforeWithInlineBlocks.java   |  187 ++++++++++++++++++++
  4 files changed, 209 insertions(+), 5 deletions(-)
@@ -281,5 +280,5 @@ index 0000000..ac92f4f
 +}
 +
 -- 
-1.7.9.5
+1.7.0.4
 

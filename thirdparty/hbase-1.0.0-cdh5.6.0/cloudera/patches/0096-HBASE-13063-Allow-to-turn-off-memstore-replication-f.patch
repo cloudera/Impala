@@ -1,8 +1,7 @@
 From daf5269c1bdca81f63948464a7e8ee38759cacd7 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Tue, 10 Mar 2015 10:02:04 +0000
-Subject: [PATCH 096/284] HBASE-13063 Allow to turn off memstore replication
- for region replicas
+Subject: [PATCH 096/286] HBASE-13063 Allow to turn off memstore replication for region replicas
 
 Reason: Task
 Author: Matteo Bertozzi
@@ -15,7 +14,7 @@ Ref: CDH-16914
  .../RegionReplicaReplicationEndpoint.java          |   75 ++++++++++++++++++--
  .../regionserver/ReplicationSourceManager.java     |    9 ++-
  .../apache/hadoop/hbase/HBaseTestingUtility.java   |   10 +++
- .../TestRegionReplicaReplicationEndpoint.java      |   39 +++++++++-
+ .../TestRegionReplicaReplicationEndpoint.java      |   39 ++++++++++-
  8 files changed, 181 insertions(+), 12 deletions(-)
 
 diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/HTableDescriptor.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/HTableDescriptor.java
@@ -450,5 +449,5 @@ index a89d4f4..9205f35 100644
      // Tests a table with region replication 3. Writes some data, and causes flushes and
      // compactions. Verifies that the data is readable from the replicas. Note that this
 -- 
-1.7.9.5
+1.7.0.4
 

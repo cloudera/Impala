@@ -1,10 +1,9 @@
 From 926ee6256e13547a2f77f806a13183173a29a5fa Mon Sep 17 00:00:00 2001
 From: anoopsjohn <anoopsamjohn@gmail.com>
 Date: Sat, 6 Sep 2014 10:06:37 +0530
-Subject: [PATCH 020/284] HBASE-11647 MOB integration testing. (Jingcheng Du)
- HBASE-11647 MOB integration testing. -
- addendum(Jingcheng Du) HBASE-11647 addendum to fix
- compile issues.
+Subject: [PATCH 020/286] HBASE-11647 MOB integration testing. (Jingcheng Du)
+ HBASE-11647 MOB integration testing. - addendum(Jingcheng Du)
+ HBASE-11647 addendum to fix compile issues.
 
 Reason: MOB Feature
 Author: Jingcheng Du
@@ -12,7 +11,7 @@ Ref: CDH-19420
 ---
  .../hadoop/hbase/IntegrationTestIngestWithMOB.java |  148 ++++++++++++++++++++
  .../hbase/util/LoadTestDataGeneratorWithMOB.java   |   73 ++++++++++
- 2 files changed, 221 insertions(+)
+ 2 files changed, 221 insertions(+), 0 deletions(-)
  create mode 100644 hbase-it/src/test/java/org/apache/hadoop/hbase/IntegrationTestIngestWithMOB.java
  create mode 100644 hbase-server/src/test/java/org/apache/hadoop/hbase/util/LoadTestDataGeneratorWithMOB.java
 
@@ -250,5 +249,5 @@ index 0000000..6ce4252
 +  }
 +}
 -- 
-1.7.9.5
+1.7.0.4
 

@@ -1,8 +1,7 @@
 From 240875f1eacebcbbecee125e1347ce3ec220981e Mon Sep 17 00:00:00 2001
 From: Devaraj Das <ddas@apache.org>
 Date: Fri, 16 Jan 2015 10:54:52 -0800
-Subject: [PATCH 050/284] HBASE-11261 Handle splitting/merging of regions that
- have region_replication greater than one
+Subject: [PATCH 050/286] HBASE-11261 Handle splitting/merging of regions that have region_replication greater than one
 
 Reason: Task
 Author: Devaraj Das
@@ -14,8 +13,8 @@ Ref: CDH-16914
  .../hadoop/hbase/regionserver/StoreFileInfo.java   |   18 ++
  .../hadoop/hbase/util/ServerRegionReplicaUtil.java |    6 +
  .../hadoop/hbase/client/TestReplicasClient.java    |   34 ++--
- .../TestRegionMergeTransactionOnCluster.java       |   52 ++++-
- .../TestSplitTransactionOnCluster.java             |   86 ++++++++-
+ .../TestRegionMergeTransactionOnCluster.java       |   52 +++++-
+ .../TestSplitTransactionOnCluster.java             |   86 +++++++++-
  8 files changed, 372 insertions(+), 30 deletions(-)
 
 diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java
@@ -808,5 +807,5 @@ index 7248535..45ee2d6 100644
          }
        }
 -- 
-1.7.9.5
+1.7.0.4
 

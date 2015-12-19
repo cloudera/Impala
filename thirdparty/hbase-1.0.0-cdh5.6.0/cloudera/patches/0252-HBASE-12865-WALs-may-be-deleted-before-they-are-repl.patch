@@ -1,17 +1,16 @@
 From 2b83f6f16c7dd1cc05d25f0984f3707b8247d24c Mon Sep 17 00:00:00 2001
 From: Andrew Purtell <apurtell@apache.org>
 Date: Fri, 7 Aug 2015 15:08:26 -0700
-Subject: [PATCH 252/284] HBASE-12865 WALs may be deleted before they are
- replicated to peers
+Subject: [PATCH 252/286] HBASE-12865 WALs may be deleted before they are replicated to peers
 
 Reason: Bug
 Author: He Liangliang
 Ref: CDH-31924
 ---
- .../hbase/replication/ReplicationQueuesClient.java |   17 ++++--
+ .../hbase/replication/ReplicationQueuesClient.java |   17 ++++-
  .../replication/ReplicationQueuesClientZKImpl.java |   17 +++++-
  .../hbase/replication/ReplicationQueuesZKImpl.java |    4 +-
- .../replication/master/ReplicationLogCleaner.java  |   59 +++++++++++++-------
+ .../replication/master/ReplicationLogCleaner.java  |   59 +++++++++++++------
  .../replication/TestReplicationStateBasic.java     |    3 +-
  .../regionserver/TestReplicationSourceManager.java |   33 +++++++++++
  6 files changed, 106 insertions(+), 27 deletions(-)
@@ -302,5 +301,5 @@ index 9ec0390..bb8e7bd 100644
    static class DummyNodeFailoverWorker extends Thread {
      private SortedMap<String, SortedSet<String>> logZnodesMap;
 -- 
-1.7.9.5
+1.7.0.4
 

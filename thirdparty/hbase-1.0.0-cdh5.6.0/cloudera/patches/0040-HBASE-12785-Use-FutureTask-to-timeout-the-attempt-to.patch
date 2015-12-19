@@ -1,15 +1,14 @@
 From 37ca2fddf9da8bc2f434e8c38080e5c1f8066d6d Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Mon, 5 Jan 2015 14:09:58 -0800
-Subject: [PATCH 040/284] HBASE-12785 Use FutureTask to timeout the attempt to
- get the lock for hbck
+Subject: [PATCH 040/286] HBASE-12785 Use FutureTask to timeout the attempt to get the lock for hbck
 
 Reason: Task
 Author: Ted Yu
 Ref: CDH-24113
 ---
  .../org/apache/hadoop/hbase/util/HBaseFsck.java    |   69 +++++++++++++-------
- 1 file changed, 46 insertions(+), 23 deletions(-)
+ 1 files changed, 46 insertions(+), 23 deletions(-)
 
 diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/util/HBaseFsck.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/util/HBaseFsck.java
 index 20204a2..1c070e8 100644
@@ -111,5 +110,5 @@ index 20204a2..1c070e8 100644
  
    private void unlockHbck() {
 -- 
-1.7.9.5
+1.7.0.4
 

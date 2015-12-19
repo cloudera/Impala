@@ -1,8 +1,7 @@
 From 55aefa2395fd470b51e8f8b00fbd946fb4293acd Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Fri, 13 Mar 2015 17:11:27 +0000
-Subject: [PATCH 111/284] HBASE-13227 LoadIncrementalHFile should skip
- non-files inside a possible family-dir
+Subject: [PATCH 111/286] HBASE-13227 LoadIncrementalHFile should skip non-files inside a possible family-dir
 
 Reason: Bug
 Author: Matteo Bertozzi
@@ -73,5 +72,5 @@ index abec268..39b6663 100644
  
      Table table = null;
 -- 
-1.7.9.5
+1.7.0.4
 

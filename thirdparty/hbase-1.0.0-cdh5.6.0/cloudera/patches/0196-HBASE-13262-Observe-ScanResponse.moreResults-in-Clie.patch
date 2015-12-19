@@ -1,15 +1,14 @@
 From b9c7471c378e58bf2578ed50b1a4419e40609fec Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@cloudera.com>
 Date: Fri, 31 Jul 2015 13:18:23 -0700
-Subject: [PATCH 196/284] HBASE-13262 Observe ScanResponse.moreResults in
- ClientScanner. (addendum)
+Subject: [PATCH 196/286] HBASE-13262 Observe ScanResponse.moreResults in ClientScanner. (addendum)
 
 Reason: Bug
 Author: Josh Elser
 Ref: CDH-26273
 ---
  .../apache/hadoop/hbase/client/ClientScanner.java  |    5 ++++-
- 1 file changed, 4 insertions(+), 1 deletion(-)
+ 1 files changed, 4 insertions(+), 1 deletions(-)
 
 diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ClientScanner.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ClientScanner.java
 index c121bed..65ffe98 100644
@@ -35,5 +34,5 @@ index c121bed..65ffe98 100644
        // Values == null means server-side filter has determined we must STOP
        // !partialResults.isEmpty() means that we are still accumulating partial Results for a
 -- 
-1.7.9.5
+1.7.0.4
 

@@ -1,10 +1,9 @@
 From 44dd6e505ce245aa9fd26f4a730bffd328db8a52 Mon Sep 17 00:00:00 2001
 From: zhangduo <zhangduo@wandoujia.com>
 Date: Sat, 13 Dec 2014 12:49:38 +0800
-Subject: [PATCH 046/284] HBASE-10201 Port 'Make flush decisions per column
- family' to trunk  - Addendum changes
- TestPerColumnFamilyFlush to LargeTest  - Addendum
- fixes typo of putIfAbsent (Duo Zhang)
+Subject: [PATCH 046/286] HBASE-10201 Port 'Make flush decisions per column family' to trunk
+  - Addendum changes TestPerColumnFamilyFlush to LargeTest
+  - Addendum fixes typo of putIfAbsent (Duo Zhang)
 
 Reason: New Feature
 Author: zhangduo
@@ -20,9 +19,9 @@ Ref: CDH-24775
  .../apache/hadoop/hbase/regionserver/HRegion.java  |  313 +++++++---
  .../hadoop/hbase/regionserver/HRegionServer.java   |    4 +-
  .../hadoop/hbase/regionserver/LogRoller.java       |    3 +-
- .../hadoop/hbase/regionserver/MemStoreFlusher.java |   85 +--
+ .../hadoop/hbase/regionserver/MemStoreFlusher.java |   85 ++--
  .../hadoop/hbase/regionserver/RSRpcServices.java   |   10 +-
- .../hadoop/hbase/regionserver/wal/FSHLog.java      |  242 +++++---
+ .../hadoop/hbase/regionserver/wal/FSHLog.java      |  242 ++++++---
  .../hadoop/hbase/regionserver/wal/FSWALEntry.java  |   29 +-
  .../hadoop/hbase/wal/DisabledWALProvider.java      |    8 +-
  .../main/java/org/apache/hadoop/hbase/wal/WAL.java |   11 +-
@@ -32,7 +31,7 @@ Ref: CDH-24775
  .../regionserver/TestPerColumnFamilyFlush.java     |  644 ++++++++++++++++++++
  .../hadoop/hbase/regionserver/wal/TestFSHLog.java  |   46 +-
  .../hbase/regionserver/wal/TestWALReplay.java      |   19 +-
- .../hadoop/hbase/wal/TestDefaultWALProvider.java   |   71 +--
+ .../hadoop/hbase/wal/TestDefaultWALProvider.java   |   71 ++--
  .../apache/hadoop/hbase/wal/TestWALFactory.java    |   34 +-
  24 files changed, 1547 insertions(+), 322 deletions(-)
  create mode 100644 hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/FlushAllStoresPolicy.java
@@ -3177,5 +3176,5 @@ index b163bd5..ff5e752 100644
          assertEquals((byte)(idx + '0'), val.getValue()[0]);
          System.out.println(entry.getKey() + " " + val);
 -- 
-1.7.9.5
+1.7.0.4
 

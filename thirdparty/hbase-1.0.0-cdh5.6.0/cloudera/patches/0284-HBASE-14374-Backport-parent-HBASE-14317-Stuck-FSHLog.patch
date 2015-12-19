@@ -1,9 +1,8 @@
 From 743becbe71e32e9a87b96988e45ecfb65fa3fe40 Mon Sep 17 00:00:00 2001
 From: stack <stack@duboce.net>
 Date: Mon, 23 Nov 2015 15:57:21 -0800
-Subject: [PATCH 284/284]     HBASE-14374 Backport parent 'HBASE-14317 Stuck
- FSHLog' issue to 1.1     Also includes HBASE-14807
- TestWALLockup is flakey
+Subject: [PATCH 284/286]     HBASE-14374 Backport parent 'HBASE-14317 Stuck FSHLog' issue to 1.1
+     Also includes HBASE-14807 TestWALLockup is flakey
 
       Reason: Bug
       Author: Stack
@@ -13,7 +12,7 @@ Subject: [PATCH 284/284]     HBASE-14374 Backport parent 'HBASE-14317 Stuck
 ---
  .../apache/hadoop/hbase/regionserver/HRegion.java  |  113 +++++---
  .../hadoop/hbase/regionserver/LogRoller.java       |   19 +-
- .../MultiVersionConsistencyControl.java            |   24 +-
+ .../MultiVersionConsistencyControl.java            |   24 ++-
  .../regionserver/wal/DamagedWALException.java      |   45 +++
  .../hadoop/hbase/regionserver/wal/FSHLog.java      |  225 ++++++++++-----
  .../hadoop/hbase/regionserver/wal/FSWALEntry.java  |    2 +-
@@ -21,11 +20,11 @@ Subject: [PATCH 284/284]     HBASE-14374 Backport parent 'HBASE-14317 Stuck
  .../hbase/regionserver/wal/ProtobufLogReader.java  |    9 +-
  .../hbase/regionserver/wal/ProtobufLogWriter.java  |    2 +-
  .../hadoop/hbase/regionserver/wal/SyncFuture.java  |    4 +-
- .../java/org/apache/hadoop/hbase/wal/WALKey.java   |   30 +-
+ .../java/org/apache/hadoop/hbase/wal/WALKey.java   |   30 ++-
  .../hbase/master/TestDistributedLogSplitting.java  |    3 +-
  .../hbase/regionserver/TestFSErrorsExposed.java    |    4 +-
  .../regionserver/TestFailedAppendAndSync.java      |  273 ++++++++++++++++++
- .../hadoop/hbase/regionserver/TestHRegion.java     |   94 +++++--
+ .../hadoop/hbase/regionserver/TestHRegion.java     |   94 ++++++-
  .../TestMultiVersionConsistencyControl.java        |    4 +-
  .../hadoop/hbase/regionserver/TestWALLockup.java   |  292 ++++++++++++++++++++
  .../hbase/regionserver/wal/TestLogRolling.java     |   15 +-
@@ -2060,5 +2059,5 @@ index 2e18fba..e98dba7 100644
  
        ResultScanner scanner = table.getScanner(new Scan());
 -- 
-1.7.9.5
+1.7.0.4
 

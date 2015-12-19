@@ -1,14 +1,13 @@
 From 271cd3929c711b2e128be5b2fb187705a2381814 Mon Sep 17 00:00:00 2001
 From: Srikanth Srungarapu <ssrungarapu@cloudera.com>
 Date: Tue, 2 Jun 2015 22:37:41 -0700
-Subject: [PATCH 160/284] HBASE-13826 Unable to create table when group acls
- are appropriately set.
+Subject: [PATCH 160/286] HBASE-13826 Unable to create table when group acls are appropriately set.
 
 Reason: Bug
 Author: Srikanth Srungarapu
 Ref: CDH-28330
 ---
- .../hbase/security/access/TableAuthManager.java    |   10 +---------
+ .../hbase/security/access/TableAuthManager.java    |   10 +--------
  .../security/access/TestAccessController2.java     |   21 ++++++++++++++++++++
  2 files changed, 22 insertions(+), 9 deletions(-)
 
@@ -73,5 +72,5 @@ index ec43854..554b8bb 100644
      final Configuration conf = TEST_UTIL.getConfiguration();
  
 -- 
-1.7.9.5
+1.7.0.4
 

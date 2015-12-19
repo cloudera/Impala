@@ -1,15 +1,14 @@
 From 956da41fcdcf92d22cffdb6d850f18eb134b6f7c Mon Sep 17 00:00:00 2001
 From: anoopsjohn <anoopsamjohn@gmail.com>
 Date: Sun, 14 Sep 2014 14:21:00 +0530
-Subject: [PATCH 021/284] HBASE-11968 If MOB is enabled, it should make sure
- hfile v3 is being used.
+Subject: [PATCH 021/286] HBASE-11968 If MOB is enabled, it should make sure hfile v3 is being used.
 
 Reason: MOB Feature
 Author: Anoop Sam John
 Ref: CDH-19420
 ---
  .../apache/hadoop/hbase/regionserver/HRegion.java  |    7 +++++++
- 1 file changed, 7 insertions(+)
+ 1 files changed, 7 insertions(+), 0 deletions(-)
 
 diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
 index 8359c94..0f222a7 100644
@@ -37,5 +36,5 @@ index 8359c94..0f222a7 100644
      }
      return new HStore(this, family, this.conf);
 -- 
-1.7.9.5
+1.7.0.4
 

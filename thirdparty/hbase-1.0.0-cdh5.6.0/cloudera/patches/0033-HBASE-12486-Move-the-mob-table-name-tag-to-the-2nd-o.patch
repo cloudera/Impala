@@ -1,15 +1,14 @@
 From b247694545e50ede0818610d08b021a142048a0c Mon Sep 17 00:00:00 2001
 From: Ramkrishna <ramkrishna.s.vasudevan@intel.com>
 Date: Fri, 21 Nov 2014 08:52:11 +0530
-Subject: [PATCH 033/284] HBASE-12486 - Move the mob table name tag to the 2nd
- one (Jingcheng Du)
+Subject: [PATCH 033/286] HBASE-12486 - Move the mob table name tag to the 2nd one (Jingcheng Du)
 
 Reason: Bug
 Author: Li Jiajia
 Ref: CDH-23659
 ---
  .../java/org/apache/hadoop/hbase/mob/MobUtils.java |    4 ++--
- 1 file changed, 2 insertions(+), 2 deletions(-)
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/MobUtils.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/MobUtils.java
 index 0f6aa6f..067d4c5 100644
@@ -33,5 +32,5 @@ index 0f6aa6f..067d4c5 100644
      byte[] refValue = Bytes.add(Bytes.toBytes(valueLength), fileName);
      KeyValue reference = new KeyValue(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength(),
 -- 
-1.7.9.5
+1.7.0.4
 

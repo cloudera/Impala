@@ -1,25 +1,25 @@
 From 411541a010d6bca2066cc43185f6f256d85f9bf4 Mon Sep 17 00:00:00 2001
 From: Ramkrishna <ramkrishna.s.vasudevan@intel.com>
 Date: Thu, 22 Jan 2015 14:52:40 +0530
-Subject: [PATCH 072/284] HBASE-12669 - Have compaction scanner save info
- about delete markers (Jingcheng Du)
+Subject: [PATCH 072/286] HBASE-12669 - Have compaction scanner save info about delete markers
+ (Jingcheng Du)
 
 Reason: MOB feature
 Author: Jingcheng Du
 Ref: CDH-22449
 ---
- .../hadoop/hbase/mob/DefaultMobCompactor.java      |   64 +++++++++++-
- .../hadoop/hbase/regionserver/HMobStore.java       |   43 +++++++-
+ .../hadoop/hbase/mob/DefaultMobCompactor.java      |   64 ++++++++++++-
+ .../hadoop/hbase/regionserver/HMobStore.java       |   43 ++++++++-
  .../apache/hadoop/hbase/regionserver/HStore.java   |    2 +-
  .../regionserver/MobCompactionStoreScanner.java    |   66 +++++++++++++
- .../hadoop/hbase/regionserver/StoreFileInfo.java   |   30 +++++-
+ .../hadoop/hbase/regionserver/StoreFileInfo.java   |   30 ++++++-
  .../hadoop/hbase/regionserver/StoreScanner.java    |    2 +-
  .../hbase/regionserver/TestMobCompaction.java      |  103 +++++++++++++++++++-
  7 files changed, 297 insertions(+), 13 deletions(-)
  create mode 100644 hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/MobCompactionStoreScanner.java
 
 diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/DefaultMobCompactor.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/DefaultMobCompactor.java
-index 47dd0b18..ec0cfe5 100644
+index 47dd0b1..ec0cfe5 100644
 --- a/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/DefaultMobCompactor.java
 +++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/DefaultMobCompactor.java
 @@ -28,16 +28,21 @@ import org.apache.hadoop.classification.InterfaceAudience;
@@ -523,5 +523,5 @@ index c651eed..9784b82 100644
 +  }
  }
 -- 
-1.7.9.5
+1.7.0.4
 

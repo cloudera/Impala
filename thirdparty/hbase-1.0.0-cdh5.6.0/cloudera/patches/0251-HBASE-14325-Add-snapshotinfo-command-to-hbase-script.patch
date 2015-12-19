@@ -1,15 +1,14 @@
 From 497f78600227904516c09f83734dbaa6ea0f036e Mon Sep 17 00:00:00 2001
 From: Samir Ahmic <samir@personal.com>
 Date: Thu, 27 Aug 2015 15:38:13 +0200
-Subject: [PATCH 251/284] HBASE-14325 Add snapshotinfo command to hbase
- script.
+Subject: [PATCH 251/286] HBASE-14325 Add snapshotinfo command to hbase script.
 
     Reason: Improvement
     Author: Samir Ahmic
     Ref: CDH-31924
 ---
  bin/hbase |    3 +++
- 1 file changed, 3 insertions(+)
+ 1 files changed, 3 insertions(+), 0 deletions(-)
 
 diff --git a/bin/hbase b/bin/hbase
 index 8713837..a0201c7 100755
@@ -33,5 +32,5 @@ index 8713837..a0201c7 100755
    CLASS='org.apache.hadoop.hbase.master.HMaster'
    if [ "$1" != "stop" ] && [ "$1" != "clear" ] ; then
 -- 
-1.7.9.5
+1.7.0.4
 

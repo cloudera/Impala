@@ -1,8 +1,7 @@
 From f1a0a9327467b28ec85b0dfca1a711001411fcc4 Mon Sep 17 00:00:00 2001
 From: Dima Spivak <dspivak@cloudera.com>
 Date: Thu, 2 Jul 2015 14:48:06 -0700
-Subject: [PATCH 203/284] HBASE-14002 Add --noReplicationSetup option to
- IntegrationTestReplication
+Subject: [PATCH 203/286] HBASE-14002 Add --noReplicationSetup option to IntegrationTestReplication
 
     Reason: Improvement
     Author: Dima Spivak
@@ -11,7 +10,7 @@ Subject: [PATCH 203/284] HBASE-14002 Add --noReplicationSetup option to
 Signed-off-by: Andrew Purtell <apurtell@apache.org>
 ---
  .../hbase/test/IntegrationTestReplication.java     |   13 +++++++++++--
- 1 file changed, 11 insertions(+), 2 deletions(-)
+ 1 files changed, 11 insertions(+), 2 deletions(-)
 
 diff --git a/hbase-it/src/test/java/org/apache/hadoop/hbase/test/IntegrationTestReplication.java b/hbase-it/src/test/java/org/apache/hadoop/hbase/test/IntegrationTestReplication.java
 index a56d5fe..c6668ad 100644
@@ -70,5 +69,5 @@ index a56d5fe..c6668ad 100644
        throw new RuntimeException("numNodes must be a multiple of width and wrap multiplier");
      }
 -- 
-1.7.9.5
+1.7.0.4
 

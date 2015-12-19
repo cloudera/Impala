@@ -1,15 +1,14 @@
 From a28a9f1e85f8fce9d923b58bc45ea89d3590c298 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Tue, 3 Mar 2015 06:48:56 -0800
-Subject: [PATCH 082/284] HBASE-13115 Fix the usage of remote user in thrift
- doAs implementation (Srikanth Srungarapu)
+Subject: [PATCH 082/286] HBASE-13115 Fix the usage of remote user in thrift doAs implementation (Srikanth Srungarapu)
 
 Reason: Bug
 Author: Srikanth Srungarapu
 Ref: CDH-22146
 ---
  .../apache/hadoop/hbase/thrift/HttpDoAsClient.java |   27 ++++++-----
- .../hadoop/hbase/thrift/ThriftHttpServlet.java     |   49 ++++++++++++++------
+ .../hadoop/hbase/thrift/ThriftHttpServlet.java     |   49 ++++++++++++++-----
  2 files changed, 51 insertions(+), 25 deletions(-)
 
 diff --git a/hbase-examples/src/main/java/org/apache/hadoop/hbase/thrift/HttpDoAsClient.java b/hbase-examples/src/main/java/org/apache/hadoop/hbase/thrift/HttpDoAsClient.java
@@ -244,5 +243,5 @@ index f3bed0a..c7ea46f 100644
        // Authorization header must have a payload
        if (authHeaderBase64String == null || authHeaderBase64String.isEmpty()) {
 -- 
-1.7.9.5
+1.7.0.4
 

@@ -1,14 +1,14 @@
 From 64ee93df8bb61ab33e17adc8237118d5167c4b8c Mon Sep 17 00:00:00 2001
 From: Elliott Clark <eclark@apache.org>
 Date: Thu, 26 Mar 2015 11:48:19 -0700
-Subject: [PATCH 177/284] HBASE-13342 Fix incorrect interface annotations
+Subject: [PATCH 177/286] HBASE-13342 Fix incorrect interface annotations
 
 Reason: Improvement
 Author: Elliott Clark
 Ref: CDH-23748
 ---
  dev-support/test-patch.sh |   25 +++++++++++++++++++++++++
- 1 file changed, 25 insertions(+)
+ 1 files changed, 25 insertions(+), 0 deletions(-)
 
 diff --git a/dev-support/test-patch.sh b/dev-support/test-patch.sh
 index 3c01359..cd46401 100755
@@ -54,5 +54,5 @@ index 3c01359..cd46401 100755
  (( RESULT = RESULT + $? ))
  checkReleaseAuditWarnings
 -- 
-1.7.9.5
+1.7.0.4
 

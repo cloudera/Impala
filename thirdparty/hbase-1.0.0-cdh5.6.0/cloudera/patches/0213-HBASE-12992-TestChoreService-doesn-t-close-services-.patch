@@ -1,16 +1,14 @@
 From cdf934880bd787bdea80d02c89af307c50f2b3f4 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Mon, 9 Feb 2015 12:15:23 -0800
-Subject: [PATCH 213/284] HBASE-12992 TestChoreService doesn't close services,
- that can break test on slow virtual hosts (Andrey
- Stepachev)
+Subject: [PATCH 213/286] HBASE-12992 TestChoreService doesn't close services, that can break test on slow virtual hosts (Andrey Stepachev)
 
 Reason: Bug
 Author: Andrey Stepachev
 Ref: CDH-28012
 ---
  .../org/apache/hadoop/hbase/TestChoreService.java  |   53 +++++++++++++++++---
- 1 file changed, 46 insertions(+), 7 deletions(-)
+ 1 files changed, 46 insertions(+), 7 deletions(-)
 
 diff --git a/hbase-common/src/test/java/org/apache/hadoop/hbase/TestChoreService.java b/hbase-common/src/test/java/org/apache/hadoop/hbase/TestChoreService.java
 index 238fb99..6c283a5 100644
@@ -223,5 +221,5 @@ index 238fb99..6c283a5 100644
      assertFalse(service.scheduleChore(failChore1));
      assertFalse(failChore1.isScheduled());
 -- 
-1.7.9.5
+1.7.0.4
 

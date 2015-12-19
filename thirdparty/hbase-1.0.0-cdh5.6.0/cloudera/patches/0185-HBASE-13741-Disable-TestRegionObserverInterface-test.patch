@@ -1,9 +1,7 @@
 From 375b572fa2c8343294de06d6875ddb6db993fa8c Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Thu, 21 May 2015 13:58:33 -0700
-Subject: [PATCH 185/284] HBASE-13741 Disable
- TestRegionObserverInterface#testRecovery and
- testLegacyRecovery (Stephen Jiang)
+Subject: [PATCH 185/286] HBASE-13741 Disable TestRegionObserverInterface#testRecovery and testLegacyRecovery (Stephen Jiang)
 
 (cherry picked from commit 86e2c3b72fb5d96bfab9cde90292fc1f650b6900)
 
@@ -12,7 +10,7 @@ Author: Stephen Jiang
 Ref: CDH-24489
 ---
  .../coprocessor/TestRegionObserverInterface.java   |    5 ++++-
- 1 file changed, 4 insertions(+), 1 deletion(-)
+ 1 files changed, 4 insertions(+), 1 deletions(-)
 
 diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/coprocessor/TestRegionObserverInterface.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/coprocessor/TestRegionObserverInterface.java
 index 031e173..28a9a8e 100644
@@ -50,5 +48,5 @@ index 031e173..28a9a8e 100644
 \ No newline at end of file
 +}
 -- 
-1.7.9.5
+1.7.0.4
 

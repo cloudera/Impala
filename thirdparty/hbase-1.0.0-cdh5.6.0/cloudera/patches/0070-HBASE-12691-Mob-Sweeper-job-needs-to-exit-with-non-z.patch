@@ -1,8 +1,7 @@
 From de1cf959c5ef6e67076904169c37b8bb6282c562 Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Sun, 14 Dec 2014 10:20:50 -0800
-Subject: [PATCH 070/284] HBASE-12691 Mob Sweeper job needs to exit with
- non-zero error value if job fails for any reason
+Subject: [PATCH 070/286] HBASE-12691 Mob Sweeper job needs to exit with non-zero error value if job fails for any reason
 
 Reason: MOB feature
 Author: Jonathan Hsieh
@@ -128,5 +127,5 @@ index 451ee26..24b573e 100644
  }
 \ No newline at end of file
 -- 
-1.7.9.5
+1.7.0.4
 
