@@ -1,7 +1,7 @@
 From cb9c22f82697b4b226e73bbc5e94b40530be4e6b Mon Sep 17 00:00:00 2001
 From: Enis Soztutar <enis@apache.org>
 Date: Tue, 28 Apr 2015 17:27:46 -0700
-Subject: [PATCH 246/283] HBASE-13585 HRegionFileSystem#splitStoreFile()
+Subject: [PATCH 246/286] HBASE-13585 HRegionFileSystem#splitStoreFile()
  finishes without closing the file handle in some
  situation
 

@@ -1,3 +1,40 @@
+commit d7fb0037b40c712a5f5bcda876e567a4b235ca0c
+Author: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
+Date:   Mon Nov 23 16:05:05 2015 -0800
+
+    HBASE-14799 Commons-collections object deserialization remote command execution vulnerability (addendum)
+    
+    Reason: Security
+    Author: Andrew Purtell
+    Ref: CDH-34565
+    
+    Change-Id: I43c33c0464926f3aac3a6564a249e36cdb8fe9c1
+
+commit d9faa0e8fa06994b82c96086469fbfe4f0b7678a
+Author: stack <stack@duboce.net>
+Date:   Fri Nov 20 12:23:04 2015 -0800
+
+    HBASE-14374 Backport parent 'HBASE-14317 Stuck FSHLog' issue to 1.1
+    Also includes HBASE-14807 TestWALLockup is flakey
+    
+      Reason: Bug
+      Author: Stack
+      Ref: CDH-33545
+    
+    Change-Id: Ic488f9b1302c9145816fa1ab7eeb709cf51117e6
+
+commit a5bc01c1d1fc917ea977cf8195beca29c348fede
+Author: Andrew Purtell <apurtell@apache.org>
+Date:   Tue Nov 17 11:35:32 2015 -0800
+
+    HBASE-14799 Commons-collections object deserialization remote command execution vulnerability
+    
+    Reason: Security
+    Author: Andrew Purtell
+    Ref: CDH-34565
+    
+    Change-Id: I7588a47a1817d65556a25c3b6617012df08b08a5
+
 commit 7a28aa68cca0e4894b2cc254fea384e3e8393605
 Author: Jenkins <dev-kitchen@cloudera.com>
 Date:   Mon Nov 23 15:36:29 2015 -0800

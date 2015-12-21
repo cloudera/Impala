@@ -1,7 +1,7 @@
 From dc3e24ee67413dbdadc831b97b4e554af9569615 Mon Sep 17 00:00:00 2001
 From: Ben Lau <benlau@yahoo-inc.com>
 Date: Wed, 7 Oct 2015 18:23:23 -0700
-Subject: [PATCH 277/283] =?UTF-8?q?HBASE-14283=20Reverse=20scan=20doesn=E2=80?=
+Subject: [PATCH 277/286] =?UTF-8?q?HBASE-14283=20Reverse=20scan=20doesn=E2=80?=
  =?UTF-8?q?=99t=20work=20with=20HFile=20inline=20index/bloom=20blocks?=
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8

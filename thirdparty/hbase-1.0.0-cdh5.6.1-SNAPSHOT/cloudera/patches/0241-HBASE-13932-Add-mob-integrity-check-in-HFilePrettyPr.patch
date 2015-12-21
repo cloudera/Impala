@@ -1,7 +1,7 @@
 From ef83a9d4246c58a9807b8b3a09c3521656b15e4e Mon Sep 17 00:00:00 2001
 From: ramkrishna <ramkrishna.s.vasudevan@gmail.com>
 Date: Wed, 24 Jun 2015 09:22:44 +0530
-Subject: [PATCH 241/283] HBASE-13932 - Add mob integrity check in
+Subject: [PATCH 241/286] HBASE-13932 - Add mob integrity check in
  HFilePrettyPrinter (Jingcheng du)
 
 Reason: Bugfix

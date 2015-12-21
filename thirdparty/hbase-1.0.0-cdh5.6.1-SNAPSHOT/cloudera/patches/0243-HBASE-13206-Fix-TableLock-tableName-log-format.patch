@@ -1,7 +1,7 @@
 From 85157a8d096ccc17ad69c425bf0b618751c71397 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Wed, 11 Mar 2015 18:27:18 +0000
-Subject: [PATCH 243/283] HBASE-13206 Fix TableLock tableName log format
+Subject: [PATCH 243/286] HBASE-13206 Fix TableLock tableName log format
 
 Reason: Supportability
 Author: Matteo Bertozzi

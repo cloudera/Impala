@@ -1,7 +1,7 @@
 From 375153d67105376409d618243e21f28c5bd21093 Mon Sep 17 00:00:00 2001
 From: Jerry He <jerryjch@apache.org>
 Date: Tue, 18 Aug 2015 13:01:44 -0700
-Subject: [PATCH 265/283] HBASE-14228 Close BufferedMutator and connection in
+Subject: [PATCH 265/286] HBASE-14228 Close BufferedMutator and connection in
  MultiTableOutputFormat
 
 Reason: Bug

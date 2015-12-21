@@ -1,7 +1,7 @@
 From 70c2680221b685ba76fbf7f0e08c97b945c7ff97 Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Fri, 20 Mar 2015 09:48:04 -0700
-Subject: [PATCH 233/283] HBASE-13277 add mob_threshold option to load test
+Subject: [PATCH 233/286] HBASE-13277 add mob_threshold option to load test
  tool
 
 Reason: Improvement

@@ -1,7 +1,7 @@
 From c5c6db7a033afddf78a52daf32586254d39a841d Mon Sep 17 00:00:00 2001
 From: "Apekshit(Appy) Sharma" <appy@cloudera.com>
 Date: Fri, 18 Sep 2015 10:33:28 -0700
-Subject: [PATCH 229/283] Changes: - Fixes security docs to suggest use of
+Subject: [PATCH 229/286] Changes: - Fixes security docs to suggest use of
  'privacy' instead of 'auth-conf' for
  'hbase.rpc.protection' property. - Changes SaslUtil
  to accept both kinds of values

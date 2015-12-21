@@ -1,7 +1,7 @@
 From 4265a7730b872012cea95b62e400c8d91e50b34a Mon Sep 17 00:00:00 2001
 From: Nick Dimiduk <ndimiduk@apache.org>
 Date: Sun, 14 Jun 2015 15:45:10 -0700
-Subject: [PATCH 278/283] HBASE-13833
+Subject: [PATCH 278/286] HBASE-13833
  LoadIncrementalHFile.doBulkLoad(Path,HTable)
  doesn't handle unmanaged connections when using
  SecureBulkLoad
