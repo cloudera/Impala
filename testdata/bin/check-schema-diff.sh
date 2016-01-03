@@ -27,3 +27,4 @@ hdfs dfs -test -e  /test-warehouse/githash.txt || { exit 0; }
 GIT_HASH=$(echo $(hdfs dfs -cat /test-warehouse/githash.txt))
 # Check whether a non-empty diff exists.
 git diff --exit-code ${GIT_HASH}..HEAD ${IMPALA_HOME}/testdata/datasets/$DATASET
+git diff --exit-code ${GIT_HASH}..HEAD ${IMPALA_HOME}/testdata/avro_schema_resolution
