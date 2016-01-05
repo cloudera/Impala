@@ -1164,22 +1164,14 @@ public class SingleNodePlanner {
 
     // Remove unregistered predicates that reference the same slot on
     // both sides (e.g. a = a). Such predicates have been generated from slot
-    // equivalences and may incorrectly reject rows with nulls (IMPALA-1412).
+    // equivalences and may incorrectly reject rows with nulls (IMPALA-1412/IMPALA-2643).
     Predicate<Expr> isIdentityPredicate = new Predicate<Expr>() {
       @Override
       public boolean apply(Expr expr) {
-        if (!(expr instanceof BinaryPredicate)
-            || ((BinaryPredicate) expr).getOp() != BinaryPredicate.Operator.EQ) {
-          return false;
-        }
-        if (!expr.isRegisteredPredicate()
-            && expr.getChild(0) instanceof SlotRef
-            && expr.getChild(1) instanceof SlotRef
-            && (((SlotRef) expr.getChild(0)).getSlotId() ==
-               ((SlotRef) expr.getChild(1)).getSlotId())) {
-          return true;
-        }
-        return false;
+        return (expr instanceof BinaryPredicate)
+            && ((BinaryPredicate) expr).getOp() == BinaryPredicate.Operator.EQ
+            && ((BinaryPredicate) expr).isInferred()
+            && expr.getChild(0).equals(expr.getChild(1));
       }
     };
     Iterables.removeIf(viewPredicates, isIdentityPredicate);
@@ -1326,7 +1318,7 @@ public class SingleNodePlanner {
           // we only do this for one of the equivalent slots, all the other implied
           // equalities are redundant
           BinaryPredicate pred =
-              analyzer.createEqPredicate(lhsSlotIds.get(0), slotDesc.getId());
+              analyzer.createInferredEqPred(lhsSlotIds.get(0), slotDesc.getId());
           result.add(pred);
         }
       }
