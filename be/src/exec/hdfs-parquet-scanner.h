@@ -149,6 +149,8 @@ class HdfsParquetScanner : public HdfsScanner {
   // Number of cols that need to be read.
   RuntimeProfile::Counter* num_cols_counter_;
 
+  const char* filename() const { return metadata_range_->file(); }
+
   // Reads data from all the columns (in parallel) and assembles rows into the context
   // object. Returns when the entire row group is complete or an error occurred.
   Status AssembleRows(int row_group_idx);
