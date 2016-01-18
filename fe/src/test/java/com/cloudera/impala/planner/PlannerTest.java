@@ -361,7 +361,7 @@ public class PlannerTest {
       } else {
         LOG.info("single-node plan: " + explainStr);
         String result = TestUtils.compareOutput(
-            Lists.newArrayList(explainStr.split("\n")), expectedPlan, true);
+            Lists.newArrayList(explainStr.split("\n")), expectedPlan, true, true);
         if (!result.isEmpty()) {
           errorLog.append("section " + Section.PLAN.toString() + " of query:\n" + query
               + "\n" + result);
@@ -401,7 +401,7 @@ public class PlannerTest {
     if (expectedLocations.size() > 0 && locationsStr != null) {
       // Locations' order does not matter.
       String result = TestUtils.compareOutput(
-          Lists.newArrayList(locationsStr.split("\n")), expectedLocations, false);
+          Lists.newArrayList(locationsStr.split("\n")), expectedLocations, false, true);
       if (!result.isEmpty()) {
         errorLog.append("section " + Section.SCANRANGELOCATIONS + " of query:\n"
             + query + "\n" + result);
@@ -468,7 +468,7 @@ public class PlannerTest {
      } else {
        LOG.info("distributed plan: " + explainStr);
        String result = TestUtils.compareOutput(
-           Lists.newArrayList(explainStr.split("\n")), expectedPlan, true);
+           Lists.newArrayList(explainStr.split("\n")), expectedPlan, true, true);
        if (!result.isEmpty()) {
          errorLog.append("section " + Section.DISTRIBUTEDPLAN.toString()
              + " of query:\n" + query + "\n" + result);
