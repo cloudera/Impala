@@ -198,28 +198,33 @@ BigIntVal TimestampFunctions::Unix(FunctionContext* context, const StringVal& st
 
   TimestampValue tv = TimestampValue(
       reinterpret_cast<const char*>(string_val.ptr), string_val.len, *dt_ctx);
-  if (!tv.HasDate()) return BigIntVal::null();
-  return BigIntVal(tv.ToUnixTime());
+  if (!tv.HasDateAndTime()) return BigIntVal::null();
+  time_t result;
+  return (tv.ToUnixTime(&result)) ? BigIntVal(result) : BigIntVal::null();
 }
 
 BigIntVal TimestampFunctions::Unix(FunctionContext* context, const TimestampVal& ts_val) {
   if (ts_val.is_null) return BigIntVal::null();
   const TimestampValue& tv = TimestampValue::FromTimestampVal(ts_val);
-  if (!tv.HasDate()) return BigIntVal::null();
-  return BigIntVal(tv.ToUnixTime());
+  time_t result;
+  return (tv.ToUnixTime(&result)) ? BigIntVal(result) : BigIntVal::null();
 }
 
 BigIntVal TimestampFunctions::Unix(FunctionContext* context) {
-  if (!context->impl()->state()->now()->HasDate()) return BigIntVal::null();
-  return BigIntVal(context->impl()->state()->now()->ToUnixTime());
+  time_t result;
+  if (context->impl()->state()->now()->ToUnixTime(&result)) {
+    return BigIntVal(result);
+  } else {
+    return BigIntVal::null();
+  }
 }
 
 BigIntVal TimestampFunctions::UnixFromString(FunctionContext* context,
     const StringVal& sv) {
   if (sv.is_null) return BigIntVal::null();
   TimestampValue tv(reinterpret_cast<const char *>(sv.ptr), sv.len);
-  if (!tv.HasDate()) return BigIntVal::null();
-  return BigIntVal(tv.ToUnixTime());
+  time_t result;
+  return (tv.ToUnixTime(&result)) ? BigIntVal(result) : BigIntVal::null();
 }
 
 void TimestampFunctions::ReportBadFormat(FunctionContext* context,
