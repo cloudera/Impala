@@ -877,8 +877,12 @@ Status ImpalaServer::UnregisterQuery(const TUniqueId& query_id, bool check_infli
 
   exec_state->Done();
 
-  double duration_ms = 1000 * (exec_state->end_time().ToSubsecondUnixTime() -
-      exec_state->start_time().ToSubsecondUnixTime());
+  double ut_end_time, ut_start_time;
+  double duration_ms = 0.0;
+  if (LIKELY(exec_state->end_time().ToSubsecondUnixTime(&ut_end_time))
+      && LIKELY(exec_state->start_time().ToSubsecondUnixTime(&ut_start_time))) {
+    duration_ms = 1000 * (ut_end_time - ut_start_time);
+  }
 
   // duration_ms can be negative when the local timezone changes during query execution.
   if (duration_ms >= 0) {

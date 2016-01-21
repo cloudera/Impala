@@ -319,7 +319,10 @@ class ExprTest : public testing::Test {
     if (tolerance_in_seconds == 0) {
       EXPECT_EQ(expected_result, *result);
     } else {
-      int64_t delta = abs(result->ToUnixTime() - expected_result.ToUnixTime());
+      time_t  unix_time, expected_unix_time;
+      EXPECT_TRUE(result->ToUnixTime(&unix_time));
+      EXPECT_TRUE(result->ToUnixTime(&expected_unix_time));
+      int64_t delta = abs(unix_time - expected_unix_time);
       EXPECT_LE(delta, tolerance_in_seconds);
     }
   }
