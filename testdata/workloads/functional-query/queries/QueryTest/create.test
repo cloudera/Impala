@@ -970,3 +970,15 @@ show databases like 'ddl_test_db'
 ---- TYPES
 STRING
 ====
+---- QUERY
+# IMPALA-2711: Make sure no memory leak from Rand().
+drop table if exists rand_ctas_t;
+create table rand_ctas_t as select rand() from functional.alltypes;
+---- RESULTS
+'Inserted 7300 row(s)'
+---- ERRORS
+====
+---- QUERY
+drop table if exists rand_ctas_t;
+---- RESULTS
+====
