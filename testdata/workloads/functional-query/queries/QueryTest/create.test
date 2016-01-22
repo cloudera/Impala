@@ -958,27 +958,14 @@ from ddl_test_db.struct_keywords t, t.a, t.m
 INT, STRING, DECIMAL, BOOLEAN, STRING, STRING, INT, TIMESTAMP, INT, INT
 ====
 ---- QUERY
-# Need to switch databases before dropping
-use default;
-drop database ddl_test_db cascade
----- RESULTS
-====
----- QUERY
-# Should be gone now
-show databases like 'ddl_test_db'
----- RESULTS
----- TYPES
-STRING
-====
----- QUERY
 # IMPALA-2711: Make sure no memory leak from Rand().
-drop table if exists rand_ctas_t;
-create table rand_ctas_t as select rand() from functional.alltypes;
+drop table if exists ddl_test_db.rand_ctas_t;
+create table ddl_test_db.rand_ctas_t as select rand() from functional.alltypes;
 ---- RESULTS
 'Inserted 7300 row(s)'
 ---- ERRORS
 ====
 ---- QUERY
-drop table if exists rand_ctas_t;
+drop table if exists ddl_test_db.rand_ctas_t;
 ---- RESULTS
 ====
