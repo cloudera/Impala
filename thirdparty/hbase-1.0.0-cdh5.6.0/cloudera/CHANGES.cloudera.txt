@@ -1,3 +1,124 @@
+commit 4b1c4e53fdfbf064455bbb951b10e68cc2c61b39
+Author: Jonathan M Hsieh <jon@cloudera.com>
+Date:   Fri Jan 15 16:09:41 2016 -0800
+
+    CDH-34757 IntegrationTests time out due to RemoveColumnAction and chaos monkey cleanup
+    
+    This patch is a small part of HBASE-11580 and included in Apache HBase 1.1.0+
+    
+    Change-Id: I48d0f33ddfc5c7bb482e976460510ef41a25e8c5
+    Author: Jonathan Hsieh
+    Reason: Testing
+    Ref: CDH-34757
+
+commit 1b1ca0da93096dad10edd1c4487f4b2e6e1c977f
+Author: Jonathan M Hsieh <jmhsieh@apache.org>
+Date:   Thu Jan 14 07:59:33 2016 -0800
+
+    HBASE-15104 Occasional failures due to NotServingRegionException in IT tests (Huaxiang Sun)
+    
+    Reason: Bug
+    Author: Huaxiang Sun
+    Ref: CDH-34902
+    
+    Change-Id: If20e660a3e7e56d60f9ad797f04da723a3e6b4ae
+
+commit ad2fbc167820e5652854054c8052b62c4add5e34
+Author: stack <stack@duboce.net>
+Date:   Wed Jan 13 15:43:07 2016 -0800
+
+    HBASE-14926 Hung ThriftServer; no timeout on read from client; if client crashes, worker thread gets stuck reading
+    
+    Reason: Bug
+    Author: Stack
+    Ref: CDH-36117
+    
+    Change-Id: I734692f03892d507ceef2ee49854c0252a4c20e9
+
+commit 486b9d3928ca46e50a2a524a946da6833afc5c86
+Author: Abhishek Kumar <abhishek.kr@huawei.com>
+Date:   Mon May 25 10:37:13 2015 +0530
+
+    HBASE-13746 list_replicated_tables command is not listing table in hbase shell
+    
+    Signed-off-by: Andrew Purtell <apurtell@apache.org>
+    
+    Reason: Bug
+    Author: Abhishek Kumar
+    Ref: CDH-36112
+    
+    Change-Id: Ic69269a119b5158d8fcf93c42f990540be3c51ce
+
+commit 7dc3f38fbe7689bb89013cc19ca066f90ed0f692
+Author: tedyu <yuzhihong@gmail.com>
+Date:   Thu Dec 24 07:00:22 2015 -0800
+
+    HBASE-15032 hbase shell scan filter string assumes UTF-8 encoding (huaxiang sun)
+    
+          Reason: Bug
+          Author: Huaxiang Sun
+          Ref: CDH-35930
+    
+    Change-Id: I2fe9b1a433c1894da8057b9b61061c7070e481a5
+
+commit c8a3b74b619b273cafabe5c8075a120804e8db0f
+Author: Andrew Purtell <apurtell@apache.org>
+Date:   Fri Dec 4 18:40:48 2015 -0800
+
+    HBASE-14923 VerifyReplication should not mask the exception during result comparison (Vishal Khandelwal)
+    
+    Reason: Bug
+    Author: Vishal Khandelwal
+    Ref: CDH-35763
+    
+    Change-Id: I5aa445272b5a8c6ad7e6d12be6783c2e6d46f3cf
+
+commit 19b012de263e9e227342833a2db934572cd8334d
+Author: Ashu Pachauri <ashu210890@gmail.com>
+Date:   Thu Oct 15 11:58:33 2015 -0700
+
+    HBASE-14621 ReplicationLogCleaner stuck on RS crash.
+    
+    Reason: Bug
+    Author: Ashu Pachauri
+    Ref: CDH-35763
+    
+    Change-Id: I1b21b2eda3f5cc3c87cd21715a8e9db9b596b607
+
+commit c32345ee2ac05cb2425bd57bb72117feeb6320fe
+Author: stack <stack@duboce.net>
+Date:   Tue Dec 29 13:19:58 2015 -0800
+
+    HBASE-15031 Fix merge of MVCC and SequenceID performance regression in branch-1.0
+    
+    Reason: Regression
+    Author: Stack
+    Ref: CDH-34623 HBase Increment performance regression: Customer has captured stacks that show that they are hitting HBASE-14460
+    
+    Change-Id: I26f2cac25a09374427a68c0e95d0e70b2733b6b0
+
+commit ce492f1483da2e6af819c56664a4d4ab68da1661
+Author: stack <stack@duboce.net>
+Date:   Tue Dec 29 10:46:02 2015 -0800
+
+    HBASE-14205 RegionCoprocessorHost System.nanoTime() performance bottleneck
+    Reason: Partner request; ngdata
+    Author: Andrew Purtell
+    Ref: CDH-35116
+    
+    Change-Id: I708e46097b2fdffaff350219327e5698a807fef3
+
+commit 5424468b77b9409a5f776d4e332515278ecd0428
+Author: Jonathan M Hsieh <jon@cloudera.com>
+Date:   Thu Dec 24 13:26:00 2015 -0800
+
+    HBASE-15035 bulkloading hfiles with tags that require splits do not preserve tags
+    
+    Change-Id: If7295c3af091bb9a69fe9b02ca21c79bdbed2ddf
+    Reason: Bug
+    Author: Jonathan Hsieh
+    Ref: CDH-35532
+
 commit f54dc0442339efeceffa5155102ce73d3be71eac
 Author: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date:   Mon Nov 23 16:05:05 2015 -0800

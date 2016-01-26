@@ -1,7 +1,7 @@
 From 2a3734764d0222092bfbaa272d15683b0f6f1a42 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Mon, 13 Apr 2015 23:21:50 +0100
-Subject: [PATCH 264/286] HBASE-13457 SnapshotExistsException doesn't honor the DoNotRetry
+Subject: [PATCH 264/296] HBASE-13457 SnapshotExistsException doesn't honor the DoNotRetry
 
 Reason: Bug
 Author: Matteo Bertozzi

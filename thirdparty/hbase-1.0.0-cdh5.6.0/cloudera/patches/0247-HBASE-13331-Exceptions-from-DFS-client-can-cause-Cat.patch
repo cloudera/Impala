@@ -1,7 +1,7 @@
 From a1ac3672f88646ead20cfbb6b976b578ef829293 Mon Sep 17 00:00:00 2001
 From: Elliott Clark <eclark@apache.org>
 Date: Tue, 24 Mar 2015 13:42:29 -0700
-Subject: [PATCH 247/286] HBASE-13331 Exceptions from DFS client can cause CatalogJanitor to delete referenced files
+Subject: [PATCH 247/296] HBASE-13331 Exceptions from DFS client can cause CatalogJanitor to delete referenced files
 
 Summary:
 CatalogJanitor#checkDaughterInFs assumes that there are no references

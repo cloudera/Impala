@@ -1,7 +1,7 @@
 From a52055c28a640280e92eff0afd111f9905558bf9 Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Sat, 16 May 2015 16:45:49 -0700
-Subject: [PATCH 236/286] HBASE-13531 Flakey failure of TestAcidGuarantees#testMobScanAtomicity (Jingcheng Du)
+Subject: [PATCH 236/296] HBASE-13531 Flakey failure of TestAcidGuarantees#testMobScanAtomicity (Jingcheng Du)
 
 rd point was not properly handled in the mob scanner case.
 

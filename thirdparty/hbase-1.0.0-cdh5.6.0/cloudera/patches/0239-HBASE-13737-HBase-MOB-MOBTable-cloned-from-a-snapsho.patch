@@ -1,7 +1,7 @@
 From beedeeb959d111705e44cd9c32343a008bca38ea Mon Sep 17 00:00:00 2001
 From: anoopsjohn <anoopsamjohn@gmail.com>
 Date: Tue, 16 Jun 2015 15:02:50 +0530
-Subject: [PATCH 239/286] HBASE-13737 [HBase MOB] MOBTable cloned from a snapshot leads to data loss, when that actual snapshot and main table is deleted. (Ashutosh Jindal)
+Subject: [PATCH 239/296] HBASE-13737 [HBase MOB] MOBTable cloned from a snapshot leads to data loss, when that actual snapshot and main table is deleted. (Ashutosh Jindal)
 
 Conflicts:
 	hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestMobSnapshotCloneIndependence.java

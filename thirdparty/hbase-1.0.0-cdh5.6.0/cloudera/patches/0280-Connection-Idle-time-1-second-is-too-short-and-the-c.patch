@@ -1,7 +1,7 @@
 From 5a05d82a91609fd49aff8e91b7a60e1cb1c01b3c Mon Sep 17 00:00:00 2001
 From: Huaxiang Sun <hsun@cloudera.com>
 Date: Mon, 16 Nov 2015 10:36:44 -0800
-Subject: [PATCH 280/286] Connection Idle time 1 second is too short and the connection is closed too quickly by the ChoreService.
+Subject: [PATCH 280/296] Connection Idle time 1 second is too short and the connection is closed too quickly by the ChoreService.
  Increase it to the default (10 minutes) for testAll(). The patch for HBASE-14533 is not committed to upstream
  yet, so this fix cannot be mapped to upstream.
 

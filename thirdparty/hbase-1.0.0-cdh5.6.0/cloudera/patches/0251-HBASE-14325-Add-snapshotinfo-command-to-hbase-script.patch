@@ -1,7 +1,7 @@
 From 497f78600227904516c09f83734dbaa6ea0f036e Mon Sep 17 00:00:00 2001
 From: Samir Ahmic <samir@personal.com>
 Date: Thu, 27 Aug 2015 15:38:13 +0200
-Subject: [PATCH 251/286] HBASE-14325 Add snapshotinfo command to hbase script.
+Subject: [PATCH 251/296] HBASE-14325 Add snapshotinfo command to hbase script.
 
     Reason: Improvement
     Author: Samir Ahmic

@@ -1,7 +1,7 @@
 From 4f9ce499602ac4a2f14214de139bb8f040465c3a Mon Sep 17 00:00:00 2001
 From: Lars Hofhansl <larsh@apache.org>
 Date: Thu, 21 May 2015 21:56:21 -0700
-Subject: [PATCH 275/286] HBASE-13703 ReplicateContext should not be a member of ReplicationSource.
+Subject: [PATCH 275/296] HBASE-13703 ReplicateContext should not be a member of ReplicationSource.
 
 Change-Id: I31955867e47e6d7c2145aa3c84d4420c2941ee29
 Reason: Bug

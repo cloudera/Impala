@@ -1,0 +1,32 @@
+From 486b9d3928ca46e50a2a524a946da6833afc5c86 Mon Sep 17 00:00:00 2001
+From: Abhishek Kumar <abhishek.kr@huawei.com>
+Date: Mon, 25 May 2015 10:37:13 +0530
+Subject: [PATCH 293/296] HBASE-13746 list_replicated_tables command is not listing table in hbase shell
+
+Signed-off-by: Andrew Purtell <apurtell@apache.org>
+
+Reason: Bug
+Author: Abhishek Kumar
+Ref: CDH-36112
+
+Change-Id: Ic69269a119b5158d8fcf93c42f990540be3c51ce
+---
+ .../src/main/ruby/hbase/replication_admin.rb       |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/hbase-shell/src/main/ruby/hbase/replication_admin.rb b/hbase-shell/src/main/ruby/hbase/replication_admin.rb
+index b2ca8e1..617073b 100644
+--- a/hbase-shell/src/main/ruby/hbase/replication_admin.rb
++++ b/hbase-shell/src/main/ruby/hbase/replication_admin.rb
+@@ -108,7 +108,7 @@ module Hbase
+     def list_replicated_tables(regex = ".*")
+       pattern = java.util.regex.Pattern.compile(regex)
+       list = @replication_admin.listReplicated()
+-      list.select {|s| pattern.match(s.get(ReplicationAdmin.TNAME))}
++      list.select {|s| pattern.match(s.get(ReplicationAdmin::TNAME))}
+     end
+ 
+     #----------------------------------------------------------------------------------------------
+-- 
+1.7.0.4
+

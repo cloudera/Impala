@@ -1,7 +1,7 @@
 From f54dc0442339efeceffa5155102ce73d3be71eac Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Mon, 23 Nov 2015 16:05:05 -0800
-Subject: [PATCH 286/286] HBASE-14799 Commons-collections object deserialization remote command execution vulnerability (addendum)
+Subject: [PATCH 286/296] HBASE-14799 Commons-collections object deserialization remote command execution vulnerability (addendum)
 
 Reason: Security
 Author: Andrew Purtell

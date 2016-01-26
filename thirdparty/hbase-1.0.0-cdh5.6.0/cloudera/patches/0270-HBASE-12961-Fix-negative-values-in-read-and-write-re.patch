@@ -1,7 +1,7 @@
 From 68341e229656228e58f9785ab91e6f8dc8d44e7c Mon Sep 17 00:00:00 2001
 From: Victoria Dudin <vdudin@vdudin-mbp.local>
 Date: Tue, 3 Feb 2015 09:47:46 -0800
-Subject: [PATCH 270/286] HBASE-12961 Fix negative values in read and write region server metrics.
+Subject: [PATCH 270/296] HBASE-12961 Fix negative values in read and write region server metrics.
 
 Reason: Bug
 Author: Victoria

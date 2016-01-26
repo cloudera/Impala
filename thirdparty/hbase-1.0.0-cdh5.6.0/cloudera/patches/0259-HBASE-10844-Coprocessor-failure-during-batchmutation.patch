@@ -1,7 +1,7 @@
 From 7ce4a2e66bb2f7a209526e06300ff1a59a665edb Mon Sep 17 00:00:00 2001
 From: Nick Dimiduk <ndimiduk@apache.org>
 Date: Thu, 13 Aug 2015 16:19:26 -0700
-Subject: [PATCH 259/286] HBASE-10844 Coprocessor failure during batchmutation leaves the memstore datastructs in an inconsistent state
+Subject: [PATCH 259/296] HBASE-10844 Coprocessor failure during batchmutation leaves the memstore datastructs in an inconsistent state
 
 Reason: Supportability
 Author: Nick Dimiduk

@@ -45,9 +45,9 @@ From: 'Apache Software Foundation' (http://www.apache.org/)
     License: The Apache Software License, Version 2.0  (http://www.apache.org/licenses/LICENSE-2.0.txt)
 
 From: 'Cloudera' (http://www.cloudera.com)
-  - Apache Avro (http://avro.apache.org) org.apache.avro:avro:bundle:1.7.6-cdh5.6.1-SNAPSHOT
+  - Apache Avro (http://avro.apache.org) org.apache.avro:avro:bundle:1.7.6-cdh5.6.0
     License: The Apache Software License, Version 2.0  (http://www.apache.org/licenses/LICENSE-2.0.txt)
-  - zookeeper  org.apache.zookeeper:zookeeper:pom:3.4.5-cdh5.6.1-SNAPSHOT
+  - zookeeper  org.apache.zookeeper:zookeeper:pom:3.4.5-cdh5.6.0
     License: The Apache Software License, Version 2.0  (http://www.apache.org/licenses/LICENSE-2.0.txt)
 
 From: 'FasterXML' (http://fasterxml.com)

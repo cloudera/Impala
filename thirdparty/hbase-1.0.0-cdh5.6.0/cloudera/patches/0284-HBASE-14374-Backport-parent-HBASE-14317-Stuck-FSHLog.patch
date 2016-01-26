@@ -1,7 +1,7 @@
 From 743becbe71e32e9a87b96988e45ecfb65fa3fe40 Mon Sep 17 00:00:00 2001
 From: stack <stack@duboce.net>
 Date: Mon, 23 Nov 2015 15:57:21 -0800
-Subject: [PATCH 284/286]     HBASE-14374 Backport parent 'HBASE-14317 Stuck FSHLog' issue to 1.1
+Subject: [PATCH 284/296]     HBASE-14374 Backport parent 'HBASE-14317 Stuck FSHLog' issue to 1.1
      Also includes HBASE-14807 TestWALLockup is flakey
 
       Reason: Bug

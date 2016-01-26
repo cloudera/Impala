@@ -1,7 +1,7 @@
 From e0dce654942d0056b137485b281a9b0f26665482 Mon Sep 17 00:00:00 2001
 From: Andrew Purtell <apurtell@apache.org>
 Date: Wed, 18 Feb 2015 08:08:47 -0800
-Subject: [PATCH 257/286] HBASE-12102 Duplicate keys in HBase.RegionServer metrics JSON
+Subject: [PATCH 257/296] HBASE-12102 Duplicate keys in HBase.RegionServer metrics JSON
 
 Reason: Bug
 Author: Ravi Kishore Valeti

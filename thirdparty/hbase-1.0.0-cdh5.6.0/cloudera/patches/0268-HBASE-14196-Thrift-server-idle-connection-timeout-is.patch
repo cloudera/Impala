@@ -1,7 +1,7 @@
 From 517d79318ad9a6629c8962375ced2586a31d06b7 Mon Sep 17 00:00:00 2001
 From: Andrew Purtell <apurtell@apache.org>
 Date: Wed, 12 Aug 2015 16:32:37 -0700
-Subject: [PATCH 268/286] HBASE-14196 Thrift server idle connection timeout issue (Vladimir Rodionov)
+Subject: [PATCH 268/296] HBASE-14196 Thrift server idle connection timeout issue (Vladimir Rodionov)
  HBASE-14533 Thrift client gets "AsyncProcess: Failed to get region location .... closed"
 
 The first issue above fixes CDH-32365. The second adds a test against regression.

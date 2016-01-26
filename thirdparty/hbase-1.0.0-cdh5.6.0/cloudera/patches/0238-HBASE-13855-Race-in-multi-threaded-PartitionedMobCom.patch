@@ -1,7 +1,7 @@
 From f414072d73f11cc6d5015b40b11ec4b9a86fa5f9 Mon Sep 17 00:00:00 2001
 From: anoopsjohn <anoopsamjohn@gmail.com>
 Date: Thu, 11 Jun 2015 15:32:19 +0530
-Subject: [PATCH 238/286] HBASE-13855 Race in multi threaded PartitionedMobCompactor causes NPE. (Jingcheng)
+Subject: [PATCH 238/296] HBASE-13855 Race in multi threaded PartitionedMobCompactor causes NPE. (Jingcheng)
 
 Reason: Bugfix
 Author: Jingcheng Du

@@ -1,7 +1,7 @@
 From 8b792f156c9c1ece847fca5c37cba8043ce0edae Mon Sep 17 00:00:00 2001
 From: Andrew Purtell <apurtell@apache.org>
 Date: Tue, 17 Nov 2015 11:35:32 -0800
-Subject: [PATCH 285/286] HBASE-14799 Commons-collections object deserialization remote command execution vulnerability
+Subject: [PATCH 285/296] HBASE-14799 Commons-collections object deserialization remote command execution vulnerability
 
 Reason: Security
 Author: Andrew Purtell

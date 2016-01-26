@@ -1,7 +1,7 @@
 From e1dc70560293a947c1a857a3f78d9661a1515d10 Mon Sep 17 00:00:00 2001
 From: Srikanth Srungarapu <ssrungarapu@cloudera.com>
 Date: Tue, 15 Sep 2015 11:02:00 -0700
-Subject: [PATCH 227/286] HBASE-14394 Properly close the connection after reading records from table.
+Subject: [PATCH 227/296] HBASE-14394 Properly close the connection after reading records from table.
 
 Reason: Bug
 Author: Srikanth Srungarapu

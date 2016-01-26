@@ -1,7 +1,7 @@
 From a86dc5ac64978d0c58741f68814f20a9cb7acd4b Mon Sep 17 00:00:00 2001
 From: Enis Soztutar <enis@apache.org>
 Date: Mon, 12 Oct 2015 20:37:34 -0700
-Subject: [PATCH 274/286] HBASE-14501 NPE in replication with TDE
+Subject: [PATCH 274/296] HBASE-14501 NPE in replication with TDE
 
 Reason: Bug
 Author: Enis Soztutar

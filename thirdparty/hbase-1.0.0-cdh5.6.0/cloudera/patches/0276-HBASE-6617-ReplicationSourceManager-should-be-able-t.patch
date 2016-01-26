@@ -1,7 +1,7 @@
 From aa025a24979f8e69deabb9d112d68c2fa38992bb Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Fri, 11 Sep 2015 09:30:58 -0700
-Subject: [PATCH 276/286] HBASE-6617 ReplicationSourceManager should be able to track multiple WAL paths (Yu Li)
+Subject: [PATCH 276/296] HBASE-6617 ReplicationSourceManager should be able to track multiple WAL paths (Yu Li)
 
 Reason: Bug
 Author: Yu Li

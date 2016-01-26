@@ -1,7 +1,7 @@
 From 56fe7c86ea28bb656894106a1d59e4a3fe9b4d53 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Mon, 2 Mar 2015 19:29:48 -0800
-Subject: [PATCH 279/286] HBASE-13134 mutateRow and checkAndMutate apis don't throw region level exceptions (Francis Liu)
+Subject: [PATCH 279/296] HBASE-13134 mutateRow and checkAndMutate apis don't throw region level exceptions (Francis Liu)
 
 Reason: Bug
 Author: Francis Liu

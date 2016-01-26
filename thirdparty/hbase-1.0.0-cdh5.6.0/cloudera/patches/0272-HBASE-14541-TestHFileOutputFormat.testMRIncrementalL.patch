@@ -1,7 +1,7 @@
 From 43473086fc1b085658eb4ce91dbd4c9fc933cd12 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Mon, 19 Oct 2015 09:22:59 -0700
-Subject: [PATCH 272/286] HBASE-14541 TestHFileOutputFormat.testMRIncrementalLoadWithSplit failed due to too many splits and few retries
+Subject: [PATCH 272/296] HBASE-14541 TestHFileOutputFormat.testMRIncrementalLoadWithSplit failed due to too many splits and few retries
 
 Reason: flaky
 Author: Matteo Bertozzi
