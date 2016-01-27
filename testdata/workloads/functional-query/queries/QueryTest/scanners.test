@@ -52,20 +52,16 @@ INT, BOOLEAN, INT
 set num_scanner_threads=1
 ====
 ---- QUERY
-set mem_limit=5g
+set mem_limit=1g
 ====
 ---- QUERY
 # IMPALA-2473: Highly selective scan query with large row size.
 # Should not OOM given single scanner thread and sufficient memory limit.
 select c.*
-from tpch_parquet.customer c, tpch_parquet.orders o, tpch_parquet.lineitem
-where c_phone='20-968-632-1388' and l_partkey = 127499 order by l_partkey desc, l_suppkey desc, l_linenumber desc, c_custkey
-limit 5
+from tpch_parquet.customer c join tpch_parquet.orders o on c.c_custkey=o.o_custkey join tpch_parquet.lineitem
+l on o.o_orderkey = l.l_orderkey where c_phone='20-968-632-1388' and l_partkey = 127499
+order by l_partkey desc, l_suppkey desc, l_linenumber desc, c_custkey limit 5
 ---- RESULTS
-53722,'Customer#000053722','p2hQ7009dQSEuRdE31HtjVv9idN2rXBHdTx4JRk',10,'20-968-632-1388',4153.75,'HOUSEHOLD','l foxes are ideas. final deposits boost blithely. carefully bo'
-53722,'Customer#000053722','p2hQ7009dQSEuRdE31HtjVv9idN2rXBHdTx4JRk',10,'20-968-632-1388',4153.75,'HOUSEHOLD','l foxes are ideas. final deposits boost blithely. carefully bo'
-53722,'Customer#000053722','p2hQ7009dQSEuRdE31HtjVv9idN2rXBHdTx4JRk',10,'20-968-632-1388',4153.75,'HOUSEHOLD','l foxes are ideas. final deposits boost blithely. carefully bo'
-53722,'Customer#000053722','p2hQ7009dQSEuRdE31HtjVv9idN2rXBHdTx4JRk',10,'20-968-632-1388',4153.75,'HOUSEHOLD','l foxes are ideas. final deposits boost blithely. carefully bo'
 53722,'Customer#000053722','p2hQ7009dQSEuRdE31HtjVv9idN2rXBHdTx4JRk',10,'20-968-632-1388',4153.75,'HOUSEHOLD','l foxes are ideas. final deposits boost blithely. carefully bo'
 ---- TYPES
 bigint,string,string,smallint,string,decimal,string,string
