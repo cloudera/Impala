@@ -31,8 +31,6 @@ From: 'an unknown organization'
 From: 'Apache Software Foundation' (http://www.apache.org)
   - Apache Log4j (http://logging.apache.org/log4j/1.2/) log4j:log4j:bundle:1.2.17
     License: The Apache Software License, Version 2.0  (http://www.apache.org/licenses/LICENSE-2.0.txt)
-  - Netty Cloudera Dependencies  org.apache.hadoop:cloudera-netty-all:jar:2.6.0-cdh5.7.0-SNAPSHOT
-    License: The Apache Software License, Version 2.0  (http://www.apache.org/licenses/LICENSE-2.0.txt)
   - Apache Hadoop Annotations  org.apache.hadoop:hadoop-annotations:jar:2.6.0-cdh5.7.0-SNAPSHOT
     License: The Apache Software License, Version 2.0  (http://www.apache.org/licenses/LICENSE-2.0.txt)
   - Apache Hadoop Auth  org.apache.hadoop:hadoop-auth:jar:2.6.0-cdh5.7.0-SNAPSHOT
@@ -115,8 +113,8 @@ From: 'The Apache Software Foundation' (http://www.apache.org/)
     License: The Apache Software License, Version 2.0  (http://www.apache.org/licenses/LICENSE-2.0.txt)
   - Commons Codec (http://commons.apache.org/codec/) commons-codec:commons-codec:jar:1.4
     License: The Apache Software License, Version 2.0  (http://www.apache.org/licenses/LICENSE-2.0.txt)
-  - Commons Collections (http://commons.apache.org/collections/) commons-collections:commons-collections:jar:3.2.1
-    License: The Apache Software License, Version 2.0  (http://www.apache.org/licenses/LICENSE-2.0.txt)
+  - Apache Commons Collections (http://commons.apache.org/collections/) commons-collections:commons-collections:jar:3.2.2
+    License: Apache License, Version 2.0  (http://www.apache.org/licenses/LICENSE-2.0.txt)
   - Commons Daemon (http://commons.apache.org/daemon/) commons-daemon:commons-daemon:jar:1.0.13
     License: The Apache Software License, Version 2.0  (http://www.apache.org/licenses/LICENSE-2.0.txt)
   - Commons IO (http://commons.apache.org/io/) commons-io:commons-io:jar:2.4
@@ -145,7 +143,7 @@ From: 'The Apache Software Foundation' (http://www.apache.org/)
     License: The Apache Software License, Version 2.0  (http://www.apache.org/licenses/LICENSE-2.0.txt)
   - ApacheDS Protocol Kerberos Codec (http://directory.apache.org/apacheds/1.5/apacheds-kerberos-codec) org.apache.directory.server:apacheds-kerberos-codec:bundle:2.0.0-M15
     License: The Apache Software License, Version 2.0  (http://www.apache.org/licenses/LICENSE-2.0.txt)
-  - htrace-core (http://incubator.apache.org/projects/htrace.html) org.apache.htrace:htrace-core:jar:3.2.0-incubating
+  - htrace-core4 (http://incubator.apache.org/projects/htrace.html) org.apache.htrace:htrace-core4:jar:4.0.1-incubating
     License: The Apache Software License, Version 2.0  (http://www.apache.org/licenses/LICENSE-2.0.txt)
   - HttpClient (http://hc.apache.org/httpcomponents-client) org.apache.httpcomponents:httpclient:jar:4.2.5
     License: Apache License  (LICENSE.txt)

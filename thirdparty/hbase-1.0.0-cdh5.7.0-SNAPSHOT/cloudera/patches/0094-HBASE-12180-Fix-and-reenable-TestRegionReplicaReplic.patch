@@ -1,14 +1,15 @@
 From 6983f723ec8dd6f1bf0696b2e006f7d8c0755d99 Mon Sep 17 00:00:00 2001
 From: Enis Soztutar <enis@apache.org>
 Date: Thu, 5 Mar 2015 14:59:38 -0800
-Subject: [PATCH 094/226] HBASE-12180 Fix and reenable TestRegionReplicaReplicationEndpoint
+Subject: [PATCH 094/295] HBASE-12180 Fix and reenable
+ TestRegionReplicaReplicationEndpoint
 
 Reason: Task
 Author: Enis Soztutar
 Ref: CDH-16914
 ---
  .../TestRegionReplicaReplicationEndpoint.java      |   49 ++++++++++----------
- 1 files changed, 25 insertions(+), 24 deletions(-)
+ 1 file changed, 25 insertions(+), 24 deletions(-)
 
 diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/replication/regionserver/TestRegionReplicaReplicationEndpoint.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/replication/regionserver/TestRegionReplicaReplicationEndpoint.java
 index 76945d7..a89d4f4 100644
@@ -157,5 +158,5 @@ index 76945d7..a89d4f4 100644
        HTU.deleteTableIfAny(toBeDisabledTable);
        connection.close();
 -- 
-1.7.0.4
+1.7.9.5
 

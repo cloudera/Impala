@@ -1,7 +1,7 @@
 From 2a408d98c54b0feb4bc990dc23f5f92223f3e8fa Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Thu, 18 Sep 2014 01:51:15 +0100
-Subject: [PATCH 017/226] HBASE-11598 Add simple rpc throttling
+Subject: [PATCH 017/295] HBASE-11598 Add simple rpc throttling
 
 Reason: New Feature
 Author: Matteo Bertozzi
@@ -29,7 +29,7 @@ Ref: CDH-20515
  .../java/org/apache/hadoop/hbase/util/Sleeper.java |    7 +
  hbase-protocol/pom.xml                             |    1 +
  .../hbase/protobuf/generated/HBaseProtos.java      |  134 +-
- .../hbase/protobuf/generated/MasterProtos.java     | 2272 ++++++++++-
+ .../hbase/protobuf/generated/MasterProtos.java     | 2272 +++++++++-
  .../hbase/protobuf/generated/QuotaProtos.java      | 4378 ++++++++++++++++++++
  hbase-protocol/src/main/protobuf/HBase.proto       |   10 +
  hbase-protocol/src/main/protobuf/Master.proto      |   18 +
@@ -14848,5 +14848,5 @@ index 0000000..40e8a10
 +  end
 +end
 -- 
-1.7.0.4
+1.7.9.5
 

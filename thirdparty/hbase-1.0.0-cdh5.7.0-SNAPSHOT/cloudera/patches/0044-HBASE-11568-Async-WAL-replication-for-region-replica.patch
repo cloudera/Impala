@@ -1,7 +1,8 @@
 From d90aad0904458d9b35289c4ef2766069c80b5018 Mon Sep 17 00:00:00 2001
 From: Devaraj Das <ddas@apache.org>
 Date: Fri, 6 Feb 2015 07:48:32 -0800
-Subject: [PATCH 044/226] HBASE-11568 Async WAL replication for region replicas (Enis Soztutar)
+Subject: [PATCH 044/295] HBASE-11568 Async WAL replication for region
+ replicas (Enis Soztutar)
 
 Reason: Task
 Author: Devaraj Das
@@ -17,7 +18,7 @@ Ref: CDH-16914
  .../regionserver/ReplicationSource.java            |    3 +-
  .../hadoop/hbase/util/ServerRegionReplicaUtil.java |   51 ++
  .../org/apache/hadoop/hbase/wal/WALSplitter.java   |  206 +++++---
- .../apache/hadoop/hbase/HBaseTestingUtility.java   |   35 ++-
+ .../apache/hadoop/hbase/HBaseTestingUtility.java   |   35 +-
  .../hbase/regionserver/TestRegionReplicas.java     |   95 +---
  .../regionserver/TestRegionServerNoMaster.java     |   94 ++--
  .../TestRegionReplicaReplicationEndpoint.java      |  345 ++++++++++++
@@ -2728,5 +2729,5 @@ index f6bd2b1..1f07a4c 100644
        WAL.Entry entry = createTestLogEntry(i);
        sink.appendEntry(entry);
 -- 
-1.7.0.4
+1.7.9.5
 

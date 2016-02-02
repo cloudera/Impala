@@ -1,14 +1,15 @@
 From af540a199c99cdf0c80cc32edce3e4388ededc90 Mon Sep 17 00:00:00 2001
 From: Enis Soztutar <enis@apache.org>
 Date: Fri, 17 Apr 2015 18:46:21 -0700
-Subject: [PATCH 161/226] HBASE-13481 Master should respect master (old) DNS/bind related configurations
+Subject: [PATCH 161/295] HBASE-13481 Master should respect master (old)
+ DNS/bind related configurations
 
 Author: Enis Soztutar
 Reason: Backward compatibility
 Ref: CDH-27135
 ---
  .../hadoop/hbase/regionserver/HRegionServer.java   |    5 ++-
- .../hadoop/hbase/regionserver/RSRpcServices.java   |   35 +++++++++++--------
+ .../hadoop/hbase/regionserver/RSRpcServices.java   |   35 +++++++++++---------
  .../compactions/RatioBasedCompactionPolicy.java    |    4 ++-
  3 files changed, 27 insertions(+), 17 deletions(-)
 
@@ -120,5 +121,5 @@ index 0db5c00..5aeff5c 100644
      return compactionSize > comConf.getThrottlePoint();
    }
 -- 
-1.7.0.4
+1.7.9.5
 

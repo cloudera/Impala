@@ -1,13 +1,14 @@
 From 1ad80d11dc9ece23d5e3e5b2a55613334bb1e7c3 Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@cloudera.com>
 Date: Tue, 10 Mar 2015 03:11:55 -0500
-Subject: [PATCH 107/226] CLOUDERA-BUILD improve dependency compatibility in hbase-client and hbase-server
+Subject: [PATCH 107/295] CLOUDERA-BUILD improve dependency compatibility in
+ hbase-client and hbase-server
 
 Ref: CDH-24807
 ---
  hbase-server/pom.xml |    5 +++++
  pom.xml              |   49 ++++++++++++++++++++++++++++++++++++++++++++++++-
- 2 files changed, 53 insertions(+), 1 deletions(-)
+ 2 files changed, 53 insertions(+), 1 deletion(-)
 
 diff --git a/hbase-server/pom.xml b/hbase-server/pom.xml
 index 9381530..7e5e166 100644
@@ -113,5 +114,5 @@ index c8a60aa..712c654 100644
            <dependency>
              <groupId>org.apache.hadoop</groupId>
 -- 
-1.7.0.4
+1.7.9.5
 

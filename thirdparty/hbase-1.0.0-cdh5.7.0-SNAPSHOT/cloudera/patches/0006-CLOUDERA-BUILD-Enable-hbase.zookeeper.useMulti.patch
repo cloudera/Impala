@@ -1,14 +1,14 @@
 From 187f3e7de37f3753785d76ccde0af4011100252f Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@cloudera.com>
 Date: Fri, 3 Oct 2014 16:54:26 -0700
-Subject: [PATCH 006/226] CLOUDERA-BUILD Enable hbase.zookeeper.useMulti
+Subject: [PATCH 006/295] CLOUDERA-BUILD Enable hbase.zookeeper.useMulti
 
 Ref: CDH-22176
 Reason: Backwards compatibility
 Author: Esteban Gutierrez
 ---
  .../org/apache/hadoop/hbase/zookeeper/ZKUtil.java  |    5 ++++-
- 1 files changed, 4 insertions(+), 1 deletions(-)
+ 1 file changed, 4 insertions(+), 1 deletion(-)
 
 diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/zookeeper/ZKUtil.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/zookeeper/ZKUtil.java
 index f76591f..ae78b74 100644
@@ -27,5 +27,5 @@ index f76591f..ae78b74 100644
      if (useMulti) {
        List<Op> zkOps = new LinkedList<Op>();
 -- 
-1.7.0.4
+1.7.9.5
 

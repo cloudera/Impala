@@ -1,7 +1,7 @@
 From 2eadc4e85e5b8c0f6e10975d023dde318a2527a2 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Mon, 24 Aug 2015 16:47:57 -0700
-Subject: [PATCH 217/226] HBASE-8329 Limit compaction speed
+Subject: [PATCH 217/295] HBASE-8329 Limit compaction speed
 
 Reason: New Feature
 Author: Duo Zhang
@@ -11,20 +11,20 @@ Ref: CDH-28012
  .../hbase/regionserver/CompactSplitThread.java     |   47 +++-
  .../hadoop/hbase/regionserver/CompactionTool.java  |    4 +-
  .../hbase/regionserver/DefaultStoreEngine.java     |    8 +-
- .../regionserver/DefaultStoreFileManager.java      |   24 ++-
+ .../regionserver/DefaultStoreFileManager.java      |   24 +-
  .../hadoop/hbase/regionserver/HMobStore.java       |    8 +-
  .../apache/hadoop/hbase/regionserver/HRegion.java  |   24 +-
  .../hadoop/hbase/regionserver/HRegionServer.java   |   14 +
- .../apache/hadoop/hbase/regionserver/HStore.java   |   26 ++-
+ .../apache/hadoop/hbase/regionserver/HStore.java   |   26 +-
  .../hbase/regionserver/RegionServerServices.java   |    8 +
- .../apache/hadoop/hbase/regionserver/Store.java    |   21 ++-
+ .../apache/hadoop/hbase/regionserver/Store.java    |   21 +-
  .../hbase/regionserver/StoreFileManager.java       |    6 +
  .../hbase/regionserver/StripeStoreEngine.java      |    6 +-
  .../hbase/regionserver/StripeStoreFileManager.java |   51 +++-
  .../compactions/CompactionContext.java             |    3 +-
  .../CompactionThroughputController.java            |   52 ++++
- .../CompactionThroughputControllerFactory.java     |   61 ++++
- .../hbase/regionserver/compactions/Compactor.java  |  113 +++++---
+ .../CompactionThroughputControllerFactory.java     |   61 +++++
+ .../hbase/regionserver/compactions/Compactor.java  |  113 ++++----
  .../regionserver/compactions/DefaultCompactor.java |   15 +-
  .../NoLimitCompactionThroughputController.java     |   66 +++++
  ...ressureAwareCompactionThroughputController.java |  263 ++++++++++++++++++
@@ -35,11 +35,11 @@ Ref: CDH-28012
  .../org/apache/hadoop/hbase/client/TestHCM.java    |    1 -
  .../TestRegionObserverScannerOpenHook.java         |    7 +-
  .../hadoop/hbase/master/MockRegionServer.java      |    6 +-
- .../hadoop/hbase/regionserver/TestCompaction.java  |   28 ++-
+ .../hadoop/hbase/regionserver/TestCompaction.java  |   28 +-
  .../TestSplitTransactionOnCluster.java             |    3 +-
  .../hadoop/hbase/regionserver/TestStore.java       |    3 +-
  .../hbase/regionserver/TestStripeCompactor.java    |    9 +-
- .../hbase/regionserver/TestStripeStoreEngine.java  |   28 ++-
+ .../hbase/regionserver/TestStripeStoreEngine.java  |   28 +-
  .../TestCompactionWithThroughputController.java    |  288 ++++++++++++++++++++
  .../compactions/TestStripeCompactionPolicy.java    |   53 ++--
  35 files changed, 1130 insertions(+), 171 deletions(-)
@@ -2319,5 +2319,5 @@ index a4c6620..26581a0 100644
        store.createWriterInTmp(anyLong(), any(Compression.Algorithm.class), anyBoolean(),
          anyBoolean(), anyBoolean())).thenAnswer(writers);
 -- 
-1.7.0.4
+1.7.9.5
 

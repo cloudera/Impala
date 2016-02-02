@@ -1,7 +1,8 @@
 From dbd51f02655a4fb25ffe2d70d57f02a0b0028706 Mon Sep 17 00:00:00 2001
 From: anoopsjohn <anoopsamjohn@gmail.com>
 Date: Sat, 24 Jan 2015 11:37:01 +0530
-Subject: [PATCH 073/226] HBASE-12820 Use table lock instead of MobZookeeper.(Jingcheng Du)
+Subject: [PATCH 073/295] HBASE-12820 Use table lock instead of
+ MobZookeeper.(Jingcheng Du)
 
 Conflicts:
 	hbase-server/src/test/java/org/apache/hadoop/hbase/mob/mapreduce/TestMobSweepMapper.java
@@ -14,13 +15,13 @@ Ref: CDH-20651
  .../org/apache/hadoop/hbase/mob/MobConstants.java  |    1 +
  .../java/org/apache/hadoop/hbase/mob/MobUtils.java |   21 +-
  .../org/apache/hadoop/hbase/mob/MobZookeeper.java  |  270 --------------------
- .../hadoop/hbase/mob/mapreduce/SweepJob.java       |  126 ++++++----
- .../hbase/mob/mapreduce/SweepJobNodeTracker.java   |   56 +++-
+ .../hadoop/hbase/mob/mapreduce/SweepJob.java       |  126 +++++----
+ .../hbase/mob/mapreduce/SweepJobNodeTracker.java   |   56 ++--
  .../hadoop/hbase/mob/mapreduce/SweepMapper.java    |    7 +-
  .../hadoop/hbase/mob/mapreduce/SweepReducer.java   |   13 +-
  .../hadoop/hbase/regionserver/HMobStore.java       |   87 +++----
- .../hbase/mob/mapreduce/TestMobSweepMapper.java    |   78 ++++--
- .../hbase/mob/mapreduce/TestMobSweepReducer.java   |   77 ++++---
+ .../hbase/mob/mapreduce/TestMobSweepMapper.java    |   78 +++---
+ .../hbase/mob/mapreduce/TestMobSweepReducer.java   |   77 +++---
  .../hadoop/hbase/mob/mapreduce/TestMobSweeper.java |    4 +-
  .../hbase/regionserver/TestMobCompaction.java      |   56 ----
  12 files changed, 276 insertions(+), 520 deletions(-)
@@ -1220,5 +1221,5 @@ index 9784b82..29bafc4 100644
    public void testMajorCompactionAfterDelete() throws Exception {
      init(UTIL.getConfiguration(), 100);
 -- 
-1.7.0.4
+1.7.9.5
 

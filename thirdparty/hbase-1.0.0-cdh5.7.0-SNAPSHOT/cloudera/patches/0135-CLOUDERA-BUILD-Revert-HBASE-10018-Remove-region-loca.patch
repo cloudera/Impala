@@ -1,14 +1,15 @@
 From 98296dbce2ff096d29a1c08995de88d65d4cb615 Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@cloudera.com>
 Date: Mon, 20 Apr 2015 20:52:55 -0700
-Subject: [PATCH 135/226] CLOUDERA-BUILD Revert "HBASE-10018 Remove region location prefetching" - ADDENDUM
+Subject: [PATCH 135/295] CLOUDERA-BUILD Revert "HBASE-10018 Remove region
+ location prefetching" - ADDENDUM
 
 Author: Esteban Gutierrez
 Reason: Backward compatibility
 Ref: CDH-27098
 ---
  .../hadoop/hbase/client/ConnectionManager.java     |    5 +++--
- 1 files changed, 3 insertions(+), 2 deletions(-)
+ 1 file changed, 3 insertions(+), 2 deletions(-)
 
 diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ConnectionManager.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ConnectionManager.java
 index e7f26f5..a5f9c61 100644
@@ -41,5 +42,5 @@ index e7f26f5..a5f9c61 100644
              // so it won't interfere.
              metaCache.clearCache(tableName, row);
 -- 
-1.7.0.4
+1.7.9.5
 

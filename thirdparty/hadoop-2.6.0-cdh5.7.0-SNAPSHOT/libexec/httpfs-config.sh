@@ -161,7 +161,7 @@ if [ "${HTTPFS_SSL_KEYSTORE_PASS}" = "" ]; then
   export HTTPFS_SSL_KEYSTORE_PASS=password
   print "Setting HTTPFS_SSL_KEYSTORE_PASS:     ${HTTPFS_SSL_KEYSTORE_PASS}"
 else
-  print "Using   HTTPFS_SSL_KEYSTORE_PASS:     ${HTTPFS_SSL_KEYSTORE_PASS}"
+  print "Using   HTTPFS_SSL_KEYSTORE_PASS:     *REDACTED*"
 fi
 
 if [ "${CATALINA_BASE}" = "" ]; then

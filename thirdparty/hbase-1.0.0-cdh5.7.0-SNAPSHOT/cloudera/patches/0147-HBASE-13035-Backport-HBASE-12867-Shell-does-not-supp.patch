@@ -1,7 +1,8 @@
 From 1e87ab710609f5ca0e5dd30cf903a28b1d16871c Mon Sep 17 00:00:00 2001
 From: Andrew Purtell <apurtell@apache.org>
 Date: Thu, 14 May 2015 12:37:42 -0700
-Subject: [PATCH 147/226] HBASE-13035 Backport HBASE-12867 Shell does not support custom replication endpoint specification
+Subject: [PATCH 147/295] HBASE-13035 Backport HBASE-12867 Shell does not
+ support custom replication endpoint specification
 
 Conflicts:
 	hbase-shell/src/main/ruby/hbase.rb
@@ -11,8 +12,8 @@ Author: Andrew Purtell
 Ref: CDH-27859
 ---
  hbase-shell/src/main/ruby/hbase.rb                 |    5 +
- .../src/main/ruby/hbase/replication_admin.rb       |   69 +++++++-
- .../src/main/ruby/shell/commands/add_peer.rb       |   38 ++++-
+ .../src/main/ruby/hbase/replication_admin.rb       |   69 ++++++-
+ .../src/main/ruby/shell/commands/add_peer.rb       |   38 +++-
  .../src/test/ruby/hbase/replication_admin_test.rb  |  191 ++++++++++++++++++++
  hbase-shell/src/test/ruby/test_helper.rb           |    4 +
  5 files changed, 296 insertions(+), 11 deletions(-)
@@ -403,5 +404,5 @@ index 5dfafc5..e2ab921 100644
        # Create the table if needed
        unless admin.exists?(name)
 -- 
-1.7.0.4
+1.7.9.5
 

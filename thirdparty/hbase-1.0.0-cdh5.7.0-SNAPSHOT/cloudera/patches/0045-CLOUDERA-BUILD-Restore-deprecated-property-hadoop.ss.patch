@@ -1,13 +1,14 @@
 From 248c98bcffc9a22f8bb3934f49889f6fc4325b09 Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@cloudera.com>
 Date: Tue, 10 Feb 2015 15:51:40 -0800
-Subject: [PATCH 045/226] CLOUDERA-BUILD Restore deprecated property hadoop.ssl.enabled
+Subject: [PATCH 045/295] CLOUDERA-BUILD Restore deprecated property
+ hadoop.ssl.enabled
 
 Author: Esteban Gutierrez
 Reason: Product Requirement (Compatibility)
 Ref: CDH-25049
 ---
- .../org/apache/hadoop/hbase/http/HttpConfig.java   |    6 ++--
+ .../org/apache/hadoop/hbase/http/HttpConfig.java   |    6 ++---
  .../hadoop/hbase/http/ServerConfigurationKeys.java |    1 +
  .../hadoop/hbase/TestHBaseTestingUtility.java      |   25 ++++++++++++++++++++
  3 files changed, 29 insertions(+), 3 deletions(-)
@@ -78,5 +79,5 @@ index 84ee963..de3c6f5 100644
     *  Test that we can start and stop multiple time a cluster
     *   with the same HBaseTestingUtility.
 -- 
-1.7.0.4
+1.7.9.5
 

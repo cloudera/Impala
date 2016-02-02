@@ -1,7 +1,8 @@
 From 307e236e2691b351cb698de7d171c23e8cc67101 Mon Sep 17 00:00:00 2001
 From: Srikanth Srungarapu <ssrungarapu@cloudera.com>
 Date: Wed, 9 Sep 2015 23:39:05 -0700
-Subject: [PATCH 225/226] HBASE-14385 Close the sockets that is missing in connection closure.
+Subject: [PATCH 225/295] HBASE-14385 Close the sockets that is missing in
+ connection closure.
 
 Reason: Bug
 Author: Srikanth Srungarapu
@@ -9,7 +10,7 @@ Ref: CDH-31545
 ---
  .../org/apache/hadoop/hbase/ipc/RpcClientImpl.java |    9 ++
  .../hadoop/hbase/ipc/TestRpcClientLeaks.java       |  115 ++++++++++++++++++++
- 2 files changed, 124 insertions(+), 0 deletions(-)
+ 2 files changed, 124 insertions(+)
  create mode 100644 hbase-server/src/test/java/org/apache/hadoop/hbase/ipc/TestRpcClientLeaks.java
 
 diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/ipc/RpcClientImpl.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/ipc/RpcClientImpl.java
@@ -154,5 +155,5 @@ index 0000000..2965055
 +}
 +
 -- 
-1.7.0.4
+1.7.9.5
 

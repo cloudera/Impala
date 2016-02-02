@@ -1,7 +1,8 @@
 From 6e09929c160510027c64b083d13950de64af9adf Mon Sep 17 00:00:00 2001
 From: stack <stack@apache.org>
 Date: Wed, 6 Aug 2014 15:56:31 -0700
-Subject: [PATCH 015/226] HBASE-10205 ConcurrentModificationException in BucketAllocator (Arjen Roodselaar and Chunhui Shen)
+Subject: [PATCH 015/295] HBASE-10205 ConcurrentModificationException in
+ BucketAllocator (Arjen Roodselaar and Chunhui Shen)
 
 ---
  .../hbase/io/hfile/bucket/BucketAllocator.java     |   15 ++++++++-------
@@ -79,5 +80,5 @@ index c094e45..1348edb 100644
        cacheStats.evict();
        freeInProgress = false;
 -- 
-1.7.0.4
+1.7.9.5
 

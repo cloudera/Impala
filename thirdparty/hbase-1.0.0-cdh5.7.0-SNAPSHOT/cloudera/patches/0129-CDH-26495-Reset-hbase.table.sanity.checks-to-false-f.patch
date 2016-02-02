@@ -1,7 +1,8 @@
 From 1b4710fae5fccde850fe59900927741fb95987c9 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Mon, 30 Mar 2015 18:56:20 +0200
-Subject: [PATCH 129/226] CDH-26495 Reset hbase.table.sanity.checks to false for 5.4
+Subject: [PATCH 129/295] CDH-26495 Reset hbase.table.sanity.checks to false
+ for 5.4
 
 Reason: Compatibility
 Author: Matteo Bertozzi
@@ -9,7 +10,7 @@ Ref: CDH-26495
 ---
  hbase-common/src/main/resources/hbase-default.xml  |    5 +++++
  .../org/apache/hadoop/hbase/master/HMaster.java    |    2 +-
- 2 files changed, 6 insertions(+), 1 deletions(-)
+ 2 files changed, 6 insertions(+), 1 deletion(-)
 
 diff --git a/hbase-common/src/main/resources/hbase-default.xml b/hbase-common/src/main/resources/hbase-default.xml
 index 571f1db..bb53267 100644
@@ -39,5 +40,5 @@ index da529a0..f7c36cd 100644
      }
      String tableVal = htd.getConfigurationValue(CONF_KEY);
 -- 
-1.7.0.4
+1.7.9.5
 

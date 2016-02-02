@@ -1,7 +1,8 @@
 From b412334f34ab03ca646bc9a67da087f580c4c7a3 Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@cloudera.com>
 Date: Wed, 13 Aug 2014 11:21:30 -0700
-Subject: [PATCH 008/226] CLOUDERA-BUILD Add a new profile for CDH5 to built against MR1. This is also the default profile.
+Subject: [PATCH 008/295] CLOUDERA-BUILD Add a new profile for CDH5 to built
+ against MR1. This is also the default profile.
 
 Ref: CDH-16257
 Reason: Product Requirement (Compatibility)
@@ -10,14 +11,14 @@ Author: Himanshu Vashishtha, Jimmy Xiang, Elliott Clarke
  .../src/main/assembly/hadoop-two-compat.xml        |   11 ++-
  hbase-client/pom.xml                               |   63 +++++++++++++-
  hbase-common/pom.xml                               |   49 ++++++++++-
- hbase-examples/pom.xml                             |   41 +++++++++-
+ hbase-examples/pom.xml                             |   41 ++++++++-
  hbase-hadoop2-compat/pom.xml                       |   81 +++++++++++++++++
- .../org/apache/hadoop/hbase/mapreduce/JobUtil.java |   86 ++++++++++++++++++-
+ .../org/apache/hadoop/hbase/mapreduce/JobUtil.java |   86 +++++++++++++++++-
  hbase-it/pom.xml                                   |   49 ++++++++++-
- hbase-server/pom.xml                               |   67 ++++++++++++++-
- .../hbase/mapreduce/MapreduceTestingShim.java      |    8 ++-
- hbase-shell/pom.xml                                |   67 ++++++++++++++-
- hbase-testing-util/pom.xml                         |   50 +++++++++++-
+ hbase-server/pom.xml                               |   67 +++++++++++++-
+ .../hbase/mapreduce/MapreduceTestingShim.java      |    8 +-
+ hbase-shell/pom.xml                                |   67 +++++++++++++-
+ hbase-testing-util/pom.xml                         |   50 ++++++++++-
  hbase-thrift/pom.xml                               |   54 +++++++++++-
  pom.xml                                            |   91 +++++++++++++++++++-
  13 files changed, 703 insertions(+), 14 deletions(-)
@@ -856,7 +857,7 @@ index 70837cf..f662895 100644
        profile for building against Hadoop 3.0.x. Activate using:
         mvn -Dhadoop.profile=3.0
 diff --git a/pom.xml b/pom.xml
-index 087e539..6774b51 100644
+index 087e539..6774b516 100644
 --- a/pom.xml
 +++ b/pom.xml
 @@ -1069,6 +1069,24 @@
@@ -975,5 +976,5 @@ index 087e539..6774b51 100644
        profile for building against Hadoop 3.0.0. Activate using:
         mvn -Dhadoop.profile=3.0
 -- 
-1.7.0.4
+1.7.9.5
 

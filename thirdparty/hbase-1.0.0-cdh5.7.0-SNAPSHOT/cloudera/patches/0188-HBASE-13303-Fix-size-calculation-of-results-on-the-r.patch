@@ -1,7 +1,8 @@
 From 999a3bc3525375c928a7d154f09df3bd7979d155 Mon Sep 17 00:00:00 2001
 From: Andrew Purtell <apurtell@apache.org>
 Date: Fri, 20 Mar 2015 17:24:04 -0700
-Subject: [PATCH 188/226] HBASE-13303 Fix size calculation of results on the region server
+Subject: [PATCH 188/295] HBASE-13303 Fix size calculation of results on the
+ region server
 
 Reason: Bug
 Author: Jonathan Lawlor
@@ -229,5 +230,5 @@ index 0000000..1f3a95b
 +}
 \ No newline at end of file
 -- 
-1.7.0.4
+1.7.9.5
 

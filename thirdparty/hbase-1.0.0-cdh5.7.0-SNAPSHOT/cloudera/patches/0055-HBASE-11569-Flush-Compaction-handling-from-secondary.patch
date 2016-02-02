@@ -1,7 +1,8 @@
 From 69c6fd1d4d741cd9eba087f791f4e48c2f2880fa Mon Sep 17 00:00:00 2001
 From: Enis Soztutar <enis@apache.org>
 Date: Fri, 13 Feb 2015 11:08:24 -0800
-Subject: [PATCH 055/226] HBASE-11569 Flush / Compaction handling from secondary region replicas
+Subject: [PATCH 055/295] HBASE-11569 Flush / Compaction handling from
+ secondary region replicas
 
 Reason: Task
 Author: Enis Soztutar
@@ -9,12 +10,12 @@ Ref: CDH-16914
 ---
  .../apache/hadoop/hbase/protobuf/ProtobufUtil.java |    2 +
  .../java/org/apache/hadoop/hbase/KeyValue.java     |   39 +-
- .../hadoop/hbase/protobuf/generated/WALProtos.java |  299 +++++-
+ .../hadoop/hbase/protobuf/generated/WALProtos.java |  299 ++++-
  hbase-protocol/src/main/protobuf/WAL.proto         |    2 +
  .../hadoop/hbase/regionserver/DefaultMemStore.java |   10 +-
- .../apache/hadoop/hbase/regionserver/HRegion.java  |  728 ++++++++++++-
+ .../apache/hadoop/hbase/regionserver/HRegion.java  |  728 +++++++++++-
  .../hbase/regionserver/HRegionFileSystem.java      |   10 +-
- .../apache/hadoop/hbase/regionserver/HStore.java   |  107 ++-
+ .../apache/hadoop/hbase/regionserver/HStore.java   |  107 +-
  .../apache/hadoop/hbase/regionserver/MemStore.java |    6 +
  .../hadoop/hbase/regionserver/RSRpcServices.java   |   20 +-
  .../apache/hadoop/hbase/regionserver/Store.java    |   30 +-
@@ -3652,5 +3653,5 @@ index 3161e8f..9a0c3f2 100644
  
    /**
 -- 
-1.7.0.4
+1.7.9.5
 

@@ -1,7 +1,7 @@
 From 7de3a9d35a32936864b8201a603a6402e4871977 Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Thu, 30 Oct 2014 06:50:13 -0700
-Subject: [PATCH 034/226] HBASE-11683 Metrics for MOB (Jingcheng Du)
+Subject: [PATCH 034/295] HBASE-11683 Metrics for MOB (Jingcheng Du)
 
 Conflicts:
 	hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionServerWrapper.java
@@ -18,9 +18,9 @@ Ref: CDH-22448
  .../regionserver/MetricsRegionServerWrapper.java   |   70 ++++++++++
  .../MetricsRegionServerSourceImpl.java             |   30 +++++
  .../hadoop/hbase/mob/DefaultMobCompactor.java      |   12 ++
- .../hadoop/hbase/mob/DefaultMobStoreFlusher.java   |   11 ++-
- .../apache/hadoop/hbase/mob/MobCacheConfig.java    |    9 ++-
- .../org/apache/hadoop/hbase/mob/MobFileCache.java  |   75 ++++++++++--
+ .../hadoop/hbase/mob/DefaultMobStoreFlusher.java   |   11 +-
+ .../apache/hadoop/hbase/mob/MobCacheConfig.java    |    9 +-
+ .../org/apache/hadoop/hbase/mob/MobFileCache.java  |   75 +++++++++--
  .../hadoop/hbase/regionserver/HMobStore.java       |   81 ++++++++++++
  .../hadoop/hbase/regionserver/HRegionServer.java   |    9 ++
  .../MetricsRegionServerWrapperImpl.java            |  134 ++++++++++++++++++++
@@ -1035,5 +1035,5 @@ index 473946c..f6704ec 100644
 +  }
  }
 -- 
-1.7.0.4
+1.7.9.5
 

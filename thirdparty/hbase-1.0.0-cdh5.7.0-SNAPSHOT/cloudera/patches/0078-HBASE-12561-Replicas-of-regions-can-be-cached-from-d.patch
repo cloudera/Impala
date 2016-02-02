@@ -1,7 +1,8 @@
 From 8460624a09b8dbb2121393987d9b1ae7152e647c Mon Sep 17 00:00:00 2001
 From: Enis Soztutar <enis@apache.org>
 Date: Mon, 23 Feb 2015 11:06:17 -0800
-Subject: [PATCH 078/226] HBASE-12561 Replicas of regions can be cached from different instances of the table in MetaCache
+Subject: [PATCH 078/295] HBASE-12561 Replicas of regions can be cached from
+ different instances of the table in MetaCache
 
 Reason: Task
 Author: Enis Soztutar
@@ -10,8 +11,8 @@ Ref: CDH-16914
  .../org/apache/hadoop/hbase/RegionLocations.java   |   28 ++++++++++
  .../hadoop/hbase/client/RegionReplicaUtil.java     |   43 +++++++++++++++
  .../apache/hadoop/hbase/TestRegionLocations.java   |   57 +++++++++++++++++++-
- .../apache/hadoop/hbase/regionserver/HRegion.java  |    3 +
- .../RegionReplicaReplicationEndpoint.java          |   21 ++++++-
+ .../apache/hadoop/hbase/regionserver/HRegion.java  |    3 ++
+ .../RegionReplicaReplicationEndpoint.java          |   21 ++++++--
  5 files changed, 148 insertions(+), 4 deletions(-)
 
 diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/RegionLocations.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/RegionLocations.java
@@ -314,5 +315,5 @@ index dc4ba8a..84cb8c7 100644
          return null;
        }
 -- 
-1.7.0.4
+1.7.9.5
 

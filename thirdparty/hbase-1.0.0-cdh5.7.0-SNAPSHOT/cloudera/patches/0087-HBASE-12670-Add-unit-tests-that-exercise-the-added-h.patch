@@ -1,14 +1,15 @@
 From 2932e5bf25cddb3e63efcf223ffc18996716f16c Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Tue, 3 Mar 2015 04:47:58 -0800
-Subject: [PATCH 087/226] HBASE-12670 Add unit tests that exercise the added hfilelink link mob paths (Jingcheng Du)
+Subject: [PATCH 087/295] HBASE-12670 Add unit tests that exercise the added
+ hfilelink link mob paths (Jingcheng Du)
 
 Reason: Mob Testing
 Author: Jingcheng Du
 Ref: CDH-23959
 ---
  .../apache/hadoop/hbase/mob/TestMobFileLink.java   |   66 ++++++++++++++++++++
- 1 files changed, 66 insertions(+), 0 deletions(-)
+ 1 file changed, 66 insertions(+)
  create mode 100644 hbase-server/src/test/java/org/apache/hadoop/hbase/mob/TestMobFileLink.java
 
 diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/mob/TestMobFileLink.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/mob/TestMobFileLink.java
@@ -84,5 +85,5 @@ index 0000000..4ddba13
 +  }
 +}
 -- 
-1.7.0.4
+1.7.9.5
 

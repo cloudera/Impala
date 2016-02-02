@@ -1,14 +1,16 @@
 From 8a5e72770c53b19116ec7082dc6a7a35367b9a6c Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Tue, 3 Feb 2015 20:07:23 -0800
-Subject: [PATCH 206/226] HBASE-12957 region_mover#isSuccessfulScan may be extremely slow on region with lots of expired data (Hongyu Bi)
+Subject: [PATCH 206/295] HBASE-12957 region_mover#isSuccessfulScan may be
+ extremely slow on region with lots of expired data
+ (Hongyu Bi)
 
 Reason: Bug
 Author: Hongyu Bi
 Ref: CDH-30248
 ---
  bin/region_mover.rb |    6 ++++--
- 1 files changed, 4 insertions(+), 2 deletions(-)
+ 1 file changed, 4 insertions(+), 2 deletions(-)
 
 diff --git a/bin/region_mover.rb b/bin/region_mover.rb
 index a2d4182..565b0d5 100644
@@ -37,5 +39,5 @@ index a2d4182..565b0d5 100644
      table = HTable.new(admin.getConfiguration(), r.getTableName())
      scanner = table.getScanner(scan)
 -- 
-1.7.0.4
+1.7.9.5
 

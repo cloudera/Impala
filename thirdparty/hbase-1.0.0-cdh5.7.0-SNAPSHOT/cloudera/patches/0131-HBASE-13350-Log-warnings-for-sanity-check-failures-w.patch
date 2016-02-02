@@ -1,13 +1,14 @@
 From 56fb5b24f5df89f381c22c52fe4efc08e37c520d Mon Sep 17 00:00:00 2001
 From: Matt Warhaftig <mwarhaftig@gmail.com>
 Date: Wed, 15 Apr 2015 00:29:34 -0400
-Subject: [PATCH 131/226] HBASE-13350 Log warnings for sanity check failures when checks disabled.
+Subject: [PATCH 131/295] HBASE-13350 Log warnings for sanity check failures
+ when checks disabled.
 
 Reason: Improvement
 Author: Matt Warhaftig
 Ref: CDH-26495
 ---
- .../org/apache/hadoop/hbase/master/HMaster.java    |   64 +++++++++++--------
+ .../org/apache/hadoop/hbase/master/HMaster.java    |   64 +++++++++++---------
  .../hadoop/hbase/client/TestFromClientSide.java    |   41 +++++++++++++
  2 files changed, 78 insertions(+), 27 deletions(-)
 
@@ -226,5 +227,5 @@ index 9220098..06961e5 100644
  
    private void checkTableIsLegal(HTableDescriptor htd) throws IOException {
 -- 
-1.7.0.4
+1.7.9.5
 

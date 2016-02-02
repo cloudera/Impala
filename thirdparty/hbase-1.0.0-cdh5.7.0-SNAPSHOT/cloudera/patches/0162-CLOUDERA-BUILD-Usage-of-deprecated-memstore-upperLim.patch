@@ -1,14 +1,16 @@
 From caa9114b0241936d76e1dc50c33ddb609046532a Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@cloudera.com>
 Date: Thu, 4 Jun 2015 23:20:39 -0700
-Subject: [PATCH 162/226] CLOUDERA-BUILD Usage of deprecated memstore upperLimit and lowerLimit properties should precede newer memstore configuration properties
+Subject: [PATCH 162/295] CLOUDERA-BUILD Usage of deprecated memstore
+ upperLimit and lowerLimit properties should precede
+ newer memstore configuration properties
 
 Author: Esteban Gutierrez
 Reason: Backward compatibility
 Ref: CDH-28002
 ---
  hbase-common/src/main/resources/hbase-default.xml |   16 ++++++++++------
- 1 files changed, 10 insertions(+), 6 deletions(-)
+ 1 file changed, 10 insertions(+), 6 deletions(-)
 
 diff --git a/hbase-common/src/main/resources/hbase-default.xml b/hbase-common/src/main/resources/hbase-default.xml
 index c7f04cd..8e7897d 100644
@@ -45,5 +47,5 @@ index c7f04cd..8e7897d 100644
    <property>
      <name>hbase.regionserver.optionalcacheflushinterval</name>
 -- 
-1.7.0.4
+1.7.9.5
 

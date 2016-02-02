@@ -1,14 +1,14 @@
 From db0718d80e6c76af85c14af12e50675db251f2a7 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Thu, 3 Sep 2015 10:26:27 -0700
-Subject: [PATCH 219/226] HBASE-14344 Add timeouts to TestHttpServerLifecycle
+Subject: [PATCH 219/295] HBASE-14344 Add timeouts to TestHttpServerLifecycle
 
 Reason: Test
 Author: Matteo Bertozzi
 Ref: CDH-31066
 ---
  .../hadoop/hbase/http/TestHttpServerLifecycle.java |   18 +++++++++++-------
- 1 files changed, 11 insertions(+), 7 deletions(-)
+ 1 file changed, 11 insertions(+), 7 deletions(-)
 
 diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/http/TestHttpServerLifecycle.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/http/TestHttpServerLifecycle.java
 index b71db0e..4a2723e 100644
@@ -75,5 +75,5 @@ index b71db0e..4a2723e 100644
      HttpServer server = null;
      String key = "test.attribute.key";
 -- 
-1.7.0.4
+1.7.9.5
 

@@ -1,7 +1,8 @@
 From c17431e351e3ffcf59b65bcc251093b36ea830bd Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Thu, 18 Sep 2014 07:03:21 -0700
-Subject: [PATCH 023/226] HBASE-11646 Handle the MOB in compaction (Jingcheng Du)
+Subject: [PATCH 023/295] HBASE-11646 Handle the MOB in compaction (Jingcheng
+ Du)
 
 Conflicts:
 	hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/compactions/Compactor.java
@@ -15,7 +16,7 @@ Ref: CDH-19420
  .../apache/hadoop/hbase/mob/MobStoreEngine.java    |    8 +
  .../java/org/apache/hadoop/hbase/mob/MobUtils.java |   40 +++
  .../hadoop/hbase/regionserver/HMobStore.java       |    5 +-
- .../hbase/regionserver/compactions/Compactor.java  |   47 +++-
+ .../hbase/regionserver/compactions/Compactor.java  |   47 ++-
  .../regionserver/compactions/DefaultCompactor.java |   22 +-
  .../regionserver/compactions/StripeCompactor.java  |    3 +-
  .../hbase/regionserver/TestMobCompaction.java      |  332 ++++++++++++++++++++
@@ -845,5 +846,5 @@ index 0000000..df056d2
 +  }
 +}
 -- 
-1.7.0.4
+1.7.9.5
 

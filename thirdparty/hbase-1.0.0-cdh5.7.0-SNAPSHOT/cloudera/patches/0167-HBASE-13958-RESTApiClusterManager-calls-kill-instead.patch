@@ -1,14 +1,15 @@
 From d61a1c9ad36c3b6bfa0f9553256b37be1d48bf2b Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Wed, 24 Jun 2015 13:36:15 -0700
-Subject: [PATCH 167/226] HBASE-13958 RESTApiClusterManager calls kill() instead of suspend() and resume()
+Subject: [PATCH 167/295] HBASE-13958 RESTApiClusterManager calls kill()
+ instead of suspend() and resume()
 
 Reason: Bug
 Author: Matteo Bertozzi
 Ref: CDH-28879
 ---
  .../apache/hadoop/hbase/RESTApiClusterManager.java |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ 1 file changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/hbase-it/src/test/java/org/apache/hadoop/hbase/RESTApiClusterManager.java b/hbase-it/src/test/java/org/apache/hadoop/hbase/RESTApiClusterManager.java
 index 060784f..83e7d38 100644
@@ -30,5 +31,5 @@ index 060784f..83e7d38 100644
  
  
 -- 
-1.7.0.4
+1.7.9.5
 

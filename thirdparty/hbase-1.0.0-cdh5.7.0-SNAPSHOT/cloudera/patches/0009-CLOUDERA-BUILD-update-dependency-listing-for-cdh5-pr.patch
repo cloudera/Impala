@@ -1,7 +1,8 @@
 From a622b753ec6962302de71973b72ba9ba596e73f1 Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@apache.org>
 Date: Fri, 23 Jan 2015 09:20:04 -0600
-Subject: [PATCH 009/226] CLOUDERA-BUILD update dependency listing for cdh5 profile.
+Subject: [PATCH 009/295] CLOUDERA-BUILD update dependency listing for cdh5
+ profile.
 
 * move some dep scopes back to compile from test
 * add cdh5 profile where missing
@@ -226,7 +227,7 @@ index 75314f0..9e1b65c 100644
        <build>
          <plugins>
 diff --git a/pom.xml b/pom.xml
-index 6774b51..4c4f102 100644
+index 6774b516..4c4f102 100644
 --- a/pom.xml
 +++ b/pom.xml
 @@ -1616,7 +1616,6 @@
@@ -238,5 +239,5 @@ index 6774b51..4c4f102 100644
        <dependency>
          <groupId>org.mockito</groupId>
 -- 
-1.7.0.4
+1.7.9.5
 

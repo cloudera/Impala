@@ -1,7 +1,9 @@
 From 3d6f5186204cd54e0ecc640838779687b7ed21cd Mon Sep 17 00:00:00 2001
 From: Srikanth Srungarapu <ssrungarapu@cloudera.com>
 Date: Tue, 14 Jul 2015 20:58:31 -0700
-Subject: [PATCH 173/226] CLOUDERA-BUILD Revert back the name and type changes block cache hit percentage that broke operational compatibility
+Subject: [PATCH 173/295] CLOUDERA-BUILD Revert back the name and type changes
+ block cache hit percentage that broke operational
+ compatibility
 
 Reason: Backward Compatibility
 Author: Srikanth Srungarapu
@@ -13,7 +15,7 @@ Ref: CDH-29488
  .../MetricsRegionServerWrapperImpl.java            |    8 ++++++++
  .../MetricsRegionServerWrapperStub.java            |    5 +++++
  .../regionserver/TestMetricsRegionServer.java      |    1 +
- 6 files changed, 24 insertions(+), 0 deletions(-)
+ 6 files changed, 24 insertions(+)
 
 diff --git a/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionServerSource.java b/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionServerSource.java
 index 81ccff0..36b9e19 100644
@@ -106,5 +108,5 @@ index d5beed8..e830194 100644
      HELPER.assertCounter("updatesBlockedTime", 419, serverSource);
    }
 -- 
-1.7.0.4
+1.7.9.5
 

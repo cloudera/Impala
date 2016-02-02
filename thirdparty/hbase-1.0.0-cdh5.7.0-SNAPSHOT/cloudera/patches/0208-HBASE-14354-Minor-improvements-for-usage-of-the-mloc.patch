@@ -1,14 +1,15 @@
 From f8686a84a348b5f60353b29318c284482605123d Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@apache.org>
 Date: Tue, 1 Sep 2015 18:36:39 -0700
-Subject: [PATCH 208/226] HBASE-14354 Minor improvements for usage of the mlock agent
+Subject: [PATCH 208/295] HBASE-14354 Minor improvements for usage of the
+ mlock agent
 
 Reson: Bug
 Author: Esteban Gutierrez
 Ref: CDH-30208
 ---
  bin/hbase-config.sh |   14 ++++++--------
- 1 files changed, 6 insertions(+), 8 deletions(-)
+ 1 file changed, 6 insertions(+), 8 deletions(-)
 
 diff --git a/bin/hbase-config.sh b/bin/hbase-config.sh
 index 2bca169..cf55d53 100644
@@ -44,5 +45,5 @@ index 2bca169..cf55d53 100644
  
  # Newer versions of glibc use an arena memory allocator that causes virtual
 -- 
-1.7.0.4
+1.7.9.5
 

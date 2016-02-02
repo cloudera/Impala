@@ -13,6 +13,54 @@
 #  limitations under the License.
 #
 
+# Attempt to set a value in the catalina.properties file. Insert new
+# attributes; overwrite existing attributes.
+# $1 attribute
+# The rest - value
+# return: 1 on failure, 0 on success
+set_catalina_prop() {
+  ATTR=$1
+  shift
+  VALUE="$@"
+  if [ ! -e "${CATALINA_BASE}" ]; then
+    return 1
+  fi
+  CATALINA_PROPERTIES="${CATALINA_BASE}/conf/catalina.properties"
+  if [ ! -e "${CATALINA_PROPERTIES}" ]; then
+    return 1
+  fi
+  if grep -q "^${ATTR}=" "${CATALINA_PROPERTIES}"; then
+    sed -i "s#${ATTR}=.*#${ATTR}=${VALUE}#" "${CATALINA_PROPERTIES}"
+    if [ $? -eq 1 ]; then
+      # sed somehow fails on the replace; fail so environment is used.
+      return 1
+    fi
+  else
+    echo "${ATTR}=${VALUE}" >> "${CATALINA_PROPERTIES}"
+  fi
+  return 0
+}
+
+# Try to set a value in the catalina.properties file. If that fails, set
+# it in catalina_opts: an environment variable that becomes a command
+# line argument.
+# $1 attribute
+# The rest - the value
+tomcat_set_prop() {
+  ATTR=$1
+  shift
+  VALUE="$@"
+  # If no value, don't set anything.
+  if [ -z "${VALUE}" ]; then
+    return
+  fi
+
+  set_catalina_prop "${ATTR}" "${VALUE}"
+  if [ $? -eq 1 ]; then
+    catalina_opts="${catalina_opts} -D${ATTR}=${VALUE}";
+  fi
+}
+
 # resolve links - $0 may be a softlink
 PRG="${0}"
 
@@ -43,9 +91,11 @@ catalina_opts="${catalina_opts} -Dhttpfs.temp.dir=${HTTPFS_TEMP}";
 catalina_opts="${catalina_opts} -Dhttpfs.admin.port=${HTTPFS_ADMIN_PORT}";
 catalina_opts="${catalina_opts} -Dhttpfs.http.port=${HTTPFS_HTTP_PORT}";
 catalina_opts="${catalina_opts} -Dhttpfs.http.hostname=${HTTPFS_HTTP_HOSTNAME}";
-catalina_opts="${catalina_opts} -Dhttpfs.ssl.enabled=${HTTPFS_SSL_ENABLED}";
-catalina_opts="${catalina_opts} -Dhttpfs.ssl.keystore.file=${HTTPFS_SSL_KEYSTORE_FILE}";
-catalina_opts="${catalina_opts} -Dhttpfs.ssl.keystore.pass=${HTTPFS_SSL_KEYSTORE_PASS}";
+
+# Try to put SSL items inside catalina.properties; on failure fall back to command line.
+tomcat_set_prop httpfs.ssl.enabled "${HTTPFS_SSL_ENABLED}"
+tomcat_set_prop httpfs.ssl.keystore.file "${HTTPFS_SSL_KEYSTORE_FILE}"
+tomcat_set_prop httpfs.ssl.keystore.pass "${HTTPFS_SSL_KEYSTORE_PASS}"
 
 print "Adding to CATALINA_OPTS:     ${catalina_opts}"
 

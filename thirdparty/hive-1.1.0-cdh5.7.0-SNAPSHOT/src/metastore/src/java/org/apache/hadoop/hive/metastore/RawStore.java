@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.SortedSet;
 
 import org.apache.hadoop.conf.Configurable;
+import org.apache.hadoop.hive.common.classification.InterfaceStability;
 import org.apache.hadoop.hive.metastore.api.AggrStats;
 import org.apache.hadoop.hive.metastore.api.ColumnStatistics;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
@@ -51,6 +52,7 @@ import org.apache.hadoop.hive.metastore.api.PrivilegeBag;
 import org.apache.hadoop.hive.metastore.api.Role;
 import org.apache.hadoop.hive.metastore.api.SetPartitionsStatsRequest;
 import org.apache.hadoop.hive.metastore.api.Table;
+import org.apache.hadoop.hive.metastore.api.TableMeta;
 import org.apache.hadoop.hive.metastore.api.Type;
 import org.apache.hadoop.hive.metastore.api.UnknownDBException;
 import org.apache.hadoop.hive.metastore.api.UnknownPartitionException;
@@ -157,6 +159,9 @@ public interface RawStore extends Configurable {
 
   public List<String> getTables(String dbName, String pattern)
       throws MetaException;
+
+  public List<TableMeta> getTableMeta(
+      String dbNames, String tableNames, List<String> tableTypes) throws MetaException;
 
   /**
    * @param dbname
@@ -596,5 +601,22 @@ public interface RawStore extends Configurable {
    * @return
    */
   public CurrentNotificationEventId getCurrentNotificationEventId();
-  
+
+  /**
+   * Gets total number of tables.
+   */
+  @InterfaceStability.Evolving
+  int getTableCount() throws MetaException;
+
+  /**
+   * Gets total number of partitions.
+   */
+  @InterfaceStability.Evolving
+  int getPartitionCount() throws MetaException;
+
+  /**
+   * Gets total number of databases.
+   */
+  @InterfaceStability.Evolving
+  int getDatabaseCount() throws MetaException;
 }

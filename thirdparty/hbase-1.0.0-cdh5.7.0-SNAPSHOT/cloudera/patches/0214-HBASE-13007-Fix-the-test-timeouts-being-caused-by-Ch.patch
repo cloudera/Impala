@@ -1,14 +1,15 @@
 From 28b98286c4aefb89576734a011859dbc0c11bd80 Mon Sep 17 00:00:00 2001
 From: stack <stack@apache.org>
 Date: Tue, 10 Feb 2015 21:19:14 -0800
-Subject: [PATCH 214/226] HBASE-13007 Fix the test timeouts being caused by ChoreService
+Subject: [PATCH 214/295] HBASE-13007 Fix the test timeouts being caused by
+ ChoreService
 
 Reason: Bug
 Author: Jonathan Lawlor
 Ref: CDH-28012
 ---
  .../java/org/apache/hadoop/hbase/ChoreService.java |    2 +-
- .../org/apache/hadoop/hbase/ScheduledChore.java    |    6 +-
+ .../org/apache/hadoop/hbase/ScheduledChore.java    |    6 +--
  .../org/apache/hadoop/hbase/TestChoreService.java  |   41 ++++++++++----------
  3 files changed, 24 insertions(+), 25 deletions(-)
 
@@ -227,5 +228,5 @@ index 6c283a5..6c76db7 100644
      ScheduledChore successChore2 = new DoNothingChore("sc2", period);
      ScheduledChore successChore3 = new DoNothingChore("sc3", period);
 -- 
-1.7.0.4
+1.7.9.5
 

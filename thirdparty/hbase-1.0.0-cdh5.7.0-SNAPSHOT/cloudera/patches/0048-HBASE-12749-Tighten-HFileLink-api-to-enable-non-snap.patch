@@ -1,14 +1,15 @@
 From 0b7b740e457c7ae7803dec8b5013fc844eeffeff Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Mon, 22 Dec 2014 19:24:25 -0800
-Subject: [PATCH 048/226] HBASE-12749 Tighten HFileLink api to enable non-snapshot uses
+Subject: [PATCH 048/295] HBASE-12749 Tighten HFileLink api to enable
+ non-snapshot uses
 
 ---
  .../java/org/apache/hadoop/hbase/io/FileLink.java  |   21 +++-
- .../java/org/apache/hadoop/hbase/io/HFileLink.java |   53 +++++++----
+ .../java/org/apache/hadoop/hbase/io/HFileLink.java |   53 ++++++----
  .../java/org/apache/hadoop/hbase/io/Reference.java |   23 ++++-
  .../java/org/apache/hadoop/hbase/mob/MobUtils.java |    2 +-
- .../hadoop/hbase/regionserver/StoreFile.java       |   16 ++--
+ .../hadoop/hbase/regionserver/StoreFile.java       |   16 ++-
  .../hadoop/hbase/regionserver/StoreFileInfo.java   |  105 ++++++++++++--------
  .../hadoop/hbase/snapshot/ExportSnapshot.java      |   10 +-
  .../hbase/snapshot/RestoreSnapshotHelper.java      |    2 +-
@@ -692,5 +693,5 @@ index 11015a4..e5f91d7 100644
            fs.delete(link.getAvailablePath(fs), true);
            corruptedFiles.add(hfile);
 -- 
-1.7.0.4
+1.7.9.5
 

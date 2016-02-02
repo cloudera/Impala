@@ -1,14 +1,14 @@
 From 6ed7eda2b4a6ee700c6d78992d19da324be8b0a8 Mon Sep 17 00:00:00 2001
 From: Jerry He <jerryjch@apache.org>
 Date: Mon, 11 May 2015 14:23:20 -0700
-Subject: [PATCH 221/226] HBASE-13217 Procedure fails due to ZK issue
+Subject: [PATCH 221/295] HBASE-13217 Procedure fails due to ZK issue
 
 Reason: Bug
 Author: Jerry He
 Ref: CDH-31088
 ---
- .../hadoop/hbase/procedure/ProcedureMember.java    |   22 ++++++++-----------
- .../hadoop/hbase/procedure/Subprocedure.java       |    9 ++++++-
+ .../hadoop/hbase/procedure/ProcedureMember.java    |   22 ++++++++------------
+ .../hadoop/hbase/procedure/Subprocedure.java       |    9 ++++++--
  .../hbase/procedure/ZKProcedureMemberRpcs.java     |   18 ++++++++--------
  3 files changed, 25 insertions(+), 24 deletions(-)
 
@@ -169,5 +169,5 @@ index e701bba..18f7df6 100644
        LOG.warn("abort already in progress", e);
        Thread.currentThread().interrupt();
 -- 
-1.7.0.4
+1.7.9.5
 

@@ -1,14 +1,14 @@
 From 2f9a8ccecf56aab36fa43a4ce766db9ddc970375 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Tue, 24 Mar 2015 09:28:06 +0000
-Subject: [PATCH 124/226] HBASE-13314 Fix NPE in HMaster.getClusterStatus()
+Subject: [PATCH 124/295] HBASE-13314 Fix NPE in HMaster.getClusterStatus()
 
 Reason: Bug
 Author: Matteo Bertozzi
 Ref: CDH-26154
 ---
  .../org/apache/hadoop/hbase/ClusterStatus.java     |   67 ++++++++++++++------
- .../org/apache/hadoop/hbase/master/HMaster.java    |   55 +++++++++--------
+ .../org/apache/hadoop/hbase/master/HMaster.java    |   55 ++++++++--------
  2 files changed, 76 insertions(+), 46 deletions(-)
 
 diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/ClusterStatus.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/ClusterStatus.java
@@ -233,5 +233,5 @@ index 83be699..da529a0 100644
      String clusterId = fileSystemManager != null ?
        fileSystemManager.getClusterId().toString() : null;
 -- 
-1.7.0.4
+1.7.9.5
 

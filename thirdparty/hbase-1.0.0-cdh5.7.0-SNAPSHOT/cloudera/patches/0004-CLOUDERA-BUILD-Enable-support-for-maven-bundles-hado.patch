@@ -1,14 +1,15 @@
 From bf6bf1f1252828c3bac26b9c45c10041bf2bdf30 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Mon, 15 Dec 2014 10:40:25 +0000
-Subject: [PATCH 004/226] CLOUDERA-BUILD Enable support for maven bundles (hadoop-common dependency)
+Subject: [PATCH 004/295] CLOUDERA-BUILD Enable support for maven bundles
+ (hadoop-common dependency)
 
 Ref: CDH-21268
 Reason: Product Requirement (Compatibility)
 Author: Esteban Gutierrez
 ---
  pom.xml |   12 ++++++++++++
- 1 files changed, 12 insertions(+), 0 deletions(-)
+ 1 file changed, 12 insertions(+)
 
 diff --git a/pom.xml b/pom.xml
 index 8ff3e68..0321cdc 100644
@@ -41,5 +42,5 @@ index 8ff3e68..0321cdc 100644
          <artifactId>maven-site-plugin</artifactId>
          <version>3.4</version>
 -- 
-1.7.0.4
+1.7.9.5
 

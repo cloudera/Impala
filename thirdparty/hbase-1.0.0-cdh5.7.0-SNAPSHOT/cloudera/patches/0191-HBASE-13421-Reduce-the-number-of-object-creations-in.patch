@@ -1,7 +1,9 @@
 From e40ca315e549da5a99bce7f48b8d73eb0d6a8940 Mon Sep 17 00:00:00 2001
 From: Jonathan Lawlor <jonathan.lawlor@cloudera.com>
 Date: Tue, 24 Mar 2015 15:52:46 -0700
-Subject: [PATCH 191/226] HBASE-13421 Reduce the number of object creations introduced by HBASE-11544 in scan RPC hot code paths
+Subject: [PATCH 191/295] HBASE-13421 Reduce the number of object creations
+ introduced by HBASE-11544 in scan RPC hot code
+ paths
 
 Reason: Bug
 Author: Jonathan Lawlor
@@ -17,12 +19,12 @@ Signed-off-by: stack <stack@apache.org>
  .../hbase/coprocessor/AggregateImplementation.java |   15 +-
  .../hadoop/hbase/mob/DefaultMobCompactor.java      |    5 +-
  .../PartitionedMobFileCompactor.java               |    9 +-
- .../apache/hadoop/hbase/regionserver/HRegion.java  |  271 +++++------
- .../hadoop/hbase/regionserver/InternalScanner.java |  209 +--------
- .../hadoop/hbase/regionserver/KeyValueHeap.java    |   44 +--
+ .../apache/hadoop/hbase/regionserver/HRegion.java  |  271 +++++-----
+ .../hadoop/hbase/regionserver/InternalScanner.java |  209 +-------
+ .../hadoop/hbase/regionserver/KeyValueHeap.java    |   44 +-
  .../hadoop/hbase/regionserver/MobStoreScanner.java |    4 +-
  .../hbase/regionserver/NoLimitScannerContext.java  |  102 ++++
- .../hadoop/hbase/regionserver/RSRpcServices.java   |   65 ++--
+ .../hadoop/hbase/regionserver/RSRpcServices.java   |   65 ++-
  .../hadoop/hbase/regionserver/RegionScanner.java   |   56 +--
  .../regionserver/ReversedMobStoreScanner.java      |    4 +-
  .../hadoop/hbase/regionserver/ScannerContext.java  |  527 ++++++++++++++++++++
@@ -34,7 +36,7 @@ Signed-off-by: stack <stack@apache.org>
  .../org/apache/hadoop/hbase/HBaseTestCase.java     |    4 +-
  .../hbase/TestPartialResultsFromClientSide.java    |    8 +-
  .../hbase/client/TestIntraRowPagination.java       |    3 +-
- .../hadoop/hbase/client/TestReplicasClient.java    |  118 ++++--
+ .../hadoop/hbase/client/TestReplicasClient.java    |  118 +++--
  .../coprocessor/ColumnAggregationEndpoint.java     |    3 +-
  .../ColumnAggregationEndpointNullResponse.java     |    4 +-
  .../ColumnAggregationEndpointWithErrors.java       |    4 +-
@@ -3340,7 +3342,7 @@ index a847347..6450c36 100644
          Cell left = results.get(0);
          byte[] row1 = Bytes.toBytes(rowId);
 diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestGetClosestAtOrBefore.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestGetClosestAtOrBefore.java
-index ece908e..e710e90 100644
+index ece908e..e710e902 100644
 --- a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestGetClosestAtOrBefore.java
 +++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestGetClosestAtOrBefore.java
 @@ -40,7 +40,6 @@ import org.apache.hadoop.hbase.client.Durability;
@@ -4394,5 +4396,5 @@ index cb126ba..30e1515 100644
            break;
          }
 -- 
-1.7.0.4
+1.7.9.5
 

@@ -1,14 +1,15 @@
 From ad98b2afeba0fd4c709a4c1cb8db7a2d20509ca6 Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Wed, 10 Dec 2014 19:43:59 -0800
-Subject: [PATCH 038/226] HBASE-12540 TestRegionServerMetrics#testMobMetrics test failure (Jingcheng Du and Jiajia Li)
+Subject: [PATCH 038/295] HBASE-12540 TestRegionServerMetrics#testMobMetrics
+ test failure (Jingcheng Du and Jiajia Li)
 
 Reason: Mob support
 Author: Jingcheng Du and Jiajia Li
 Ref: CDH-23093
 ---
  .../regionserver/TestRegionServerMetrics.java      |   14 +++++++-------
- 1 files changed, 7 insertions(+), 7 deletions(-)
+ 1 file changed, 7 insertions(+), 7 deletions(-)
 
 diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestRegionServerMetrics.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestRegionServerMetrics.java
 index f6704ec..d515536 100644
@@ -70,5 +71,5 @@ index f6704ec..d515536 100644
      t.close();
      admin.close();
 -- 
-1.7.0.4
+1.7.9.5
 

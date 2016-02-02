@@ -1,15 +1,16 @@
 From 5b8ea9c7e1949593d0ee85566d13a5ec01f50074 Mon Sep 17 00:00:00 2001
 From: Ramkrishna <ramkrishna.s.vasudevan@intel.com>
 Date: Thu, 9 Oct 2014 09:50:39 +0530
-Subject: [PATCH 031/226] HBASE-12201 Close the writers in the MOB sweep tool (Jingcheng Du)
+Subject: [PATCH 031/295] HBASE-12201 Close the writers in the MOB sweep tool
+ (Jingcheng Du)
 
 Reason: Bug
 Author: Jingcheng Du
 Ref: CDH-22318
 ---
  .../java/org/apache/hadoop/hbase/mob/MobUtils.java |    4 +--
- .../hadoop/hbase/mob/mapreduce/SweepJob.java       |   29 +++++++++++++------
- .../hadoop/hbase/mob/mapreduce/SweepReducer.java   |   14 ++++++---
+ .../hadoop/hbase/mob/mapreduce/SweepJob.java       |   29 ++++++++++++++------
+ .../hadoop/hbase/mob/mapreduce/SweepReducer.java   |   14 ++++++----
  3 files changed, 30 insertions(+), 17 deletions(-)
 
 diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/MobUtils.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/MobUtils.java
@@ -168,5 +169,5 @@ index 04fe359..ab8379e 100644
          try {
            table.close();
 -- 
-1.7.0.4
+1.7.9.5
 

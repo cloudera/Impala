@@ -1,14 +1,14 @@
 From 502b9cedd8c91ea80f6726a173dedcede501f148 Mon Sep 17 00:00:00 2001
 From: Dima Spivak <dspivak@cloudera.com>
 Date: Mon, 16 Mar 2015 18:22:51 -0700
-Subject: [PATCH 116/226] HBASE-13223 Add testMoveMeta to IntegrationTestMTTR
+Subject: [PATCH 116/295] HBASE-13223 Add testMoveMeta to IntegrationTestMTTR
 
 Reason: New Feature
 Author: Dima Spivak
 Ref: CDH-12895
 ---
  .../hadoop/hbase/mttr/IntegrationTestMTTR.java     |   15 ++++++++++++++-
- 1 files changed, 14 insertions(+), 1 deletions(-)
+ 1 file changed, 14 insertions(+), 1 deletion(-)
 
 diff --git a/hbase-it/src/test/java/org/apache/hadoop/hbase/mttr/IntegrationTestMTTR.java b/hbase-it/src/test/java/org/apache/hadoop/hbase/mttr/IntegrationTestMTTR.java
 index 9dc2dfa..4780b48 100644
@@ -85,5 +85,5 @@ index 9dc2dfa..4780b48 100644
      run(new ActionCallable(moveRegionAction), "MoveRegion");
    }
 -- 
-1.7.0.4
+1.7.9.5
 

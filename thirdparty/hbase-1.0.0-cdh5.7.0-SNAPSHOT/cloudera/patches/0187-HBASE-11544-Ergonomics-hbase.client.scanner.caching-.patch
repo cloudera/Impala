@@ -1,7 +1,9 @@
 From a27315f145ededb8621d845cdd09bc039e110ea2 Mon Sep 17 00:00:00 2001
 From: Jonathan Lawlor <jonathan.lawlor@cloudera.com>
 Date: Wed, 4 Feb 2015 14:07:35 -0800
-Subject: [PATCH 187/226] HBASE-11544: [Ergonomics] hbase.client.scanner.caching is dogged and will try to return batch even if it means OOME
+Subject: [PATCH 187/295] HBASE-11544: [Ergonomics]
+ hbase.client.scanner.caching is dogged and will try
+ to return batch even if it means OOME
 
 Reason: Bug
 Author: Jonathan Lawlor
@@ -10,8 +12,8 @@ Ref: CDH-27345
 Signed-off-by: stack <stack@apache.org>
 (cherry picked from commit e3c7e6de52c78c0cf6674191b2e1ff8d8b88031c)
 ---
- .../apache/hadoop/hbase/client/ClientScanner.java  |  174 +++++-
- .../org/apache/hadoop/hbase/client/Result.java     |  104 +++-
+ .../apache/hadoop/hbase/client/ClientScanner.java  |  174 ++++-
+ .../org/apache/hadoop/hbase/client/Result.java     |  104 ++-
  .../hadoop/hbase/client/ReversedClientScanner.java |   33 +-
  .../java/org/apache/hadoop/hbase/client/Scan.java  |   34 +
  .../hbase/client/ScannerCallableWithReplicas.java  |    3 +
@@ -22,15 +24,15 @@ Signed-off-by: stack <stack@apache.org>
  hbase-common/src/main/resources/hbase-default.xml  |   20 +-
  .../coprocessor/example/BulkDeleteEndpoint.java    |    9 +-
  .../coprocessor/example/RowCountEndpoint.java      |    5 +-
- .../hbase/protobuf/generated/ClientProtos.java     |  743 ++++++++++++++++---
+ .../hbase/protobuf/generated/ClientProtos.java     |  743 +++++++++++++++---
  hbase-protocol/src/main/protobuf/Client.proto      |   17 +
  .../hbase/client/ClientSideRegionScanner.java      |    5 +-
  .../hadoop/hbase/client/TableSnapshotScanner.java  |    4 +-
  .../hbase/coprocessor/AggregateImplementation.java |   17 +-
- .../apache/hadoop/hbase/regionserver/HRegion.java  |  241 +++++--
- .../hadoop/hbase/regionserver/InternalScanner.java |  205 +++++-
+ .../apache/hadoop/hbase/regionserver/HRegion.java  |  241 ++++--
+ .../hadoop/hbase/regionserver/InternalScanner.java |  205 ++++-
  .../hadoop/hbase/regionserver/KeyValueHeap.java    |   39 +-
- .../hadoop/hbase/regionserver/RSRpcServices.java   |   66 ++-
+ .../hadoop/hbase/regionserver/RSRpcServices.java   |   66 +-
  .../hadoop/hbase/regionserver/RegionScanner.java   |   54 +-
  .../hadoop/hbase/regionserver/StoreFlusher.java    |    5 +-
  .../hadoop/hbase/regionserver/StoreScanner.java    |   58 +-
@@ -6271,5 +6273,5 @@ index d4c7fa8..cb126ba 100644
            break;
          }
 -- 
-1.7.0.4
+1.7.9.5
 

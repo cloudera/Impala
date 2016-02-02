@@ -1,7 +1,8 @@
 From 84bdd514c88224c6f562acce439beee37de2b8f7 Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@apache.org>
 Date: Fri, 1 May 2015 23:53:13 -0500
-Subject: [PATCH 143/226] HBASE-13611 update clover profile to work with clover 4.x and maven 3.
+Subject: [PATCH 143/295] HBASE-13611 update clover profile to work with
+ clover 4.x and maven 3.
 
 * change pom to use a maven 3 compat version of clover
 * add clover to javadoc plugin deps so that instrumented doclet works
@@ -16,7 +17,7 @@ Ref: CDH-27317
 ---
  .../hbase/TestInterfaceAudienceAnnotations.java    |   27 +++++++++++++++++++-
  .../org/apache/hadoop/hbase/SplitLogCounters.java  |    5 +++-
- pom.xml                                            |   22 ++++++++++++---
+ pom.xml                                            |   22 ++++++++++++----
  3 files changed, 47 insertions(+), 7 deletions(-)
 
 diff --git a/hbase-client/src/test/java/org/apache/hadoop/hbase/TestInterfaceAudienceAnnotations.java b/hbase-client/src/test/java/org/apache/hadoop/hbase/TestInterfaceAudienceAnnotations.java
@@ -138,5 +139,5 @@ index 82a23cd..94f6311 100644
              <groupId>com.atlassian.maven.plugins</groupId>
              <artifactId>maven-clover2-plugin</artifactId>
 -- 
-1.7.0.4
+1.7.9.5
 

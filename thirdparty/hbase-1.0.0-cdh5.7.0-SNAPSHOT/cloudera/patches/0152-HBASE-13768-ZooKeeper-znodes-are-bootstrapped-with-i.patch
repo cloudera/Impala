@@ -1,7 +1,9 @@
 From 1f3d4c9f5172e4f251089bba91f6a4e30f268905 Mon Sep 17 00:00:00 2001
 From: Andrew Purtell <apurtell@apache.org>
 Date: Wed, 27 May 2015 12:21:47 -0700
-Subject: [PATCH 152/226] HBASE-13768 ZooKeeper znodes are bootstrapped with insecure ACLs in a secure configuration (Enis Soztutar)
+Subject: [PATCH 152/295] HBASE-13768 ZooKeeper znodes are bootstrapped with
+ insecure ACLs in a secure configuration (Enis
+ Soztutar)
 
 Reason: Bug
 Author: Enis Soztutar
@@ -605,5 +607,5 @@ index 5e7f75e..1e98265 100644
        // don't let cp initialization errors kill the master
        try {
 -- 
-1.7.0.4
+1.7.9.5
 

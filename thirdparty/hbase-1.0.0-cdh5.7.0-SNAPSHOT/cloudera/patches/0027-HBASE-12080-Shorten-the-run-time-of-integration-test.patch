@@ -1,14 +1,16 @@
 From 23a3f3d334b82245c7a0b030298c6f8801ce3ab3 Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Wed, 24 Sep 2014 06:40:04 -0700
-Subject: [PATCH 027/226] HBASE-12080 Shorten the run time of integration test by default when using mvn failsafe:integration-test (Jingcheng Du)
+Subject: [PATCH 027/295] HBASE-12080 Shorten the run time of integration test
+ by default when using mvn failsafe:integration-test
+ (Jingcheng Du)
 
 Reason: MOB feature
 Author: Jingcheng Du
 Ref: CDH-19420
 ---
  .../hadoop/hbase/IntegrationTestIngestWithMOB.java |   13 ++++++++++---
- 1 files changed, 10 insertions(+), 3 deletions(-)
+ 1 file changed, 10 insertions(+), 3 deletions(-)
 
 diff --git a/hbase-it/src/test/java/org/apache/hadoop/hbase/IntegrationTestIngestWithMOB.java b/hbase-it/src/test/java/org/apache/hadoop/hbase/IntegrationTestIngestWithMOB.java
 index b021cc4..95470b5 100644
@@ -49,5 +51,5 @@ index b021cc4..95470b5 100644
    protected void initTable() throws IOException {
      super.initTable();
 -- 
-1.7.0.4
+1.7.9.5
 

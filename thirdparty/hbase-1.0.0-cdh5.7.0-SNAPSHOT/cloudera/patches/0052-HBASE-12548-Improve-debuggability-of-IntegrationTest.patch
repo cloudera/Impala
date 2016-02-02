@@ -1,7 +1,8 @@
 From 7fb479f85d58450b459d0a6c909ebfaf8ec839d9 Mon Sep 17 00:00:00 2001
 From: Devaraj Das <ddas@apache.org>
 Date: Fri, 16 Jan 2015 11:49:49 -0800
-Subject: [PATCH 052/226] HBASE-12548 Improve debuggability of IntegrationTestTimeBoundedRequestsWithRegionReplicas.
+Subject: [PATCH 052/295] HBASE-12548 Improve debuggability of
+ IntegrationTestTimeBoundedRequestsWithRegionReplicas.
 
 Reason: Task
 Author: Devaraj Das
@@ -10,10 +11,10 @@ Ref: CDH-16914
  .../java/org/apache/hadoop/hbase/CellUtil.java     |   29 ++++++++++
  .../hbase/util/test/LoadTestKVGenerator.java       |   13 ++++-
  .../java/org/apache/hadoop/hbase/TestCellUtil.java |   34 ++++++++++++
- .../apache/hadoop/hbase/IntegrationTestIngest.java |    9 +++-
+ .../apache/hadoop/hbase/IntegrationTestIngest.java |    9 ++-
  .../hbase/mapreduce/IntegrationTestBulkLoad.java   |    3 +
  ...nTestTimeBoundedRequestsWithRegionReplicas.java |   16 +++++-
- .../apache/hadoop/hbase/master/RegionStates.java   |    6 ++-
+ .../apache/hadoop/hbase/master/RegionStates.java   |    6 +-
  .../hadoop/hbase/util/MultiThreadedAction.java     |   58 +++++++++++++++++++-
  8 files changed, 163 insertions(+), 5 deletions(-)
 
@@ -401,5 +402,5 @@ index 0293ea1..5b04ab9 100644
    private Map<String, MutationType> parseMutateInfo(byte[] mutateInfo) {
      Map<String, MutationType> mi = new HashMap<String, MutationType>();
 -- 
-1.7.0.4
+1.7.9.5
 

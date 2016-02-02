@@ -1,7 +1,8 @@
 From 6d6d0bc71eea256005f628822140f799abea4eda Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Wed, 4 Mar 2015 23:47:05 -0800
-Subject: [PATCH 084/226] HBASE-13012 Add shell commands to trigger the mob file compactor (Jingcheng Du and Jiajia Li)
+Subject: [PATCH 084/295] HBASE-13012 Add shell commands to trigger the mob
+ file compactor (Jingcheng Du and Jiajia Li)
 
 Conflicts:
 	hbase-client/src/main/java/org/apache/hadoop/hbase/client/HBaseAdmin.java
@@ -23,10 +24,10 @@ Ref: CDH-25606
  .../hbase/master/MobFileCompactionChore.java       |  105 ++--------
  .../org/apache/hadoop/hbase/mob/MobConstants.java  |   13 +-
  .../java/org/apache/hadoop/hbase/mob/MobUtils.java |  103 +++++++++
- .../mob/filecompactions/MobFileCompactor.java      |   16 ++-
+ .../mob/filecompactions/MobFileCompactor.java      |   16 +-
  .../PartitionedMobFileCompactor.java               |   27 ++-
  .../mob/filecompactions/TestMobFileCompactor.java  |  218 +++++++++++++++-----
- .../TestPartitionedMobFileCompactor.java           |   49 ++++--
+ .../TestPartitionedMobFileCompactor.java           |   49 +++--
  hbase-shell/src/main/ruby/hbase/admin.rb           |   22 ++
  hbase-shell/src/main/ruby/shell.rb                 |    2 +
  .../src/main/ruby/shell/commands/compact_mob.rb    |   42 ++++
@@ -1676,5 +1677,5 @@ index 0000000..dfcd6c9
 +  end
 +end
 -- 
-1.7.0.4
+1.7.9.5
 

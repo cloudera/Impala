@@ -1,14 +1,15 @@
 From 1a06908a50aefde7ada90aa89d0f1907b5f11c29 Mon Sep 17 00:00:00 2001
 From: Andrew Purtell <apurtell@apache.org>
 Date: Tue, 17 Mar 2015 15:06:44 -0700
-Subject: [PATCH 141/226] HBASE-13269 Limit result array preallocation to avoid OOME with large scan caching values
+Subject: [PATCH 141/295] HBASE-13269 Limit result array preallocation to
+ avoid OOME with large scan caching values
 
 Reason: Bug
 Author: Andrew Purtell
 Ref: CDH-27468
 ---
  .../hadoop/hbase/regionserver/RSRpcServices.java   |    5 ++++-
- 1 files changed, 4 insertions(+), 1 deletions(-)
+ 1 file changed, 4 insertions(+), 1 deletion(-)
 
 diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/RSRpcServices.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/RSRpcServices.java
 index a4db519..5d7fcd2 100644
@@ -34,5 +35,5 @@ index a4db519..5d7fcd2 100644
            long totalCellSize = 0;
  
 -- 
-1.7.0.4
+1.7.9.5
 

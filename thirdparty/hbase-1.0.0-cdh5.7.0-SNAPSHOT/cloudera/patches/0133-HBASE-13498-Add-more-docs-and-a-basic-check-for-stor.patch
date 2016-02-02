@@ -1,7 +1,8 @@
 From 1ebf4e096fe9cec632fe9fe25d5c0cddc76625d4 Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@apache.org>
 Date: Mon, 20 Apr 2015 00:31:57 -0500
-Subject: [PATCH 133/226] HBASE-13498 Add more docs and a basic check for storage policy handling.
+Subject: [PATCH 133/295] HBASE-13498 Add more docs and a basic check for
+ storage policy handling.
 
 Conflicts:
 	hbase-common/src/main/java/org/apache/hadoop/hbase/HConstants.java
@@ -12,7 +13,7 @@ Reason: Improvement
 Author: Sean Busbey
 Ref: CDH-24670
 ---
- .../java/org/apache/hadoop/hbase/HConstants.java   |    8 +-
+ .../java/org/apache/hadoop/hbase/HConstants.java   |    8 +--
  .../hadoop/hbase/regionserver/wal/FSHLog.java      |    2 +
  .../java/org/apache/hadoop/hbase/util/FSUtils.java |   60 ++++++++++++++++----
  .../org/apache/hadoop/hbase/util/TestFSUtils.java  |   43 ++++++++++++++
@@ -214,5 +215,5 @@ index 5fbe4b7..845a5e0 100644
     * Ugly test that ensures we can get at the hedged read counters in dfsclient.
     * Does a bit of preading with hedged reads enabled using code taken from hdfs TestPread.
 -- 
-1.7.0.4
+1.7.9.5
 

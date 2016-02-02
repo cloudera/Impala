@@ -1,13 +1,14 @@
 From e90fc5edf74f7549ae85168986911616c7bcda70 Mon Sep 17 00:00:00 2001
 From: Enis Soztutar <enis@apache.org>
 Date: Sun, 22 Feb 2015 21:29:12 -0800
-Subject: [PATCH 059/226] HBASE-11842 Integration test for async wal replication to secondary regions
+Subject: [PATCH 059/295] HBASE-11842 Integration test for async wal
+ replication to secondary regions
 
 Reason: Task
 Author: Enis Soztutar
 Ref: CDH-16914
 ---
- .../apache/hadoop/hbase/IntegrationTestIngest.java |   35 +++-
+ .../apache/hadoop/hbase/IntegrationTestIngest.java |   35 ++-
  .../IntegrationTestIngestStripeCompactions.java    |   11 +-
  .../hadoop/hbase/IntegrationTestIngestWithMOB.java |    2 +-
  .../IntegrationTestRegionReplicaReplication.java   |  231 ++++++++++++++++++++
@@ -16,10 +17,10 @@ Ref: CDH-16914
  .../RegionReplicaReplicationEndpoint.java          |   84 +++++--
  .../regionserver/ReplicationSource.java            |    5 +-
  .../apache/hadoop/hbase/util/CompressionTest.java  |    5 +-
- .../apache/hadoop/hbase/HBaseTestingUtility.java   |   40 ++++-
+ .../apache/hadoop/hbase/HBaseTestingUtility.java   |   40 +++-
  ...stRegionReplicaReplicationEndpointNoMaster.java |    1 +
  .../hadoop/hbase/util/ConstantDelayQueue.java      |  196 +++++++++++++++++
- .../org/apache/hadoop/hbase/util/LoadTestTool.java |   83 +++++++-
+ .../org/apache/hadoop/hbase/util/LoadTestTool.java |   83 ++++++-
  .../hadoop/hbase/util/MultiThreadedWriterBase.java |    7 +-
  .../apache/hadoop/hbase/util/RestartMetaTest.java  |    5 +-
  15 files changed, 670 insertions(+), 49 deletions(-)
@@ -1177,5 +1178,5 @@ index 81b219d..7119c43 100644
  
      LOG.debug("Loading data....\n\n");
 -- 
-1.7.0.4
+1.7.9.5
 

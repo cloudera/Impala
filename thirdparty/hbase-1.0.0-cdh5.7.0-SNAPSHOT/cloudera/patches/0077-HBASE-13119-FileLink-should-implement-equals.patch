@@ -1,12 +1,12 @@
 From a54e7bf7a826a1d4e4f0623f887514098f6193bd Mon Sep 17 00:00:00 2001
 From: Enis Soztutar <enis@apache.org>
 Date: Fri, 27 Feb 2015 17:19:56 -0800
-Subject: [PATCH 077/226] HBASE-13119 FileLink should implement equals
+Subject: [PATCH 077/295] HBASE-13119 FileLink should implement equals
 
 ---
  .../java/org/apache/hadoop/hbase/io/FileLink.java  |   20 ++++++++++-
  .../org/apache/hadoop/hbase/io/TestFileLink.java   |   36 ++++++++++++++++++++
- .../hbase/regionserver/TestStoreFileInfo.java      |   31 ++++++++++++++++-
+ .../hbase/regionserver/TestStoreFileInfo.java      |   31 +++++++++++++++--
  3 files changed, 84 insertions(+), 3 deletions(-)
 
 diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/io/FileLink.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/io/FileLink.java
@@ -171,5 +171,5 @@ index 955996c..13c05ec 100644
  }
  
 -- 
-1.7.0.4
+1.7.9.5
 

@@ -1,7 +1,8 @@
 From 97ea527a3a444feab094b5f23538b85667693eea Mon Sep 17 00:00:00 2001
 From: Srikanth Srungarapu <ssrungarapu@cloudera.com>
 Date: Wed, 11 Mar 2015 11:31:56 -0700
-Subject: [PATCH 102/226] CLOUDERA-BUILD Revert "HBASE-10471 Remove HTD.isAsyncLogFlush() from trunk"
+Subject: [PATCH 102/295] CLOUDERA-BUILD Revert "HBASE-10471 Remove
+ HTD.isAsyncLogFlush() from trunk"
 
 Reason: Product Requirement (Compatibility)
 Author: Srikanth Srungarapu
@@ -14,7 +15,7 @@ Conflicts:
 ---
  .../org/apache/hadoop/hbase/HTableDescriptor.java  |   28 ++++++++++++++++++++
  .../hbase/regionserver/wal/TestDurability.java     |    1 -
- 2 files changed, 28 insertions(+), 1 deletions(-)
+ 2 files changed, 28 insertions(+), 1 deletion(-)
 
 diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/HTableDescriptor.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/HTableDescriptor.java
 index 003a26f..6a86e17 100644
@@ -68,5 +69,5 @@ index 0081eb1..5219d95 100644
        htd.addFamily(hcd);
        HRegionInfo info = new HRegionInfo(htd.getTableName(), null, null, false);
 -- 
-1.7.0.4
+1.7.9.5
 

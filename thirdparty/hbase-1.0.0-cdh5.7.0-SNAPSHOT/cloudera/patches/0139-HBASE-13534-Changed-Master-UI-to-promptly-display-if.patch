@@ -1,7 +1,8 @@
 From ecf7d3fd0f388ca869864f15058325b1879381af Mon Sep 17 00:00:00 2001
-From: Apekshit(Appy) Sharma <appy@cloudera.com>
+From: "Apekshit(Appy) Sharma" <appy@cloudera.com>
 Date: Wed, 22 Apr 2015 20:28:14 -0700
-Subject: [PATCH 139/226] HBASE-13534 Changed Master UI to promptly display if it is a backup master. (Apekshit)
+Subject: [PATCH 139/295] HBASE-13534 Changed Master UI to promptly display if
+ it is a backup master. (Apekshit)
 
 Author: Apekshit Sharma
 Reason: Improvement
@@ -9,7 +10,7 @@ Other: CDH-13534
 
 Signed-off-by: Elliott Clark <eclark@apache.org>
 ---
- .../hbase/tmpl/master/BackupMasterStatusTmpl.jamon |   51 ++++++++-----------
+ .../hbase/tmpl/master/BackupMasterStatusTmpl.jamon |   51 +++++++++-----------
  .../hbase/tmpl/master/MasterStatusTmpl.jamon       |    5 +-
  2 files changed, 25 insertions(+), 31 deletions(-)
 
@@ -118,5 +119,5 @@ index 9792126..6a4d285 100644
          </div>
  
 -- 
-1.7.0.4
+1.7.9.5
 

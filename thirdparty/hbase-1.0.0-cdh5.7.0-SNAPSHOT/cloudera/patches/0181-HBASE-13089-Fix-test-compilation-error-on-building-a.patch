@@ -1,14 +1,15 @@
 From 59f6713ba02bd338230473b1ec6de10c24f69436 Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@apache.org>
 Date: Fri, 24 Jul 2015 15:34:40 -0700
-Subject: [PATCH 181/226] HBASE-13089 Fix test compilation error on building against htrace-3.2.0-incubating
+Subject: [PATCH 181/295] HBASE-13089 Fix test compilation error on building
+ against htrace-3.2.0-incubating
 
 Reason: Compatibility
 Author: Esteban Gutierrez
 Ref: CDH-29817
 ---
  .../apache/hadoop/hbase/trace/TestHTraceHooks.java |   15 +++++++++++++--
- 1 files changed, 13 insertions(+), 2 deletions(-)
+ 1 file changed, 13 insertions(+), 2 deletions(-)
 
 diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/trace/TestHTraceHooks.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/trace/TestHTraceHooks.java
 index eba30a8..eeda043 100644
@@ -61,5 +62,5 @@ index eba30a8..eeda043 100644
      assertEquals(2, roots.size());
      Span putRoot = null;
 -- 
-1.7.0.4
+1.7.9.5
 

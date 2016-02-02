@@ -112,6 +112,7 @@
             <th>Owner</th>
             <th>Group</th>
             <th>Size</th>
+            <th>Last Modified</th>
             <th>Replication</th>
             <th>Block Size</th>
             <th>Name</th>
@@ -124,6 +125,7 @@
             <td>{owner}</td>
             <td>{group}</td>
             <td>{length|fmt_bytes}</td>
+            <td>{#helper_date_tostring value="{modificationTime}"/}</td>
             <td>{replication}</td>
             <td>{blockSize|fmt_bytes}</td>
             <td><a style="cursor:pointer" inode-type="{type}" class="explorer-browse-links" inode-path="{pathSuffix}">{pathSuffix}</a></td>
@@ -153,7 +155,9 @@
     </script><script type="text/javascript" src="/static/dust-full-2.0.0.min.js">
     </script><script type="text/javascript" src="/static/dust-helpers-1.1.1.min.js">
     </script><script type="text/javascript" src="/static/dfs-dust.js">
+    </script><script type="text/javascript" src="/static/json-bignum.js">
     </script><script type="text/javascript" src="explorer.js">
+    </script><script type="text/javascript" src="/static/moment.min.js">
     </script>
   </body>
 </html>

@@ -30,6 +30,9 @@ import com.google.common.collect.Multimaps;
 import org.apache.commons.cli.OptionBuilder;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.hive.common.metrics.common.MetricsVariable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -122,6 +125,7 @@ import org.apache.hadoop.hive.metastore.api.ShowLocksResponse;
 import org.apache.hadoop.hive.metastore.api.SkewedInfo;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.Table;
+import org.apache.hadoop.hive.metastore.api.TableMeta;
 import org.apache.hadoop.hive.metastore.api.TableStatsRequest;
 import org.apache.hadoop.hive.metastore.api.TableStatsResult;
 import org.apache.hadoop.hive.metastore.api.ThriftHiveMetastore;
@@ -203,6 +207,7 @@ import org.apache.thrift.transport.TTransportFactory;
 
 import com.facebook.fb303.FacebookBase;
 import com.facebook.fb303.fb_status;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableListMultimap;
@@ -250,6 +255,12 @@ public class HiveMetaStore extends ThriftHiveMetastore {
   // embedded metastore or a remote one
   private static boolean isMetaStoreRemote = false;
 
+  // Used for testing to simulate method timeout.
+  @VisibleForTesting
+  static boolean TEST_TIMEOUT_ENABLED = false;
+  @VisibleForTesting
+  static long TEST_TIMEOUT_VALUE = -1;
+
   /** A fixed date format to be used for hive partition column values. */
   public static final ThreadLocal<DateFormat> PARTITION_DATE_FORMAT =
        new ThreadLocal<DateFormat>() {
@@ -296,6 +307,9 @@ public class HiveMetaStore extends ThriftHiveMetastore {
                                      // right now they come from jpox.properties
 
     private static String currentUrl;
+
+    //For Metrics
+    private int initDatabaseCount, initTableCount, initPartCount;
 
     private Warehouse wh; // hdfs warehouse
     private static final ThreadLocal<RawStore> threadLocalMS =
@@ -479,11 +493,43 @@ public class HiveMetaStore extends ThriftHiveMetastore {
         }
       }
 
+      Metrics metrics = MetricsFactory.getInstance();
+      if (metrics != null && hiveConf.getBoolVar(ConfVars.METASTORE_INIT_METADATA_COUNT_ENABLED)) {
+        LOG.info("Begin calculating metadata count metrics.");
+        updateMetrics();
+        LOG.info("Finished metadata count metrics: " + initDatabaseCount + " databases, " + initTableCount +
+          " tables, " + initPartCount + " partitions.");
+        metrics.addGauge(MetricsConstant.INIT_TOTAL_DATABASES, new MetricsVariable() {
+          @Override
+          public Object getValue() {
+            return initDatabaseCount;
+          }
+        });
+        metrics.addGauge(MetricsConstant.INIT_TOTAL_TABLES, new MetricsVariable() {
+          @Override
+          public Object getValue() {
+            return initTableCount;
+          }
+        });
+        metrics.addGauge(MetricsConstant.INIT_TOTAL_PARTITIONS, new MetricsVariable() {
+          @Override
+          public Object getValue() {
+            return initPartCount;
+          }
+        });
+      }
+
       preListeners = MetaStoreUtils.getMetaStoreListeners(MetaStorePreEventListener.class,
           hiveConf,
           hiveConf.getVar(HiveConf.ConfVars.METASTORE_PRE_EVENT_LISTENERS));
       listeners = MetaStoreUtils.getMetaStoreListeners(MetaStoreEventListener.class, hiveConf,
           hiveConf.getVar(HiveConf.ConfVars.METASTORE_EVENT_LISTENERS));
+      listeners.add(new SessionPropertiesListener(hiveConf));
+
+      if (metrics != null) {
+        listeners.add(new HMSMetricsListener(hiveConf, metrics));
+      }
+
       endFunctionListeners = MetaStoreUtils.getMetaStoreListeners(
           MetaStoreEndFunctionListener.class, hiveConf,
           hiveConf.getVar(HiveConf.ConfVars.METASTORE_END_FUNCTION_LISTENERS));
@@ -756,7 +802,7 @@ public class HiveMetaStore extends ThriftHiveMetastore {
           function + extraLogInfo);
       if (MetricsFactory.getInstance() != null) {
         try {
-          MetricsFactory.getInstance().startScope(function);
+          MetricsFactory.getInstance().startStoredScope(function);
         } catch (IOException e) {
           LOG.debug("Exception when starting metrics scope"
             + e.getClass().getName() + " " + e.getMessage(), e);
@@ -800,7 +846,7 @@ public class HiveMetaStore extends ThriftHiveMetastore {
     private void endFunction(String function, MetaStoreEndFunctionContext context) {
       if (MetricsFactory.getInstance() != null) {
         try {
-          MetricsFactory.getInstance().endScope(function);
+          MetricsFactory.getInstance().endStoredScope(function);
         } catch (IOException e) {
           LOG.debug("Exception when closing metrics scope" + e);
         }
@@ -899,6 +945,15 @@ public class HiveMetaStore extends ThriftHiveMetastore {
           }
         } catch (NoSuchObjectException e) {
           // expected
+        }
+
+        if (TEST_TIMEOUT_ENABLED) {
+          try {
+            Thread.sleep(TEST_TIMEOUT_VALUE);
+          } catch (InterruptedException e) {
+            // do nothing
+          }
+          Deadline.checkTimeout();
         }
 
         create_database_core(getMS(), db);
@@ -1708,6 +1763,15 @@ public class HiveMetaStore extends ThriftHiveMetastore {
           }
           partNames.add(Warehouse.makePartName(tbl.getPartitionKeys(), part.getValues()));
         }
+        for (MetaStoreEventListener listener : listeners) {
+          //No drop part listener events fired for public listeners historically, for drop table case.
+          //Limiting to internal listeners for now, to avoid unexpected calls for public listeners.
+          if (listener instanceof HMSMetricsListener) {
+            for (Partition part : partsToDelete) {
+              listener.onDropPartition(null);
+            }
+          }
+        }
         ms.dropPartitions(dbName, tableName, partNames);
       }
 
@@ -1780,6 +1844,23 @@ public class HiveMetaStore extends ThriftHiveMetastore {
         throw e;
       } finally {
         endFunction("get_table", t != null, ex, name);
+      }
+      return t;
+    }
+
+    @Override
+    public List<TableMeta> get_table_meta(String dbnames, String tblNames, List<String> tblTypes)
+        throws MetaException, NoSuchObjectException {
+      List<TableMeta> t = null;
+      startTableFunction("get_table_metas", dbnames, tblNames);
+      Exception ex = null;
+      try {
+        t = getMS().getTableMeta(dbnames, tblNames, tblTypes);
+      } catch (Exception e) {
+        ex = e;
+        throw newMetaException(e);
+      } finally {
+        endFunction("get_table_metas", t != null, ex);
       }
       return t;
     }
@@ -2579,6 +2660,12 @@ public class HiveMetaStore extends ThriftHiveMetastore {
           ms.addPartition(destPartition);
           ms.dropPartition(partition.getDbName(), sourceTable.getTableName(),
             partition.getValues());
+        }
+        Path destParentPath = destPath.getParent();
+        if (!wh.isDir(destParentPath)) {
+          if (!wh.mkdirs(destParentPath, true)) {
+              throw new MetaException("Unable to create path " + destParentPath);
+          }
         }
         /**
          * TODO: Use the hard link feature of hdfs
@@ -5408,6 +5495,9 @@ public class HiveMetaStore extends ThriftHiveMetastore {
     }
 
     private static MetaException newMetaException(Exception e) {
+      if (e instanceof MetaException) {
+        return (MetaException)e;
+      }
       MetaException me = new MetaException(e.toString());
       me.initCause(e);
       return me;
@@ -5756,6 +5846,13 @@ public class HiveMetaStore extends ThriftHiveMetastore {
       RawStore ms = getMS();
       return ms.getCurrentNotificationEventId();
     }
+
+    @VisibleForTesting
+    public void updateMetrics() throws MetaException {
+      initTableCount = getMS().getTableCount();
+      initPartCount = getMS().getPartitionCount();
+      initDatabaseCount = getMS().getDatabaseCount();
+    }
   }
 
 
@@ -6023,7 +6120,7 @@ public class HiveMetaStore extends ThriftHiveMetastore {
             conf.getVar(HiveConf.ConfVars.METASTORE_KERBEROS_KEYTAB_FILE),
             conf.getVar(HiveConf.ConfVars.METASTORE_KERBEROS_PRINCIPAL));
         // start delegation token manager
-        saslServer.startDelegationTokenSecretManager(conf, baseHandler.getMS(), ServerMode.METASTORE);
+        saslServer.startDelegationTokenSecretManager(conf, baseHandler, ServerMode.METASTORE);
         transFactory = saslServer.createTransportFactory(
                 MetaStoreUtils.getMetaStoreSaslProperties(conf));
         processor = saslServer.wrapProcessor(

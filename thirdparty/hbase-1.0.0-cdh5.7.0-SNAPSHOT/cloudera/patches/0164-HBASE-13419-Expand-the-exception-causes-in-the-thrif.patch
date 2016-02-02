@@ -1,7 +1,8 @@
 From e10e1963412ad0db9034f98db56e7b7b0413e1f7 Mon Sep 17 00:00:00 2001
-From: Apekshit(Appy) Sharma <appy@cloudera.com>
+From: "Apekshit(Appy) Sharma" <appy@cloudera.com>
 Date: Fri, 12 Jun 2015 15:40:35 -0700
-Subject: [PATCH 164/226] HBASE-13419 Expand the exception causes in the thrift gateway.
+Subject: [PATCH 164/295] HBASE-13419 Expand the exception causes in the
+ thrift gateway.
 
 Expand the full chain of exception causes when passing an error back up to a
 thrift client so useful information doesn't get lost when the exception is
@@ -12,7 +13,7 @@ Author: Michael Muller
 Ref: CDH-28214
 ---
  .../hadoop/hbase/thrift/ThriftServerRunner.java    |   75 ++++++++++----------
- 1 files changed, 38 insertions(+), 37 deletions(-)
+ 1 file changed, 38 insertions(+), 37 deletions(-)
 
 diff --git a/hbase-thrift/src/main/java/org/apache/hadoop/hbase/thrift/ThriftServerRunner.java b/hbase-thrift/src/main/java/org/apache/hadoop/hbase/thrift/ThriftServerRunner.java
 index 6c8f89b..8dc060f 100644
@@ -340,5 +341,5 @@ index 6c8f89b..8dc060f 100644
      }
    }
 -- 
-1.7.0.4
+1.7.9.5
 

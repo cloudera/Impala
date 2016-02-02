@@ -1,7 +1,8 @@
 From 8c42f5b6a7e0a0d5ce36c64e877dfe7a6fdab93c Mon Sep 17 00:00:00 2001
 From: Devaraj Das <ddas@apache.org>
 Date: Mon, 22 Dec 2014 16:45:41 -0800
-Subject: [PATCH 097/226] HBASE-12012. Improve cancellation for the scan RPCs (patch from master; had to resolve some conflicts)
+Subject: [PATCH 097/295] HBASE-12012. Improve cancellation for the scan RPCs
+ (patch from master; had to resolve some conflicts)
 
 Reason: Task
 Author: Devaraj Das
@@ -11,7 +12,7 @@ Ref: CDH-16914
  .../apache/hadoop/hbase/client/ClientScanner.java  |    7 +
  .../hadoop/hbase/client/ClientSmallScanner.java    |    7 +-
  .../client/ResultBoundedCompletionService.java     |  165 ++++++++++++++++++++
- .../client/RpcRetryingCallerWithReadReplicas.java  |  153 ++-----------------
+ .../client/RpcRetryingCallerWithReadReplicas.java  |  153 ++----------------
  .../hadoop/hbase/client/ScannerCallable.java       |    7 +-
  .../hbase/client/ScannerCallableWithReplicas.java  |  105 ++++++++++---
  .../hadoop/hbase/client/TestReplicasClient.java    |   48 ++++++
@@ -774,5 +775,5 @@ index 39c08fd..a8b21ba 100644
      openRegion(hriSecondary);
      int NUMROWS = 100;
 -- 
-1.7.0.4
+1.7.9.5
 

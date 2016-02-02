@@ -1,26 +1,27 @@
 From 8a11c3cf5dd70ce49628ebd488f203cad067ae5f Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@cloudera.com>
 Date: Sat, 31 Jan 2015 00:58:56 -0800
-Subject: [PATCH 001/226] CLOUDERA-BUILD Change build to point to Cloudera versions and repositories.
+Subject: [PATCH 001/295] CLOUDERA-BUILD Change build to point to Cloudera
+ versions and repositories.
 
 ---
  hbase-annotations/pom.xml    |    2 +-
- hbase-assembly/pom.xml       |    4 +-
- hbase-checkstyle/pom.xml     |    4 +-
+ hbase-assembly/pom.xml       |    4 +--
+ hbase-checkstyle/pom.xml     |    4 +--
  hbase-client/pom.xml         |    2 +-
  hbase-common/pom.xml         |    2 +-
  hbase-examples/pom.xml       |    2 +-
  hbase-hadoop-compat/pom.xml  |    2 +-
  hbase-hadoop2-compat/pom.xml |    2 +-
- hbase-it/pom.xml             |    4 +-
- hbase-prefix-tree/pom.xml    |    4 +-
+ hbase-it/pom.xml             |    4 +--
+ hbase-prefix-tree/pom.xml    |    4 +--
  hbase-protocol/pom.xml       |    2 +-
- hbase-rest/pom.xml           |    4 +-
+ hbase-rest/pom.xml           |    4 +--
  hbase-server/pom.xml         |    6 ++--
- hbase-shell/pom.xml          |    4 +-
+ hbase-shell/pom.xml          |    4 +--
  hbase-testing-util/pom.xml   |    6 ++--
- hbase-thrift/pom.xml         |    4 +-
- pom.xml                      |   82 +++++++++++++++++++++++++++++++----------
+ hbase-thrift/pom.xml         |    4 +--
+ pom.xml                      |   82 +++++++++++++++++++++++++++++++-----------
  17 files changed, 89 insertions(+), 47 deletions(-)
 
 diff --git a/hbase-annotations/pom.xml b/hbase-annotations/pom.xml
@@ -494,5 +495,5 @@ index 74e559d..f67d935 100644
    </dependencyManagement>
    <!-- Dependencies needed by subprojects -->
 -- 
-1.7.0.4
+1.7.9.5
 
