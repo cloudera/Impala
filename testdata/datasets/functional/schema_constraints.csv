@@ -162,3 +162,7 @@ table_name:bzip2_tbl, constraint:restrict_to, table_format:text/bzip/block
 table_name:large_bzip2_tbl, constraint:restrict_to, table_format:text/bzip/block
 table_name:multistream_bzip2_tbl, constraint:restrict_to, table_format:text/bzip/block
 table_name:large_multistream_bzip2_tbl, constraint:restrict_to, table_format:text/bzip/block
+
+# Skipping header lines is only supported with text tables
+table_name:table_with_header, constraint:restrict_to, table_format:text/none/none
+table_name:table_with_header_2, constraint:restrict_to, table_format:text/none/none

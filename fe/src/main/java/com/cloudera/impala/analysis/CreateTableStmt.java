@@ -26,7 +26,6 @@ import org.apache.hadoop.fs.permission.FsAction;
 import com.cloudera.impala.authorization.Privilege;
 import com.cloudera.impala.catalog.HdfsStorageDescriptor;
 import com.cloudera.impala.catalog.RowFormat;
-import com.cloudera.impala.catalog.TableLoadingException;
 import com.cloudera.impala.common.AnalysisException;
 import com.cloudera.impala.common.FileSystemUtil;
 import com.cloudera.impala.thrift.TAccessEvent;
@@ -196,8 +195,8 @@ public class CreateTableStmt extends StatementBase {
     MetaStoreUtil.checkShortPropertyMap("Property", tblProperties_);
     MetaStoreUtil.checkShortPropertyMap("Serde property", serdeProperties_);
 
-    if (analyzer.dbContainsTable(tableName_.getDb(), tableName_.getTbl(), Privilege.CREATE)
-        && !ifNotExists_) {
+    if (analyzer.dbContainsTable(tableName_.getDb(), tableName_.getTbl(),
+        Privilege.CREATE) && !ifNotExists_) {
       throw new AnalysisException(Analyzer.TBL_ALREADY_EXISTS_ERROR_MSG + tableName_);
     }
 
@@ -237,6 +236,11 @@ public class CreateTableStmt extends StatementBase {
             "Please retry without caching: CREATE TABLE %s ... UNCACHED",
             location_.toString(), tableName_));
       }
+    }
+
+    // Analyze 'skip.header.line.format' property.
+    if (tblProperties_ != null) {
+      AlterTableSetTblProperties.analyzeSkipHeaderLineCount(tblProperties_);
     }
   }
 
