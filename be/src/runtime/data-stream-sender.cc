@@ -405,8 +405,6 @@ Status DataStreamSender::Open(RuntimeState* state) {
 
 Status DataStreamSender::Send(RuntimeState* state, RowBatch* batch, bool eos) {
   SCOPED_TIMER(profile_->total_time_counter());
-  ExprContext::FreeLocalAllocations(partition_expr_ctxs_);
-  RETURN_IF_ERROR(state->CheckQueryState());
   DCHECK(!closed_);
   DCHECK(!flushed_);
 
@@ -446,10 +444,11 @@ Status DataStreamSender::Send(RuntimeState* state, RowBatch* batch, bool eos) {
         hash_val =
             RawValue::GetHashValueFnv(partition_val, ctx->root()->type(), hash_val);
       }
-
+      ExprContext::FreeLocalAllocations(partition_expr_ctxs_);
       RETURN_IF_ERROR(channels_[hash_val % num_channels]->AddRow(row));
     }
   }
+  RETURN_IF_ERROR(state->CheckQueryState());
   return Status::OK();
 }
 
