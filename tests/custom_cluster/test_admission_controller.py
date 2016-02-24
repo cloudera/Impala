@@ -56,11 +56,16 @@ MEM_TEST_LIMIT = 100000 * 1024 * 1024
 
 _STATESTORED_ARGS = "-statestore_heartbeat_frequency_ms=%s" % (STATESTORE_HEARTBEAT_MS)
 
-def impalad_admission_ctrl_flags(max_requests, max_queued, mem_limit):
+def impalad_admission_ctrl_flags(max_requests, max_queued, pool_max_mem,
+    proc_mem_limit = None):
+  if proc_mem_limit is not None:
+    proc_limit_flag = "-mem_limit=%s" % (proc_mem_limit)
+  else:
+    proc_limit_flag = ""
   return ("-vmodule admission-controller=3 -default_pool_max_requests %s "
       "-default_pool_max_queued %s -default_pool_mem_limit %s "
-      "-disable_admission_control=false" %\
-      (max_requests, max_queued, mem_limit))
+      "-disable_admission_control=false %s" %\
+      (max_requests, max_queued, pool_max_mem, proc_limit_flag))
 
 
 def impalad_admission_ctrl_config_args():
@@ -528,7 +533,7 @@ class TestAdmissionControllerStress(TestAdmissionController):
   @pytest.mark.execute_serially
   @CustomClusterTestSuite.with_args(
       impalad_args=impalad_admission_ctrl_flags(MAX_NUM_CONCURRENT_QUERIES * 100,
-        MAX_NUM_QUEUED_QUERIES, MEM_TEST_LIMIT),
+        MAX_NUM_QUEUED_QUERIES, MEM_TEST_LIMIT, MEM_TEST_LIMIT),
       statestored_args=_STATESTORED_ARGS)
   def test_mem_limit(self, vector):
     self.pool_name = 'default-pool'
