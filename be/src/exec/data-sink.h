@@ -52,11 +52,11 @@ class DataSink {
   // eos should be true when the last batch is passed to Send()
   virtual Status Send(RuntimeState* state, RowBatch* batch, bool eos) = 0;
 
-  // Releases all resources that were allocated in Prepare()/Send().
-  // Further Send() calls are illegal after calling Close().
-  // It must be okay to call this multiple times. Subsequent calls should
-  // be ignored.
-  virtual void Close(RuntimeState* state) = 0;
+  /// Releases all resources that were allocated in Prepare()/Send().
+  /// Further Send() calls are illegal after calling Close().
+  /// It must be okay to call this multiple times. Subsequent calls should
+  /// be ignored.
+  virtual void Close(RuntimeState* state);
 
   // Creates a new data sink from thrift_sink. A pointer to the
   // new sink is written to *sink, and is owned by the caller.
