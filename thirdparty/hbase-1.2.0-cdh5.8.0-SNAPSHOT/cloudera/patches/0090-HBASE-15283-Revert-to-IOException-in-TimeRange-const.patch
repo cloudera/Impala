@@ -1,0 +1,108 @@
+From a8314301c28aa0738596f1dc2dd87f4d8dcb2a16 Mon Sep 17 00:00:00 2001
+From: Jonathan M Hsieh <jmhsieh@apache.org>
+Date: Wed, 17 Feb 2016 11:20:23 -0800
+Subject: [PATCH 090/217] HBASE-15283 Revert to IOException in TimeRange
+ constructor to maintain API compat in 1.x line
+
+[branch-1 and branch-1.2 only] HBASE-14355 changed the type of exception thrown if an invalid TimeRange is specified.  This reverts to 1.1.x semantics.
+---
+ .../java/org/apache/hadoop/hbase/client/Query.java |    9 +++++++--
+ .../java/org/apache/hadoop/hbase/io/TimeRange.java |   17 ++++++++++++++---
+ 2 files changed, 21 insertions(+), 5 deletions(-)
+
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/Query.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/Query.java
+index 268d81a..53e680d 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/Query.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/Query.java
+@@ -17,6 +17,7 @@
+  */
+ package org.apache.hadoop.hbase.client;
+ 
++import java.io.IOException;
+ import java.util.Map;
+ 
+ import com.google.common.collect.Maps;
+@@ -192,8 +193,12 @@ public abstract class Query extends OperationWithAttributes {
+    */
+ 
+   public Query setColumnFamilyTimeRange(byte[] cf, long minStamp, long maxStamp) {
+-    colFamTimeRangeMap.put(cf, new TimeRange(minStamp, maxStamp));
+-    return this;
++    try {
++      colFamTimeRangeMap.put(cf, new TimeRange(minStamp, maxStamp));
++      return this;
++    } catch (IOException ioe) {
++      throw new IllegalArgumentException(ioe);
++    }
+   }
+ 
+   /**
+diff --git a/hbase-common/src/main/java/org/apache/hadoop/hbase/io/TimeRange.java b/hbase-common/src/main/java/org/apache/hadoop/hbase/io/TimeRange.java
+index a300c21..672cc9d 100644
+--- a/hbase-common/src/main/java/org/apache/hadoop/hbase/io/TimeRange.java
++++ b/hbase-common/src/main/java/org/apache/hadoop/hbase/io/TimeRange.java
+@@ -43,7 +43,9 @@ public class TimeRange {
+   /**
+    * Default constructor.
+    * Represents interval [0, Long.MAX_VALUE) (allTime)
++   * @deprecated This is made @InterfaceAudience.Private in the 2.0 line and above
+    */
++  @Deprecated
+   public TimeRange() {
+     allTime = true;
+   }
+@@ -51,7 +53,9 @@ public class TimeRange {
+   /**
+    * Represents interval [minStamp, Long.MAX_VALUE)
+    * @param minStamp the minimum timestamp value, inclusive
++   * @deprecated This is made @InterfaceAudience.Private in the 2.0 line and above
+    */
++  @Deprecated
+   public TimeRange(long minStamp) {
+     this.minStamp = minStamp;
+   }
+@@ -59,7 +63,9 @@ public class TimeRange {
+   /**
+    * Represents interval [minStamp, Long.MAX_VALUE)
+    * @param minStamp the minimum timestamp value, inclusive
++   * @deprecated This is removed in the 2.0 line and above
+    */
++  @Deprecated
+   public TimeRange(byte [] minStamp) {
+     this.minStamp = Bytes.toLong(minStamp);
+   }
+@@ -68,15 +74,18 @@ public class TimeRange {
+    * Represents interval [minStamp, maxStamp)
+    * @param minStamp the minimum timestamp, inclusive
+    * @param maxStamp the maximum timestamp, exclusive
+-   * @throws IllegalArgumentException
++   * @throws IllegalArgumentException if either <0,
++   * @throws IOException if max smaller than min.
++   * @deprecated This is made @InterfaceAudience.Private in the 2.0 line and above
+    */
+-  public TimeRange(long minStamp, long maxStamp) {
++  @Deprecated
++  public TimeRange(long minStamp, long maxStamp) throws IOException {
+     if (minStamp < 0 || maxStamp < 0) {
+       throw new IllegalArgumentException("Timestamp cannot be negative. minStamp:" + minStamp
+         + ", maxStamp:" + maxStamp);
+     }
+     if(maxStamp < minStamp) {
+-      throw new IllegalArgumentException("maxStamp is smaller than minStamp");
++      throw new IOException("maxStamp is smaller than minStamp");
+     }
+     this.minStamp = minStamp;
+     this.maxStamp = maxStamp;
+@@ -87,7 +96,9 @@ public class TimeRange {
+    * @param minStamp the minimum timestamp, inclusive
+    * @param maxStamp the maximum timestamp, exclusive
+    * @throws IOException
++   * @deprecated This is removed in the 2.0 line and above
+    */
++  @Deprecated
+   public TimeRange(byte [] minStamp, byte [] maxStamp)
+   throws IOException {
+     this(Bytes.toLong(minStamp), Bytes.toLong(maxStamp));
+-- 
+1.7.9.5
+
