@@ -176,8 +176,7 @@ class SimpleAssignmentTest : public SimpleSchedulerTest {
 
 TEST_F(SimpleAssignmentTest, ComputeAssignmentDeterministicNonCached) {
   TQueryOptions query_options;
-  query_options.random_replica = false;
-  query_options.replica_preference = TReplicaPreference::DISK_LOCAL;
+  query_options.schedule_random_replica = false;
 
   // Compute a number of schedules and verify that only one location has been picked.
 
@@ -196,8 +195,7 @@ TEST_F(SimpleAssignmentTest, ComputeAssignmentDeterministicNonCached) {
 
 TEST_F(SimpleAssignmentTest, ComputeAssignmentRandomNonCached) {
   TQueryOptions query_options;
-  query_options.random_replica = true;
-  query_options.replica_preference = TReplicaPreference::DISK_LOCAL;
+  query_options.schedule_random_replica = true;
 
   // Compute a number of schedules and verify that more than one location has been picked.
 
