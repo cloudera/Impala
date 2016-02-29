@@ -77,11 +77,7 @@ class TestComputeStats(ImpalaTestSuite):
     """IMPALA-2201: Tests that the results of compute incremental stats are properly
     persisted when the data was loaded from Hive with hive.stats.autogather=true.
     """
-
-    # Unless something drastic changes in Hive and/or Impala, this test should
-    # always succeed.
-    if self.exploration_strategy() != 'exhaustive': pytest.skip()
-
+    pytest.skip('skip this test in 5.4.x branch')
     # Create a table and load data into a single partition with Hive with
     # stats autogathering.
     table_name = "autogather_test"
