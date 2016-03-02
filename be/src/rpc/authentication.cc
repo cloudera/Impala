@@ -47,14 +47,10 @@
 #include <sys/stat.h>     // for stat system call
 #include <unistd.h>       // for stat system call
 
-//#include "common/names.h"
-
 using boost::algorithm::is_any_of;
 using boost::algorithm::replace_all;
 using boost::algorithm::split;
 using boost::algorithm::trim;
-using boost::mt19937;
-using boost::uniform_int;
 using namespace apache::thrift;
 using namespace std;
 using namespace strings;
@@ -411,8 +407,7 @@ int SaslAuthorizeInternal(sasl_conn_t* conn, void* context,
   vector<string> whitelist;
   split(whitelist, FLAGS_internal_principals_whitelist, is_any_of(","));
   whitelist.push_back(internal_auth_provider->service_name());
-  for (std::vector<string>::iterator it = whitelist.begin(); it != whitelist.end(); ++it) {
-    string& s = *it;
+  BOOST_FOREACH(string& s, whitelist) {
     trim(s);
     if (s.empty()) continue;
     if (names[0] == s) {
