@@ -509,16 +509,11 @@ Status SimpleScheduler::ComputeScanRangeAssignment(
         // the replica as not cached (network transfer dominates anyway in this case).
         // TODO: measure this in a cluster setup. Are remote reads better with caching?
         if (location.is_cached) {
-          is_cached = true;
           memory_distance = TReplicaPreference::CACHE_LOCAL;
         } else {
-          is_cached = false;
           memory_distance = TReplicaPreference::DISK_LOCAL;
         }
-        remote_read = false;
       } else {
-        is_cached = false;
-        remote_read = true;
         memory_distance = TReplicaPreference::REMOTE;
       }
       memory_distance = max(memory_distance, base_distance);
@@ -538,7 +533,7 @@ Status SimpleScheduler::ComputeScanRangeAssignment(
       } else if (memory_distance == min_distance) {
         // Check the effective memory distance of the current replica to decide whether to
         // treat it as cached. If the actual distance has been increased to base_distance,
-        // then cached_replica will be different from is_cached.
+        // then cached_replica will be different from location.is_cached.
         bool cached_replica = memory_distance == TReplicaPreference::CACHE_LOCAL;
         // Load based scheduling
         if (assigned_bytes < min_assigned_bytes) {
@@ -562,6 +557,8 @@ Status SimpleScheduler::ComputeScanRangeAssignment(
         min_assigned_bytes = assigned_bytes;
         data_host = &replica_host;
         volume_id = location.volume_id;
+        is_cached = location.is_cached;
+        remote_read = min_distance == TReplicaPreference::REMOTE;
       }
     }  // end of BOOST_FOREACH
 
