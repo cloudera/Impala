@@ -1,0 +1,26 @@
+From db3be34016d014dafad54bdd219eaa741c5e347d Mon Sep 17 00:00:00 2001
+From: stack <stack@duboce.net>
+Date: Mon, 8 Feb 2016 13:17:02 -0800
+Subject: [PATCH 224/226] HBASE-15157 Add *PerformanceTest for Append,
+ CheckAnd* Admendment; fix undeclared className in
+ PE. Reason: Bug Author: Stack Ref: CDH-37023
+
+---
+ .../apache/hadoop/hbase/PerformanceEvaluation.java |    1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/PerformanceEvaluation.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/PerformanceEvaluation.java
+index 3d88a8b..fd54f84 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/PerformanceEvaluation.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/PerformanceEvaluation.java
+@@ -1786,6 +1786,7 @@ public class PerformanceEvaluation extends Configured implements Tool {
+     System.err.println("                 running: 1 <= value <= 500");
+     System.err.println("Examples:");
+     System.err.println(" To run a single client doing the default 1M sequentialWrites:");
++    String className = this.getClass().getSimpleName();
+     System.err.println(" $ bin/hbase " + className + " sequentialWrite 1");
+     System.err.println(" To run 10 clients doing increments over ten rows:");
+     System.err.println(" $ bin/hbase " + className + " --rows=10 --nomapred increment 10");
+-- 
+1.7.9.5
+
