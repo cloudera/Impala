@@ -55,6 +55,8 @@ using boost::algorithm::split;
 using boost::algorithm::trim;
 using boost::mt19937;
 using boost::uniform_int;
+using boost::posix_time::microsec_clock;
+using boost::posix_time::ptime;
 using namespace apache::thrift;
 using namespace boost::filesystem;   // for is_regular()
 using namespace strings;
@@ -526,9 +528,10 @@ void SaslAuthProvider::RunKinit(Promise<Status>* first_kinit) {
     // Sleep for the renewal interval, minus a random time between 0-5 minutes to help
     // avoid a storm at the KDC. Additionally, never sleep less than a minute to
     // reduce KDC stress due to frequent renewals.
-    mt19937 generator;
-    uniform_int<> dist(0, 300);
-    SleepForMs(1000 * max((60 * FLAGS_kerberos_reinit_interval) - dist(generator), 60));
+    ptime now = microsec_clock::local_time();
+    long seed = now.time_of_day().total_microseconds();
+    srand(seed);
+    SleepForMs(1000 * max((60 * FLAGS_kerberos_reinit_interval) - rand()%300, 60));
   }
 }
 
