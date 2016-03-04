@@ -67,6 +67,11 @@ DEFINE_string(redaction_rules_file, "", "Absolute path to sensitive data redacti
     "Web UI and audit records. Query results will not be affected. Refer to the "
     "documentation for the rule file format.");
 
+DEFINE_bool(load_auth_to_local_rules, false, "If true, load auth_to_local configuration "
+    "from hdfs' core-site.xml. When enabled, impalad reads the rules from the property "
+    "hadoop.security.auth_to_local and applies them to translate the Kerberos principal "
+    "to its corresponding local user name for authorization.");
+
 // Stress option for testing failed memory allocation. Debug builds only.
 #ifndef NDEBUG
 DEFINE_int32(stress_free_pool_alloc, 0, "A stress option which causes memory allocations "
