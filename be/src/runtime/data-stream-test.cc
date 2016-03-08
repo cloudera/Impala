@@ -31,6 +31,7 @@
 #include "runtime/client-cache.h"
 #include "runtime/raw-value.h"
 #include "runtime/backend-client.h"
+#include "runtime/raw-value.inline.h"
 #include "service/fe-support.h"
 #include "util/cpu-info.h"
 #include "util/disk-info.h"

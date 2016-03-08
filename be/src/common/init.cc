@@ -22,6 +22,7 @@
 #include "exprs/expr.h"
 #include "util/cpu-info.h"
 #include "util/debug-util.h"
+#include "util/decimal-util.h"
 #include "util/disk-info.h"
 #include "util/logging-support.h"
 #include "util/mem-info.h"
