@@ -150,27 +150,27 @@ Status HdfsAvroScanner::ParseMetadata() {
       RETURN_IF_FALSE(stream_->ReadBytes(value_len, &value, &parse_status_));
 
       if (key == AVRO_SCHEMA_KEY) {
-        avro_schema_t raw_file_schema;
+        avro_schema_t raw_file_schema = NULL;
         int error = avro_schema_from_json_length(
             reinterpret_cast<char*>(value), value_len, &raw_file_schema);
-        ScopedAvroSchemaT file_schema(raw_file_schema);
         if (error != 0) {
           stringstream ss;
           ss << "Failed to parse file schema: " << avro_strerror();
           return Status(ss.str());
         }
+        ScopedAvroSchemaT file_schema(raw_file_schema);
 
         const string& table_schema_str = scan_node_->hdfs_table()->avro_schema();
         DCHECK_GT(table_schema_str.size(), 0);
-        avro_schema_t raw_table_schema;
+        avro_schema_t raw_table_schema = NULL;
         error = avro_schema_from_json_length(
             table_schema_str.c_str(), table_schema_str.size(), &raw_table_schema);
-        ScopedAvroSchemaT table_schema(raw_table_schema);
         if (error != 0) {
           stringstream ss;
           ss << "Failed to parse table schema: " << avro_strerror();
           return Status(ss.str());
         }
+        ScopedAvroSchemaT table_schema(raw_table_schema);
         RETURN_IF_ERROR(ResolveSchemas(table_schema.get(), file_schema.get()));
 
         // We currently codegen a function only for the table schema. If this file's
@@ -699,16 +699,16 @@ Function* HdfsAvroScanner::CodegenMaterializeTuple(HdfsScanNode* node,
   // TODO: HdfsScanNode shouldn't codegen functions it doesn't need.
   if (table_schema_str.empty()) return NULL;
 
-  avro_schema_t raw_table_schema;
+  avro_schema_t raw_table_schema = NULL;
   int error = avro_schema_from_json_length(
       table_schema_str.c_str(), table_schema_str.size(), &raw_table_schema);
-  ScopedAvroSchemaT table_schema(raw_table_schema);
   if (error != 0) {
     stringstream ss;
     ss << "Failed to parse table schema: " << avro_strerror();
     node->runtime_state()->LogError(ErrorMsg(TErrorCode::GENERAL, ss.str()));
     return NULL;
   }
+  ScopedAvroSchemaT table_schema(raw_table_schema);
   int num_fields = avro_schema_record_size(table_schema.get());
   DCHECK_GT(num_fields, 0);
   // Disable Codegen for TYPE_CHAR

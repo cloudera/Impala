@@ -106,3 +106,28 @@ INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
 OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
 LOCATION '/test-warehouse/alltypes_avro_snap'
 TBLPROPERTIES ('avro.schema.url'='hdfs://${hiveconf:hive.metastore.warehouse.dir}/avro_schemas/functional/alltypes.json');
+
+-- We only need a wrong schema (duplicated), the table location is not relevant
+DROP TABLE IF EXISTS duplicate_schema_test;
+CREATE EXTERNAL TABLE duplicate_schema_test
+ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
+STORED AS
+INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
+OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
+LOCATION '/test-warehouse/tinytable_avro_snap/'
+TBLPROPERTIES ('avro.schema.literal'='
+{
+  "type": "record",
+  "name": "dup1",
+  "fields": [
+    {"name": "a", "type": "int"}
+  ]
+}
+{
+  "type": "record",
+  "name": "dup1",
+  "fields": [
+    {"name": "a", "type": "int"}
+  ]
+}
+')

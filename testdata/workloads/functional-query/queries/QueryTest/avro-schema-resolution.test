@@ -22,3 +22,9 @@ int, boolean, int, int, int, bigint, float, double, string, string, string, int,
 2430,true,0,0,0,0,0,0,'09/01/09','0','2009-09-01 00:00:00',2009,9
 6380,true,0,0,0,0,0,0,'10/01/10','0','2010-10-01 00:00:00',2010,10
 ====
+---- QUERY
+# with code gen
+select * from duplicate_schema_test
+---- CATCH
+Failed to parse table schema: Error parsing JSON: end of file expected near '{'
+====
