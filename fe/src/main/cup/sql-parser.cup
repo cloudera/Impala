@@ -2643,8 +2643,6 @@ ident_or_keyword ::=
   {: RESULT = r.toString(); :}
   | KW_EXPLAIN:r
   {: RESULT = r.toString(); :}
-  | KW_EXTENDED:r
-  {: RESULT = r.toString(); :}
   | KW_EXTERNAL:r
   {: RESULT = r.toString(); :}
   | KW_FALSE:r
@@ -2685,8 +2683,6 @@ ident_or_keyword ::=
   {: RESULT = r.toString(); :}
   | KW_IF:r
   {: RESULT = r.toString(); :}
-  | KW_ILIKE:r
-  {: RESULT = r.toString(); :}
   | KW_IN:r
   {: RESULT = r.toString(); :}
   | KW_INCREMENTAL:r
@@ -2708,8 +2704,6 @@ ident_or_keyword ::=
   | KW_INTO:r
   {: RESULT = r.toString(); :}
   | KW_INVALIDATE:r
-  {: RESULT = r.toString(); :}
-  | KW_IREGEXP:r
   {: RESULT = r.toString(); :}
   | KW_IS:r
   {: RESULT = r.toString(); :}
