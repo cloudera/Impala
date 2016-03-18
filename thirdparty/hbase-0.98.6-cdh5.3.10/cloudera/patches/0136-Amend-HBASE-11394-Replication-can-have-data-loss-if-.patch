@@ -1,0 +1,48 @@
+From c42a8dd4044cbed8f6f888c2d0238c786cb72017 Mon Sep 17 00:00:00 2001
+From: Andrew Purtell <apurtell@apache.org>
+Date: Fri, 10 Oct 2014 13:59:42 -0700
+Subject: [PATCH 136/157] Amend HBASE-11394 Replication can have data loss if
+ peer id contains hyphen
+
+Reason: Bug
+Author: Andrew Purtell
+Ref: CDH-35763
+---
+ .../replication/TestReplicationTrackerZKImpl.java  |    7 +++----
+ 1 file changed, 3 insertions(+), 4 deletions(-)
+
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/replication/TestReplicationTrackerZKImpl.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/replication/TestReplicationTrackerZKImpl.java
+index c8e2ef2..99a7593 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/replication/TestReplicationTrackerZKImpl.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/replication/TestReplicationTrackerZKImpl.java
+@@ -37,7 +37,6 @@ import org.apache.hadoop.hbase.zookeeper.ZKUtil;
+ import org.apache.hadoop.hbase.zookeeper.ZooKeeperWatcher;
+ import org.junit.AfterClass;
+ import org.junit.Test;
+-import org.junit.Ignore;
+ 
+ import static org.junit.Assert.*;
+ 
+@@ -178,16 +177,16 @@ public class TestReplicationTrackerZKImpl {
+   public void testPeerNameControl() throws Exception {
+     int exists = 0;
+     int hyphen = 0;
+-    rp.addPeer("6", new ReplicationPeerConfig().setClusterKey(utility.getClusterKey()), null);
++    rp.addPeer("6", utility.getClusterKey(), null);
+     
+     try{
+-      rp.addPeer("6", new ReplicationPeerConfig().setClusterKey(utility.getClusterKey()), null);
++      rp.addPeer("6", utility.getClusterKey(), null);
+     }catch(IllegalArgumentException e){
+       exists++;
+     }
+ 
+     try{
+-      rp.addPeer("6-ec2", new ReplicationPeerConfig().setClusterKey(utility.getClusterKey()), null);
++      rp.addPeer("6-ec2", utility.getClusterKey(), null);
+     }catch(IllegalArgumentException e){
+       hyphen++;
+     }
+-- 
+1.7.9.5
+

@@ -1,0 +1,28 @@
+From 738aa45d6909261b1b4f27b3f22dc6f49cff276a Mon Sep 17 00:00:00 2001
+From: stack <stack@apache.org>
+Date: Wed, 29 Oct 2014 22:03:26 -0700
+Subject: [PATCH 134/157] HBASE-12336 RegionServer failed to shutdown for
+ NodeFailoverWorker thread
+
+Reason: Bug
+Author: Liu Shaohui
+Ref: CDH-35763
+---
+ .../regionserver/ReplicationSourceManager.java     |    1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/ReplicationSourceManager.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/ReplicationSourceManager.java
+index f823457..dcd0fc8 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/ReplicationSourceManager.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/ReplicationSourceManager.java
+@@ -146,6 +146,7 @@ public class ReplicationSourceManager implements ReplicationListener {
+         new LinkedBlockingQueue<Runnable>());
+     ThreadFactoryBuilder tfb = new ThreadFactoryBuilder();
+     tfb.setNameFormat("ReplicationExecutor-%d");
++    tfb.setDaemon(true);
+     this.executor.setThreadFactory(tfb.build());
+     this.rand = new Random();
+   }
+-- 
+1.7.9.5
+

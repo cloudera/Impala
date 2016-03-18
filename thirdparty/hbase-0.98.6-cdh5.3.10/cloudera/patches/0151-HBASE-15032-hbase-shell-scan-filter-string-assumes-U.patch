@@ -1,0 +1,68 @@
+From 856af28c70260807cde9018a148b97f7273300d1 Mon Sep 17 00:00:00 2001
+From: tedyu <yuzhihong@gmail.com>
+Date: Thu, 24 Dec 2015 07:00:22 -0800
+Subject: [PATCH 151/157] HBASE-15032 hbase shell scan filter string assumes
+ UTF-8 encoding (huaxiang sun)
+
+      Reason: Bug
+      Author: Huaxiang Sun
+      Ref: CDH-35930
+
+Change-Id: I2fe9b1a433c1894da8057b9b61061c7070e481a5
+---
+ hbase-shell/src/main/ruby/hbase/table.rb      |    6 ++++--
+ hbase-shell/src/test/ruby/hbase/table_test.rb |   15 +++++++++++++++
+ 2 files changed, 19 insertions(+), 2 deletions(-)
+
+diff --git a/hbase-shell/src/main/ruby/hbase/table.rb b/hbase-shell/src/main/ruby/hbase/table.rb
+index 3fe006b..6c8802f 100644
+--- a/hbase-shell/src/main/ruby/hbase/table.rb
++++ b/hbase-shell/src/main/ruby/hbase/table.rb
+@@ -345,7 +345,8 @@ EOF
+       unless filter.class == String
+         get.setFilter(filter)
+       else
+-        get.setFilter(org.apache.hadoop.hbase.filter.ParseFilter.new.parseFilterString(filter))
++        get.setFilter(
++          org.apache.hadoop.hbase.filter.ParseFilter.new.parseFilterString(filter.to_java_bytes))
+       end
+ 
+       # Call hbase for the results
+@@ -429,7 +430,8 @@ EOF
+         unless filter.class == String
+           scan.setFilter(filter)
+         else
+-          scan.setFilter(org.apache.hadoop.hbase.filter.ParseFilter.new.parseFilterString(filter))
++          scan.setFilter(
++            org.apache.hadoop.hbase.filter.ParseFilter.new.parseFilterString(filter.to_java_bytes))
+         end
+ 
+         scan.setTimeStamp(timestamp) if timestamp
+diff --git a/hbase-shell/src/test/ruby/hbase/table_test.rb b/hbase-shell/src/test/ruby/hbase/table_test.rb
+index 7272229..6c1b3e6 100644
+--- a/hbase-shell/src/test/ruby/hbase/table_test.rb
++++ b/hbase-shell/src/test/ruby/hbase/table_test.rb
+@@ -530,5 +530,20 @@ module Hbase
+       end
+     end
+ 
++    define_test "scan should support FILTER with non-ASCII bytes" do
++      @test_table.put(4, "x:a", "\x82")
++      begin
++        res = @test_table._scan_internal FILTER => "SingleColumnValueFilter('x', 'a', >=, 'binary:\x82', true, true)"
++        assert_not_equal(res, {}, "Result is empty")
++        assert_kind_of(Hash, res)
++        assert_not_nil(res['4'])
++        assert_not_nil(res['4']['x:a'])
++        assert_nil(res['1'])
++        assert_nil(res['2'])
++      ensure
++        # clean up newly added columns for this test only.
++        @test_table.delete(4, "x:a")
++      end
++    end
+   end
+ end
+-- 
+1.7.9.5
+

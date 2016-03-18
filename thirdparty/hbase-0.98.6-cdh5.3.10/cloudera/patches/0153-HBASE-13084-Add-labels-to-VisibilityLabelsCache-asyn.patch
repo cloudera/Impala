@@ -1,0 +1,122 @@
+From e762512003de6649aec8460113a67348d77546c6 Mon Sep 17 00:00:00 2001
+From: zhangduo <zhangduo@wandoujia.com>
+Date: Tue, 24 Feb 2015 18:18:35 +0800
+Subject: [PATCH 153/157] HBASE-13084 Add labels to VisibilityLabelsCache
+ asynchronously causes TestShell flakey
+
+This patch also adds ExplaningPredicate to Waiter.java (~10 lines) from HBASE-13004. We aren't backporting
+all of HBASE-13004 because it makes a lot of changes to HBaseTestingUtility and because there were lot of merge
+errors.
+
+Signed-off-by: stack <stack@apache.org>
+
+Reason: fix flaky test
+Author: Duo Zhang
+Ref: CDH-36155
+---
+ .../test/java/org/apache/hadoop/hbase/Waiter.java  |   15 +++++++++
+ .../apache/hadoop/hbase/HBaseTestingUtility.java   |   34 ++++++++++++++++++++
+ .../ruby/hbase/visibility_labels_admin_test.rb     |    2 ++
+ 3 files changed, 51 insertions(+)
+
+diff --git a/hbase-common/src/test/java/org/apache/hadoop/hbase/Waiter.java b/hbase-common/src/test/java/org/apache/hadoop/hbase/Waiter.java
+index d9f9e7d..27d6f88 100644
+--- a/hbase-common/src/test/java/org/apache/hadoop/hbase/Waiter.java
++++ b/hbase-common/src/test/java/org/apache/hadoop/hbase/Waiter.java
+@@ -98,6 +98,21 @@ public final class Waiter {
+   }
+ 
+   /**
++   * A mixin interface, can be used with {@link Waiter} to explain failed state.
++   */
++  @InterfaceAudience.Private
++  public interface ExplainingPredicate<E extends Exception> extends Predicate<E> {
++
++    /**
++     * Perform a predicate evaluation.
++     *
++     * @return explanation of failed state
++     */
++    String explainFailure() throws E;
++
++  }
++
++  /**
+    * Makes the current thread sleep for the duration equal to the specified time in milliseconds
+    * multiplied by the {@link #getWaitForRatio(Configuration)}.
+    * @param conf the configuration
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/HBaseTestingUtility.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/HBaseTestingUtility.java
+index 1b7dac5..942608a 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/HBaseTestingUtility.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/HBaseTestingUtility.java
+@@ -84,6 +84,7 @@ import org.apache.hadoop.hbase.regionserver.InternalScanner;
+ import org.apache.hadoop.hbase.regionserver.RegionServerServices;
+ import org.apache.hadoop.hbase.regionserver.wal.HLog;
+ import org.apache.hadoop.hbase.security.User;
++import org.apache.hadoop.hbase.security.visibility.VisibilityLabelsCache;
+ import org.apache.hadoop.hbase.tool.Canary;
+ import org.apache.hadoop.hbase.util.Bytes;
+ import org.apache.hadoop.hbase.util.FSUtils;
+@@ -3339,6 +3340,39 @@ public class HBaseTestingUtility extends HBaseCommonTestingUtility {
+   }
+ 
+   /**
++
++  /**
++   * Wait until labels is ready in VisibilityLabelsCache.
++   * @param timeoutMillis
++   * @param labels
++   */
++  public void waitLabelAvailable(long timeoutMillis, final String... labels) {
++    final VisibilityLabelsCache labelsCache = VisibilityLabelsCache.get();
++    waitFor(timeoutMillis, new Waiter.ExplainingPredicate<RuntimeException>() {
++
++      @Override
++      public boolean evaluate() {
++        for (String label : labels) {
++          if (labelsCache.getLabelOrdinal(label) == 0) {
++            return false;
++          }
++        }
++        return true;
++      }
++
++      @Override
++      public String explainFailure() {
++        for (String label : labels) {
++          if (labelsCache.getLabelOrdinal(label) == 0) {
++            return label + " is not available yet";
++          }
++        }
++        return "";
++      }
++    });
++  }
++
++  /**
+    * Create a set of column descriptors with the combination of compression,
+    * encoding, bloom codecs available.
+    * @return the list of column descriptors
+diff --git a/hbase-shell/src/test/ruby/hbase/visibility_labels_admin_test.rb b/hbase-shell/src/test/ruby/hbase/visibility_labels_admin_test.rb
+index 2c20a17..05c3daf 100644
+--- a/hbase-shell/src/test/ruby/hbase/visibility_labels_admin_test.rb
++++ b/hbase-shell/src/test/ruby/hbase/visibility_labels_admin_test.rb
+@@ -49,6 +49,7 @@ module Hbase
+       label = 'TEST_AUTHS'
+       user = org.apache.hadoop.hbase.security.User.getCurrent().getName();
+       visibility_admin.add_labels(label)
++      $TEST_CLUSTER.waitLabelAvailable(10000, label)
+       count = visibility_admin.get_auths(user).length
+ 
+       # verifying the set functionality
+@@ -69,6 +70,7 @@ module Hbase
+       label = 'TEST_VISIBILITY'
+       user = org.apache.hadoop.hbase.security.User.getCurrent().getName();
+       visibility_admin.add_labels(label)
++      $TEST_CLUSTER.waitLabelAvailable(10000, label)
+       visibility_admin.set_auths(user, label)
+ 
+       # verifying put functionality
+-- 
+1.7.9.5
+

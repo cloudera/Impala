@@ -1,0 +1,28 @@
+From 039d8d71f1a7062ab151118721f5d7c277a49ba5 Mon Sep 17 00:00:00 2001
+From: Andrew Purtell <apurtell@apache.org>
+Date: Fri, 4 Dec 2015 18:40:48 -0800
+Subject: [PATCH 149/157] HBASE-14923 VerifyReplication should not mask the
+ exception during result comparison
+
+Reason: Bug
+Author: Vishal Khandelwal
+Ref: CDH-35763
+---
+ .../mapreduce/replication/VerifyReplication.java   |    1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/replication/VerifyReplication.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/replication/VerifyReplication.java
+index 16c294b..88fbf36 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/replication/VerifyReplication.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/replication/VerifyReplication.java
+@@ -150,6 +150,7 @@ public class VerifyReplication extends Configured implements Tool {
+             context.getCounter(Counters.GOODROWS).increment(1);
+           } catch (Exception e) {
+             logFailRowAndIncreaseCounter(context, Counters.CONTENT_DIFFERENT_ROWS, value);
++            LOG.error("Exception while comparing row : " + e);
+           }
+           currentCompareRowInPeerTable = replicatedScanner.next();
+           break;
+-- 
+1.7.9.5
+

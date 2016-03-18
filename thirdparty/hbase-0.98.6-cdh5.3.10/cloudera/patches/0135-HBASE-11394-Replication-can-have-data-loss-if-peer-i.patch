@@ -1,0 +1,107 @@
+From d2ac0333de11bfaa50374e7ec51eadc3ad60b2c2 Mon Sep 17 00:00:00 2001
+From: stack <stack@apache.org>
+Date: Fri, 10 Oct 2014 10:28:16 -0700
+Subject: [PATCH 135/157] HBASE-11394 Replication can have data loss if peer
+ id contains hyphen "-"
+
+Reason: Bug
+Author: Talat Uyarer
+Ref: CDH-35763
+---
+ .../hbase/replication/ReplicationPeersZKImpl.java  |    5 ++++
+ .../org/apache/hadoop/hbase/zookeeper/ZKUtil.java  |    4 +--
+ .../replication/TestReplicationTrackerZKImpl.java  |   31 ++++++++++++++++++--
+ 3 files changed, 35 insertions(+), 5 deletions(-)
+
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/replication/ReplicationPeersZKImpl.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/replication/ReplicationPeersZKImpl.java
+index df0e385..2c12841 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/replication/ReplicationPeersZKImpl.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/replication/ReplicationPeersZKImpl.java
+@@ -115,6 +115,11 @@ public class ReplicationPeersZKImpl extends ReplicationStateZKBase implements Re
+         throw new IllegalArgumentException("Cannot add a peer with id=" + id
+             + " because that id already exists.");
+       }
++      
++      if(id.contains("-")){
++        throw new IllegalArgumentException("Found invalid peer name:" + id);
++      }
++      
+       ZKUtil.createWithParents(this.zookeeper, this.peersZNode);
+       ZKUtil.createAndWatch(this.zookeeper, ZKUtil.joinZNode(this.peersZNode, id),
+         toByteArray(clusterKey));
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/zookeeper/ZKUtil.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/zookeeper/ZKUtil.java
+index da6a50f..d766966 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/zookeeper/ZKUtil.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/zookeeper/ZKUtil.java
+@@ -1340,8 +1340,8 @@ public class ZKUtil {
+           deleteNodeRecursively(zkw, joinZNode(node, child));
+         }
+       }
+-      //Zookeeper Watches are one time triggers; When children of parent nodes are deleted recursively.
+-      //Must set another watch, get notified of delete node
++      //Zookeeper Watches are one time triggers; When children of parent nodes are deleted recursively. 
++      //Must set another watch, get notified of delete node   
+       if (zkw.getRecoverableZooKeeper().exists(node, zkw) != null){
+         zkw.getRecoverableZooKeeper().delete(node, -1);
+       }
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/replication/TestReplicationTrackerZKImpl.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/replication/TestReplicationTrackerZKImpl.java
+index d073726..c8e2ef2 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/replication/TestReplicationTrackerZKImpl.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/replication/TestReplicationTrackerZKImpl.java
+@@ -141,7 +141,7 @@ public class TestReplicationTrackerZKImpl {
+     assertEquals("hostname2.example.org:1234", rsRemovedData);
+   }
+ 
+-  @Ignore ("Flakey") @Test(timeout = 30000)
++  @Test(timeout = 30000)
+   public void testPeerRemovedEvent() throws Exception {
+     rp.addPeer("5", utility.getClusterKey());
+     rt.registerListener(new DummyReplicationListener());
+@@ -153,7 +153,7 @@ public class TestReplicationTrackerZKImpl {
+     assertEquals("5", peerRemovedData);
+   }
+ 
+-  @Ignore ("Flakey") @Test(timeout = 30000)
++  @Test(timeout = 30000)
+   public void testPeerListChangedEvent() throws Exception {
+     // add a peer
+     rp.addPeer("5", utility.getClusterKey());
+@@ -170,9 +170,34 @@ public class TestReplicationTrackerZKImpl {
+     assertTrue(plChangedData.contains("5"));
+ 
+     // clean up
+-    ZKUtil.deleteNode(zkw, "/hbase/replication/peers/5");
++    //ZKUtil.deleteNode(zkw, "/hbase/replication/peers/5");
++    rp.removePeer("5");
+   }
+ 
++  @Test(timeout = 30000)
++  public void testPeerNameControl() throws Exception {
++    int exists = 0;
++    int hyphen = 0;
++    rp.addPeer("6", new ReplicationPeerConfig().setClusterKey(utility.getClusterKey()), null);
++    
++    try{
++      rp.addPeer("6", new ReplicationPeerConfig().setClusterKey(utility.getClusterKey()), null);
++    }catch(IllegalArgumentException e){
++      exists++;
++    }
++
++    try{
++      rp.addPeer("6-ec2", new ReplicationPeerConfig().setClusterKey(utility.getClusterKey()), null);
++    }catch(IllegalArgumentException e){
++      hyphen++;
++    }
++    assertEquals(1, exists);
++    assertEquals(1, hyphen);
++    
++    // clean up
++    rp.removePeer("6");
++  }
++  
+   private class DummyReplicationListener implements ReplicationListener {
+ 
+     @Override
+-- 
+1.7.9.5
+

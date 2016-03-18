@@ -1,0 +1,80 @@
+From 7c75f5edfced4b6abae0808c72014f59c72fe0ac Mon Sep 17 00:00:00 2001
+From: Andrew Purtell <apurtell@apache.org>
+Date: Thu, 2 Oct 2014 18:02:32 -0700
+Subject: [PATCH 138/157] HBASE-12150 Backport replication changes from
+ HBASE-12145
+
+Reason: Bug
+Author: Andrew Purtell
+Ref: CDH-35763
+---
+ .../hbase/replication/ReplicationPeersZKImpl.java  |   10 ++++++++--
+ .../hbase/zookeeper/RecoverableZooKeeper.java      |   12 +++++++-----
+ 2 files changed, 15 insertions(+), 7 deletions(-)
+
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/replication/ReplicationPeersZKImpl.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/replication/ReplicationPeersZKImpl.java
+index b909fee..abdfd95 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/replication/ReplicationPeersZKImpl.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/replication/ReplicationPeersZKImpl.java
+@@ -259,8 +259,14 @@ public class ReplicationPeersZKImpl extends ReplicationStateZKBase implements Re
+     if (peer == null) {
+       return false;
+     }
+-    ((ConcurrentMap<String, ReplicationPeer>) peerClusters).putIfAbsent(peerId, peer);
+-    LOG.info("Added new peer cluster " + peer.getClusterKey());
++    ReplicationPeer previous =
++      ((ConcurrentMap<String, ReplicationPeer>) peerClusters).putIfAbsent(peerId, peer);
++    if (previous == null) {
++      LOG.info("Added new peer cluster=" + peer.getClusterKey());
++    } else {
++      LOG.info("Peer already present, " + previous.getClusterKey() + ", new cluster=" +
++        peer.getClusterKey());
++    }
+     return true;
+   }
+ 
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/zookeeper/RecoverableZooKeeper.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/zookeeper/RecoverableZooKeeper.java
+index 809c2a1..d6a28d1 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/zookeeper/RecoverableZooKeeper.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/zookeeper/RecoverableZooKeeper.java
+@@ -98,6 +98,8 @@ public class RecoverableZooKeeper {
+   private static final int ID_LENGTH_OFFSET = MAGIC_SIZE;
+   private static final int ID_LENGTH_SIZE =  Bytes.SIZEOF_INT;
+ 
++  @edu.umd.cs.findbugs.annotations.SuppressWarnings(value="DE_MIGHT_IGNORE",
++      justification="None. Its always been this way.")
+   public RecoverableZooKeeper(String quorumServers, int sessionTimeout,
+       Watcher watcher, int maxRetries, int retryIntervalMillis)
+   throws IOException {
+@@ -755,23 +757,23 @@ public class RecoverableZooKeeper {
+     return newData;
+   }
+ 
+-  public long getSessionId() {
++  public synchronized long getSessionId() {
+     return zk == null ? null : zk.getSessionId();
+   }
+ 
+-  public void close() throws InterruptedException {
++  public synchronized void close() throws InterruptedException {
+     if (zk != null) zk.close();
+   }
+ 
+-  public States getState() {
++  public synchronized States getState() {
+     return zk == null ? null : zk.getState();
+   }
+ 
+-  public ZooKeeper getZooKeeper() {
++  public synchronized ZooKeeper getZooKeeper() {
+     return zk;
+   }
+ 
+-  public byte[] getSessionPasswd() {
++  public synchronized byte[] getSessionPasswd() {
+     return zk == null ? null : zk.getSessionPasswd();
+   }
+ 
+-- 
+1.7.9.5
+
