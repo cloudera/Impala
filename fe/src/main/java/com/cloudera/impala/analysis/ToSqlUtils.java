@@ -126,13 +126,12 @@ public class ToSqlUtils {
     for (ColumnDef col: stmt.getPartitionColumnDefs()) {
       partitionColsSql.add(col.toString());
     }
-    String location = stmt.getLocation() == null ? null : stmt.getLocation().toString();
     // TODO: Pass the correct compression, if applicable.
     return getCreateTableSql(stmt.getDb(), stmt.getTbl(), stmt.getComment(), colsSql,
         partitionColsSql, stmt.getTblProperties(), stmt.getSerdeProperties(),
         stmt.isExternal(), stmt.getIfNotExists(), stmt.getRowFormat(),
         HdfsFileFormat.fromThrift(stmt.getFileFormat()), HdfsCompression.NONE, null,
-        location);
+        stmt.getLocation());
   }
 
   /**
@@ -153,7 +152,7 @@ public class ToSqlUtils {
         innerStmt.getSerdeProperties(), innerStmt.isExternal(),
         innerStmt.getIfNotExists(), innerStmt.getRowFormat(),
         HdfsFileFormat.fromThrift(innerStmt.getFileFormat()), HdfsCompression.NONE, null,
-        innerStmt.getLocation().toString());
+        innerStmt.getLocation());
     return createTableSql + " AS " + stmt.getQueryStmt().toSql();
   }
 
@@ -187,8 +186,9 @@ public class ToSqlUtils {
         msTable.getSd().getInputFormat());
     HdfsCompression compression = HdfsCompression.fromHdfsInputFormatClass(
         msTable.getSd().getInputFormat());
-    String location = isHbaseTable ? null : msTable.getSd().getLocation();
+    HdfsUri location = isHbaseTable ? null : new HdfsUri(msTable.getSd().getLocation());
     Map<String, String> serdeParameters = msTable.getSd().getSerdeInfo().getParameters();
+
     return getCreateTableSql(table.getDb().getName(), table.getName(), comment, colsSql,
         partitionColsSql, properties, serdeParameters, isExternal, false, rowFormat,
         format, compression, table.getStorageHandlerClassName(), location);
@@ -204,7 +204,7 @@ public class ToSqlUtils {
       Map<String, String> tblProperties, Map<String, String> serdeParameters,
       boolean isExternal, boolean ifNotExists, RowFormat rowFormat,
       HdfsFileFormat fileFormat, HdfsCompression compression, String storageHandlerClass,
-      String location) {
+      HdfsUri location) {
     Preconditions.checkNotNull(tableName);
     StringBuilder sb = new StringBuilder("CREATE ");
     if (isExternal) sb.append("EXTERNAL ");
@@ -269,7 +269,7 @@ public class ToSqlUtils {
       }
     }
     if (location != null) {
-      sb.append("LOCATION '" + location + "'\n");
+      sb.append("LOCATION '" + location.toString() + "'\n");
     }
     if (tblProperties != null && !tblProperties.isEmpty()) {
       sb.append("TBLPROPERTIES " + propertyMapToSql(tblProperties));
