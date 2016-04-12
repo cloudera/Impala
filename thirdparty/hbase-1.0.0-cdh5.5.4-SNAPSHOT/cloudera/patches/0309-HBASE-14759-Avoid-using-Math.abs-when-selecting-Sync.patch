@@ -1,0 +1,90 @@
+From 28029df8b53b03c96231cc45906441a4ac3ee285 Mon Sep 17 00:00:00 2001
+From: zhangduo <zhangduo@wandoujia.com>
+Date: Sat, 7 Nov 2015 09:13:04 +0800
+Subject: [PATCH 309/312] HBASE-14759 Avoid using Math.abs when selecting
+ SyncRunner in FSHLog
+
+(cherry picked from commit 55314ecb994529576f7d6aa842d11d8f7ac52544)
+
+Change-Id: Ic3b2a1fd9d4b270c6fddfdd0a93f09c7a2bcc38c
+Reason: Bug
+Author: Duo Zhang
+Ref: CDH-38342
+---
+ .../hadoop/hbase/regionserver/wal/FSHLog.java      |    6 ++--
+ .../hadoop/hbase/regionserver/wal/TestFSHLog.java  |   29 ++++++++++++++++++++
+ 2 files changed, 32 insertions(+), 3 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/wal/FSHLog.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/wal/FSHLog.java
+index 2d3a974..e65a4c5 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/wal/FSHLog.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/wal/FSHLog.java
+@@ -66,7 +66,6 @@ import org.apache.hadoop.hbase.HBaseConfiguration;
+ import org.apache.hadoop.hbase.HConstants;
+ import org.apache.hadoop.hbase.HRegionInfo;
+ import org.apache.hadoop.hbase.HTableDescriptor;
+-import org.apache.hadoop.hbase.KeyValue;
+ import org.apache.hadoop.hbase.TableName;
+ import org.apache.hadoop.hbase.classification.InterfaceAudience;
+ import org.apache.hadoop.hbase.util.Bytes;
+@@ -2032,9 +2031,10 @@ public class FSHLog implements WAL {
+           if (!endOfBatch || this.syncFuturesCount <= 0) return;
+           // Below expects that the offer 'transfers' responsibility for the outstanding syncs to
+           // the syncRunner. We should never get an exception in here.
+-          int index = Math.abs(this.syncRunnerIndex++) % this.syncRunners.length;
++          this.syncRunnerIndex = (this.syncRunnerIndex + 1) % this.syncRunners.length;
+           try {
+-            this.syncRunners[index].offer(sequence, this.syncFutures, this.syncFuturesCount);
++            this.syncRunners[this.syncRunnerIndex].offer(sequence, this.syncFutures,
++              this.syncFuturesCount);
+           } catch (Exception e) {
+             // Should NEVER get here.
+             requestLogRoll();
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/wal/TestFSHLog.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/wal/TestFSHLog.java
+index bc720eb..03e7131 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/wal/TestFSHLog.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/wal/TestFSHLog.java
+@@ -25,6 +25,7 @@ import static org.junit.Assert.assertTrue;
+ import static org.junit.Assert.fail;
+ 
+ import java.io.IOException;
++import java.lang.reflect.Field;
+ import java.util.ArrayList;
+ import java.util.Comparator;
+ import java.util.HashMap;
+@@ -465,4 +466,32 @@ public class TestFSHLog {
+     }
+   }
+ 
++  @Test
++  public void testSyncRunnerIndexOverflow() throws IOException, NoSuchFieldException,
++      SecurityException, IllegalArgumentException, IllegalAccessException {
++    final String name = "testSyncRunnerIndexOverflow";
++    FSHLog log =
++        new FSHLog(fs, FSUtils.getRootDir(conf), name, HConstants.HREGION_OLDLOGDIR_NAME, conf,
++            null, true, null, null);
++    try {
++      Field ringBufferEventHandlerField = FSHLog.class.getDeclaredField("ringBufferEventHandler");
++      ringBufferEventHandlerField.setAccessible(true);
++      FSHLog.RingBufferEventHandler ringBufferEventHandler =
++          (FSHLog.RingBufferEventHandler) ringBufferEventHandlerField.get(log);
++      Field syncRunnerIndexField =
++          FSHLog.RingBufferEventHandler.class.getDeclaredField("syncRunnerIndex");
++      syncRunnerIndexField.setAccessible(true);
++      syncRunnerIndexField.set(ringBufferEventHandler, Integer.MAX_VALUE - 1);
++      HTableDescriptor htd = new HTableDescriptor(TableName.valueOf("t1"));
++      htd.addFamily(new HColumnDescriptor("row"));
++      HRegionInfo hri =
++          new HRegionInfo(htd.getTableName(), HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW);
++      AtomicLong sequenceId = new AtomicLong(1);
++      for (int i = 0; i < 10; i++) {
++        addEdits(log, hri, htd, 1, sequenceId);
++      }
++    } finally {
++      log.close();
++    }
++  }
+ }
+-- 
+1.7.9.5
+
