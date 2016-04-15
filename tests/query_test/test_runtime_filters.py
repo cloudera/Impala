@@ -18,6 +18,7 @@ import time
 from tests.common.test_vector import *
 from tests.common.impala_test_suite import *
 
+@pytest.mark.execute_serially # IMPALA-3367
 class TestRuntimeFilters(ImpalaTestSuite):
   @classmethod
   def get_workload(cls):
@@ -43,6 +44,7 @@ class TestRuntimeFilters(ImpalaTestSuite):
       "Query took too long (%ss, possibly waiting for missing filters?)" % str(duration)
 
 
+@pytest.mark.execute_serially # IMPALA-3367
 class TestRuntimeRowFilters(ImpalaTestSuite):
   @classmethod
   def get_workload(cls):
