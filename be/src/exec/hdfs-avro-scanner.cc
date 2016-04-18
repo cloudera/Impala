@@ -842,6 +842,8 @@ Function* HdfsAvroScanner::CodegenDecodeAvroData(RuntimeState* state,
   DCHECK_EQ(replaced, 1);
 
   Function* eval_conjuncts_fn = ExecNode::CodegenEvalConjuncts(state, conjunct_ctxs);
+ 
+  if(eval_conjuncts_fn == NULL) return NULL;
   decode_avro_data_fn = codegen->ReplaceCallSites(decode_avro_data_fn, false,
       eval_conjuncts_fn, "EvalConjuncts", &replaced);
   DCHECK_EQ(replaced, 1);
