@@ -1,4 +1,4 @@
-MiniLlama 1.0.0-cdh5.5.4-SNAPSHOT
+MiniLlama 1.0.0-cdh5.5.4
 
 MiniLlama runs a Hadoop HDFS/Yarn minicluster and a Llama instance using a
 single command.

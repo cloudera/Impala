@@ -31,13 +31,13 @@ From: 'an unknown organization'
 From: 'Apache Software Foundation' (http://www.apache.org)
   - Apache Log4j (http://logging.apache.org/log4j/1.2/) log4j:log4j:bundle:1.2.17
     License: The Apache Software License, Version 2.0  (http://www.apache.org/licenses/LICENSE-2.0.txt)
-  - Apache Hadoop Annotations  org.apache.hadoop:hadoop-annotations:jar:2.6.0-cdh5.5.4-SNAPSHOT
+  - Apache Hadoop Annotations  org.apache.hadoop:hadoop-annotations:jar:2.6.0-cdh5.5.4
     License: The Apache Software License, Version 2.0  (http://www.apache.org/licenses/LICENSE-2.0.txt)
-  - Apache Hadoop Auth  org.apache.hadoop:hadoop-auth:jar:2.6.0-cdh5.5.4-SNAPSHOT
+  - Apache Hadoop Auth  org.apache.hadoop:hadoop-auth:jar:2.6.0-cdh5.5.4
     License: The Apache Software License, Version 2.0  (http://www.apache.org/licenses/LICENSE-2.0.txt)
-  - Apache Hadoop Common  org.apache.hadoop:hadoop-common:jar:2.6.0-cdh5.5.4-SNAPSHOT
+  - Apache Hadoop Common  org.apache.hadoop:hadoop-common:jar:2.6.0-cdh5.5.4
     License: The Apache Software License, Version 2.0  (http://www.apache.org/licenses/LICENSE-2.0.txt)
-  - Apache Hadoop HDFS  org.apache.hadoop:hadoop-hdfs:jar:2.6.0-cdh5.5.4-SNAPSHOT
+  - Apache Hadoop HDFS  org.apache.hadoop:hadoop-hdfs:jar:2.6.0-cdh5.5.4
     License: The Apache Software License, Version 2.0  (http://www.apache.org/licenses/LICENSE-2.0.txt)
 
 From: 'Apache Software Foundation' (http://www.apache.org/)
@@ -45,9 +45,9 @@ From: 'Apache Software Foundation' (http://www.apache.org/)
     License: The Apache Software License, Version 2.0  (http://www.apache.org/licenses/LICENSE-2.0.txt)
 
 From: 'Cloudera' (http://www.cloudera.com)
-  - Apache Avro (http://avro.apache.org) org.apache.avro:avro:bundle:1.7.6-cdh5.5.4-SNAPSHOT
+  - Apache Avro (http://avro.apache.org) org.apache.avro:avro:bundle:1.7.6-cdh5.5.4
     License: The Apache Software License, Version 2.0  (http://www.apache.org/licenses/LICENSE-2.0.txt)
-  - zookeeper  org.apache.zookeeper:zookeeper:pom:3.4.5-cdh5.5.4-SNAPSHOT
+  - zookeeper  org.apache.zookeeper:zookeeper:pom:3.4.5-cdh5.5.4
     License: The Apache Software License, Version 2.0  (http://www.apache.org/licenses/LICENSE-2.0.txt)
 
 From: 'FasterXML' (http://fasterxml.com)

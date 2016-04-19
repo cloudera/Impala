@@ -32,7 +32,7 @@ index 02d54ca..1bcfaab 100644
      <artifactId>hbase</artifactId>
      <groupId>org.apache.hbase</groupId>
 -    <version>1.0.0-cdh5.5.3-SNAPSHOT</version>
-+    <version>1.0.0-cdh5.5.4-SNAPSHOT</version>
++    <version>1.0.0-cdh5.5.4</version>
      <relativePath>..</relativePath>
    </parent>
  
@@ -45,7 +45,7 @@ index e6078aa..532415e 100644
      <artifactId>hbase</artifactId>
      <groupId>org.apache.hbase</groupId>
 -    <version>1.0.0-cdh5.5.3-SNAPSHOT</version>
-+    <version>1.0.0-cdh5.5.4-SNAPSHOT</version>
++    <version>1.0.0-cdh5.5.4</version>
      <relativePath>..</relativePath>
    </parent>
    <artifactId>hbase-assembly</artifactId>
@@ -58,7 +58,7 @@ index c3f69b3..c047f6d 100644
  <groupId>org.apache.hbase</groupId>
  <artifactId>hbase-checkstyle</artifactId>
 -<version>1.0.0-cdh5.5.3-SNAPSHOT</version>
-+<version>1.0.0-cdh5.5.4-SNAPSHOT</version>
++<version>1.0.0-cdh5.5.4</version>
  <name>HBase - Checkstyle</name>
  <description>Module to hold Checkstyle properties for HBase.</description>
  
@@ -66,7 +66,7 @@ index c3f69b3..c047f6d 100644
      <artifactId>hbase</artifactId>
      <groupId>org.apache.hbase</groupId>
 -    <version>1.0.0-cdh5.5.3-SNAPSHOT</version>
-+    <version>1.0.0-cdh5.5.4-SNAPSHOT</version>
++    <version>1.0.0-cdh5.5.4</version>
      <relativePath>..</relativePath>
    </parent>
  
@@ -79,7 +79,7 @@ index 72cf36f..5372d05 100644
      <artifactId>hbase</artifactId>
      <groupId>org.apache.hbase</groupId>
 -    <version>1.0.0-cdh5.5.3-SNAPSHOT</version>
-+    <version>1.0.0-cdh5.5.4-SNAPSHOT</version>
++    <version>1.0.0-cdh5.5.4</version>
      <relativePath>..</relativePath>
    </parent>
  
@@ -92,7 +92,7 @@ index 3632ad9..c75aa4e 100644
      <artifactId>hbase</artifactId>
      <groupId>org.apache.hbase</groupId>
 -    <version>1.0.0-cdh5.5.3-SNAPSHOT</version>
-+    <version>1.0.0-cdh5.5.4-SNAPSHOT</version>
++    <version>1.0.0-cdh5.5.4</version>
      <relativePath>..</relativePath>
    </parent>
  
@@ -105,7 +105,7 @@ index 8809b88..b50c558 100644
      <artifactId>hbase</artifactId>
      <groupId>org.apache.hbase</groupId>
 -    <version>1.0.0-cdh5.5.3-SNAPSHOT</version>
-+    <version>1.0.0-cdh5.5.4-SNAPSHOT</version>
++    <version>1.0.0-cdh5.5.4</version>
      <relativePath>..</relativePath>
    </parent>
    <artifactId>hbase-examples</artifactId>
@@ -118,7 +118,7 @@ index a4c6588..0cac288 100644
          <artifactId>hbase</artifactId>
          <groupId>org.apache.hbase</groupId>
 -        <version>1.0.0-cdh5.5.3-SNAPSHOT</version>
-+        <version>1.0.0-cdh5.5.4-SNAPSHOT</version>
++        <version>1.0.0-cdh5.5.4</version>
          <relativePath>..</relativePath>
      </parent>
  
@@ -131,7 +131,7 @@ index f8042f2..153246c 100644
      <artifactId>hbase</artifactId>
      <groupId>org.apache.hbase</groupId>
 -    <version>1.0.0-cdh5.5.3-SNAPSHOT</version>
-+    <version>1.0.0-cdh5.5.4-SNAPSHOT</version>
++    <version>1.0.0-cdh5.5.4</version>
      <relativePath>..</relativePath>
    </parent>
  
@@ -144,7 +144,7 @@ index 6df1662..1495434 100644
      <artifactId>hbase</artifactId>
      <groupId>org.apache.hbase</groupId>
 -    <version>1.0.0-cdh5.5.3-SNAPSHOT</version>
-+    <version>1.0.0-cdh5.5.4-SNAPSHOT</version>
++    <version>1.0.0-cdh5.5.4</version>
      <relativePath>..</relativePath>
    </parent>
  
@@ -157,7 +157,7 @@ index 93e8c8a..0cf3ec2 100644
      <artifactId>hbase</artifactId>
      <groupId>org.apache.hbase</groupId>
 -    <version>1.0.0-cdh5.5.3-SNAPSHOT</version>
-+    <version>1.0.0-cdh5.5.4-SNAPSHOT</version>
++    <version>1.0.0-cdh5.5.4</version>
      <relativePath>..</relativePath>
    </parent>
  
@@ -170,7 +170,7 @@ index 1316dab..fed7c5b 100644
          <artifactId>hbase</artifactId>
          <groupId>org.apache.hbase</groupId>
 -        <version>1.0.0-cdh5.5.3-SNAPSHOT</version>
-+        <version>1.0.0-cdh5.5.4-SNAPSHOT</version>
++        <version>1.0.0-cdh5.5.4</version>
          <relativePath>..</relativePath>
      </parent>
  
@@ -183,7 +183,7 @@ index 53ddc55..9c95d41 100644
      <artifactId>hbase</artifactId>
      <groupId>org.apache.hbase</groupId>
 -    <version>1.0.0-cdh5.5.3-SNAPSHOT</version>
-+    <version>1.0.0-cdh5.5.4-SNAPSHOT</version>
++    <version>1.0.0-cdh5.5.4</version>
      <relativePath>..</relativePath>
    </parent>
    <artifactId>hbase-rest</artifactId>
@@ -196,7 +196,7 @@ index 7eec50e..24032b3 100644
      <artifactId>hbase</artifactId>
      <groupId>org.apache.hbase</groupId>
 -    <version>1.0.0-cdh5.5.3-SNAPSHOT</version>
-+    <version>1.0.0-cdh5.5.4-SNAPSHOT</version>
++    <version>1.0.0-cdh5.5.4</version>
      <relativePath>..</relativePath>
    </parent>
    <artifactId>hbase-server</artifactId>
@@ -209,7 +209,7 @@ index 48d7f1f..24944dc 100644
      <artifactId>hbase</artifactId>
      <groupId>org.apache.hbase</groupId>
 -    <version>1.0.0-cdh5.5.3-SNAPSHOT</version>
-+    <version>1.0.0-cdh5.5.4-SNAPSHOT</version>
++    <version>1.0.0-cdh5.5.4</version>
      <relativePath>..</relativePath>
    </parent>
    <artifactId>hbase-shell</artifactId>
@@ -222,7 +222,7 @@ index fbc6c99..6840871 100644
          <artifactId>hbase</artifactId>
          <groupId>org.apache.hbase</groupId>
 -        <version>1.0.0-cdh5.5.3-SNAPSHOT</version>
-+        <version>1.0.0-cdh5.5.4-SNAPSHOT</version>
++        <version>1.0.0-cdh5.5.4</version>
          <relativePath>..</relativePath>
      </parent>
      <artifactId>hbase-testing-util</artifactId>
@@ -235,7 +235,7 @@ index be21e45..544b634 100644
      <artifactId>hbase</artifactId>
      <groupId>org.apache.hbase</groupId>
 -    <version>1.0.0-cdh5.5.3-SNAPSHOT</version>
-+    <version>1.0.0-cdh5.5.4-SNAPSHOT</version>
++    <version>1.0.0-cdh5.5.4</version>
      <relativePath>..</relativePath>
    </parent>
    <artifactId>hbase-thrift</artifactId>
@@ -256,7 +256,7 @@ index c203a2d..1b52345 100644
    <artifactId>hbase</artifactId>
    <packaging>pom</packaging>
 -  <version>1.0.0-cdh5.5.3-SNAPSHOT</version>
-+  <version>1.0.0-cdh5.5.4-SNAPSHOT</version>
++  <version>1.0.0-cdh5.5.4</version>
    <name>HBase</name>
    <description>
      Apache HBase is the Hadoop database. Use it when you need

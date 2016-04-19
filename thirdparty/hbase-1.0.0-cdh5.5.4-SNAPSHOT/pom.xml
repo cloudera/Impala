@@ -32,14 +32,14 @@
   <parent>
     <groupId>com.cloudera.cdh</groupId>
     <artifactId>cdh-root</artifactId>
-    <version>5.5.4-SNAPSHOT</version>
+    <version>5.5.4</version>
     <relativePath/>
     <!-- no parent resolution -->
   </parent>
   <groupId>org.apache.hbase</groupId>
   <artifactId>hbase</artifactId>
   <packaging>pom</packaging>
-  <version>1.0.0-cdh5.5.4-SNAPSHOT</version>
+  <version>1.0.0-cdh5.5.4</version>
   <name>HBase</name>
   <description>
     Apache HBase is the Hadoop database. Use it when you need
