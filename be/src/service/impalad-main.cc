@@ -23,11 +23,12 @@
 #include "common/init.h"
 #include "exec/hbase-table-scanner.h"
 #include "exec/hbase-table-writer.h"
-#include "runtime/hbase-table-factory.h"
+#include "exprs/hive-udf-call.h"
 #include "codegen/llvm-codegen.h"
 #include "common/status.h"
 #include "runtime/coordinator.h"
 #include "runtime/exec-env.h"
+#include "runtime/hbase-table-factory.h"
 #include "util/jni-util.h"
 #include "util/network-util.h"
 #include "rpc/thrift-util.h"
@@ -59,6 +60,7 @@ int main(int argc, char** argv) {
   EXIT_IF_ERROR(HBaseTableScanner::Init());
   EXIT_IF_ERROR(HBaseTableFactory::Init());
   EXIT_IF_ERROR(HBaseTableWriter::InitJNI());
+  EXIT_IF_ERROR(HiveUdfCall::Init());
   InitFeSupport();
 
   // start backend service for the coordinator on be_port

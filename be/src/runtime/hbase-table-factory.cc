@@ -95,12 +95,11 @@ HBaseTableFactory::~HBaseTableFactory() {
 
   // Clean up the global refs and stop the threads.
   if (conf_ != NULL) {
-    env->DeleteGlobalRef(conf_);
+    JniUtil::FreeGlobalRef(env, conf_);
   }
-
   if (executor_ != NULL && executor_shutdown_id_ != NULL) {
     env->CallObjectMethod(executor_, executor_shutdown_id_);
-    env->DeleteGlobalRef(executor_);
+    JniUtil::FreeGlobalRef(env, executor_);
   }
 }
 
