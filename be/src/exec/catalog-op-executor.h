@@ -17,7 +17,7 @@
 #define IMPALA_EXEC_CATALOG_OP_EXECUTOR_H
 
 #include <boost/scoped_ptr.hpp>
-#include "gen-cpp/cli_service_types.h"
+#include "gen-cpp/TCLIService_types.h"
 #include "gen-cpp/Frontend_types.h"
 
 namespace impala {
@@ -25,6 +25,7 @@ namespace impala {
 class ExecEnv;
 class Frontend;
 class Status;
+class RuntimeProfile;
 
 // The CatalogOpExecutor is responsible for executing catalog operations.
 // This includes DDL statements such as CREATE and ALTER as well as statements such
@@ -32,7 +33,8 @@ class Status;
 // operation.
 class CatalogOpExecutor {
  public:
-  CatalogOpExecutor(ExecEnv* env, Frontend* fe) : env_(env), fe_(fe) {}
+  CatalogOpExecutor(ExecEnv* env, Frontend* fe, RuntimeProfile* profile)
+      : env_(env), fe_(fe), profile_(profile) {}
 
   // Executes the given catalog operation against the catalog server.
   Status Exec(const TCatalogOpRequest& catalog_op);
@@ -57,6 +59,11 @@ class CatalogOpExecutor {
   Status PrioritizeLoad(const TPrioritizeLoadRequest& req,
       TPrioritizeLoadResponse* result);
 
+  // Makes an RPC to the CatalogServer to verify whether the specified user has privileges
+  // to access the Sentry Policy Service. Returns OK if the user has privileges or
+  // a bad status if the user does not have privileges (or if there was an error).
+  Status SentryAdminCheck(const TSentryAdminCheckRequest& re);
+
   // Set in Exec(), returns a pointer to the TDdlExecResponse of the DDL execution.
   // If called before Exec(), this will return NULL. Only set if the
   // TCatalogOpType is DDL.
@@ -77,6 +84,7 @@ class CatalogOpExecutor {
   static void SetTableStats(
       const apache::hive::service::cli::thrift::TTableSchema& tbl_stats_schema,
       const apache::hive::service::cli::thrift::TRowSet& tbl_stats_data,
+      const std::vector<TPartitionStats>& existing_part_stats,
       TAlterTableUpdateStatsParams* params);
   static void SetColumnStats(
       const apache::hive::service::cli::thrift::TTableSchema& col_stats_schema,
@@ -91,6 +99,7 @@ class CatalogOpExecutor {
 
   ExecEnv* env_;
   Frontend* fe_;
+  RuntimeProfile* profile_;
 
   // Handles additional BE work that needs to be done for drop function and data source,
   // in particular, clearing the local library cache for this function.

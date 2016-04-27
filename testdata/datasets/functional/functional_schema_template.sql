@@ -457,11 +457,14 @@ ALTER TABLE {table_name} ADD IF NOT EXISTS PARTITION(year=2010, month=1, day=7);
 ALTER TABLE {table_name} ADD IF NOT EXISTS PARTITION(year=2010, month=1, day=8);
 ALTER TABLE {table_name} ADD IF NOT EXISTS PARTITION(year=2010, month=1, day=9);
 ALTER TABLE {table_name} ADD IF NOT EXISTS PARTITION(year=2010, month=1, day=10);
+ALTER TABLE {table_name} ADD IF NOT EXISTS PARTITION(year=2010, month=1, day=NULL);
 ---- DEPENDENT_LOAD
 INSERT OVERWRITE TABLE {db_name}{db_suffix}.{table_name} partition (year, month, day)
 SELECT id, bool_col, tinyint_col, smallint_col, int_col, bigint_col, float_col, double_col, date_string_col, string_col, timestamp_col, year, month, day
 FROM {db_name}.{table_name};
 ---- LOAD
+SET hive.exec.dynamic.partition.mode=nonstrict;
+SET hive.exec.dynamic.partition=true;
 LOAD DATA LOCAL INPATH '{impala_home}/testdata/target/AllTypesAgg/100101.txt' OVERWRITE INTO TABLE {db_name}{db_suffix}.{table_name} PARTITION(year=2010, month=1, day=1);
 LOAD DATA LOCAL INPATH '{impala_home}/testdata/target/AllTypesAgg/100102.txt' OVERWRITE INTO TABLE {db_name}{db_suffix}.{table_name} PARTITION(year=2010, month=1, day=2);
 LOAD DATA LOCAL INPATH '{impala_home}/testdata/target/AllTypesAgg/100103.txt' OVERWRITE INTO TABLE {db_name}{db_suffix}.{table_name} PARTITION(year=2010, month=1, day=3);
@@ -472,6 +475,7 @@ LOAD DATA LOCAL INPATH '{impala_home}/testdata/target/AllTypesAgg/100107.txt' OV
 LOAD DATA LOCAL INPATH '{impala_home}/testdata/target/AllTypesAgg/100108.txt' OVERWRITE INTO TABLE {db_name}{db_suffix}.{table_name} PARTITION(year=2010, month=1, day=8);
 LOAD DATA LOCAL INPATH '{impala_home}/testdata/target/AllTypesAgg/100109.txt' OVERWRITE INTO TABLE {db_name}{db_suffix}.{table_name} PARTITION(year=2010, month=1, day=9);
 LOAD DATA LOCAL INPATH '{impala_home}/testdata/target/AllTypesAgg/100110.txt' OVERWRITE INTO TABLE {db_name}{db_suffix}.{table_name} PARTITION(year=2010, month=1, day=10);
+INSERT OVERWRITE TABLE {db_name}{db_suffix}.{table_name} partition (year, month, day) SELECT id, bool_col, tinyint_col, smallint_col, int_col, bigint_col, float_col, double_col, date_string_col, string_col, timestamp_col, year, month, tinyint_col as day FROM {db_name}.{table_name} WHERE year=2010 and month=1 and day != '__HIVE_DEFAULT_PARTITION__' and tinyint_col IS NULL order by id;
 ====
 ---- DATASET
 functional
@@ -521,6 +525,45 @@ LOAD DATA LOCAL INPATH '{impala_home}/testdata/target/AllTypesAggNoNulls/100107.
 LOAD DATA LOCAL INPATH '{impala_home}/testdata/target/AllTypesAggNoNulls/100108.txt' OVERWRITE INTO TABLE {db_name}{db_suffix}.{table_name} PARTITION(year=2010, month=1, day=8);
 LOAD DATA LOCAL INPATH '{impala_home}/testdata/target/AllTypesAggNoNulls/100109.txt' OVERWRITE INTO TABLE {db_name}{db_suffix}.{table_name} PARTITION(year=2010, month=1, day=9);
 LOAD DATA LOCAL INPATH '{impala_home}/testdata/target/AllTypesAggNoNulls/100110.txt' OVERWRITE INTO TABLE {db_name}{db_suffix}.{table_name} PARTITION(year=2010, month=1, day=10);
+====
+---- DATASET
+functional
+---- BASE_TABLE_NAME
+allcomplextypes
+---- PARTITION_COLUMNS
+year int
+month int
+---- COLUMNS
+id int
+int_array_col array<int>
+array_array_col array<array<int>>
+map_array_col array<map<string,int>>
+struct_array_col array<struct<f1: bigint, f2: string>>
+int_map_col map<string, int>
+array_map_col map<string, array<int>>
+map_map_col map<string, map<string, int>>
+struct_map_col map<string, struct<f1: bigint, f2: string>>
+int_struct_col struct<f1: int, f2: int>
+complex_struct_col struct<f1: int, f2: array<int>, f3: map<string, int>>
+nested_struct_col struct<f1: int, f2: struct<f11: bigint, f12: struct<f21: bigint>>>
+complex_nested_struct_col struct<f1: int, f2: array<struct<f11: bigint, f12: map<string, struct<f21: bigint>>>>>
+---- ROW_FORMAT
+delimited fields terminated by ','  escaped by '\\'
+---- DEPENDENT_LOAD
+---- LOAD
+====
+---- DATASET
+functional
+---- BASE_TABLE_NAME
+functional
+---- COLUMNS
+-- For testing ambiguous path resolution
+id int
+functional struct<functional: struct<functional: int>>
+---- ROW_FORMAT
+delimited fields terminated by ','  escaped by '\\'
+---- DEPENDENT_LOAD
+---- LOAD
 ====
 ---- DATASET
 functional
@@ -700,6 +743,15 @@ alltypes_view
 ---- CREATE
 CREATE VIEW IF NOT EXISTS {db_name}{db_suffix}.{table_name}
 AS SELECT * FROM {db_name}{db_suffix}.alltypes;
+---- LOAD
+====
+---- DATASET
+functional
+---- BASE_TABLE_NAME
+allcomplextypes_view
+---- CREATE
+CREATE VIEW IF NOT EXISTS {db_name}{db_suffix}.{table_name}
+AS SELECT * FROM {db_name}{db_suffix}.allcomplextypes;
 ---- LOAD
 ====
 ---- DATASET
@@ -919,6 +971,7 @@ ALTER TABLE {table_name} ADD IF NOT EXISTS PARTITION(year=2010, month=1, day=7);
 ALTER TABLE {table_name} ADD IF NOT EXISTS PARTITION(year=2010, month=1, day=8);
 ALTER TABLE {table_name} ADD IF NOT EXISTS PARTITION(year=2010, month=1, day=9);
 ALTER TABLE {table_name} ADD IF NOT EXISTS PARTITION(year=2010, month=1, day=10);
+ALTER TABLE {table_name} ADD IF NOT EXISTS PARTITION(year=2010, month=1, day=NULL);
 ---- DEPENDENT_LOAD
 insert overwrite table {db_name}{db_suffix}.{table_name} partition (year, month, day) SELECT id, bool_col, tinyint_col, smallint_col, int_col, bigint_col, float_col, double_col, date_string_col, string_col, timestamp_col, year, month, day FROM {db_name}.{table_name} where id % 4 = 0;
 insert into table {db_name}{db_suffix}.{table_name} partition (year, month, day) SELECT id, bool_col, tinyint_col, smallint_col, int_col, bigint_col, float_col, double_col, date_string_col, string_col, timestamp_col, year, month, day FROM {db_name}.{table_name} where id % 4 = 1;
@@ -1077,13 +1130,13 @@ ALTER TABLE {table_name} ADD IF NOT EXISTS PARTITION(id=8);
 ALTER TABLE {table_name} ADD IF NOT EXISTS PARTITION(id=9);
 ----  DEPENDENT_LOAD
 INSERT OVERWRITE TABLE {db_name}{db_suffix}.{table_name} partition (id)
-select bool_col,id FROM {db_name}.alltypesagg where id < 10;
+select distinct bool_col,id FROM {db_name}.alltypesagg where id < 10 order by id;
 ---- LOAD
 SET hive.exec.dynamic.partition.mode=nonstrict;
 SET hive.exec.dynamic.partition=true;
   SET hive.input.format=org.apache.hadoop.hive.ql.io.HiveInputFormat;
 INSERT OVERWRITE TABLE {db_name}{db_suffix}.{table_name} partition (id)
-select bool_col,id FROM {db_name}.alltypesagg where id < 10;
+select distinct bool_col,id FROM {db_name}.alltypesagg where id < 10 order by id;
 ====
 ---- DATASET
 functional
@@ -1197,6 +1250,16 @@ LOAD DATA LOCAL INPATH '${{env:IMPALA_HOME}}/testdata/bad_text_lzo/bad_text.lzo'
 ---- DATASET
 functional
 ---- BASE_TABLE_NAME
+bad_text_gzip
+---- COLUMNS
+s STRING
+i INT
+---- DEPENDENT_LOAD
+LOAD DATA LOCAL INPATH '${{env:IMPALA_HOME}}/testdata/bad_text_gzip/file_not_finished.gz' OVERWRITE INTO TABLE {db_name}{db_suffix}.{table_name};
+====
+---- DATASET
+functional
+---- BASE_TABLE_NAME
 bad_seq_snap
 ---- COLUMNS
 field STRING
@@ -1212,33 +1275,6 @@ functional
 bad_parquet
 ---- COLUMNS
 field STRING
-====
----- DATASET
-functional
----- BASE_TABLE_NAME
-map_table
----- CREATE_HIVE
--- For structured-type testing
-CREATE TABLE IF NOT EXISTS {db_name}{db_suffix}.{table_name} (map_col map<int, string>);
-====
----- DATASET
-functional
----- BASE_TABLE_NAME
-map_table_hbase
----- COLUMNS
-key string
-map_col map<string, string>
----- LOAD
--- TODO: Combine this table and the 'map_table' above when the data loading framework
--- has better support for specifying the executor (Hive vs Impala) for a table section.
-====
----- DATASET
-functional
----- BASE_TABLE_NAME
-array_table
----- CREATE_HIVE
--- For structured-type testing
-CREATE TABLE IF NOT EXISTS {db_name}{db_suffix}.{table_name} (array_col array<int>);
 ====
 ---- DATASET
 functional
@@ -1335,6 +1371,23 @@ delimited fields terminated by ','
 ---- LOAD
 `hadoop fs -mkdir -p /test-warehouse/decimal_tiny && hadoop fs -put -f \
 ${IMPALA_HOME}/testdata/data/decimal-tiny.txt /test-warehouse/decimal_tiny/
+---- DEPENDENT_LOAD
+INSERT OVERWRITE TABLE {db_name}{db_suffix}.{table_name}
+select * from functional.{table_name};
+====
+---- DATASET
+functional
+---- BASE_TABLE_NAME
+chars_tiny
+---- COLUMNS
+cs CHAR(5)
+cl CHAR(140)
+vc VARCHAR(32)
+---- ROW_FORMAT
+delimited fields terminated by ','
+---- LOAD
+`hadoop fs -mkdir -p /test-warehouse/chars_tiny && hadoop fs -put -f \
+${IMPALA_HOME}/testdata/data/chars-tiny.txt /test-warehouse/chars_tiny/
 ---- DEPENDENT_LOAD
 INSERT OVERWRITE TABLE {db_name}{db_suffix}.{table_name}
 select * from functional.{table_name};

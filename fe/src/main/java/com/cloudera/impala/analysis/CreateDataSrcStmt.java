@@ -17,7 +17,6 @@ package com.cloudera.impala.analysis;
 import org.apache.hadoop.hive.metastore.MetaStoreUtils;
 
 import com.cloudera.impala.authorization.Privilege;
-import com.cloudera.impala.catalog.AuthorizationException;
 import com.cloudera.impala.common.AnalysisException;
 import com.cloudera.impala.extdatasource.ApiVersion;
 import com.cloudera.impala.thrift.TCreateDataSourceParams;
@@ -26,7 +25,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 
 /**
- * Represents a CREATE DATASOURCE statement.
+ * Represents a CREATE DATA SOURCE statement.
  */
 public class CreateDataSrcStmt extends StatementBase {
   private final String dataSrcName_;
@@ -50,8 +49,7 @@ public class CreateDataSrcStmt extends StatementBase {
   }
 
   @Override
-  public void analyze(Analyzer analyzer) throws AnalysisException,
-      AuthorizationException {
+  public void analyze(Analyzer analyzer) throws AnalysisException {
     if (!MetaStoreUtils.validateName(dataSrcName_)) {
       throw new AnalysisException("Invalid data source name: " + dataSrcName_);
     }
@@ -74,7 +72,7 @@ public class CreateDataSrcStmt extends StatementBase {
   @Override
   public String toSql() {
     StringBuilder sb = new StringBuilder();
-    sb.append("CREATE DATASOURCE ");
+    sb.append("CREATE DATA SOURCE ");
     if (ifNotExists_) sb.append("IF NOT EXISTS ");
     sb.append(dataSrcName_);
     sb.append(" LOCATION '");
@@ -89,7 +87,7 @@ public class CreateDataSrcStmt extends StatementBase {
 
   public TCreateDataSourceParams toThrift() {
     return new TCreateDataSourceParams(
-        new TDataSource(dataSrcName_, location_.getLocation(), className_,
+        new TDataSource(dataSrcName_, location_.toString(), className_,
             apiVersion_.name())).setIf_not_exists(ifNotExists_);
   }
 }

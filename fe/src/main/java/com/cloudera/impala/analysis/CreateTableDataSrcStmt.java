@@ -24,7 +24,6 @@ import java.util.List;
 import java.util.Map;
 
 import com.cloudera.impala.authorization.Privilege;
-import com.cloudera.impala.catalog.AuthorizationException;
 import com.cloudera.impala.catalog.DataSource;
 import com.cloudera.impala.catalog.DataSourceTable;
 import com.cloudera.impala.catalog.RowFormat;
@@ -37,7 +36,7 @@ import com.google.common.collect.Maps;
 
 /**
  * Represents a CREATE TABLE statement for external data sources. Such tables
- * reference an external data source (created with a CREATE DATASOURCE statement)
+ * reference an external data source (created with a CREATE DATA SOURCE statement)
  * and the properties of that source are stored in the table properties because
  * the metastore does not store the data sources themselves.
  */
@@ -65,8 +64,7 @@ public class CreateTableDataSrcStmt extends CreateTableStmt {
   }
 
   @Override
-  public void analyze(Analyzer analyzer)
-      throws AnalysisException, AuthorizationException {
+  public void analyze(Analyzer analyzer) throws AnalysisException {
     super.analyze(analyzer);
     String dataSourceName = getTblProperties().get(TBL_PROP_DATA_SRC_NAME);
     DataSource dataSource = analyzer.getCatalog().getDataSource(dataSourceName);
@@ -74,16 +72,16 @@ public class CreateTableDataSrcStmt extends CreateTableStmt {
       throw new AnalysisException("Data source does not exist: " + dataSourceName);
     }
 
-    for (ColumnDesc col: getColumnDescs()) {
-      if (!DataSourceTable.isSupportedColumnType(col.getColType())) {
+    for (ColumnDesc col: getColumnDefs()) {
+      if (!DataSourceTable.isSupportedColumnType(col.getType())) {
         throw new AnalysisException("Tables produced by an external data source do " +
-            "not support the column type: " + col.getColType());
+            "not support the column type: " + col.getType());
       }
     }
     // Add table properties from the DataSource catalog object now that we have access
     // to the catalog. These are stored in the table metadata because DataSource catalog
     // objects are not currently persisted.
-    String location = dataSource.getLocation().toUri().getPath();
+    String location = dataSource.getLocation();
     getTblProperties().put(TBL_PROP_LOCATION, location);
     getTblProperties().put(TBL_PROP_CLASS, dataSource.getClassName());
     getTblProperties().put(TBL_PROP_API_VER, dataSource.getApiVersion());

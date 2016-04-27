@@ -5,48 +5,50 @@ select
 from
   (select
     i_manager_id,
-    sum(ss_sales_price) sum_sales
+    sum(ss_sales_price) sum_sales,
+    avg(sum(ss_sales_price)) over (partition by i_manager_id) avg_monthly_sales
   from
-    store_sales
-    join item on (store_sales.ss_item_sk = item.i_item_sk)
-    join store on (store_sales.ss_store_sk = store.s_store_sk)
-    join date_dim on (store_sales.ss_sold_date_sk = date_dim.d_date_sk)
+    item,
+    store_sales,
+    date_dim,
+    store
   where
-    ss_date between '2001-01-01' and '2001-12-31'
-    and (
-          (i_category in('Books', 'Children', 'Electronics')
-            and i_class in('personal', 'portable', 'refernece', 'self-help')
-            and i_brand in('scholaramalgamalg #14', 'scholaramalgamalg #7', 'exportiunivamalg #9', 'scholaramalgamalg #9')
-          )
-          or 
-          (i_category in('Women', 'Music', 'Men')
-            and i_class in('accessories', 'classical', 'fragrances', 'pants')
-            and i_brand in('amalgimporto #1', 'edu packscholar #1', 'exportiimporto #1', 'importoamalg #1')
-          )
-        )
+    ss_item_sk = i_item_sk
+    and ss_sold_date_sk = d_date_sk
+    and ss_store_sk = s_store_sk
+    and d_month_seq in (1212, 1212 + 1, 1212 + 2, 1212 + 3, 1212 + 4, 1212 + 5, 1212 + 6, 1212 + 7, 1212 + 8, 1212 + 9, 1212 + 10, 1212 + 11)
+    and ((i_category in ('Books', 'Children', 'Electronics')
+      and i_class in ('personal', 'portable', 'refernece', 'self-help')
+      and i_brand in ('scholaramalgamalg #14', 'scholaramalgamalg #7', 'exportiunivamalg #9', 'scholaramalgamalg #9'))
+    or (i_category in ('Women', 'Music', 'Men')
+      and i_class in ('accessories', 'classical', 'fragrances', 'pants')
+      and i_brand in ('amalgimporto #1', 'edu packscholar #1', 'exportiimporto #1', 'importoamalg #1')))
+    and ss_sold_date_sk between 2451911 and 2452275  -- partition key filter
   group by
     i_manager_id,
     d_moy
   ) tmp1
+where
+case when avg_monthly_sales > 0 then abs (sum_sales - avg_monthly_sales) / avg_monthly_sales else null end > 0.1
 order by
   i_manager_id,
+  avg_monthly_sales,
   sum_sales
-limit 100
+limit 100;
 ---- RESULTS
-10,50.08000183105469
-10,92.63999938964844
-13,1.75
-13,4.71999979019165
-13,66.86000061035156
-13,136.1300048828125
-29,2.269999980926514
-29,25.35000038146973
-29,71.66999816894531
-29,81.19000053405762
-34,2.789999961853027
-34,21.90999984741211
-34,83.13999938964844
-34,200.9999931454659
+10,50.08000183105469,71.36000061035156
+10,92.63999938964844,71.36000061035156
+13,1.75,52.36500132083893
+13,4.71999979019165,52.36500132083893
+13,66.86000061035156,52.36500132083893
+13,136.1300048828125,52.36500132083893
+29,2.269999980926514,45.11999976634979
+29,25.35000038146973,45.11999976634979
+29,71.66999816894531,45.11999976634979
+29,81.19000053405762,45.11999976634979
+34,2.789999961853027,77.20999808609486
+34,21.90999984741211,77.20999808609486
+34,200.9999931454659,77.20999808609486
 ---- TYPES
-INT, DOUBLE
+INT, DOUBLE, DOUBLE
 ====

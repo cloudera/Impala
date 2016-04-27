@@ -22,9 +22,12 @@ import com.google.common.collect.Lists;
 /**
  * Encapsulates all the information needed to compute ORDER BY
  * This doesn't contain aliases or positional exprs.
+ * TODO: reorganize this completely, this doesn't really encapsulate anything; this
+ * should move into planner/ and encapsulate the implementation of the sort of a
+ * particular input row (materialize all row slots)
  */
 public class SortInfo {
-  private final List<Expr> orderingExprs_;
+  private List<Expr> orderingExprs_;
   private final List<Boolean> isAscOrder_;
   // True if "NULLS FIRST", false if "NULLS LAST", null if not specified.
   private final List<Boolean> nullsFirstParams_;
@@ -44,7 +47,8 @@ public class SortInfo {
     nullsFirstParams_ = nullsFirstParams;
   }
 
-  void setMaterializedTupleInfo(TupleDescriptor tupleDesc, List<Expr> tupleSlotExprs) {
+  public void setMaterializedTupleInfo(
+      TupleDescriptor tupleDesc, List<Expr> tupleSlotExprs) {
     sortTupleDesc_ = tupleDesc;
     sortTupleSlotExprs_ = tupleSlotExprs;
   }
@@ -72,10 +76,10 @@ public class SortInfo {
    * Materializes the slots referenced by the corresponding sortTupleSlotExpr after
    * applying the 'smap'.
    */
-  public void materializeRequiredSlots(Analyzer analyzer, Expr.SubstitutionMap smap) {
+  public void materializeRequiredSlots(Analyzer analyzer, ExprSubstitutionMap smap) {
     Preconditions.checkNotNull(sortTupleDesc_);
     Preconditions.checkNotNull(sortTupleSlotExprs_);
-    Preconditions.checkState(sortTupleDesc_.getIsMaterialized());
+    Preconditions.checkState(sortTupleDesc_.isMaterialized());
     analyzer.materializeSlots(orderingExprs_);
     List<SlotDescriptor> sortTupleSlotDescs = sortTupleDesc_.getSlots();
     List<Expr> materializedExprs = Lists.newArrayList();
@@ -84,7 +88,21 @@ public class SortInfo {
         materializedExprs.add(sortTupleSlotExprs_.get(i));
       }
     }
-    analyzer.materializeSlots(Expr.cloneList(materializedExprs, smap));
+    List<Expr> substMaterializedExprs =
+        Expr.substituteList(materializedExprs, smap, analyzer, false);
+    analyzer.materializeSlots(substMaterializedExprs);
   }
 
+  public void substituteOrderingExprs(ExprSubstitutionMap smap, Analyzer analyzer) {
+    orderingExprs_ = Expr.substituteList(orderingExprs_, smap, analyzer, false);
+  }
+
+  /**
+   * Asserts that all ordering exprs are bound by the sort tuple.
+   */
+  public void checkConsistency() {
+    for (Expr orderingExpr: orderingExprs_) {
+      Preconditions.checkState(orderingExpr.isBound(sortTupleDesc_.getId()));
+    }
+  }
 }

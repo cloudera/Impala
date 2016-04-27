@@ -14,14 +14,15 @@
 
 package com.cloudera.impala.analysis;
 
+import java.util.ArrayList;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.cloudera.impala.catalog.AuthorizationException;
-import com.cloudera.impala.catalog.ColumnType;
 import com.cloudera.impala.catalog.Db;
 import com.cloudera.impala.catalog.Function.CompareMode;
 import com.cloudera.impala.catalog.ScalarFunction;
+import com.cloudera.impala.catalog.Type;
 import com.cloudera.impala.common.AnalysisException;
 import com.cloudera.impala.common.Pair;
 import com.cloudera.impala.common.Reference;
@@ -30,6 +31,7 @@ import com.cloudera.impala.thrift.TExprNode;
 import com.cloudera.impala.thrift.TExprNodeType;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Predicates;
 import com.google.common.collect.Lists;
 
 /**
@@ -45,7 +47,11 @@ public class BinaryPredicate extends Predicate {
     LE("<=", "le", TComparisonOp.LE),
     GE(">=", "ge", TComparisonOp.GE),
     LT("<", "lt", TComparisonOp.LT),
-    GT(">", "gt", TComparisonOp.GT);
+    GT(">", "gt", TComparisonOp.GT),
+    // Same as EQ, except it returns True if the rhs is NULL. There is no backend
+    // function for this. The functionality is embedded in the hash-join
+    // implementation.
+    NULL_MATCHING_EQ("=", "null_matching_eq", TComparisonOp.EQ);
 
     private final String description_;
     private final String name_;
@@ -70,32 +76,35 @@ public class BinaryPredicate extends Predicate {
         case GE: return LE;
         case LT: return GT;
         case GT: return LT;
+        case NULL_MATCHING_EQ:
+          throw new IllegalStateException("Not implemented");
         default: throw new IllegalStateException("Invalid operator");
       }
     }
   }
 
   public static void initBuiltins(Db db) {
-    for (ColumnType t: ColumnType.getSupportedTypes()) {
+    for (Type t: Type.getSupportedTypes()) {
       if (t.isNull()) continue; // NULL is handled through type promotion.
       db.addBuiltin(ScalarFunction.createBuiltinOperator(
-          Operator.EQ.getName(), Lists.newArrayList(t, t), ColumnType.BOOLEAN));
+          Operator.EQ.getName(), Lists.newArrayList(t, t), Type.BOOLEAN));
       db.addBuiltin(ScalarFunction.createBuiltinOperator(
-          Operator.NE.getName(), Lists.newArrayList(t, t), ColumnType.BOOLEAN));
+          Operator.NE.getName(), Lists.newArrayList(t, t), Type.BOOLEAN));
       db.addBuiltin(ScalarFunction.createBuiltinOperator(
-          Operator.LE.getName(), Lists.newArrayList(t, t), ColumnType.BOOLEAN));
+          Operator.LE.getName(), Lists.newArrayList(t, t), Type.BOOLEAN));
       db.addBuiltin(ScalarFunction.createBuiltinOperator(
-          Operator.GE.getName(), Lists.newArrayList(t, t), ColumnType.BOOLEAN));
+          Operator.GE.getName(), Lists.newArrayList(t, t), Type.BOOLEAN));
       db.addBuiltin(ScalarFunction.createBuiltinOperator(
-          Operator.LT.getName(), Lists.newArrayList(t, t), ColumnType.BOOLEAN));
+          Operator.LT.getName(), Lists.newArrayList(t, t), Type.BOOLEAN));
       db.addBuiltin(ScalarFunction.createBuiltinOperator(
-          Operator.GT.getName(), Lists.newArrayList(t, t), ColumnType.BOOLEAN));
+          Operator.GT.getName(), Lists.newArrayList(t, t), Type.BOOLEAN));
     }
   }
 
-  private final Operator op_;
+  private Operator op_;
 
   public Operator getOp() { return op_; }
+  public void setOp(Operator op) { op_ = op; }
 
   public BinaryPredicate(Operator op, Expr e1, Expr e2) {
     super();
@@ -106,6 +115,13 @@ public class BinaryPredicate extends Predicate {
     children_.add(e2);
   }
 
+  protected BinaryPredicate(BinaryPredicate other) {
+    super(other);
+    op_ = other.op_;
+  }
+
+  public boolean isNullMatchingEq() { return op_ == Operator.NULL_MATCHING_EQ; }
+
   @Override
   public String toSqlImpl() {
     return getChild(0).toSql() + " " + op_.toString() + " " + getChild(1).toSql();
@@ -114,13 +130,16 @@ public class BinaryPredicate extends Predicate {
   @Override
   protected void toThrift(TExprNode msg) {
     Preconditions.checkState(children_.size() == 2);
+    // Cannot serialize a nested predicate.
+    Preconditions.checkState(!contains(Subquery.class));
     // This check is important because we often clone and/or evaluate predicates,
     // and it's easy to get the casting logic wrong, e.g., cloned predicates
     // with expr substitutions need to be re-analyzed with reanalyze().
-    Preconditions.checkState(getChild(0).getType().matchesType(getChild(1).getType()),
+    Preconditions.checkState(getChild(0).getType().getPrimitiveType() ==
+                             getChild(1).getType().getPrimitiveType(),
         "child 0 type: " + getChild(0).getType() +
         " child 1 type: " + getChild(1).getType());
-    msg.node_type = TExprNodeType.BINARY_PRED;
+    msg.node_type = TExprNodeType.FUNCTION_CALL;
   }
 
   @Override
@@ -132,22 +151,51 @@ public class BinaryPredicate extends Predicate {
   }
 
   @Override
-  public void analyze(Analyzer analyzer) throws AnalysisException,
-      AuthorizationException {
+  public void analyze(Analyzer analyzer) throws AnalysisException {
     if (isAnalyzed_) return;
     super.analyze(analyzer);
 
     convertNumericLiteralsFromDecimal(analyzer);
-    fn_ = getBuiltinFunction(analyzer, op_.getName(), collectChildReturnTypes(),
+    String opName = op_.getName().equals("null_matching_eq") ? "eq" : op_.getName();
+    fn_ = getBuiltinFunction(analyzer, opName, collectChildReturnTypes(),
         CompareMode.IS_SUPERTYPE_OF);
     if (fn_ == null) {
-      throw new AnalysisException("operands of type " + getChild(0).getType() +
-          " and " + getChild(1).getType()  + " are not comparable: " + toSql());
+      // Construct an appropriate error message and throw an AnalysisException.
+      String errMsg = "operands of type " + getChild(0).getType().toSql() + " and " +
+            getChild(1).getType().toSql()  + " are not comparable: " + toSql();
+
+      // Check if any of the children is a Subquery that does not return a
+      // scalar.
+      for (Expr expr: children_) {
+        if (expr instanceof Subquery && !expr.getType().isScalarType()) {
+          errMsg = "Subquery must return a single row: " + expr.toSql();
+          break;
+        }
+      }
+
+      throw new AnalysisException(errMsg);
     }
     Preconditions.checkState(fn_.getReturnType().isBoolean());
-    castForFunctionCall();
+
+    ArrayList<Expr> subqueries = Lists.newArrayList();
+    collectAll(Predicates.instanceOf(Subquery.class), subqueries);
+    if (subqueries.size() > 1) {
+      // TODO Remove that restriction when we add support for independent subquery
+      // evaluation.
+      throw new AnalysisException("Multiple subqueries are not supported in binary " +
+          "predicates: " + toSql());
+    }
+    if (contains(InPredicate.class) || contains(ExistsPredicate.class)) {
+      throw new AnalysisException("IN and/or EXISTS subquery predicates are not " +
+          "supported in binary predicates: " + toSql());
+    }
+
+    // Don't perform any casting for predicates with subqueries here. Any casting
+    // required will be performed when the subquery is unnested.
+    if (!contains(Subquery.class)) castForFunctionCall(true);
 
     // determine selectivity
+    // TODO: Compute selectivity for nested predicates
     Reference<SlotRef> slotRefRef = new Reference<SlotRef>();
     if (op_ == Operator.EQ
         && isSingleColumnPredicate(slotRefRef, null)
@@ -235,7 +283,19 @@ public class BinaryPredicate extends Predicate {
       case GT:
         newOp = Operator.LE;
         break;
+      case NULL_MATCHING_EQ:
+        throw new IllegalStateException("Not implemented");
     }
     return new BinaryPredicate(newOp, getChild(0), getChild(1));
   }
+
+  @Override
+  public boolean equals(Object obj) {
+    if (!super.equals(obj)) return false;
+    BinaryPredicate other = (BinaryPredicate) obj;
+    return op_.equals(other.op_);
+  }
+
+  @Override
+  public Expr clone() { return new BinaryPredicate(this); }
 }

@@ -413,7 +413,7 @@ void RuntimeProfile::AddInfoString(const string& key, const string& value) {
   }
 }
 
-const string* RuntimeProfile::GetInfoString(const string& key) {
+const string* RuntimeProfile::GetInfoString(const string& key) const {
   lock_guard<mutex> l(info_strings_lock_);
   InfoStrings::const_iterator it = info_strings_.find(key);
   if (it == info_strings_.end()) return NULL;
@@ -631,7 +631,7 @@ void RuntimeProfile::SerializeToArchiveString(stringstream* out) const {
 
   vector<uint8_t> compressed_buffer;
   compressed_buffer.resize(compressor->MaxOutputLen(serialized_buffer.size()));
-  int result_len = compressed_buffer.size();
+  int64_t result_len = compressed_buffer.size();
   uint8_t* compressed_buffer_ptr = &compressed_buffer[0];
   compressor->ProcessBlock(true, serialized_buffer.size(), &serialized_buffer[0],
       &result_len, &compressed_buffer_ptr);

@@ -17,15 +17,13 @@ package com.cloudera.impala.analysis;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
-import com.cloudera.impala.catalog.AuthorizationException;
-import com.cloudera.impala.catalog.ColumnType;
 import com.cloudera.impala.catalog.Db;
 import com.cloudera.impala.catalog.Function.CompareMode;
 import com.cloudera.impala.catalog.ScalarFunction;
+import com.cloudera.impala.catalog.Type;
 import com.cloudera.impala.common.AnalysisException;
 import com.cloudera.impala.thrift.TExprNode;
 import com.cloudera.impala.thrift.TExprNodeType;
-import com.cloudera.impala.thrift.TLikePredicate;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 
@@ -48,15 +46,18 @@ public class LikePredicate extends Predicate {
   }
 
   public static void initBuiltins(Db db) {
-    db.addBuiltin(ScalarFunction.createBuiltinOperator(
-        Operator.LIKE.name(), "LikePredicate", "LikeFn",
-        Lists.newArrayList(ColumnType.STRING, ColumnType.STRING), ColumnType.BOOLEAN));
-    db.addBuiltin(ScalarFunction.createBuiltinOperator(
-        Operator.RLIKE.name(), "LikePredicate", "RegexFn",
-        Lists.newArrayList(ColumnType.STRING, ColumnType.STRING), ColumnType.BOOLEAN));
-    db.addBuiltin(ScalarFunction.createBuiltinOperator(
-        Operator.REGEXP.name(), "LikePredicate", "RegexFn",
-        Lists.newArrayList(ColumnType.STRING, ColumnType.STRING), ColumnType.BOOLEAN));
+    db.addBuiltin(ScalarFunction.createBuiltin(
+        Operator.LIKE.name(), Lists.<Type>newArrayList(Type.STRING, Type.STRING),
+        false, Type.BOOLEAN, "_ZN6impala13LikePredicate4LikeEPN10impala_udf15FunctionContextERKNS1_9StringValES6_", "_ZN6impala13LikePredicate11LikePrepareEPN10impala_udf15FunctionContextENS2_18FunctionStateScopeE",
+        "_ZN6impala13LikePredicate9LikeCloseEPN10impala_udf15FunctionContextENS2_18FunctionStateScopeE", true));
+    db.addBuiltin(ScalarFunction.createBuiltin(
+        Operator.RLIKE.name(), Lists.<Type>newArrayList(Type.STRING, Type.STRING),
+        false, Type.BOOLEAN, "_ZN6impala13LikePredicate5RegexEPN10impala_udf15FunctionContextERKNS1_9StringValES6_", "_ZN6impala13LikePredicate12RegexPrepareEPN10impala_udf15FunctionContextENS2_18FunctionStateScopeE",
+        "_ZN6impala13LikePredicate10RegexCloseEPN10impala_udf15FunctionContextENS2_18FunctionStateScopeE", true));
+    db.addBuiltin(ScalarFunction.createBuiltin(
+        Operator.REGEXP.name(), Lists.<Type>newArrayList(Type.STRING, Type.STRING),
+        false, Type.BOOLEAN, "_ZN6impala13LikePredicate5RegexEPN10impala_udf15FunctionContextERKNS1_9StringValES6_", "_ZN6impala13LikePredicate12RegexPrepareEPN10impala_udf15FunctionContextENS2_18FunctionStateScopeE",
+        "_ZN6impala13LikePredicate10RegexCloseEPN10impala_udf15FunctionContextENS2_18FunctionStateScopeE", true));
   }
 
   private final Operator op_;
@@ -72,11 +73,17 @@ public class LikePredicate extends Predicate {
     selectivity_ = 0.1;
   }
 
+  /**
+   * Copy c'tor used in clone().
+   */
+  public LikePredicate(LikePredicate other) {
+    super(other);
+    op_ = other.op_;
+  }
+
   @Override
   public boolean equals(Object obj) {
-    if (!super.equals(obj)) {
-      return false;
-    }
+    if (!super.equals(obj)) return false;
     return ((LikePredicate) obj).op_ == op_;
   }
 
@@ -87,13 +94,11 @@ public class LikePredicate extends Predicate {
 
   @Override
   protected void toThrift(TExprNode msg) {
-    msg.node_type = TExprNodeType.LIKE_PRED;
-    msg.like_pred = new TLikePredicate("\\");
+    msg.node_type = TExprNodeType.FUNCTION_CALL;
   }
 
   @Override
-  public void analyze(Analyzer analyzer) throws AnalysisException,
-      AuthorizationException {
+  public void analyze(Analyzer analyzer) throws AnalysisException {
     if (isAnalyzed_) return;
     super.analyze(analyzer);
     if (!getChild(0).getType().isStringType() && !getChild(0).getType().isNull()) {
@@ -110,7 +115,7 @@ public class LikePredicate extends Predicate {
     Preconditions.checkState(fn_ != null);
     Preconditions.checkState(fn_.getReturnType().isBoolean());
 
-    if (!getChild(1).getType().isNull() && getChild(1).isLiteral()
+    if (getChild(1).isLiteral() && !getChild(1).isNullLiteral()
         && (op_ == Operator.RLIKE || op_ == Operator.REGEXP)) {
       // let's make sure the pattern works
       // TODO: this checks that it's a Java-supported regex, but the syntax supported
@@ -122,5 +127,9 @@ public class LikePredicate extends Predicate {
             "invalid regular expression in '" + this.toSql() + "'");
       }
     }
+    castForFunctionCall(false);
   }
+
+  @Override
+  public Expr clone() { return new LikePredicate(this); }
 }

@@ -24,6 +24,8 @@ import org.apache.thrift.protocol.TBinaryProtocol;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.cloudera.impala.authorization.SentryConfig;
+import com.cloudera.impala.authorization.User;
 import com.cloudera.impala.catalog.CatalogException;
 import com.cloudera.impala.catalog.CatalogServiceCatalog;
 import com.cloudera.impala.catalog.Function;
@@ -43,10 +45,12 @@ import com.cloudera.impala.thrift.TGetTablesResult;
 import com.cloudera.impala.thrift.TLogLevel;
 import com.cloudera.impala.thrift.TPrioritizeLoadRequest;
 import com.cloudera.impala.thrift.TResetMetadataRequest;
+import com.cloudera.impala.thrift.TSentryAdminCheckRequest;
 import com.cloudera.impala.thrift.TUniqueId;
 import com.cloudera.impala.thrift.TUpdateCatalogRequest;
 import com.cloudera.impala.util.GlogAppender;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 
 /**
  * JNI-callable interface for the CatalogService. The main point is to serialize
@@ -68,15 +72,24 @@ public class JniCatalog {
   }
 
   public JniCatalog(boolean loadInBackground, int numMetadataLoadingThreads,
-      int impalaLogLevel, int otherLogLevel) throws InternalException {
+      String sentryServiceConfig, int impalaLogLevel, int otherLogLevel)
+      throws InternalException {
     Preconditions.checkArgument(numMetadataLoadingThreads > 0);
     // This trick saves having to pass a TLogLevel enum, which is an object and more
     // complex to pass through JNI.
     GlogAppender.Install(TLogLevel.values()[impalaLogLevel],
         TLogLevel.values()[otherLogLevel]);
 
+    // Check if the Sentry Service is configured. If so, create a configuration object.
+    SentryConfig sentryConfig = null;
+    if (!Strings.isNullOrEmpty(sentryServiceConfig)) {
+      sentryConfig = new SentryConfig(sentryServiceConfig);
+      sentryConfig.loadConfig();
+    }
+    LOG.info(JniUtil.getJavaVersion());
+
     catalog_ = new CatalogServiceCatalog(loadInBackground,
-        numMetadataLoadingThreads, getServiceId());
+        numMetadataLoadingThreads, sentryConfig, getServiceId());
     try {
       catalog_.reset();
     } catch (CatalogException e) {
@@ -200,6 +213,19 @@ public class JniCatalog {
     TPrioritizeLoadRequest request = new TPrioritizeLoadRequest();
     JniUtil.deserializeThrift(protocolFactory_, request, thriftLoadReq);
     catalog_.prioritizeLoad(request.getObject_descs());
+  }
+
+  /**
+   * Verifies whether the user is configured as an admin on the Sentry Service. Throws
+   * an AuthorizationException if the user does not have admin privileges or if there
+   * were errors communicating with the Sentry Service.
+   */
+  public void checkUserSentryAdmin(byte[] thriftReq) throws ImpalaException,
+      TException  {
+    TSentryAdminCheckRequest request = new TSentryAdminCheckRequest();
+    JniUtil.deserializeThrift(protocolFactory_, request, thriftReq);
+    catalog_.getSentryProxy().checkUserSentryAdmin(
+        new User(request.getHeader().getRequesting_user()));
   }
 
   /**

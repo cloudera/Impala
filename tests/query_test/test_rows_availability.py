@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # Copyright (c) 2012 Cloudera, Inc. All rights reserved.
 
+import pytest
 import re
 from tests.common.impala_test_suite import ImpalaTestSuite
 from tests.common.test_vector import TestDimension
@@ -23,7 +24,8 @@ class TestRowsAvailability(ImpalaTestSuite):
              'select * from %s %s order by id limit 1' % (TABLE, WHERE_CLAUSE),
              'select * from %s %s order by id' % (TABLE, WHERE_CLAUSE),
              'select count(*) from %s %s' % (TABLE, WHERE_CLAUSE),
-             'select 1 union all select count(*) from %s %s' % (TABLE, WHERE_CLAUSE)]
+             'select 1 union all select count(*) from %s %s' % (TABLE, WHERE_CLAUSE),
+             'select count(*) over () from %s %s' % (TABLE, WHERE_CLAUSE)]
   ROWS_AVAIL_LOWER_BOUND_MS = 2000
 
   @classmethod
@@ -44,12 +46,17 @@ class TestRowsAvailability(ImpalaTestSuite):
         vector.get_value('exec_option')['disable_codegen'] == False and\
         vector.get_value('exec_option')['num_nodes'] == 0
 
+  @pytest.mark.execute_serially
   def test_rows_availability(self, vector):
+    # This test is run serially because it requires the query to come back within
+    # some amount of time. Running this with other tests makes it hard to bound
+    # that time.
     query = vector.get_value('query')
     # Execute async to get a handle. Wait until the query has completed.
     handle = self.execute_query_async(query, vector.get_value('exec_option'))
     self.impalad_test_service.wait_for_query_state(self.client, handle,
-        self.client.QUERY_STATES['FINISHED'])
+        self.client.QUERY_STATES['FINISHED'], timeout=20)
+
     # Parse the query profile for the 'Rows available' timeline event.
     rows_avail_line = self.__get_rows_available_event(handle)
     # Match the parenthesized delta duration between the 'Rows available' event
@@ -65,6 +72,7 @@ class TestRowsAvailability(ImpalaTestSuite):
         "previous timeline event.\nExpected the event to be marked no earlier than "\
         "%sms after the previous event.\nQuery: %s"\
         % (rows_avail_ms, self.ROWS_AVAIL_LOWER_BOUND_MS, query)
+    self.close_query(handle)
 
   def __get_rows_available_event(self, query_handle):
     profile = self.client.get_runtime_profile(query_handle)

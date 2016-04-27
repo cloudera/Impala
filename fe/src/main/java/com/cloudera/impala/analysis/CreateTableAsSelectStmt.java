@@ -17,7 +17,6 @@ package com.cloudera.impala.analysis;
 import java.util.EnumSet;
 
 import com.cloudera.impala.authorization.Privilege;
-import com.cloudera.impala.catalog.AuthorizationException;
 import com.cloudera.impala.catalog.Db;
 import com.cloudera.impala.catalog.HdfsTable;
 import com.cloudera.impala.catalog.MetaStoreClientPool.MetaStoreClient;
@@ -56,24 +55,43 @@ public class CreateTableAsSelectStmt extends StatementBase {
   public String toSql() { return createStmt_.toSql() + " AS " + getQueryStmt().toSql(); }
 
   @Override
-  public void analyze(Analyzer analyzer) throws AnalysisException,
-      AuthorizationException {
+  public void analyze(Analyzer analyzer) throws AnalysisException {
     super.analyze(analyzer);
 
     // The analysis for CTAS happens in two phases - the first phase happens before
     // the target table exists and we want to validate the CREATE statement and the
     // query portion of the insert statement. If this passes, analysis will be run
     // over the full INSERT statement. To avoid duplicate registrations of table/colRefs,
-    // create a new analyzer and clone the query statement for this initial pass.
+    // create a new root analyzer and clone the query statement for this initial pass.
+    Analyzer dummyRootAnalyzer = new Analyzer(analyzer.getCatalog(),
+        analyzer.getQueryCtx(), analyzer.getAuthzConfig());
     QueryStmt tmpQueryStmt = insertStmt_.getQueryStmt().clone();
-    Analyzer tmpAnalyzer = new Analyzer(analyzer, analyzer.getUser());
-    tmpAnalyzer.setUseHiveColLabels(true);
-    tmpQueryStmt.analyze(tmpAnalyzer);
+    try {
+      Analyzer tmpAnalyzer = new Analyzer(dummyRootAnalyzer);
+      tmpAnalyzer.setUseHiveColLabels(true);
+      tmpQueryStmt.analyze(tmpAnalyzer);
+      if (analyzer.containsSubquery()) {
+        // The select statement of this CTAS is nested. Rewrite the
+        // statement to unnest all subqueries and re-analyze using a new analyzer.
+        StmtRewriter.rewriteQueryStatement(tmpQueryStmt, tmpAnalyzer);
+        // Update the insert statement with the unanalyzed rewritten select stmt.
+        insertStmt_.setQueryStmt(tmpQueryStmt.clone());
+
+        // Re-analyze the select statement of the CTAS.
+        tmpQueryStmt = insertStmt_.getQueryStmt().clone();
+        tmpAnalyzer = new Analyzer(dummyRootAnalyzer);
+        tmpAnalyzer.setUseHiveColLabels(true);
+        tmpQueryStmt.analyze(tmpAnalyzer);
+      }
+    } finally {
+      // Record missing tables in the original analyzer.
+      analyzer.getMissingTbls().addAll(dummyRootAnalyzer.getMissingTbls());
+    }
 
     // Add the columns from the select statement to the create statement.
     int colCnt = tmpQueryStmt.getColLabels().size();
     for (int i = 0; i < colCnt; ++i) {
-      createStmt_.getColumnDescs().add(new ColumnDesc(
+      createStmt_.getColumnDefs().add(new ColumnDesc(
           tmpQueryStmt.getColLabels().get(i),
           tmpQueryStmt.getBaseTblResultExprs().get(i).getType(), null));
     }
@@ -88,8 +106,7 @@ public class CreateTableAsSelectStmt extends StatementBase {
 
     // The full privilege check for the database will be done as part of the INSERT
     // analysis.
-    Db db = analyzer.getCatalog().getDb(createStmt_.getDb(),
-        analyzer.getUser(), Privilege.ANY);
+    Db db = analyzer.getDb(createStmt_.getDb(), Privilege.ANY);
     if (db == null) {
       throw new AnalysisException(
           Analyzer.DB_DOES_NOT_EXIST_ERROR_MSG + createStmt_.getDb());

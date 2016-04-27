@@ -19,8 +19,10 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_OUTPUT_ROOT_DIRECTORY}/runtime")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_OUTPUT_ROOT_DIRECTORY}/runtime")
 
-add_library(Runtime STATIC
+add_library(Runtime
   buffered-block-mgr.cc
+  buffered-tuple-stream.cc
+  buffered-tuple-stream-ir.cc
   client-cache.cc
   coordinator.cc
   data-stream-mgr.cc
@@ -43,7 +45,6 @@ add_library(Runtime STATIC
   plan-fragment-executor.cc
   types.cc
   raw-value.cc
-  raw-value-test.cc
   row-batch.cc
   runtime-state.cc
   sorted-run-merger.cc
@@ -75,3 +76,4 @@ ADD_BE_TEST(thread-resource-mgr-test)
 ADD_BE_TEST(mem-tracker-test)
 ADD_BE_TEST(multi-precision-test)
 ADD_BE_TEST(decimal-test)
+ADD_BE_TEST(buffered-tuple-stream-test)

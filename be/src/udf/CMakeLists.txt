@@ -22,28 +22,10 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_OUTPUT_ROOT_DIRECTORY}/udf")
 # Build this library twice. Once to be linked into the main impalad. This version
 # can have dependencies on our other libs. The second version is shipped as part
 # of the UDF sdk, which can't use other libs.
-add_library(Udf udf.cc udf-test-harness.cc)
-add_library(ImpalaUdf udf.cc udf-test-harness.cc)
+add_library(Udf udf.cc udf-ir.cc udf-test-harness.cc)
+add_library(ImpalaUdf udf.cc udf-ir.cc udf-test-harness.cc)
 set_target_properties(ImpalaUdf PROPERTIES COMPILE_FLAGS "-DIMPALA_UDF_SDK_BUILD")
 
-# We can't use the normal link list since we want to pick up libImpalaUdf (the external
-# library) rather than the interal libUdf.
-set (UDF_TEST_LINK_LIBS
-  -Wl,--start-group
-  Common
-  GlobalFlags
-  ImpalaUdf
-  Runtime
-  TestUtil
-  Util
-  -Wl,--end-group
-# Below are all external dependencies.  They should some after the impala libs.
-  ${Boost_LIBRARIES}
-  glogstatic
-  gflagsstatic
-  -lboost_date_time
-  gtest)
-  
 ADD_EXECUTABLE(udf-test udf-test.cc)
 TARGET_LINK_LIBRARIES(udf-test ${UDF_TEST_LINK_LIBS})
 ADD_TEST(udf-test "${EXECUTABLE_OUTPUT_PATH}/udf-test")

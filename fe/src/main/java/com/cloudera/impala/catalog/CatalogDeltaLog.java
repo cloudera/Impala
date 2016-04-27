@@ -61,7 +61,12 @@ public class CatalogDeltaLog {
    * catalog.
    */
   public synchronized void garbageCollect(long currentCatalogVersion) {
-    removedCatalogObjects_ = removedCatalogObjects_.tailMap(currentCatalogVersion);
+    // Nothing will be garbage collected so avoid creating a new object.
+    if (!removedCatalogObjects_.isEmpty() &&
+        removedCatalogObjects_.firstKey() < currentCatalogVersion) {
+      removedCatalogObjects_ = new TreeMap<Long, TCatalogObject>(
+          removedCatalogObjects_.tailMap(currentCatalogVersion));
+    }
   }
 
   /**
@@ -99,6 +104,13 @@ public class CatalogDeltaLog {
       case FUNCTION:
         return first.getFn().getSignature().equals(second.getFn().getSignature()) &&
             first.getFn().getName().equals(second.getFn().getName());
+      case ROLE:
+        return first.getRole().getRole_name().equalsIgnoreCase(
+            second.getRole().getRole_name());
+      case PRIVILEGE:
+        return first.getPrivilege().getPrivilege_name().equalsIgnoreCase(
+            second.getPrivilege().getPrivilege_name()) &&
+            first.getPrivilege().getRole_id() == second.getPrivilege().getRole_id();
       default: return false;
     }
   }

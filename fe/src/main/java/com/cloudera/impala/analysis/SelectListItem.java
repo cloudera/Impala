@@ -49,6 +49,7 @@ class SelectListItem {
   public TableName getTblName() { return tblName_; }
   public Expr getExpr() { return expr_; }
   public String getAlias() { return alias_; }
+  public void setAlias(String alias) { alias_ = alias; }
 
   public String toSql() {
     if (!isStar_) {
@@ -85,13 +86,18 @@ class SelectListItem {
     }
     // Optionally return auto-generated column label.
     if (useHiveColLabels) return "_c" + selectListPos;
+    // Abbreviate the toSql() for analytic exprs.
+    if (expr_ instanceof AnalyticExpr) {
+      AnalyticExpr expr = (AnalyticExpr) expr_;
+      return expr.getFnCall().toSql() + " OVER(...)";
+    }
     return expr_.toSql().toLowerCase();
   }
 
   @Override
   public SelectListItem clone() {
     if (isStar_) return createStarItem(tblName_);
-    return new SelectListItem(expr_.clone(null), alias_);
+    return new SelectListItem(expr_.clone().reset(), alias_);
   }
 
 }

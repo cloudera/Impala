@@ -18,31 +18,38 @@
 import random
 
 from getpass import getuser
-from cli_service import TCLIService
+from TCLIService import TCLIService
+from ImpalaService import ImpalaHiveServer2Service
 from thrift.transport.TSocket import TSocket
 from thrift.transport.TTransport import TBufferedTransport
 from thrift.protocol import TBinaryProtocol
 from tests.common.impala_test_suite import ImpalaTestSuite, IMPALAD_HS2_HOST_PORT
 
-def needs_session(fn):
-  """Decorator that establishes a session and sets self.session_handle. When the test is
-  finished, the session is closed.
-  """
-  def add_session(self):
-    open_session_req = TCLIService.TOpenSessionReq()
-    open_session_req.username = getuser()
-    open_session_req.configuration = dict()
-    resp = self.hs2_client.OpenSession(open_session_req)
-    HS2TestSuite.check_response(resp)
-    self.session_handle = resp.sessionHandle
-    try:
-      fn(self)
-    finally:
-      close_session_req = TCLIService.TCloseSessionReq()
-      close_session_req.sessionHandle = resp.sessionHandle
-      HS2TestSuite.check_response(self.hs2_client.CloseSession(close_session_req))
-      self.session_handle = None
-  return add_session
+def needs_session(protocol_version=
+                  TCLIService.TProtocolVersion.HIVE_CLI_SERVICE_PROTOCOL_V6):
+  def session_decorator(fn):
+    """Decorator that establishes a session and sets self.session_handle. When the test is
+    finished, the session is closed.
+    """
+    def add_session(self):
+      open_session_req = TCLIService.TOpenSessionReq()
+      open_session_req.username = getuser()
+      open_session_req.configuration = dict()
+      open_session_req.client_protocol = protocol_version
+      resp = self.hs2_client.OpenSession(open_session_req)
+      HS2TestSuite.check_response(resp)
+      self.session_handle = resp.sessionHandle
+      assert protocol_version <= resp.serverProtocolVersion
+      try:
+        fn(self)
+      finally:
+        close_session_req = TCLIService.TCloseSessionReq()
+        close_session_req.sessionHandle = resp.sessionHandle
+        HS2TestSuite.check_response(self.hs2_client.CloseSession(close_session_req))
+        self.session_handle = None
+    return add_session
+
+  return session_decorator
 
 def operation_id_to_query_id(operation_id):
   lo, hi = operation_id.guid[:8],  operation_id.guid[8:]
@@ -56,6 +63,9 @@ class HS2TestSuite(ImpalaTestSuite):
   # "0." from the random floating-point number.
   TEST_DB = 'hs2_db' + str(random.random())[2:]
 
+  HS2_V6_COLUMN_TYPES = ['boolVal', 'stringVal', 'byteVal', 'i16Val', 'i32Val', 'i64Val',
+                         'doubleVal', 'binaryVal']
+
   def setup(self):
     self.cleanup_db(self.TEST_DB)
     host, port = IMPALAD_HS2_HOST_PORT.split(":")
@@ -63,7 +73,7 @@ class HS2TestSuite(ImpalaTestSuite):
     self.transport = TBufferedTransport(self.socket)
     self.transport.open()
     self.protocol = TBinaryProtocol.TBinaryProtocol(self.transport)
-    self.hs2_client = TCLIService.Client(self.protocol)
+    self.hs2_client = ImpalaHiveServer2Service.Client(self.protocol)
     self.client.execute("create database %s" % self.TEST_DB)
 
   def teardown(self):
@@ -73,8 +83,8 @@ class HS2TestSuite(ImpalaTestSuite):
 
   @staticmethod
   def check_response(response,
-                       expected_status_code = TCLIService.TStatusCode.SUCCESS_STATUS,
-                       expected_error_prefix = None):
+                     expected_status_code = TCLIService.TStatusCode.SUCCESS_STATUS,
+                     expected_error_prefix = None):
     assert response.status.statusCode == expected_status_code
     if expected_status_code != TCLIService.TStatusCode.SUCCESS_STATUS\
        and expected_error_prefix is not None:
@@ -86,11 +96,25 @@ class HS2TestSuite(ImpalaTestSuite):
     close_op_resp = self.hs2_client.CloseOperation(close_op_req)
     assert close_op_resp.status.statusCode == TCLIService.TStatusCode.SUCCESS_STATUS
 
+  def get_num_rows(self, result_set):
+    # rows will always be set, so the only way to tell if we should use it is to see if
+    # any columns are set
+    if result_set.columns is None or len(result_set.columns) == 0:
+      return len(result_set.rows)
+
+    assert result_set.columns is not None
+    for col_type in HS2TestSuite.HS2_V6_COLUMN_TYPES:
+      typed_col = getattr(result_set.columns[0], col_type)
+      if typed_col != None:
+        return len(typed_col.values)
+
+    assert False
+
   def fetch(self, handle, orientation, size, expected_num_rows = None):
     """Fetches at most size number of rows from the query identified by the given
     operation handle. Uses the given fetch orientation. Asserts that the fetch returns
     a success status, and that the number of rows returned is equal to size, or
-    equal to the given expected_num_rows (it one was given)."""
+    equal to the given expected_num_rows (if one was given)."""
     fetch_results_req = TCLIService.TFetchResultsReq()
     fetch_results_req.operationHandle = handle
     fetch_results_req.orientation = orientation
@@ -100,8 +124,31 @@ class HS2TestSuite(ImpalaTestSuite):
     num_rows = size
     if expected_num_rows is not None:
       num_rows = expected_num_rows
-    assert len(fetch_results_resp.results.rows) == num_rows
+    assert self.get_num_rows(fetch_results_resp.results) == num_rows
     return fetch_results_resp
+
+  def fetch_until(self, handle, orientation, size):
+    """Tries to fetch exactly 'size' rows from the given query handle, with the given
+    fetch orientation. If fewer rows than 'size' are returned by the first fetch, repeated
+    fetches are issued until either 0 rows are returned, or the number of rows fetched is
+    equal to 'size'"""
+    fetch_results_req = TCLIService.TFetchResultsReq()
+    fetch_results_req.operationHandle = handle
+    fetch_results_req.orientation = orientation
+    fetch_results_req.maxRows = size
+    fetch_results_resp = self.hs2_client.FetchResults(fetch_results_req)
+    HS2TestSuite.check_response(fetch_results_resp)
+    num_rows = size
+    num_rows_fetched = self.get_num_rows(fetch_results_resp.results)
+    while num_rows_fetched < size:
+      fetch_results_req.maxRows = size - num_rows_fetched
+      fetch_results_resp = self.hs2_client.FetchResults(fetch_results_req)
+      HS2TestSuite.check_response(fetch_results_resp)
+      last_fetch_size = self.get_num_rows(fetch_results_resp.results)
+      assert last_fetch_size > 0
+      num_rows_fetched += last_fetch_size
+
+    assert num_rows_fetched == size
 
   def fetch_fail(self, handle, orientation, expected_error_prefix):
     """Attempts to fetch rows from the query identified by the given operation handle.

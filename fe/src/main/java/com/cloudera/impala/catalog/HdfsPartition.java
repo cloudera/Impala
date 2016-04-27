@@ -16,28 +16,38 @@ package com.cloudera.impala.catalog;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.commons.lang.ArrayUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.cloudera.impala.analysis.ToSqlUtils;
 import com.cloudera.impala.analysis.Expr;
 import com.cloudera.impala.analysis.LiteralExpr;
+import com.cloudera.impala.analysis.NullLiteral;
 import com.cloudera.impala.analysis.PartitionKeyValue;
+import com.cloudera.impala.catalog.PartitionStatsUtil;
+import com.cloudera.impala.common.ImpalaException;
+import com.cloudera.impala.common.JniUtil;
 import com.cloudera.impala.thrift.ImpalaInternalServiceConstants;
 import com.cloudera.impala.thrift.TAccessLevel;
 import com.cloudera.impala.thrift.TExpr;
 import com.cloudera.impala.thrift.TExprNode;
+import com.cloudera.impala.thrift.THdfsCompression;
 import com.cloudera.impala.thrift.THdfsFileBlock;
 import com.cloudera.impala.thrift.THdfsFileDesc;
 import com.cloudera.impala.thrift.THdfsPartition;
 import com.cloudera.impala.thrift.TTableStats;
+import com.cloudera.impala.thrift.TPartitionStats;
 import com.cloudera.impala.util.HdfsCachingUtil;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.base.Joiner;
 
 /**
  * Query-relevant information for one table partition. Partitions are comparable
@@ -55,6 +65,9 @@ public class HdfsPartition implements Comparable<HdfsPartition> {
 
     public String getFileName() { return fileDescriptor_.getFile_name(); }
     public long getFileLength() { return fileDescriptor_.getLength(); }
+    public THdfsCompression getFileCompression() {
+      return fileDescriptor_.getCompression();
+    }
     public long getModificationTime() {
       return fileDescriptor_.getLast_modification_time();
     }
@@ -195,6 +208,10 @@ public class HdfsPartition implements Comparable<HdfsPartition> {
   private boolean isMarkedCached_ = false;
   private final TAccessLevel accessLevel_;
 
+  // (k,v) pairs of parameters for this partition, stored in the HMS. Used by Impala to
+  // store intermediate state for statistics computations.
+  private Map<String, String> hmsParameters_;
+
   public HdfsStorageDescriptor getInputFormatDescriptor() {
     return fileFormatDescriptor_;
   }
@@ -206,6 +223,10 @@ public class HdfsPartition implements Comparable<HdfsPartition> {
    */
   public org.apache.hadoop.hive.metastore.api.Partition getMetaStorePartition() {
     return msPartition_;
+  }
+
+  public boolean isDefaultPartition() {
+    return id_ == ImpalaInternalServiceConstants.DEFAULT_PARTITION_ID;
   }
 
   /**
@@ -233,6 +254,50 @@ public class HdfsPartition implements Comparable<HdfsPartition> {
   }
 
   /**
+   * Utility method which returns a string of conjuncts of equality exprs to exactly
+   * select this partition (e.g. ((month=2009) AND (year=2012)).
+   * TODO: Remove this when TODO elsewhere in this file to save and expose the list of
+   * TPartitionKeyValues has been resolved.
+   */
+  public String getConjunctSql() {
+    List<String> partitionCols = Lists.newArrayList();
+    List<String> partitionValues = Lists.newArrayList();
+    for (int i = 0; i < getTable().getNumClusteringCols(); ++i) {
+      partitionCols.add(ToSqlUtils.getIdentSql(getTable().getColumns().get(i).getName()));
+    }
+
+    List<String> conjuncts = Lists.newArrayList();
+    for (int i = 0; i < partitionCols.size(); ++i) {
+      LiteralExpr expr = getPartitionValues().get(i);
+      String sql = expr.toSql();
+      if (expr instanceof NullLiteral || sql.isEmpty()) {
+        conjuncts.add(ToSqlUtils.getIdentSql(partitionCols.get(i))
+            + " IS NULL");
+      } else {
+        conjuncts.add(ToSqlUtils.getIdentSql(partitionCols.get(i))
+            + "=" + sql);
+      }
+    }
+    return "(" + Joiner.on(" AND " ).join(conjuncts) + ")";
+  }
+
+  /**
+   * Returns a string of the form part_key1=value1/part_key2=value2...
+   */
+  public String getValuesAsString() {
+    StringBuilder partDescription = new StringBuilder();
+    for (int i = 0; i < getTable().getNumClusteringCols(); ++i) {
+      String columnName = getTable().getColumns().get(i).getName();
+      String value = PartitionKeyValue.getPartitionKeyValueString(
+          getPartitionValues().get(i),
+          getTable().getNullPartitionKeyValue());
+      partDescription.append(columnName + "=" + value);
+      if (i != getTable().getNumClusteringCols() - 1) partDescription.append("/");
+    }
+    return partDescription.toString();
+  }
+
+  /**
    * Returns the storage location (HDFS path) of this partition. Should only be called
    * for partitioned tables.
    */
@@ -244,9 +309,34 @@ public class HdfsPartition implements Comparable<HdfsPartition> {
   public boolean isMarkedCached() { return isMarkedCached_; }
   void markCached() { isMarkedCached_ = true; }
 
+  // May return null if no per-partition stats were recorded, or if the per-partition
+  // stats could not be deserialised from the parameter map.
+  public TPartitionStats getPartitionStats() {
+    try {
+      return PartitionStatsUtil.partStatsFromParameters(hmsParameters_);
+    } catch (ImpalaException e) {
+      LOG.warn("Could not deserialise incremental stats state for " + getPartitionName() +
+          ", consider DROP INCREMENTAL STATS ... PARTITION ... and recomputing " +
+          "incremental stats for this table.");
+      return null;
+    }
+  }
+
+  public boolean hasIncrementalStats() {
+    TPartitionStats partStats = getPartitionStats();
+    return partStats != null && partStats.intermediate_col_stats != null;
+  }
+
   // Returns the HDFS permissions Impala has to this partition's directory - READ_ONLY,
   // READ_WRITE, etc.
   public TAccessLevel getAccessLevel() { return accessLevel_; }
+
+  /**
+   * Returns the HMS parameter with key 'key' if it exists, otherwise returns null.
+   */
+   public String getHmsParameter(String key) {
+     return hmsParameters_.get(key);
+   }
 
   /**
    * Marks this partition's metadata as "dirty" indicating that changes have been
@@ -263,6 +353,8 @@ public class HdfsPartition implements Comparable<HdfsPartition> {
   public List<HdfsPartition.FileDescriptor> getFileDescriptors() {
     return fileDescriptors_;
   }
+
+  public boolean hasFileDescriptors() { return !fileDescriptors_.isEmpty(); }
 
   private HdfsPartition(HdfsTable table,
       org.apache.hadoop.hive.metastore.api.Partition msPartition,
@@ -281,15 +373,19 @@ public class HdfsPartition implements Comparable<HdfsPartition> {
     if (msPartition != null && msPartition.getParameters() != null) {
       isMarkedCached_ = HdfsCachingUtil.getCacheDirIdFromParams(
           msPartition.getParameters()) != null;
+      hmsParameters_ = msPartition.getParameters();
+    } else {
+      hmsParameters_ = Maps.newHashMap();
     }
 
     // TODO: instead of raising an exception, we should consider marking this partition
     // invalid and moving on, so that table loading won't fail and user can query other
     // partitions.
     for (FileDescriptor fileDescriptor: fileDescriptors_) {
-      String result = checkFileCompressionTypeSupported(fileDescriptor.getFileName());
-      if (!result.isEmpty()) {
-        throw new RuntimeException(result);
+      StringBuilder errorMsg = new StringBuilder();
+      if (!getInputFormatDescriptor().getFileFormat().isFileCompressionTypeSupported(
+          fileDescriptor.getFileName(), errorMsg)) {
+        throw new RuntimeException(errorMsg.toString());
       }
     }
   }
@@ -312,38 +408,6 @@ public class HdfsPartition implements Comparable<HdfsPartition> {
         storageDescriptor, emptyFileDescriptorList,
         ImpalaInternalServiceConstants.DEFAULT_PARTITION_ID, null,
         TAccessLevel.READ_WRITE);
-  }
-
-  /*
-   * Checks whether a file is supported in Impala based on the file extension.
-   * Returns an empty string if the file format is supported, otherwise a string with
-   * details on the incompatibility is returned.
-   * Impala only supports .lzo on text files for partitions that have been declared in
-   * the metastore as TEXT_LZO. For now, raise an error on any other type.
-   */
-  public String checkFileCompressionTypeSupported(String fileName) {
-    // Check to see if the file has a compression suffix.
-    // Impala only supports .lzo on text files that have been declared in the metastore
-    // as TEXT_LZO. For now, raise an error on any other type.
-    HdfsCompression compressionType = HdfsCompression.fromFileName(fileName);
-    if (compressionType == HdfsCompression.LZO_INDEX) {
-      // Index files are read by the LZO scanner directly.
-      return "";
-    }
-
-    HdfsStorageDescriptor sd = getInputFormatDescriptor();
-    if (compressionType == HdfsCompression.LZO) {
-      if (sd.getFileFormat() != HdfsFileFormat.LZO_TEXT) {
-        return "Compressed file not supported without compression input format: " +
-            fileName;
-      }
-    } else if (sd.getFileFormat() == HdfsFileFormat.LZO_TEXT) {
-      return "Expected file with .lzo suffix: " + fileName;
-    } else if (sd.getFileFormat() == HdfsFileFormat.TEXT
-               && compressionType != HdfsCompression.NONE) {
-      return "Compressed text files are not supported: " + fileName;
-    }
-    return "";
   }
 
   /**
@@ -374,8 +438,7 @@ public class HdfsPartition implements Comparable<HdfsPartition> {
         thriftPartition.mapKeyDelim,
         thriftPartition.escapeChar,
         (byte) '"', // TODO: We should probably add quoteChar to THdfsPartition.
-        thriftPartition.blockSize,
-        thriftPartition.compression);
+        thriftPartition.blockSize);
 
     List<LiteralExpr> literalExpr = Lists.newArrayList();
     if (id != ImpalaInternalServiceConstants.DEFAULT_PARTITION_ID) {
@@ -401,22 +464,30 @@ public class HdfsPartition implements Comparable<HdfsPartition> {
       }
     }
 
-    List<HdfsPartition.FileDescriptor> fileDescriptors_ = Lists.newArrayList();
+    List<HdfsPartition.FileDescriptor> fileDescriptors = Lists.newArrayList();
     if (thriftPartition.isSetFile_desc()) {
       for (THdfsFileDesc desc: thriftPartition.getFile_desc()) {
-        fileDescriptors_.add(HdfsPartition.FileDescriptor.fromThrift(desc));
+        fileDescriptors.add(HdfsPartition.FileDescriptor.fromThrift(desc));
       }
     }
+
     TAccessLevel accessLevel = thriftPartition.isSetAccess_level() ?
         thriftPartition.getAccess_level() : TAccessLevel.READ_WRITE;
     HdfsPartition partition = new HdfsPartition(table, null, literalExpr, storageDesc,
-        fileDescriptors_, id, thriftPartition.getLocation(), accessLevel);
+        fileDescriptors, id, thriftPartition.getLocation(), accessLevel);
     if (thriftPartition.isSetStats()) {
       partition.setNumRows(thriftPartition.getStats().getNum_rows());
     }
     if (thriftPartition.isSetIs_marked_cached()) {
       partition.isMarkedCached_ = thriftPartition.isIs_marked_cached();
     }
+
+    if (thriftPartition.isSetHms_parameters()) {
+      partition.hmsParameters_ = thriftPartition.getHms_parameters();
+    } else {
+      partition.hmsParameters_ = Maps.newHashMap();
+    }
+
     return partition;
   }
 
@@ -435,7 +506,7 @@ public class HdfsPartition implements Comparable<HdfsPartition> {
     }
   }
 
-  public THdfsPartition toThrift(boolean includeFileDescriptorMetadata) {
+  public THdfsPartition toThrift(boolean includeFileDesc) {
     List<TExpr> thriftExprs = Expr.treesToThrift(getPartitionValues());
 
     THdfsPartition thriftHdfsPart = new THdfsPartition(
@@ -445,13 +516,14 @@ public class HdfsPartition implements Comparable<HdfsPartition> {
         fileFormatDescriptor_.getMapKeyDelim(),
         fileFormatDescriptor_.getEscapeChar(),
         fileFormatDescriptor_.getFileFormat().toThrift(), thriftExprs,
-        fileFormatDescriptor_.getBlockSize(), fileFormatDescriptor_.getCompression());
+        fileFormatDescriptor_.getBlockSize());
     thriftHdfsPart.setLocation(location_);
     thriftHdfsPart.setStats(new TTableStats(numRows_));
     thriftHdfsPart.setAccess_level(accessLevel_);
     thriftHdfsPart.setIs_marked_cached(isMarkedCached_);
     thriftHdfsPart.setId(getId());
-    if (includeFileDescriptorMetadata) {
+    thriftHdfsPart.setHms_parameters(hmsParameters_);
+    if (includeFileDesc) {
       // Add block location information
       for (FileDescriptor fd: fileDescriptors_) {
         thriftHdfsPart.addToFile_desc(fd.toThrift());

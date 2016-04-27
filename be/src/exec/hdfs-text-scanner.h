@@ -25,8 +25,8 @@ class DelimitedTextParser;
 class ScannerContext;
 struct HdfsFileDesc;
 
-// HdfsScanner implementation that understands text-formatted
-// records. Uses SSE instructions, if available, for performance.
+// HdfsScanner implementation that understands text-formatted records.
+// Uses SSE instructions, if available, for performance.
 class HdfsTextScanner : public HdfsScanner {
  public:
   HdfsTextScanner(HdfsScanNode* scan_node, RuntimeState* state);
@@ -37,15 +37,24 @@ class HdfsTextScanner : public HdfsScanner {
   virtual Status ProcessSplit();
   virtual void Close();
 
-  // Issue io manager byte ranges for 'files'
-  static Status IssueInitialRanges(HdfsScanNode*, const std::vector<HdfsFileDesc*>&);
+  // Issue io manager byte ranges for 'files'.
+  static Status IssueInitialRanges(HdfsScanNode* scan_node,
+                                   const std::vector<HdfsFileDesc*>& files);
 
-  // Codegen writing tuples and evaluating predicates
-  static llvm::Function* Codegen(HdfsScanNode*, const std::vector<Expr*>& conjuncts);
+  // Codegen writing tuples and evaluating predicates.
+  static llvm::Function* Codegen(HdfsScanNode*,
+                                 const std::vector<ExprContext*>& conjunct_ctxs);
+
+  // Suffix for lzo index files.
+  const static std::string LZO_INDEX_SUFFIX;
 
   static const char* LLVM_CLASS_NAME;
 
  protected:
+  // Reset the scanner.  This clears any partial state that needs to
+  // be cleared when starting or when restarting after an error.
+  Status ResetScanner();
+
   // Current position in byte buffer.
   char* byte_buffer_ptr_;
 
@@ -53,21 +62,17 @@ class HdfsTextScanner : public HdfsScanner {
   char* byte_buffer_end_;
 
   // Actual bytes received from last file read.
-  int byte_buffer_read_size_;
+  int64_t byte_buffer_read_size_;
 
-  // Memory pool for allocations into the boundary row / column
-  boost::scoped_ptr<MemPool> boundary_mem_pool_;
-
-  // Reset the scanner.  This clears any partial state that needs to
-  // be cleared when starting or when restarting after an error.
-  void ResetScanner();
+  // True if we are parsing the header for this scanner.
+  bool only_parsing_header_;
 
  private:
   const static int NEXT_BLOCK_READ_SIZE = 1024; //bytes
 
   // Initializes this scanner for this context.  The context maps to a single
   // scan range.
-  void InitNewRange();
+  virtual Status InitNewRange();
 
   // Finds the start of the first tuple in this scan range and initializes
   // byte_buffer_ptr to be the next character (the start of the first tuple).  If
@@ -86,12 +91,21 @@ class HdfsTextScanner : public HdfsScanner {
   // Reads past the end of the scan range for the next tuple end.
   Status FinishScanRange();
 
-  // Fills the next byte buffer from the context.  This will block if there are
-  // no bytes ready.  Updates byte_buffer_ptr, byte_buffer_end_ and
-  // byte_buffer_read_size_.
+  // Fills the next byte buffer from the context.  This will block if there are no bytes
+  // ready.  Updates byte_buffer_ptr_, byte_buffer_end_ and byte_buffer_read_size_.
   // If num_bytes is 0, the scanner will read whatever is the io mgr buffer size,
   // otherwise it will just read num_bytes.
   virtual Status FillByteBuffer(bool* eosr, int num_bytes = 0);
+
+  // Fills the next byte buffer from the compressed data in stream_ by reading the entire
+  // file, decompressing it, and setting the byte_buffer_ptr_ to the decompressed buffer.
+  Status FillByteBufferCompressedFile(bool* eosr);
+
+  // Fills the next byte buffer from the gzip compressed data in stream_. Unlike
+  // FillByteBufferCompressedFile(), the entire file does not need to be read at once.
+  // Buffers from stream_ are decompressed as they are read and byte_buffer_ptr_ is set
+  // to available decompressed data.
+  Status FillByteBufferGzip(bool* eosr);
 
   // Prepends field data that was from the previous file buffer (This field straddled two
   // file buffers).  'data' already contains the pointer/len from the current file buffer,
@@ -118,6 +132,9 @@ class HdfsTextScanner : public HdfsScanner {
   // Appends the current file and line to the RuntimeState's error log.
   // row_idx is 0-based (in current batch) where the parse error occured.
   virtual void LogRowParseError(int row_idx, std::stringstream*);
+
+  // Mem pool for boundary_row_ and boundary_column_.
+  boost::scoped_ptr<MemPool> boundary_pool_;
 
   // Helper string for dealing with input rows that span file blocks.
   // We keep track of a whole line that spans file blocks to be able to report

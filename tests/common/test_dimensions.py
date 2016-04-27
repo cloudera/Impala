@@ -106,12 +106,13 @@ ALL_DISABLE_CODEGEN_OPTIONS = [True, False]
 def create_single_exec_option_dimension():
   """Creates an exec_option dimension that will produce a single test vector"""
   return create_exec_option_dimension(cluster_sizes=ALL_NODES_ONLY,
-      disable_codegen_options=[False], batch_sizes=[0])
+                                      disable_codegen_options=[False],
+                                      batch_sizes=[0])
 
 def create_exec_option_dimension(cluster_sizes=ALL_CLUSTER_SIZES,
                                  disable_codegen_options=ALL_DISABLE_CODEGEN_OPTIONS,
                                  batch_sizes=ALL_BATCH_SIZES,
-                                 sync_ddl=None):
+                                 sync_ddl=None, exec_single_node_option=[0]):
   """
   Builds a query exec option test dimension
 
@@ -125,6 +126,7 @@ def create_exec_option_dimension(cluster_sizes=ALL_CLUSTER_SIZES,
   """
   exec_option_dimensions = {
       'abort_on_error': [1],
+      'exec_single_node_rows_threshold': exec_single_node_option,
       'batch_size': batch_sizes,
       'disable_codegen': disable_codegen_options,
       'num_nodes': cluster_sizes}
@@ -146,11 +148,11 @@ def get_dataset_from_workload(workload):
   # extract it without reading the actual test vector file
   return load_table_info_dimension(workload, 'exhaustive')[0].value.dataset
 
-def load_table_info_dimension(workload, exploration_strategy, file_formats=None,
+def load_table_info_dimension(workload_name, exploration_strategy, file_formats=None,
                       compression_codecs=None):
   """Loads test vector corresponding to the given workload and exploration strategy"""
   test_vector_file = os.path.join(
-      WORKLOAD_DIR, workload, '%s_%s.csv' % (workload, exploration_strategy))
+      WORKLOAD_DIR, workload_name, '%s_%s.csv' % (workload_name, exploration_strategy))
 
   if not os.path.isfile(test_vector_file):
     raise RuntimeError, 'Vector file not found: ' + test_vector_file

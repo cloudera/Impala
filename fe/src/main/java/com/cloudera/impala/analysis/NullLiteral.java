@@ -14,8 +14,7 @@
 
 package com.cloudera.impala.analysis;
 
-import com.cloudera.impala.catalog.ColumnType;
-import com.cloudera.impala.common.AnalysisException;
+import com.cloudera.impala.catalog.Type;
 import com.cloudera.impala.thrift.TExprNode;
 import com.cloudera.impala.thrift.TExprNodeType;
 import com.google.common.base.Objects;
@@ -24,21 +23,34 @@ import com.google.common.base.Preconditions;
 public class NullLiteral extends LiteralExpr {
 
   public NullLiteral() {
-    type_ = ColumnType.NULL;
+    type_ = Type.NULL;
+  }
+
+  /**
+   * Copy c'tor used in clone().
+   */
+  protected NullLiteral(NullLiteral other) {
+    super(other);
+  }
+
+  /**
+   * Returns an analyzed NullLiteral of the specified type.
+   */
+  public static NullLiteral create(Type type) {
+    NullLiteral l = new NullLiteral();
+    l.analyzeNoThrow(null);
+    l.uncheckedCastTo(type);
+    return l;
   }
 
   @Override
   public boolean equals(Object obj) {
-    if (!super.equals(obj)) {
-      return false;
-    }
+    if (!super.equals(obj)) return false;
     return obj instanceof NullLiteral;
   }
 
   @Override
-  public String toSqlImpl() {
-    return getStringValue();
-  }
+  public String toSqlImpl() { return getStringValue(); }
 
   @Override
   public String debugString() {
@@ -46,12 +58,10 @@ public class NullLiteral extends LiteralExpr {
   }
 
   @Override
-  public String getStringValue() {
-    return "NULL";
-  }
+  public String getStringValue() { return "NULL"; }
 
   @Override
-  protected Expr uncheckedCastTo(ColumnType targetType) throws AnalysisException {
+  protected Expr uncheckedCastTo(Type targetType) {
     Preconditions.checkState(targetType.isValid());
     type_ = targetType;
     return this;
@@ -66,5 +76,14 @@ public class NullLiteral extends LiteralExpr {
   public int compareTo(LiteralExpr o) {
     if (!(o instanceof NullLiteral)) return -1;
     return 0;
+  }
+
+  @Override
+  public Expr clone() { return new NullLiteral(this); }
+
+  @Override
+  protected void resetAnalysisState() {
+    super.resetAnalysisState();
+    type_ = Type.NULL;
   }
 }

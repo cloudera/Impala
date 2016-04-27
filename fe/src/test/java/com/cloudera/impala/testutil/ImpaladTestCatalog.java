@@ -15,16 +15,12 @@
 package com.cloudera.impala.testutil;
 
 import com.cloudera.impala.authorization.AuthorizationConfig;
-import com.cloudera.impala.authorization.Privilege;
-import com.cloudera.impala.authorization.User;
-import com.cloudera.impala.catalog.AuthorizationException;
+import com.cloudera.impala.catalog.CatalogException;
 import com.cloudera.impala.catalog.CatalogServiceCatalog;
-import com.cloudera.impala.catalog.DatabaseNotFoundException;
 import com.cloudera.impala.catalog.Db;
 import com.cloudera.impala.catalog.HdfsCachePool;
 import com.cloudera.impala.catalog.ImpaladCatalog;
 import com.cloudera.impala.catalog.Table;
-import com.cloudera.impala.catalog.TableLoadingException;
 import com.google.common.base.Preconditions;
 
 /**
@@ -35,15 +31,23 @@ public class ImpaladTestCatalog extends ImpaladCatalog {
   // Used to load missing table metadata when running the FE tests.
   private final CatalogServiceCatalog srcCatalog_;
 
+  public ImpaladTestCatalog() {
+    this(AuthorizationConfig.createAuthDisabledConfig());
+  }
+
+  /**
+   * Takes an AuthorizationConfig to bootstrap the backing CatalogServiceCatalog.
+   */
   public ImpaladTestCatalog(AuthorizationConfig authzConfig) {
-    super(authzConfig);
+    super();
     CatalogServiceCatalog catalogServerCatalog =
-        CatalogServiceCatalog.createForTesting(false);
+        CatalogServiceTestCatalog.createWithAuth(authzConfig.getSentryConfig());
     // Bootstrap the catalog by adding all dbs, tables, and functions.
     for (String dbName: catalogServerCatalog.getDbNames(null)) {
       // Adding DB should include all tables/fns in that database.
       addDb(catalogServerCatalog.getDb(dbName));
     }
+    authPolicy_ = ((CatalogServiceTestCatalog) catalogServerCatalog).getAuthPolicy();
     srcCatalog_ = catalogServerCatalog;
     setIsReady();
   }
@@ -54,13 +58,19 @@ public class ImpaladTestCatalog extends ImpaladCatalog {
   }
 
   /**
+   * Reloads all metadata from the source catalog.
+   */
+  public void reset() throws CatalogException {
+    srcCatalog_.reset();
+  }
+
+  /**
    * Overrides ImpaladCatalog.getTable to load the table metadata if it is missing.
    */
   @Override
-  public Table getTable(String dbName, String tableName, User user,
-      Privilege privilege) throws AuthorizationException, DatabaseNotFoundException,
-      TableLoadingException {
-    Table existingTbl = super.getTable(dbName, tableName, user, privilege);
+  public Table getTable(String dbName, String tableName)
+      throws CatalogException {
+    Table existingTbl = super.getTable(dbName, tableName);
     // Table doesn't exist or is already loaded. Just return it.
     if (existingTbl == null || existingTbl.isLoaded()) return existingTbl;
 
@@ -72,6 +82,6 @@ public class ImpaladTestCatalog extends ImpaladCatalog {
     Db db = getDb(dbName);
     Preconditions.checkNotNull(db);
     db.addTable(newTbl);
-    return super.getTable(dbName, tableName, user, privilege);
+    return super.getTable(dbName, tableName);
   }
 }

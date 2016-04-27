@@ -16,7 +16,6 @@
 #include "service/impala-server.inline.h"
 #include "service/query-exec-state.h"
 #include "util/debug-util.h"
-#include "gen-cpp/cli_service_types.h"
 
 using namespace std;
 using namespace impala;
@@ -25,10 +24,9 @@ using namespace apache::hive::service::cli::thrift;
 
 namespace impala {
 
-// To detect cancellation of the parent query, this function acquires the parent query's
-// lock_ and checks the parent's parent_status before any HS2 "RPC" into the impala
-// server. It is important not to hold any locks (in particular the parent query's
-// lock_) while invoking HS2 functions to avoid deadlock.
+// To detect cancellation of the parent query this function checks IsCancelled() before
+// any HS2 "RPC" into the impala server. It is important not to hold any locks (in
+// particular the parent query's lock_) while invoking HS2 functions to avoid deadlock.
 Status ChildQuery::ExecAndFetch() {
   const TUniqueId& session_id = parent_exec_state_->session_id();
   VLOG_QUERY << "Executing child query: " << query_ << " in session "
@@ -53,7 +51,7 @@ Status ChildQuery::ExecAndFetch() {
   //    for Cancel() to use.
   // 3. Set is_running_ to true. Once is_running_ is set, the child query
   //    can be cancelled via Cancel().
-  RETURN_IF_ERROR(CheckParentStatus());
+  RETURN_IF_ERROR(IsCancelled());
   parent_server_->ExecuteStatement(exec_stmt_resp, exec_stmt_req);
   hs2_handle_ = exec_stmt_resp.operationHandle;
   {
@@ -65,7 +63,7 @@ Status ChildQuery::ExecAndFetch() {
 
   TGetResultSetMetadataReq meta_req;
   meta_req.operationHandle = exec_stmt_resp.operationHandle;
-  RETURN_IF_ERROR(CheckParentStatus());
+  RETURN_IF_ERROR(IsCancelled());
   parent_server_->GetResultSetMetadata(meta_resp_, meta_req);
   status = meta_resp_.status;
   RETURN_IF_ERROR(status);
@@ -75,11 +73,11 @@ Status ChildQuery::ExecAndFetch() {
   fetch_req.operationHandle = exec_stmt_resp.operationHandle;
   fetch_req.maxRows = 1024;
   do {
-    RETURN_IF_ERROR(CheckParentStatus());
+    RETURN_IF_ERROR(IsCancelled());
     parent_server_->FetchResults(fetch_resp_, fetch_req);
     status = fetch_resp_.status;
   } while (status.ok() && fetch_resp_.hasMoreRows);
-  RETURN_IF_ERROR(CheckParentStatus());
+  RETURN_IF_ERROR(IsCancelled());
 
   TCloseOperationResp close_resp;
   TCloseOperationReq close_req;
@@ -89,6 +87,8 @@ Status ChildQuery::ExecAndFetch() {
     lock_guard<mutex> l(lock_);
     is_running_ = false;
   }
+  RETURN_IF_ERROR(IsCancelled());
+
   // Don't overwrite error from fetch. A failed fetch unregisters the query and we want to
   // preserve the original error status (e.g., CANCELLED).
   if (status.ok()) status = close_resp.status;
@@ -117,7 +117,7 @@ void ChildQuery::SetQueryOptions(const TQueryOptions& parent_options,
     TExecuteStatementReq* exec_stmt_req) {
   // If this DCHECK is hit then handle the missing query option below.
   DCHECK_EQ(_TImpalaQueryOptions_VALUES_TO_NAMES.size(),
-      TImpalaQueryOptions::DISABLE_OUTERMOST_TOPN + 1);
+      TImpalaQueryOptions::EXEC_SINGLE_NODE_ROWS_THRESHOLD + 1);
   SET_QUERY_OPTION(abort_on_default_limit_exceeded, ABORT_ON_DEFAULT_LIMIT_EXCEEDED);
   SET_QUERY_OPTION(abort_on_error, ABORT_ON_ERROR);
   SET_QUERY_OPTION(allow_unsupported_formats, ALLOW_UNSUPPORTED_FORMATS);
@@ -136,18 +136,27 @@ void ChildQuery::SetQueryOptions(const TQueryOptions& parent_options,
   SET_QUERY_OPTION(mem_limit, MEM_LIMIT);
   SET_QUERY_OPTION(num_nodes, NUM_NODES);
   SET_QUERY_OPTION(num_scanner_threads, NUM_SCANNER_THREADS);
-  SET_QUERY_OPTION(parquet_compression_codec, PARQUET_COMPRESSION_CODEC);
+  SET_QUERY_OPTION(compression_codec, COMPRESSION_CODEC);
   SET_QUERY_OPTION(parquet_file_size, PARQUET_FILE_SIZE);
   SET_QUERY_OPTION(request_pool, REQUEST_POOL);
   SET_QUERY_OPTION(reservation_request_timeout, RESERVATION_REQUEST_TIMEOUT);
   SET_QUERY_OPTION(sync_ddl, SYNC_DDL);
   SET_QUERY_OPTION(v_cpu_cores, V_CPU_CORES);
+  SET_QUERY_OPTION(rm_initial_mem, RM_INITIAL_MEM);
+  SET_QUERY_OPTION(query_timeout_s, QUERY_TIMEOUT_S);
+  SET_QUERY_OPTION(max_block_mgr_memory, MAX_BLOCK_MGR_MEMORY);
+  SET_QUERY_OPTION(appx_count_distinct, APPX_COUNT_DISTINCT);
+  SET_QUERY_OPTION(disable_unsafe_spills, DISABLE_UNSAFE_SPILLS);
+  SET_QUERY_OPTION(seq_compression_mode, SEQ_COMPRESSION_MODE);
+  SET_QUERY_OPTION(exec_single_node_rows_threshold,
+      EXEC_SINGLE_NODE_ROWS_THRESHOLD);
 }
 
 void ChildQuery::Cancel() {
   // Do not hold lock_ while calling into parent_server_ to avoid deadlock.
   {
     lock_guard<mutex> l(lock_);
+    is_cancelled_ = true;
     if (!is_running_) return;
     is_running_ = false;
   }
@@ -164,15 +173,10 @@ void ChildQuery::Cancel() {
   parent_server_->CloseOperation(close_resp, close_req);
 }
 
-Status ChildQuery::CheckParentStatus() {
-  Status parent_status;
-  {
-    lock_guard<mutex> l(*parent_exec_state_->lock());
-    parent_status = parent_exec_state_->query_status();
-  }
-  // Cancel this child query if the parent was cancelled or has failed.
-  if (!parent_status.ok()) Cancel();
-  return parent_status;
+Status ChildQuery::IsCancelled() {
+  lock_guard<mutex> l(lock_);
+  if (!is_cancelled_) return Status::OK;
+  return Status::CANCELLED;
 }
 
 }

@@ -23,16 +23,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.cloudera.impala.analysis.TableName;
-import com.cloudera.impala.authorization.Privilege;
 import com.cloudera.impala.authorization.User;
 import com.cloudera.impala.catalog.Column;
-import com.cloudera.impala.catalog.ColumnType;
 import com.cloudera.impala.catalog.Db;
 import com.cloudera.impala.catalog.Function;
 import com.cloudera.impala.catalog.ImpaladCatalog;
 import com.cloudera.impala.catalog.PrimitiveType;
+import com.cloudera.impala.catalog.ScalarType;
 import com.cloudera.impala.catalog.Table;
 import com.cloudera.impala.catalog.TableLoadingException;
+import com.cloudera.impala.catalog.Type;
 import com.cloudera.impala.common.ImpalaException;
 import com.cloudera.impala.thrift.TColumn;
 import com.cloudera.impala.thrift.TColumnValue;
@@ -81,123 +81,123 @@ public class MetadataOp {
    * Initialize result set schema for each of the HiveServer2 operations
    */
   private static void initialzeResultSetSchemas() {
-    GET_CATALOGS_MD.addToColumns(new TColumn("TABLE_CAT", ColumnType.STRING.toThrift()));
+    GET_CATALOGS_MD.addToColumns(new TColumn("TABLE_CAT", Type.STRING.toThrift()));
 
     GET_COLUMNS_MD.addToColumns(
-        new TColumn("TABLE_CAT", ColumnType.STRING.toThrift()));
+        new TColumn("TABLE_CAT", Type.STRING.toThrift()));
     GET_COLUMNS_MD.addToColumns(
-        new TColumn("TABLE_MD", ColumnType.STRING.toThrift()));
+        new TColumn("TABLE_MD", Type.STRING.toThrift()));
     GET_COLUMNS_MD.addToColumns(
-        new TColumn("TABLE_NAME", ColumnType.STRING.toThrift()));
+        new TColumn("TABLE_NAME", Type.STRING.toThrift()));
     GET_COLUMNS_MD.addToColumns(
-        new TColumn("COLUMN_NAME", ColumnType.STRING.toThrift()));
+        new TColumn("COLUMN_NAME", Type.STRING.toThrift()));
     GET_COLUMNS_MD.addToColumns(
-        new TColumn("DATA_TYPE", ColumnType.INT.toThrift()));
+        new TColumn("DATA_TYPE", Type.INT.toThrift()));
     GET_COLUMNS_MD.addToColumns(
-        new TColumn("TYPE_NAME", ColumnType.STRING.toThrift()));
+        new TColumn("TYPE_NAME", Type.STRING.toThrift()));
     GET_COLUMNS_MD.addToColumns(
-        new TColumn("COLUMN_SIZE", ColumnType.INT.toThrift()));
+        new TColumn("COLUMN_SIZE", Type.INT.toThrift()));
     GET_COLUMNS_MD.addToColumns(
-        new TColumn("BUFFER_LENGTH", ColumnType.INT.toThrift()));
+        new TColumn("BUFFER_LENGTH", Type.INT.toThrift()));
     GET_COLUMNS_MD.addToColumns(
-        new TColumn("DECIMAL_DIGITS", ColumnType.INT.toThrift()));
+        new TColumn("DECIMAL_DIGITS", Type.INT.toThrift()));
     GET_COLUMNS_MD.addToColumns(
-        new TColumn("NUM_PREC_RADIX", ColumnType.INT.toThrift()));
+        new TColumn("NUM_PREC_RADIX", Type.INT.toThrift()));
     GET_COLUMNS_MD.addToColumns(
-        new TColumn("NULLABLE", ColumnType.INT.toThrift()));
+        new TColumn("NULLABLE", Type.INT.toThrift()));
     GET_COLUMNS_MD.addToColumns(
-        new TColumn("REMARKS", ColumnType.STRING.toThrift()));
+        new TColumn("REMARKS", Type.STRING.toThrift()));
     GET_COLUMNS_MD.addToColumns(
-        new TColumn("COLUMN_DEF", ColumnType.STRING.toThrift()));
+        new TColumn("COLUMN_DEF", Type.STRING.toThrift()));
     GET_COLUMNS_MD.addToColumns(
-        new TColumn("SQL_DATA_TYPE", ColumnType.INT.toThrift()));
+        new TColumn("SQL_DATA_TYPE", Type.INT.toThrift()));
     GET_COLUMNS_MD.addToColumns(
-        new TColumn("SQL_DATETIME_SUB", ColumnType.INT.toThrift()));
+        new TColumn("SQL_DATETIME_SUB", Type.INT.toThrift()));
     GET_COLUMNS_MD.addToColumns(
-        new TColumn("CHAR_OCTET_LENGTH", ColumnType.INT.toThrift()));
+        new TColumn("CHAR_OCTET_LENGTH", Type.INT.toThrift()));
     GET_COLUMNS_MD.addToColumns(
-        new TColumn("ORDINAL_POSITION", ColumnType.INT.toThrift()));
+        new TColumn("ORDINAL_POSITION", Type.INT.toThrift()));
     GET_COLUMNS_MD.addToColumns(
-        new TColumn("IS_NULLABLE", ColumnType.STRING.toThrift()));
+        new TColumn("IS_NULLABLE", Type.STRING.toThrift()));
     GET_COLUMNS_MD.addToColumns(
-        new TColumn("SCOPE_CATALOG", ColumnType.STRING.toThrift()));
+        new TColumn("SCOPE_CATALOG", Type.STRING.toThrift()));
     GET_COLUMNS_MD.addToColumns(
-        new TColumn("SCOPE_SCHEMA", ColumnType.STRING.toThrift()));
+        new TColumn("SCOPE_SCHEMA", Type.STRING.toThrift()));
     GET_COLUMNS_MD.addToColumns(
-        new TColumn("SCOPE_TABLE", ColumnType.STRING.toThrift()));
+        new TColumn("SCOPE_TABLE", Type.STRING.toThrift()));
     GET_COLUMNS_MD.addToColumns(
-        new TColumn("SOURCE_DATA_TYPE", ColumnType.SMALLINT.toThrift()));
+        new TColumn("SOURCE_DATA_TYPE", Type.SMALLINT.toThrift()));
     GET_COLUMNS_MD.addToColumns(
-        new TColumn("IS_AUTO_INCREMENT", ColumnType.STRING.toThrift()));
+        new TColumn("IS_AUTO_INCREMENT", Type.STRING.toThrift()));
 
     GET_SCHEMAS_MD.addToColumns(
-        new TColumn("TABLE_SCHEM", ColumnType.STRING.toThrift()));
+        new TColumn("TABLE_SCHEM", Type.STRING.toThrift()));
     GET_SCHEMAS_MD.addToColumns(
-        new TColumn("TABLE_CATALOG", ColumnType.STRING.toThrift()));
+        new TColumn("TABLE_CATALOG", Type.STRING.toThrift()));
 
     GET_TABLES_MD.addToColumns(
-        new TColumn("TABLE_CAT", ColumnType.STRING.toThrift()));
+        new TColumn("TABLE_CAT", Type.STRING.toThrift()));
     GET_TABLES_MD.addToColumns(
-        new TColumn("TABLE_SCHEM", ColumnType.STRING.toThrift()));
+        new TColumn("TABLE_SCHEM", Type.STRING.toThrift()));
     GET_TABLES_MD.addToColumns(
-        new TColumn("TABLE_NAME", ColumnType.STRING.toThrift()));
+        new TColumn("TABLE_NAME", Type.STRING.toThrift()));
     GET_TABLES_MD.addToColumns(
-        new TColumn("TABLE_TYPE", ColumnType.STRING.toThrift()));
+        new TColumn("TABLE_TYPE", Type.STRING.toThrift()));
     GET_TABLES_MD.addToColumns(
-        new TColumn("REMARKS", ColumnType.STRING.toThrift()));
+        new TColumn("REMARKS", Type.STRING.toThrift()));
 
     GET_TYPEINFO_MD.addToColumns(
-        new TColumn("TYPE_NAME", ColumnType.STRING.toThrift()));
+        new TColumn("TYPE_NAME", Type.STRING.toThrift()));
     GET_TYPEINFO_MD.addToColumns(
-        new TColumn("DATA_TYPE", ColumnType.INT.toThrift()));
+        new TColumn("DATA_TYPE", Type.INT.toThrift()));
     GET_TYPEINFO_MD.addToColumns(
-        new TColumn("PRECISION", ColumnType.INT.toThrift()));
+        new TColumn("PRECISION", Type.INT.toThrift()));
     GET_TYPEINFO_MD.addToColumns(
-        new TColumn("LITERAL_PREFIX", ColumnType.STRING.toThrift()));
+        new TColumn("LITERAL_PREFIX", Type.STRING.toThrift()));
     GET_TYPEINFO_MD.addToColumns(
-        new TColumn("LITERAL_SUFFIX", ColumnType.STRING.toThrift()));
+        new TColumn("LITERAL_SUFFIX", Type.STRING.toThrift()));
     GET_TYPEINFO_MD.addToColumns(
-        new TColumn("CREATE_PARAMS", ColumnType.STRING.toThrift()));
+        new TColumn("CREATE_PARAMS", Type.STRING.toThrift()));
     GET_TYPEINFO_MD.addToColumns(
-        new TColumn("NULLABLE", ColumnType.INT.toThrift()));
+        new TColumn("NULLABLE", Type.INT.toThrift()));
     GET_TYPEINFO_MD.addToColumns(
-        new TColumn("CASE_SENSITIVE", ColumnType.BOOLEAN.toThrift()));
+        new TColumn("CASE_SENSITIVE", Type.BOOLEAN.toThrift()));
     GET_TYPEINFO_MD.addToColumns(
-        new TColumn("SEARCHABLE", ColumnType.SMALLINT.toThrift()));
+        new TColumn("SEARCHABLE", Type.SMALLINT.toThrift()));
     GET_TYPEINFO_MD.addToColumns(
-        new TColumn("UNSIGNED_ATTRIBUTE", ColumnType.BOOLEAN.toThrift()));
+        new TColumn("UNSIGNED_ATTRIBUTE", Type.BOOLEAN.toThrift()));
     GET_TYPEINFO_MD.addToColumns(
-        new TColumn("FIXED_PREC_SCALE", ColumnType.BOOLEAN.toThrift()));
+        new TColumn("FIXED_PREC_SCALE", Type.BOOLEAN.toThrift()));
     GET_TYPEINFO_MD.addToColumns(
-        new TColumn("AUTO_INCREMENT", ColumnType.BOOLEAN.toThrift()));
+        new TColumn("AUTO_INCREMENT", Type.BOOLEAN.toThrift()));
     GET_TYPEINFO_MD.addToColumns(
-        new TColumn("LOCAL_TYPE_NAME", ColumnType.STRING.toThrift()));
+        new TColumn("LOCAL_TYPE_NAME", Type.STRING.toThrift()));
     GET_TYPEINFO_MD.addToColumns(
-        new TColumn("MINIMUM_SCALE", ColumnType.SMALLINT.toThrift()));
+        new TColumn("MINIMUM_SCALE", Type.SMALLINT.toThrift()));
     GET_TYPEINFO_MD.addToColumns(
-        new TColumn("MAXIMUM_SCALE", ColumnType.SMALLINT.toThrift()));
+        new TColumn("MAXIMUM_SCALE", Type.SMALLINT.toThrift()));
     GET_TYPEINFO_MD.addToColumns(
-        new TColumn("SQL_DATA_TYPE", ColumnType.INT.toThrift()));
+        new TColumn("SQL_DATA_TYPE", Type.INT.toThrift()));
     GET_TYPEINFO_MD.addToColumns(
-        new TColumn("SQL_DATETIME_SUB", ColumnType.INT.toThrift()));
+        new TColumn("SQL_DATETIME_SUB", Type.INT.toThrift()));
     GET_TYPEINFO_MD.addToColumns(
-        new TColumn("NUM_PREC_RADIX", ColumnType.INT.toThrift()));
+        new TColumn("NUM_PREC_RADIX", Type.INT.toThrift()));
 
     GET_TABLE_TYPES_MD.addToColumns(
-        new TColumn("TABLE_TYPE", ColumnType.STRING.toThrift()));
+        new TColumn("TABLE_TYPE", Type.STRING.toThrift()));
 
     GET_FUNCTIONS_MD.addToColumns(
-        new TColumn("FUNCTION_CAT", ColumnType.STRING.toThrift()));
+        new TColumn("FUNCTION_CAT", Type.STRING.toThrift()));
     GET_FUNCTIONS_MD.addToColumns(
-        new TColumn("FUNCTION_SCHEM", ColumnType.STRING.toThrift()));
+        new TColumn("FUNCTION_SCHEM", Type.STRING.toThrift()));
     GET_FUNCTIONS_MD.addToColumns(
-        new TColumn("FUNCTION_NAME", ColumnType.STRING.toThrift()));
+        new TColumn("FUNCTION_NAME", Type.STRING.toThrift()));
     GET_FUNCTIONS_MD.addToColumns(
-        new TColumn("REMARKS", ColumnType.STRING.toThrift()));
+        new TColumn("REMARKS", Type.STRING.toThrift()));
     GET_FUNCTIONS_MD.addToColumns(
-        new TColumn("FUNCTION_TYPE", ColumnType.INT.toThrift()));
+        new TColumn("FUNCTION_TYPE", Type.INT.toThrift()));
     GET_FUNCTIONS_MD.addToColumns(
-        new TColumn("SPECIFIC_NAME", ColumnType.STRING.toThrift()));
+        new TColumn("SPECIFIC_NAME", Type.STRING.toThrift()));
   }
 
   /**
@@ -241,7 +241,7 @@ public class MetadataOp {
    * will not be populated.
    * If columns is null, then DbsTablesColumns.columns will not be populated.
    */
-  private static DbsMetadata getDbsMetadata(ImpaladCatalog catalog, String catalogName,
+  private static DbsMetadata getDbsMetadata(Frontend fe, String catalogName,
       String schemaName, String tableName, String columnName, String functionName,
       User user) throws ImpalaException {
     DbsMetadata result = new DbsMetadata();
@@ -258,10 +258,12 @@ public class MetadataOp {
     PatternMatcher columnPattern = PatternMatcher.createJdbcPatternMatcher(columnName);
     PatternMatcher fnPattern = PatternMatcher.createJdbcPatternMatcher(functionName);
 
-    for (String dbName: catalog.getDbNames(null, user)) {
+    ImpaladCatalog catalog = fe.getCatalog();
+    for (String dbName: fe.getDbNames(null, user)) {
       if (!schemaPattern.matches(dbName)) continue;
 
-      Db db = catalog.getDb(dbName, user, Privilege.ANY);
+      Db db = catalog.getDb(dbName);
+      if (db == null) continue;
 
       if (functionName != null) {
         // Get function metadata
@@ -271,14 +273,14 @@ public class MetadataOp {
         // Get table metadata
         List<String> tableList = Lists.newArrayList();
         List<List<Column>> tablesColumnsList = Lists.newArrayList();
-        for (String tabName: catalog.getTableNames(db.getName(), "*", user)) {
+        for (String tabName: fe.getTableNames(db.getName(), "*", user)) {
           if (!tablePattern.matches(tabName)) continue;
           tableList.add(tabName);
           List<Column> columns = Lists.newArrayList();
 
           Table table = null;
           try {
-            table = catalog.getTable(dbName, tabName, user, Privilege.ANY);
+            table = catalog.getTable(dbName, tabName);
           } catch (TableLoadingException e) {
             // Ignore exception (this table will be skipped).
           }
@@ -334,7 +336,7 @@ public class MetadataOp {
     // Get the list of schemas, tables, and columns that satisfy the search conditions.
     DbsMetadata dbsMetadata = null;
     while (dbsMetadata == null || !dbsMetadata.missingTbls.isEmpty()) {
-      dbsMetadata = getDbsMetadata(fe.getCatalog(), catalogName,
+      dbsMetadata = getDbsMetadata(fe, catalogName,
           schemaName, tableName, columnName, null, user);
       if (!fe.requestTblLoadAndWait(dbsMetadata.missingTbls)) {
         LOG.info("Timed out waiting for missing tables. Load request will be retried.");
@@ -347,14 +349,14 @@ public class MetadataOp {
         String tabName = dbsMetadata.tableNames.get(i).get(j);
         for (int k = 0; k < dbsMetadata.columns.get(i).get(j).size(); ++k) {
           Column column = dbsMetadata.columns.get(i).get(j).get(k);
-          ColumnType colType = column.getType();
+          Type colType = column.getType();
           TResultRow row = new TResultRow();
           row.colVals = Lists.newArrayList();
           row.colVals.add(NULL_COL_VAL); // TABLE_CAT
           row.colVals.add(createTColumnValue(dbName)); // TABLE_SCHEM
           row.colVals.add(createTColumnValue(tabName)); // TABLE_NAME
           row.colVals.add(createTColumnValue(column.getName())); // COLUMN_NAME
-          row.colVals.add(createTColumnValue(colType.getJavaSQLType())); // DATA_TYPE
+          row.colVals.add(createTColumnValue(colType.getJavaSqlType())); // DATA_TYPE
           row.colVals.add(
               createTColumnValue(colType.getPrimitiveType().name())); // TYPE_NAME
           row.colVals.add(createTColumnValue(colType.getColumnSize())); // COLUMN_SIZE
@@ -392,12 +394,12 @@ public class MetadataOp {
    * pattern.
    * catalogName and schemaName are JDBC search patterns.
    */
-  public static TResultSet getSchemas(ImpaladCatalog catalog,
+  public static TResultSet getSchemas(Frontend fe,
       String catalogName, String schemaName, User user) throws ImpalaException {
     TResultSet result = createEmptyResultSet(GET_SCHEMAS_MD);
 
     // Get the list of schemas that satisfy the search condition.
-    DbsMetadata dbsMetadata = getDbsMetadata(catalog, catalogName,
+    DbsMetadata dbsMetadata = getDbsMetadata(fe, catalogName,
         schemaName, null, null, null, user);
 
     for (int i = 0; i < dbsMetadata.dbs.size(); ++i) {
@@ -420,7 +422,7 @@ public class MetadataOp {
    * catalogName, schemaName and tableName are JDBC search patterns.
    * tableTypes specifies which table types to search for (TABLE, VIEW, etc).
    */
-  public static TResultSet getTables(ImpaladCatalog catalog, String catalogName,
+  public static TResultSet getTables(Frontend fe, String catalogName,
       String schemaName, String tableName, List<String> tableTypes, User user)
           throws ImpalaException{
     TResultSet result = createEmptyResultSet(GET_TABLES_MD);
@@ -441,7 +443,7 @@ public class MetadataOp {
     }
 
     // Get the list of schemas, tables that satisfy the search conditions.
-    DbsMetadata dbsMetadata = getDbsMetadata(catalog, catalogName,
+    DbsMetadata dbsMetadata = getDbsMetadata(fe, catalogName,
         schemaName, tableName, null, null, user);
 
     for (int i = 0; i < dbsMetadata.dbs.size(); ++i) {
@@ -503,7 +505,7 @@ public class MetadataOp {
    * catalogName, schemaName and functionName are JDBC search patterns.
    * @throws ImpalaException
    */
-  public static TResultSet getFunctions(ImpaladCatalog catalog,
+  public static TResultSet getFunctions(Frontend fe,
       String catalogName, String schemaName, String functionName,
       User user) throws ImpalaException {
     TResultSet result = createEmptyResultSet(GET_FUNCTIONS_MD);
@@ -513,7 +515,7 @@ public class MetadataOp {
       return result;
     }
 
-    DbsMetadata dbsMetadata = getDbsMetadata(catalog, catalogName,
+    DbsMetadata dbsMetadata = getDbsMetadata(fe, catalogName,
         schemaName, null, null, functionName, user);
     for (List<Function> fns: dbsMetadata.functions) {
       for (Function fn: fns) {
@@ -533,14 +535,15 @@ public class MetadataOp {
           ptype.equals(PrimitiveType.DATE) ||
           ptype.equals(PrimitiveType.DATETIME) ||
           ptype.equals(PrimitiveType.DECIMAL) ||
-          ptype.equals(PrimitiveType.CHAR)) {
+          ptype.equals(PrimitiveType.CHAR) ||
+          ptype.equals(PrimitiveType.VARCHAR)) {
         continue;
       }
-      ColumnType type = ColumnType.createType(ptype);
+      Type type = ScalarType.createType(ptype);
       TResultRow row = new TResultRow();
       row.colVals = Lists.newArrayList();
       row.colVals.add(createTColumnValue(ptype.name())); // TYPE_NAME
-      row.colVals.add(createTColumnValue(type.getJavaSQLType()));  // DATA_TYPE
+      row.colVals.add(createTColumnValue(type.getJavaSqlType()));  // DATA_TYPE
       row.colVals.add(createTColumnValue(type.getPrecision()));  // PRECISION
       row.colVals.add(NULL_COL_VAL); // LITERAL_PREFIX
       row.colVals.add(NULL_COL_VAL); // LITERAL_SUFFIX

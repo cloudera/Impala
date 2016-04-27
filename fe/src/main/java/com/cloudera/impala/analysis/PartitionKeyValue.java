@@ -14,7 +14,6 @@
 
 package com.cloudera.impala.analysis;
 
-import com.cloudera.impala.catalog.AuthorizationException;
 import com.cloudera.impala.common.AnalysisException;
 import com.google.common.base.Preconditions;
 
@@ -35,8 +34,7 @@ public class PartitionKeyValue {
     this.value_ = value;
   }
 
-  public void analyze(Analyzer analyzer) throws AnalysisException,
-      AuthorizationException {
+  public void analyze(Analyzer analyzer) throws AnalysisException {
     if (isStatic() && !value_.isConstant()) {
       throw new AnalysisException(
           String.format("Non-constant expressions are not supported " +
@@ -56,6 +54,19 @@ public class PartitionKeyValue {
   @Override
   public String toString() {
     return isStatic() ? colName_ + "=" + value_.toSql() : colName_;
+  }
+
+  /**
+   * Returns a binary predicate as a SQL string which matches the column and value of this
+   * PartitionKeyValue. If the value is null, correctly substitutes 'IS' as the operator.
+   */
+  public String toPredicateSql() {
+    String ident = ToSqlUtils.getIdentSql(colName_);
+    if (literalValue_ instanceof NullLiteral ||
+        literalValue_.getStringValue().isEmpty()) {
+      return ident + " IS NULL";
+    }
+    return isStatic() ? ident + "=" + value_.toSql() : ident;
   }
 
   /**

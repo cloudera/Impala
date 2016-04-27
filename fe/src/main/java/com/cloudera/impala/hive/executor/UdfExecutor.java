@@ -37,7 +37,7 @@ import org.apache.hadoop.io.Writable;
 import org.apache.log4j.Logger;
 import org.apache.thrift.protocol.TBinaryProtocol;
 
-import com.cloudera.impala.catalog.ColumnType;
+import com.cloudera.impala.catalog.Type;
 import com.cloudera.impala.catalog.PrimitiveType;
 import com.cloudera.impala.common.ImpalaException;
 import com.cloudera.impala.common.ImpalaRuntimeException;
@@ -51,7 +51,7 @@ import com.google.common.collect.Lists;
 // Wrapper object to run hive UDFs. This class works with UdfCallExpr in the
 // backend to marshall data back and forth between the execution engine and
 // the java UDF class.
-// See the comments in be/src/exprs/udf-call-expr.h for more details.
+// See the comments in be/src/exprs/hive-udf-call.h for more details.
 // TODO: should we cache loaded jars and classes?
 @SuppressWarnings("restriction")
 public class UdfExecutor {
@@ -65,8 +65,8 @@ public class UdfExecutor {
 
   private UDF udf_;
   private Method method_;
-  private ColumnType[] argTypes_;
-  private ColumnType retType_;
+  private Type[] argTypes_;
+  private Type retType_;
 
   // Input buffer from the backend. This is valid for the duration of an evaluate() call.
   // These buffers are allocated in the BE.
@@ -113,10 +113,10 @@ public class UdfExecutor {
 
     String className = request.fn.scalar_fn.symbol;
     String jarFile = request.local_location;
-    ColumnType retType = ColumnType.fromThrift(request.fn.ret_type);
-    ColumnType[] parameterTypes = new ColumnType[request.fn.arg_types.size()];
+    Type retType = Type.fromThrift(request.fn.ret_type);
+    Type[] parameterTypes = new Type[request.fn.arg_types.size()];
     for (int i = 0; i < request.fn.arg_types.size(); ++i) {
-      parameterTypes[i] = ColumnType.fromThrift(request.fn.arg_types.get(i));
+      parameterTypes[i] = Type.fromThrift(request.fn.arg_types.get(i));
     }
     inputBufferPtr_ = request.input_buffer_ptr;
     inputNullsPtr_ = request.input_nulls_ptr;
@@ -141,7 +141,7 @@ public class UdfExecutor {
    * @param udfPath: fully qualified class path for the UDF
    */
   public UdfExecutor(String jarFile, String udfPath,
-      ColumnType retType, ColumnType... parameterTypes)
+      Type retType, Type... parameterTypes)
       throws ImpalaRuntimeException {
 
     inputBufferOffsets_ = new int[parameterTypes.length];
@@ -196,8 +196,9 @@ public class UdfExecutor {
       for (int i = 0; i < argTypes_.length; ++i) {
         if (UnsafeUtil.UNSAFE.getByte(inputNullsPtr_ + i) == 0) {
           if (isArgString_[i]) {
-            Preconditions.checkState(inputArgs_[i] instanceof ImpalaBytesWritable);
-            inputArgs_[i] = ((ImpalaBytesWritable)inputArgs_[i]).toString();
+            Preconditions.checkState(inputObjects_[i] instanceof ImpalaBytesWritable);
+            inputArgs_[i] =
+                new String(((ImpalaBytesWritable)inputObjects_[i]).getBytes());
           } else {
             inputArgs_[i] = inputObjects_[i];
           }
@@ -311,9 +312,9 @@ public class UdfExecutor {
         if (obj instanceof byte[]) {
           bytes = (byte[]) obj;
         } else if (obj instanceof BytesWritable) {
-          bytes = ((BytesWritable)obj).getBytes();
+          bytes = ((BytesWritable)obj).copyBytes();
         } else if (obj instanceof Text) {
-          bytes = ((Text)obj).getBytes();
+          bytes = ((Text)obj).copyBytes();
         } else if (obj instanceof String) {
           bytes = ((String)obj).getBytes();
         } else {
@@ -342,7 +343,7 @@ public class UdfExecutor {
   // These objects are allocated once and reused across calls to evaluate()
   private void allocateInputObjects() throws ImpalaRuntimeException {
     inputObjects_ = new Writable[argTypes_.length];
-    inputArgs_ = new Writable[argTypes_.length];
+    inputArgs_ = new Object[argTypes_.length];
     isArgString_ = new boolean[argTypes_.length];
 
     for (int i = 0; i < argTypes_.length; ++i) {
@@ -378,8 +379,7 @@ public class UdfExecutor {
             inputObjects_[i] = w;
           } else if (method_.getParameterTypes()[i] == String.class) {
             isArgString_[i] = true;
-            // String can be mapped to any String-like Writable class. We need
-            // to call toString on it before calling the UDF.
+            // String can be mapped to any String-like Writable class.
             ImpalaBytesWritable w = new ImpalaBytesWritable(inputBufferPtr_ + offset);
             inputObjects_[i] = w;
           } else {
@@ -408,7 +408,7 @@ public class UdfExecutor {
    * This uses reflection to look up the "evaluate" function in the UDF class.
    */
   private void init(String jarPath, String udfPath,
-      ColumnType retType, ColumnType... parameterTypes) throws
+      Type retType, Type... parameterTypes) throws
       ImpalaRuntimeException {
     ArrayList<String> signatures = Lists.newArrayList();
     try {

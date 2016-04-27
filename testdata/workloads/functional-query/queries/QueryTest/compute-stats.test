@@ -15,56 +15,221 @@ STRING
 ---- QUERY
 show table stats compute_stats_db.alltypes
 ---- LABELS
-YEAR, MONTH, #ROWS, #FILES, SIZE, BYTES CACHED, FORMAT
+YEAR, MONTH, #ROWS, #FILES, SIZE, BYTES CACHED, FORMAT, INCREMENTAL STATS
 ---- RESULTS
-2009,1,310,1,'24.56KB','NOT CACHED','TEXT'
-2009,2,280,1,'22.27KB','NOT CACHED','TEXT'
-2009,3,310,1,'24.67KB','NOT CACHED','TEXT'
-2009,4,300,1,'24.06KB','NOT CACHED','TEXT'
-2009,5,310,1,'24.97KB','NOT CACHED','TEXT'
-2009,6,300,1,'24.16KB','NOT CACHED','TEXT'
-2009,7,310,1,'24.97KB','NOT CACHED','TEXT'
-2009,8,310,1,'24.97KB','NOT CACHED','TEXT'
-2009,9,300,1,'24.16KB','NOT CACHED','TEXT'
-2009,10,310,1,'24.97KB','NOT CACHED','TEXT'
-2009,11,300,1,'24.16KB','NOT CACHED','TEXT'
-2009,12,310,1,'24.97KB','NOT CACHED','TEXT'
-2010,1,310,1,'24.97KB','NOT CACHED','TEXT'
-2010,2,280,1,'22.54KB','NOT CACHED','TEXT'
-2010,3,310,1,'24.97KB','NOT CACHED','TEXT'
-2010,4,300,1,'24.16KB','NOT CACHED','TEXT'
-2010,5,310,1,'24.97KB','NOT CACHED','TEXT'
-2010,6,300,1,'24.16KB','NOT CACHED','TEXT'
-2010,7,310,1,'24.97KB','NOT CACHED','TEXT'
-2010,8,310,1,'24.97KB','NOT CACHED','TEXT'
-2010,9,300,1,'24.16KB','NOT CACHED','TEXT'
-2010,10,310,1,'24.97KB','NOT CACHED','TEXT'
-2010,11,300,1,'24.16KB','NOT CACHED','TEXT'
-2010,12,310,1,'24.97KB','NOT CACHED','TEXT'
-Total,,7300,24,'586.84KB','0B',''
+'2009','1',310,1,'24.56KB','NOT CACHED','TEXT','false'
+'2009','2',280,1,'22.27KB','NOT CACHED','TEXT','false'
+'2009','3',310,1,'24.67KB','NOT CACHED','TEXT','false'
+'2009','4',300,1,'24.06KB','NOT CACHED','TEXT','false'
+'2009','5',310,1,'24.97KB','NOT CACHED','TEXT','false'
+'2009','6',300,1,'24.16KB','NOT CACHED','TEXT','false'
+'2009','7',310,1,'24.97KB','NOT CACHED','TEXT','false'
+'2009','8',310,1,'24.97KB','NOT CACHED','TEXT','false'
+'2009','9',300,1,'24.16KB','NOT CACHED','TEXT','false'
+'2009','10',310,1,'24.97KB','NOT CACHED','TEXT','false'
+'2009','11',300,1,'24.16KB','NOT CACHED','TEXT','false'
+'2009','12',310,1,'24.97KB','NOT CACHED','TEXT','false'
+'2010','1',310,1,'24.97KB','NOT CACHED','TEXT','false'
+'2010','2',280,1,'22.54KB','NOT CACHED','TEXT','false'
+'2010','3',310,1,'24.97KB','NOT CACHED','TEXT','false'
+'2010','4',300,1,'24.16KB','NOT CACHED','TEXT','false'
+'2010','5',310,1,'24.97KB','NOT CACHED','TEXT','false'
+'2010','6',300,1,'24.16KB','NOT CACHED','TEXT','false'
+'2010','7',310,1,'24.97KB','NOT CACHED','TEXT','false'
+'2010','8',310,1,'24.97KB','NOT CACHED','TEXT','false'
+'2010','9',300,1,'24.16KB','NOT CACHED','TEXT','false'
+'2010','10',310,1,'24.97KB','NOT CACHED','TEXT','false'
+'2010','11',300,1,'24.16KB','NOT CACHED','TEXT','false'
+'2010','12',310,1,'24.97KB','NOT CACHED','TEXT','false'
+'Total','',7300,24,'586.84KB','0B','',''
 ---- TYPES
-INT, INT, BIGINT, BIGINT, STRING, STRING, STRING
+STRING, STRING, BIGINT, BIGINT, STRING, STRING, STRING, STRING
 ====
 ---- QUERY
 show column stats compute_stats_db.alltypes
 ---- LABELS
 COLUMN, TYPE, #DISTINCT VALUES, #NULLS, MAX SIZE, AVG SIZE
 ---- RESULTS
-'id','INT',8161,0,4,4
-'bool_col','BOOLEAN',2,0,1,1
-'tinyint_col','TINYINT',10,0,1,1
-'smallint_col','SMALLINT',10,0,2,2
-'int_col','INT',10,0,4,4
-'bigint_col','BIGINT',10,0,8,8
-'float_col','FLOAT',10,0,4,4
-'double_col','DOUBLE',10,0,8,8
-'date_string_col','STRING',666,0,8,8
-'string_col','STRING',10,0,1,1
-'timestamp_col','TIMESTAMP',5678,0,16,16
+'id','INT',8161,-1,4,4
+'bool_col','BOOLEAN',2,-1,1,1
+'tinyint_col','TINYINT',10,-1,1,1
+'smallint_col','SMALLINT',10,-1,2,2
+'int_col','INT',10,-1,4,4
+'bigint_col','BIGINT',10,-1,8,8
+'float_col','FLOAT',10,-1,4,4
+'double_col','DOUBLE',10,-1,8,8
+'date_string_col','STRING',666,-1,8,8
+'string_col','STRING',10,-1,1,1
+'timestamp_col','TIMESTAMP',5678,-1,16,16
 'year','INT',2,0,4,4
 'month','INT',12,0,4,4
 ---- TYPES
-STRING, STRING, BIGINT, BIGINT, DOUBLE, DOUBLE
+STRING, STRING, BIGINT, BIGINT, INT, DOUBLE
+====
+---- QUERY
+# drop stats from this table
+drop stats compute_stats_db.alltypes
+====
+---- QUERY
+show table stats compute_stats_db.alltypes
+---- LABELS
+YEAR, MONTH, #ROWS, #FILES, SIZE, BYTES CACHED, FORMAT, INCREMENTAL STATS
+---- RESULTS
+'2009','1',-1,1,'24.56KB','NOT CACHED','TEXT','false'
+'2009','10',-1,1,'24.97KB','NOT CACHED','TEXT','false'
+'2009','11',-1,1,'24.16KB','NOT CACHED','TEXT','false'
+'2009','12',-1,1,'24.97KB','NOT CACHED','TEXT','false'
+'2009','2',-1,1,'22.27KB','NOT CACHED','TEXT','false'
+'2009','3',-1,1,'24.67KB','NOT CACHED','TEXT','false'
+'2009','4',-1,1,'24.06KB','NOT CACHED','TEXT','false'
+'2009','5',-1,1,'24.97KB','NOT CACHED','TEXT','false'
+'2009','6',-1,1,'24.16KB','NOT CACHED','TEXT','false'
+'2009','7',-1,1,'24.97KB','NOT CACHED','TEXT','false'
+'2009','8',-1,1,'24.97KB','NOT CACHED','TEXT','false'
+'2009','9',-1,1,'24.16KB','NOT CACHED','TEXT','false'
+'2010','1',-1,1,'24.97KB','NOT CACHED','TEXT','false'
+'2010','10',-1,1,'24.97KB','NOT CACHED','TEXT','false'
+'2010','11',-1,1,'24.16KB','NOT CACHED','TEXT','false'
+'2010','12',-1,1,'24.97KB','NOT CACHED','TEXT','false'
+'2010','2',-1,1,'22.54KB','NOT CACHED','TEXT','false'
+'2010','3',-1,1,'24.97KB','NOT CACHED','TEXT','false'
+'2010','4',-1,1,'24.16KB','NOT CACHED','TEXT','false'
+'2010','5',-1,1,'24.97KB','NOT CACHED','TEXT','false'
+'2010','6',-1,1,'24.16KB','NOT CACHED','TEXT','false'
+'2010','7',-1,1,'24.97KB','NOT CACHED','TEXT','false'
+'2010','8',-1,1,'24.97KB','NOT CACHED','TEXT','false'
+'2010','9',-1,1,'24.16KB','NOT CACHED','TEXT','false'
+'Total','',-1,24,'586.84KB','0B','',''
+---- TYPES
+STRING, STRING, BIGINT, BIGINT, STRING, STRING, STRING, STRING
+====
+---- QUERY
+# Note - the NDV for partition columns is read from the table metadata.
+show column stats compute_stats_db.alltypes
+---- LABELS
+COLUMN, TYPE, #DISTINCT VALUES, #NULLS, MAX SIZE, AVG SIZE
+---- RESULTS
+'id','INT',-1,-1,4,4
+'bool_col','BOOLEAN',-1,-1,1,1
+'tinyint_col','TINYINT',-1,-1,1,1
+'smallint_col','SMALLINT',-1,-1,2,2
+'int_col','INT',-1,-1,4,4
+'bigint_col','BIGINT',-1,-1,8,8
+'float_col','FLOAT',-1,-1,4,4
+'double_col','DOUBLE',-1,-1,8,8
+'date_string_col','STRING',-1,-1,-1,-1
+'string_col','STRING',-1,-1,-1,-1
+'timestamp_col','TIMESTAMP',-1,-1,16,16
+'year','INT',2,0,4,4
+'month','INT',12,0,4,4
+---- TYPES
+STRING, STRING, BIGINT, BIGINT, INT, DOUBLE
+====
+---- QUERY
+# Add partitions with NULL values and check for stats.
+alter table compute_stats_db.alltypes add partition (year=NULL, month=NULL)
+---- RESULTS
+====
+---- QUERY
+show column stats compute_stats_db.alltypes
+---- LABELS
+COLUMN, TYPE, #DISTINCT VALUES, #NULLS, MAX SIZE, AVG SIZE
+---- RESULTS
+'id','INT',-1,-1,4,4
+'bool_col','BOOLEAN',-1,-1,1,1
+'tinyint_col','TINYINT',-1,-1,1,1
+'smallint_col','SMALLINT',-1,-1,2,2
+'int_col','INT',-1,-1,4,4
+'bigint_col','BIGINT',-1,-1,8,8
+'float_col','FLOAT',-1,-1,4,4
+'double_col','DOUBLE',-1,-1,8,8
+'date_string_col','STRING',-1,-1,-1,-1
+'string_col','STRING',-1,-1,-1,-1
+'timestamp_col','TIMESTAMP',-1,-1,16,16
+'year','INT',3,1,4,4
+'month','INT',13,1,4,4
+---- TYPES
+STRING, STRING, BIGINT, BIGINT, INT, DOUBLE
+====
+---- QUERY
+alter table compute_stats_db.alltypes add partition (year=2011, month=NULL)
+---- RESULTS
+====
+---- QUERY
+show column stats compute_stats_db.alltypes
+---- LABELS
+COLUMN, TYPE, #DISTINCT VALUES, #NULLS, MAX SIZE, AVG SIZE
+---- RESULTS
+'id','INT',-1,-1,4,4
+'bool_col','BOOLEAN',-1,-1,1,1
+'tinyint_col','TINYINT',-1,-1,1,1
+'smallint_col','SMALLINT',-1,-1,2,2
+'int_col','INT',-1,-1,4,4
+'bigint_col','BIGINT',-1,-1,8,8
+'float_col','FLOAT',-1,-1,4,4
+'double_col','DOUBLE',-1,-1,8,8
+'date_string_col','STRING',-1,-1,-1,-1
+'string_col','STRING',-1,-1,-1,-1
+'timestamp_col','TIMESTAMP',-1,-1,16,16
+'year','INT',4,1,4,4
+'month','INT',13,2,4,4
+---- TYPES
+STRING, STRING, BIGINT, BIGINT, INT, DOUBLE
+====
+---- QUERY
+# Drop the partitions with NULL values and check for stats.
+alter table compute_stats_db.alltypes drop partition (year=NULL, month=NULL)
+---- RESULTS
+====
+---- QUERY
+show column stats compute_stats_db.alltypes
+---- LABELS
+COLUMN, TYPE, #DISTINCT VALUES, #NULLS, MAX SIZE, AVG SIZE
+---- RESULTS
+'id','INT',-1,-1,4,4
+'bool_col','BOOLEAN',-1,-1,1,1
+'tinyint_col','TINYINT',-1,-1,1,1
+'smallint_col','SMALLINT',-1,-1,2,2
+'int_col','INT',-1,-1,4,4
+'bigint_col','BIGINT',-1,-1,8,8
+'float_col','FLOAT',-1,-1,4,4
+'double_col','DOUBLE',-1,-1,8,8
+'date_string_col','STRING',-1,-1,-1,-1
+'string_col','STRING',-1,-1,-1,-1
+'timestamp_col','TIMESTAMP',-1,-1,16,16
+'year','INT',3,0,4,4
+'month','INT',13,1,4,4
+---- TYPES
+STRING, STRING, BIGINT, BIGINT, INT, DOUBLE
+====
+---- QUERY
+alter table compute_stats_db.alltypes drop partition (year=2011, month=NULL)
+---- RESULTS
+====
+---- QUERY
+show column stats compute_stats_db.alltypes
+---- LABELS
+COLUMN, TYPE, #DISTINCT VALUES, #NULLS, MAX SIZE, AVG SIZE
+---- RESULTS
+'id','INT',-1,-1,4,4
+'bool_col','BOOLEAN',-1,-1,1,1
+'tinyint_col','TINYINT',-1,-1,1,1
+'smallint_col','SMALLINT',-1,-1,2,2
+'int_col','INT',-1,-1,4,4
+'bigint_col','BIGINT',-1,-1,8,8
+'float_col','FLOAT',-1,-1,4,4
+'double_col','DOUBLE',-1,-1,8,8
+'date_string_col','STRING',-1,-1,-1,-1
+'string_col','STRING',-1,-1,-1,-1
+'timestamp_col','TIMESTAMP',-1,-1,16,16
+'year','INT',2,0,4,4
+'month','INT',12,0,4,4
+---- TYPES
+STRING, STRING, BIGINT, BIGINT, INT, DOUBLE
+====
+---- QUERY
+# drop stats from this table a second time, should not throw an error.
+drop stats compute_stats_db.alltypes
 ====
 ---- QUERY
 # test computing stats on an partitioned text table with all types
@@ -84,30 +249,30 @@ STRING
 ---- QUERY
 show table stats compute_stats_db.alltypesnopart
 ---- LABELS
-#ROWS, #FILES, SIZE, BYTES CACHED, FORMAT
+#ROWS, #FILES, SIZE, BYTES CACHED, FORMAT, INCREMENTAL STATS
 ---- RESULTS
-100,3,'7.73KB','NOT CACHED','TEXT'
+100,3,'7.73KB','NOT CACHED','TEXT','false'
 ---- TYPES
-BIGINT, BIGINT, STRING, STRING, STRING
+BIGINT, BIGINT, STRING, STRING, STRING, STRING
 ====
 ---- QUERY
 show column stats compute_stats_db.alltypesnopart
 ---- LABELS
 COLUMN, TYPE, #DISTINCT VALUES, #NULLS, MAX SIZE, AVG SIZE
 ---- RESULTS
-'id','INT',105,0,4,4
-'bool_col','BOOLEAN',2,0,1,1
-'tinyint_col','TINYINT',10,0,1,1
-'smallint_col','SMALLINT',10,0,2,2
-'int_col','INT',10,0,4,4
-'bigint_col','BIGINT',10,0,8,8
-'float_col','FLOAT',10,0,4,4
-'double_col','DOUBLE',10,0,8,8
-'date_string_col','STRING',12,0,8,8
-'string_col','STRING',10,0,1,1
-'timestamp_col','TIMESTAMP',101,0,16,16
+'id','INT',105,-1,4,4
+'bool_col','BOOLEAN',2,-1,1,1
+'tinyint_col','TINYINT',10,-1,1,1
+'smallint_col','SMALLINT',10,-1,2,2
+'int_col','INT',10,-1,4,4
+'bigint_col','BIGINT',10,-1,8,8
+'float_col','FLOAT',10,-1,4,4
+'double_col','DOUBLE',10,-1,8,8
+'date_string_col','STRING',12,-1,8,8
+'string_col','STRING',10,-1,1,1
+'timestamp_col','TIMESTAMP',101,-1,16,16
 ---- TYPES
-STRING, STRING, BIGINT, BIGINT, DOUBLE, DOUBLE
+STRING, STRING, BIGINT, BIGINT, INT, DOUBLE
 ====
 ---- QUERY
 # test computing stats on a partitioned parquet table with all types
@@ -126,56 +291,56 @@ STRING
 ---- QUERY
 show table stats compute_stats_db.alltypes_parquet
 ---- LABELS
-YEAR, MONTH, #ROWS, #FILES, SIZE, BYTES CACHED, FORMAT
+YEAR, MONTH, #ROWS, #FILES, SIZE, BYTES CACHED, FORMAT, INCREMENTAL STATS
 ---- RESULTS
-2009,1,310,1,regex:.+KB,'NOT CACHED','PARQUET'
-2009,2,280,1,regex:.+KB,'NOT CACHED','PARQUET'
-2009,3,310,1,regex:.+KB,'NOT CACHED','PARQUET'
-2009,4,300,1,regex:.+KB,'NOT CACHED','PARQUET'
-2009,5,310,1,regex:.+KB,'NOT CACHED','PARQUET'
-2009,6,300,1,regex:.+KB,'NOT CACHED','PARQUET'
-2009,7,310,1,regex:.+KB,'NOT CACHED','PARQUET'
-2009,8,310,1,regex:.+KB,'NOT CACHED','PARQUET'
-2009,9,300,1,regex:.+KB,'NOT CACHED','PARQUET'
-2009,10,310,1,regex:.+KB,'NOT CACHED','PARQUET'
-2009,11,300,1,regex:.+KB,'NOT CACHED','PARQUET'
-2009,12,310,1,regex:.+KB,'NOT CACHED','PARQUET'
-2010,1,310,1,regex:.+KB,'NOT CACHED','PARQUET'
-2010,2,280,1,regex:.+KB,'NOT CACHED','PARQUET'
-2010,3,310,1,regex:.+KB,'NOT CACHED','PARQUET'
-2010,4,300,1,regex:.+KB,'NOT CACHED','PARQUET'
-2010,5,310,1,regex:.+KB,'NOT CACHED','PARQUET'
-2010,6,300,1,regex:.+KB,'NOT CACHED','PARQUET'
-2010,7,310,1,regex:.+KB,'NOT CACHED','PARQUET'
-2010,8,310,1,regex:.+KB,'NOT CACHED','PARQUET'
-2010,9,300,1,regex:.+KB,'NOT CACHED','PARQUET'
-2010,10,310,1,regex:.+KB,'NOT CACHED','PARQUET'
-2010,11,300,1,regex:.+KB,'NOT CACHED','PARQUET'
-2010,12,310,1,regex:.+KB,'NOT CACHED','PARQUET'
-Total,,7300,24,regex:.+KB,'0B',''
+'2009','1',310,1,regex:.+KB,'NOT CACHED','PARQUET','false'
+'2009','2',280,1,regex:.+KB,'NOT CACHED','PARQUET','false'
+'2009','3',310,1,regex:.+KB,'NOT CACHED','PARQUET','false'
+'2009','4',300,1,regex:.+KB,'NOT CACHED','PARQUET','false'
+'2009','5',310,1,regex:.+KB,'NOT CACHED','PARQUET','false'
+'2009','6',300,1,regex:.+KB,'NOT CACHED','PARQUET','false'
+'2009','7',310,1,regex:.+KB,'NOT CACHED','PARQUET','false'
+'2009','8',310,1,regex:.+KB,'NOT CACHED','PARQUET','false'
+'2009','9',300,1,regex:.+KB,'NOT CACHED','PARQUET','false'
+'2009','10',310,1,regex:.+KB,'NOT CACHED','PARQUET','false'
+'2009','11',300,1,regex:.+KB,'NOT CACHED','PARQUET','false'
+'2009','12',310,1,regex:.+KB,'NOT CACHED','PARQUET','false'
+'2010','1',310,1,regex:.+KB,'NOT CACHED','PARQUET','false'
+'2010','2',280,1,regex:.+KB,'NOT CACHED','PARQUET','false'
+'2010','3',310,1,regex:.+KB,'NOT CACHED','PARQUET','false'
+'2010','4',300,1,regex:.+KB,'NOT CACHED','PARQUET','false'
+'2010','5',310,1,regex:.+KB,'NOT CACHED','PARQUET','false'
+'2010','6',300,1,regex:.+KB,'NOT CACHED','PARQUET','false'
+'2010','7',310,1,regex:.+KB,'NOT CACHED','PARQUET','false'
+'2010','8',310,1,regex:.+KB,'NOT CACHED','PARQUET','false'
+'2010','9',300,1,regex:.+KB,'NOT CACHED','PARQUET','false'
+'2010','10',310,1,regex:.+KB,'NOT CACHED','PARQUET','false'
+'2010','11',300,1,regex:.+KB,'NOT CACHED','PARQUET','false'
+'2010','12',310,1,regex:.+KB,'NOT CACHED','PARQUET','false'
+'Total','',7300,24,regex:.+KB,'0B','',''
 ---- TYPES
-INT, INT, BIGINT, BIGINT, STRING, STRING, STRING
+STRING, STRING, BIGINT, BIGINT, STRING, STRING, STRING, STRING
 ====
 ---- QUERY
 show column stats compute_stats_db.alltypes_parquet
 ---- LABELS
 COLUMN, TYPE, #DISTINCT VALUES, #NULLS, MAX SIZE, AVG SIZE
 ---- RESULTS
-'id','INT',8161,0,4,4
-'bool_col','BOOLEAN',2,0,1,1
-'tinyint_col','TINYINT',10,0,1,1
-'smallint_col','SMALLINT',10,0,2,2
-'int_col','INT',10,0,4,4
-'bigint_col','BIGINT',10,0,8,8
-'float_col','FLOAT',10,0,4,4
-'double_col','DOUBLE',10,0,8,8
-'date_string_col','STRING',666,0,8,8
-'string_col','STRING',10,0,1,1
-'timestamp_col','TIMESTAMP',5678,0,16,16
+'id','INT',8161,-1,4,4
+'bool_col','BOOLEAN',2,-1,1,1
+'tinyint_col','TINYINT',10,-1,1,1
+'smallint_col','SMALLINT',10,-1,2,2
+'int_col','INT',10,-1,4,4
+'bigint_col','BIGINT',10,-1,8,8
+'float_col','FLOAT',10,-1,4,4
+'double_col','DOUBLE',10,-1,8,8
+'date_string_col','STRING',666,-1,8,8
+'string_col','STRING',10,-1,1,1
+'timestamp_col','TIMESTAMP',5678,-1,16,16
 'year','INT',2,0,4,4
 'month','INT',12,0,4,4
 ---- TYPES
-STRING, STRING, BIGINT, BIGINT, DOUBLE, DOUBLE
+STRING, STRING, BIGINT, BIGINT, INT, DOUBLE
 ====
 ---- QUERY
 # test computing stats on an HBase table
@@ -209,21 +374,21 @@ show column stats compute_stats_db.alltypessmall_hbase
 ---- LABELS
 COLUMN, TYPE, #DISTINCT VALUES, #NULLS, MAX SIZE, AVG SIZE
 ---- RESULTS
-'id','INT',105,0,4,4
-'bigint_col','BIGINT',10,0,8,8
-'bool_col','BOOLEAN',2,0,1,1
-'date_string_col','STRING',12,0,8,8
-'double_col','DOUBLE',10,0,8,8
-'float_col','FLOAT',10,0,4,4
-'int_col','INT',10,0,4,4
-'month','INT',4,0,4,4
-'smallint_col','SMALLINT',10,0,2,2
-'string_col','STRING',10,0,1,1
-'timestamp_col','TIMESTAMP',101,0,16,16
-'tinyint_col','TINYINT',10,0,1,1
-'year','INT',1,0,4,4
+'id','INT',105,-1,4,4
+'bigint_col','BIGINT',10,-1,8,8
+'bool_col','BOOLEAN',2,-1,1,1
+'date_string_col','STRING',12,-1,8,8
+'double_col','DOUBLE',10,-1,8,8
+'float_col','FLOAT',10,-1,4,4
+'int_col','INT',10,-1,4,4
+'month','INT',4,-1,4,4
+'smallint_col','SMALLINT',10,-1,2,2
+'string_col','STRING',10,-1,1,1
+'timestamp_col','TIMESTAMP',101,-1,16,16
+'tinyint_col','TINYINT',10,-1,1,1
+'year','INT',1,-1,4,4
 ---- TYPES
-STRING, STRING, BIGINT, BIGINT, DOUBLE, DOUBLE
+STRING, STRING, BIGINT, BIGINT, INT, DOUBLE
 ====
 ---- QUERY
 # test computing stats on an binary HBase table
@@ -251,21 +416,21 @@ show column stats compute_stats_db.alltypessmall_hbase_bin
 ---- LABELS
 COLUMN, TYPE, #DISTINCT VALUES, #NULLS, MAX SIZE, AVG SIZE
 ---- RESULTS
-'id','INT',105,0,4,4
-'bigint_col','BIGINT',10,0,8,8
-'bool_col','BOOLEAN',2,0,1,1
-'date_string_col','STRING',12,0,8,8
-'double_col','DOUBLE',10,0,8,8
-'float_col','FLOAT',10,0,4,4
-'int_col','INT',10,0,4,4
-'month','INT',4,0,4,4
-'smallint_col','SMALLINT',10,0,2,2
-'string_col','STRING',10,0,1,1
-'timestamp_col','TIMESTAMP',101,0,16,16
-'tinyint_col','TINYINT',10,0,1,1
-'year','INT',1,0,4,4
+'id','INT',105,-1,4,4
+'bigint_col','BIGINT',10,-1,8,8
+'bool_col','BOOLEAN',2,-1,1,1
+'date_string_col','STRING',12,-1,8,8
+'double_col','DOUBLE',10,-1,8,8
+'float_col','FLOAT',10,-1,4,4
+'int_col','INT',10,-1,4,4
+'month','INT',4,-1,4,4
+'smallint_col','SMALLINT',10,-1,2,2
+'string_col','STRING',10,-1,1,1
+'timestamp_col','TIMESTAMP',101,-1,16,16
+'tinyint_col','TINYINT',10,-1,1,1
+'year','INT',1,-1,4,4
 ---- TYPES
-STRING, STRING, BIGINT, BIGINT, DOUBLE, DOUBLE
+STRING, STRING, BIGINT, BIGINT, INT, DOUBLE
 ====
 ---- QUERY
 # test computing stats on an empty table
@@ -281,48 +446,48 @@ STRING
 ---- QUERY
 show table stats compute_stats_db.alltypes_empty
 ---- LABELS
-YEAR, MONTH, #ROWS, #FILES, SIZE, BYTES CACHED, FORMAT
+YEAR, MONTH, #ROWS, #FILES, SIZE, BYTES CACHED, FORMAT, INCREMENTAL STATS
 ---- RESULTS
-Total,,0,0,'0B','0B',''
+'Total','',0,0,'0B','0B','',''
 ---- TYPES
-INT, INT, BIGINT, BIGINT, STRING, STRING, STRING
+STRING, STRING, BIGINT, BIGINT, STRING, STRING, STRING, STRING
 ====
 ---- QUERY
 show column stats compute_stats_db.alltypes_empty
 ---- LABELS
 COLUMN, TYPE, #DISTINCT VALUES, #NULLS, MAX SIZE, AVG SIZE
 ---- RESULTS
-'id','INT',0,0,4,4
-'bool_col','BOOLEAN',2,0,1,1
-'tinyint_col','TINYINT',0,0,1,1
-'smallint_col','SMALLINT',0,0,2,2
-'int_col','INT',0,0,4,4
-'bigint_col','BIGINT',0,0,8,8
-'float_col','FLOAT',0,0,4,4
-'double_col','DOUBLE',0,0,8,8
-'date_string_col','STRING',0,0,0,0
-'string_col','STRING',0,0,0,0
-'timestamp_col','TIMESTAMP',0,0,16,16
+'id','INT',0,-1,4,4
+'bool_col','BOOLEAN',2,-1,1,1
+'tinyint_col','TINYINT',0,-1,1,1
+'smallint_col','SMALLINT',0,-1,2,2
+'int_col','INT',0,-1,4,4
+'bigint_col','BIGINT',0,-1,8,8
+'float_col','FLOAT',0,-1,4,4
+'double_col','DOUBLE',0,-1,8,8
+'date_string_col','STRING',0,-1,0,0
+'string_col','STRING',0,-1,0,0
+'timestamp_col','TIMESTAMP',0,-1,16,16
 'year','INT',0,0,4,4
 'month','INT',0,0,4,4
 ---- TYPES
-STRING, STRING, BIGINT, BIGINT, DOUBLE, DOUBLE
+STRING, STRING, BIGINT, BIGINT, INT, DOUBLE
 ====
 ---- QUERY
 # IMP-1227: Test computing stats on an HBase table that has a
 # complex-typed column that Impala does not yet support.
-create table compute_stats_db.map_table
-like functional_hbase.map_table_hbase;
+create table compute_stats_db.allcomplextypes
+like functional_hbase.allcomplextypes
 ====
 ---- QUERY
-compute stats compute_stats_db.map_table
+compute stats compute_stats_db.allcomplextypes
 ---- RESULTS
-'Updated 1 partition(s) and 1 column(s).'
+'Updated 1 partition(s) and 3 column(s).'
 ---- TYPES
 STRING
 ====
 ---- QUERY: VERIFY_IS_EQUAL
-show table stats compute_stats_db.map_table
+show table stats compute_stats_db.allcomplextypes
 ---- LABELS
 REGION LOCATION, START ROWKEY, EST. #ROWS, SIZE
 ---- RESULTS
@@ -331,182 +496,339 @@ regex:.+,'',regex:.+,regex:.+
 STRING, STRING, BIGINT, STRING
 ====
 ---- QUERY
-show column stats compute_stats_db.map_table
+show column stats compute_stats_db.allcomplextypes
 ---- LABELS
 COLUMN, TYPE, #DISTINCT VALUES, #NULLS, MAX SIZE, AVG SIZE
 ---- RESULTS
-'key','STRING',0,0,0,0
-'map_col','INVALID_TYPE',-1,-1,-1,-1
+'id','INT',0,-1,4,4
+'array_array_col','ARRAY<ARRAY<INT>>',-1,-1,-1,-1
+'array_map_col','MAP<STRING,ARRAY<INT>>',-1,-1,-1,-1
+'complex_nested_struct_col','STRUCT<f1:INT,f2:ARRAY<STRUCT<f11:BIGINT,f12:MAP<STRING,STRUCT<f21:BIGINT>>>>>',-1,-1,-1,-1
+'complex_struct_col','STRUCT<f1:INT,f2:ARRAY<INT>,f3:MAP<STRING,INT>>',-1,-1,-1,-1
+'int_array_col','ARRAY<INT>',-1,-1,-1,-1
+'int_map_col','MAP<STRING,INT>',-1,-1,-1,-1
+'int_struct_col','STRUCT<f1:INT,f2:INT>',-1,-1,-1,-1
+'map_array_col','ARRAY<MAP<STRING,INT>>',-1,-1,-1,-1
+'map_map_col','MAP<STRING,MAP<STRING,INT>>',-1,-1,-1,-1
+'month','INT',0,-1,4,4
+'nested_struct_col','STRUCT<f1:INT,f2:STRUCT<f11:BIGINT,f12:STRUCT<f21:BIGINT>>>',-1,-1,-1,-1
+'struct_array_col','ARRAY<STRUCT<f1:BIGINT,f2:STRING>>',-1,-1,-1,-1
+'struct_map_col','MAP<STRING,STRUCT<f1:BIGINT,f2:STRING>>',-1,-1,-1,-1
+'year','INT',0,-1,4,4
 ---- TYPES
-STRING, STRING, BIGINT, BIGINT, DOUBLE, DOUBLE
+STRING, STRING, BIGINT, BIGINT, INT, DOUBLE
 ====
 ---- QUERY
-# IMPALA-867: Test computing stats on Avro tables with matching/mismatched
-# column definitions and Avro schema. Clone the used tables here.
-create table compute_stats_db.avro_alltypes
+# IMPALA-867: Test computing stats on Avro tables created by Hive with
+# matching/mismatched column definitions and Avro schema.
+# Clone the used tables here.
+create table compute_stats_db.avro_hive_alltypes
 like functional_avro_snap.alltypes;
-create table compute_stats_db.avro_alltypes_extra_coldef
+create table compute_stats_db.avro_hive_alltypes_extra_coldef
 like functional_avro_snap.alltypes_extra_coldef;
-create table compute_stats_db.avro_alltypes_missing_coldef
+create table compute_stats_db.avro_hive_alltypes_missing_coldef
 like functional_avro_snap.alltypes_missing_coldef;
-create table compute_stats_db.avro_alltypes_type_mismatch
+create table compute_stats_db.avro_hive_alltypes_type_mismatch
 like functional_avro_snap.alltypes_type_mismatch;
 ====
 ---- QUERY
 # Avro table with matching column definitions and Avro schema
-compute stats compute_stats_db.avro_alltypes
+compute stats compute_stats_db.avro_hive_alltypes
 ---- RESULTS
 'Updated 0 partition(s) and 11 column(s).'
 ---- TYPES
 STRING
 ====
 ---- QUERY
-show table stats compute_stats_db.avro_alltypes
+show table stats compute_stats_db.avro_hive_alltypes
 ---- LABELS
-YEAR, MONTH, #ROWS, #FILES, SIZE, BYTES CACHED, FORMAT
+YEAR, MONTH, #ROWS, #FILES, SIZE, BYTES CACHED, FORMAT, INCREMENTAL STATS
 ---- RESULTS
-Total,,0,0,'0B','0B',''
+'Total','',0,0,'0B','0B','',''
 ---- TYPES
-INT, INT, BIGINT, BIGINT, STRING, STRING, STRING
+STRING, STRING, BIGINT, BIGINT, STRING, STRING, STRING, STRING
 ====
 ---- QUERY
-show column stats compute_stats_db.avro_alltypes
+show column stats compute_stats_db.avro_hive_alltypes
 ---- LABELS
 COLUMN, TYPE, #DISTINCT VALUES, #NULLS, MAX SIZE, AVG SIZE
 ---- RESULTS
-'id','INT',0,0,4,4
-'bool_col','BOOLEAN',2,0,1,1
-'tinyint_col','INT',0,0,4,4
-'smallint_col','INT',0,0,4,4
-'int_col','INT',0,0,4,4
-'bigint_col','BIGINT',0,0,8,8
-'float_col','FLOAT',0,0,4,4
-'double_col','DOUBLE',0,0,8,8
-'date_string_col','STRING',0,0,0,0
-'string_col','STRING',0,0,0,0
-'timestamp_col','STRING',0,0,0,0
+'id','INT',0,-1,4,4
+'bool_col','BOOLEAN',2,-1,1,1
+'tinyint_col','INT',0,-1,4,4
+'smallint_col','INT',0,-1,4,4
+'int_col','INT',0,-1,4,4
+'bigint_col','BIGINT',0,-1,8,8
+'float_col','FLOAT',0,-1,4,4
+'double_col','DOUBLE',0,-1,8,8
+'date_string_col','STRING',0,-1,0,0
+'string_col','STRING',0,-1,0,0
+'timestamp_col','STRING',0,-1,0,0
 'year','INT',0,0,4,4
 'month','INT',0,0,4,4
 ---- TYPES
-STRING, STRING, BIGINT, BIGINT, DOUBLE, DOUBLE
+STRING, STRING, BIGINT, BIGINT, INT, DOUBLE
 ====
 ---- QUERY
 # Avro table with an extra column definition.
-compute stats compute_stats_db.avro_alltypes_extra_coldef
+compute stats compute_stats_db.avro_hive_alltypes_extra_coldef
 ---- RESULTS
 'Updated 0 partition(s) and 12 column(s).'
 ---- TYPES
 STRING
 ====
 ---- QUERY
-show table stats compute_stats_db.avro_alltypes_extra_coldef
+show table stats compute_stats_db.avro_hive_alltypes_extra_coldef
 ---- LABELS
-YEAR, MONTH, #ROWS, #FILES, SIZE, BYTES CACHED, FORMAT
+YEAR, MONTH, #ROWS, #FILES, SIZE, BYTES CACHED, FORMAT, INCREMENTAL STATS
 ---- RESULTS
-Total,,0,0,'0B','0B',''
+'Total','',0,0,'0B','0B','',''
 ---- TYPES
-INT, INT, BIGINT, BIGINT, STRING, STRING, STRING
+STRING, STRING, BIGINT, BIGINT, STRING, STRING, STRING, STRING
 ====
 ---- QUERY
-show column stats compute_stats_db.avro_alltypes_extra_coldef
+show column stats compute_stats_db.avro_hive_alltypes_extra_coldef
 ---- LABELS
 COLUMN, TYPE, #DISTINCT VALUES, #NULLS, MAX SIZE, AVG SIZE
 ---- RESULTS
-'id','INT',0,0,4,4
-'bool_col','BOOLEAN',2,0,1,1
-'tinyint_col','TINYINT',0,0,1,1
-'smallint_col','SMALLINT',0,0,2,2
-'int_col','INT',0,0,4,4
-'bigint_col','BIGINT',0,0,8,8
-'float_col','FLOAT',0,0,4,4
-'double_col','DOUBLE',0,0,8,8
-'date_string_col','STRING',0,0,0,0
-'string_col','STRING',0,0,0,0
-'timestamp_col','TIMESTAMP',0,0,16,16
-'extra_col','STRING',0,0,0,0
+'id','INT',0,-1,4,4
+'bool_col','BOOLEAN',2,-1,1,1
+'tinyint_col','TINYINT',0,-1,1,1
+'smallint_col','SMALLINT',0,-1,2,2
+'int_col','INT',0,-1,4,4
+'bigint_col','BIGINT',0,-1,8,8
+'float_col','FLOAT',0,-1,4,4
+'double_col','DOUBLE',0,-1,8,8
+'date_string_col','STRING',0,-1,0,0
+'string_col','STRING',0,-1,0,0
+'timestamp_col','TIMESTAMP',0,-1,16,16
+'extra_col','STRING',0,-1,0,0
 'year','INT',0,0,4,4
 'month','INT',0,0,4,4
 ---- TYPES
-STRING, STRING, BIGINT, BIGINT, DOUBLE, DOUBLE
+STRING, STRING, BIGINT, BIGINT, INT, DOUBLE
 ====
 ---- QUERY
 # Avro table with missing two column definitions.
-compute stats compute_stats_db.avro_alltypes_missing_coldef
+compute stats compute_stats_db.avro_hive_alltypes_missing_coldef
 ---- RESULTS
 'Updated 0 partition(s) and 9 column(s).'
 ---- TYPES
 STRING
 ====
 ---- QUERY
-show table stats compute_stats_db.avro_alltypes_missing_coldef
+show table stats compute_stats_db.avro_hive_alltypes_missing_coldef
 ---- LABELS
-YEAR, MONTH, #ROWS, #FILES, SIZE, BYTES CACHED, FORMAT
+YEAR, MONTH, #ROWS, #FILES, SIZE, BYTES CACHED, FORMAT, INCREMENTAL STATS
 ---- RESULTS
-Total,,0,0,'0B','0B',''
+'Total','',0,0,'0B','0B','',''
 ---- TYPES
-INT, INT, BIGINT, BIGINT, STRING, STRING, STRING
+STRING, STRING, BIGINT, BIGINT, STRING, STRING, STRING, STRING
 ====
 ---- QUERY
-show column stats compute_stats_db.avro_alltypes_missing_coldef
+show column stats compute_stats_db.avro_hive_alltypes_missing_coldef
 ---- LABELS
 COLUMN, TYPE, #DISTINCT VALUES, #NULLS, MAX SIZE, AVG SIZE
 ---- RESULTS
-'id','INT',0,0,4,4
-'bool_col','BOOLEAN',2,0,1,1
-'smallint_col','SMALLINT',0,0,2,2
-'int_col','INT',0,0,4,4
-'bigint_col','BIGINT',0,0,8,8
-'float_col','FLOAT',0,0,4,4
-'double_col','DOUBLE',0,0,8,8
-'date_string_col','STRING',0,0,0,0
-'string_col','STRING',0,0,0,0
+'id','INT',0,-1,4,4
+'bool_col','BOOLEAN',2,-1,1,1
+'smallint_col','SMALLINT',0,-1,2,2
+'int_col','INT',0,-1,4,4
+'bigint_col','BIGINT',0,-1,8,8
+'float_col','FLOAT',0,-1,4,4
+'double_col','DOUBLE',0,-1,8,8
+'date_string_col','STRING',0,-1,0,0
+'string_col','STRING',0,-1,0,0
 'year','INT',0,0,4,4
 'month','INT',0,0,4,4
 ---- TYPES
-STRING, STRING, BIGINT, BIGINT, DOUBLE, DOUBLE
+STRING, STRING, BIGINT, BIGINT, INT, DOUBLE
 ====
 ---- QUERY
 # Avro table with one column definition having a different
 # type than the Avro schema (bigint_col is a string).
-compute stats compute_stats_db.avro_alltypes_type_mismatch
+compute stats compute_stats_db.avro_hive_alltypes_type_mismatch
 ---- RESULTS
 'Updated 0 partition(s) and 11 column(s).'
 ---- TYPES
 STRING
 ====
 ---- QUERY
-show table stats compute_stats_db.avro_alltypes_type_mismatch
+show table stats compute_stats_db.avro_hive_alltypes_type_mismatch
 ---- LABELS
-YEAR, MONTH, #ROWS, #FILES, SIZE, BYTES CACHED, FORMAT
+YEAR, MONTH, #ROWS, #FILES, SIZE, BYTES CACHED, FORMAT, INCREMENTAL STATS
 ---- RESULTS
-Total,,0,0,'0B','0B',''
+'Total','',0,0,'0B','0B','',''
 ---- TYPES
-INT, INT, BIGINT, BIGINT, STRING, STRING, STRING
+STRING, STRING, BIGINT, BIGINT, STRING, STRING, STRING, STRING
 ====
 ---- QUERY
-show column stats compute_stats_db.avro_alltypes_type_mismatch
+show column stats compute_stats_db.avro_hive_alltypes_type_mismatch
 ---- LABELS
 COLUMN, TYPE, #DISTINCT VALUES, #NULLS, MAX SIZE, AVG SIZE
 ---- RESULTS
-'id','INT',0,0,4,4
-'bool_col','BOOLEAN',2,0,1,1
-'tinyint_col','TINYINT',0,0,1,1
-'smallint_col','SMALLINT',0,0,2,2
-'int_col','INT',0,0,4,4
-'bigint_col','STRING',0,0,0,0
-'float_col','FLOAT',0,0,4,4
-'double_col','DOUBLE',0,0,8,8
-'date_string_col','STRING',0,0,0,0
-'string_col','STRING',0,0,0,0
-'timestamp_col','TIMESTAMP',0,0,16,16
+'id','INT',0,-1,4,4
+'bool_col','BOOLEAN',2,-1,1,1
+'tinyint_col','TINYINT',0,-1,1,1
+'smallint_col','SMALLINT',0,-1,2,2
+'int_col','INT',0,-1,4,4
+'bigint_col','STRING',0,-1,0,0
+'float_col','FLOAT',0,-1,4,4
+'double_col','DOUBLE',0,-1,8,8
+'date_string_col','STRING',0,-1,0,0
+'string_col','STRING',0,-1,0,0
+'timestamp_col','TIMESTAMP',0,-1,16,16
 'year','INT',0,0,4,4
 'month','INT',0,0,4,4
 ---- TYPES
-STRING, STRING, BIGINT, BIGINT, DOUBLE, DOUBLE
+STRING, STRING, BIGINT, BIGINT, INT, DOUBLE
 ====
+---- QUERY
+# Test Avro table created without any column definitions.
+create table compute_stats_db.avro_impala_alltypes_no_coldefs
+partitioned by (year int, month int)
+with serdeproperties
+('avro.schema.url'='hdfs:///test-warehouse/avro_schemas/functional/alltypes.json')
+stored as avro;
+====
+---- QUERY
+compute stats compute_stats_db.avro_impala_alltypes_no_coldefs
+---- RESULTS
+'Updated 0 partition(s) and 11 column(s).'
+---- TYPES
+STRING
+====
+---- QUERY
+show table stats compute_stats_db.avro_impala_alltypes_no_coldefs
+---- LABELS
+YEAR, MONTH, #ROWS, #FILES, SIZE, BYTES CACHED, FORMAT, INCREMENTAL STATS
+---- RESULTS
+'Total','',0,0,'0B','0B','',''
+---- TYPES
+STRING, STRING, BIGINT, BIGINT, STRING, STRING, STRING, STRING
+====
+---- QUERY
+show column stats compute_stats_db.avro_impala_alltypes_no_coldefs
+---- LABELS
+COLUMN, TYPE, #DISTINCT VALUES, #NULLS, MAX SIZE, AVG SIZE
+---- RESULTS
+'id','INT',0,-1,4,4
+'bool_col','BOOLEAN',2,-1,1,1
+'tinyint_col','INT',0,-1,4,4
+'smallint_col','INT',0,-1,4,4
+'int_col','INT',0,-1,4,4
+'bigint_col','BIGINT',0,-1,8,8
+'float_col','FLOAT',0,-1,4,4
+'double_col','DOUBLE',0,-1,8,8
+'date_string_col','STRING',0,-1,0,0
+'string_col','STRING',0,-1,0,0
+'timestamp_col','STRING',0,-1,0,0
+'year','INT',0,0,4,4
+'month','INT',0,0,4,4
+---- TYPES
+STRING, STRING, BIGINT, BIGINT, INT, DOUBLE
+====
+---- QUERY
+# IMPALA-1104: Test computing stats on Avro tables created by Impala
+# with mismatched column definitions and Avro schema. Mismatched column name.
+create table compute_stats_db.avro_impala_alltypes_bad_colname
+(id int, bool_col boolean, tinyint_col int, smallint_col int, bad_int_col int,
+bigint_col bigint, float_col float, double_col double, date_string_col string,
+string_col string, timestamp_col timestamp)
+partitioned by (year int, month int)
+with serdeproperties
+('avro.schema.url'='hdfs:///test-warehouse/avro_schemas/functional/alltypes.json')
+stored as avro;
+====
+---- QUERY
+compute stats compute_stats_db.avro_impala_alltypes_bad_colname
+---- RESULTS
+'Updated 0 partition(s) and 11 column(s).'
+---- TYPES
+STRING
+====
+---- QUERY
+show table stats compute_stats_db.avro_impala_alltypes_bad_colname
+---- LABELS
+YEAR, MONTH, #ROWS, #FILES, SIZE, BYTES CACHED, FORMAT, INCREMENTAL STATS
+---- RESULTS
+'Total','',0,0,'0B','0B','',''
+---- TYPES
+STRING, STRING, BIGINT, BIGINT, STRING, STRING, STRING, STRING
+====
+---- QUERY
+show column stats compute_stats_db.avro_impala_alltypes_bad_colname
+---- LABELS
+COLUMN, TYPE, #DISTINCT VALUES, #NULLS, MAX SIZE, AVG SIZE
+---- RESULTS
+'id','INT',0,-1,4,4
+'bool_col','BOOLEAN',2,-1,1,1
+'tinyint_col','INT',0,-1,4,4
+'smallint_col','INT',0,-1,4,4
+'int_col','INT',0,-1,4,4
+'bigint_col','BIGINT',0,-1,8,8
+'float_col','FLOAT',0,-1,4,4
+'double_col','DOUBLE',0,-1,8,8
+'date_string_col','STRING',0,-1,0,0
+'string_col','STRING',0,-1,0,0
+'timestamp_col','STRING',0,-1,0,0
+'year','INT',0,0,4,4
+'month','INT',0,0,4,4
+---- TYPES
+STRING, STRING, BIGINT, BIGINT, INT, DOUBLE
+====
+---- QUERY
+# IMPALA-1104: Test computing stats on Avro tables created by Impala
+# with mismatched column definitions and Avro schema. Mismatched column type.
+create table compute_stats_db.avro_impala_alltypes_bad_coltype
+(id int, bool_col boolean, tinyint_col int, smallint_col int, int_col int,
+bigint_col bigint, float_col float, double_col bigint, date_string_col string,
+string_col string, timestamp_col timestamp)
+partitioned by (year int, month int)
+with serdeproperties
+('avro.schema.url'='hdfs:///test-warehouse/avro_schemas/functional/alltypes.json')
+stored as avro;
+====
+---- QUERY
+compute stats compute_stats_db.avro_impala_alltypes_bad_coltype
+---- RESULTS
+'Updated 0 partition(s) and 11 column(s).'
+---- TYPES
+STRING
+====
+---- QUERY
+show table stats compute_stats_db.avro_impala_alltypes_bad_coltype
+---- LABELS
+YEAR, MONTH, #ROWS, #FILES, SIZE, BYTES CACHED, FORMAT, INCREMENTAL STATS
+---- RESULTS
+'Total','',0,0,'0B','0B','',''
+---- TYPES
+STRING, STRING, BIGINT, BIGINT, STRING, STRING, STRING, STRING
+====
+---- QUERY
+show column stats compute_stats_db.avro_impala_alltypes_bad_coltype
+---- LABELS
+COLUMN, TYPE, #DISTINCT VALUES, #NULLS, MAX SIZE, AVG SIZE
+---- RESULTS
+'id','INT',0,-1,4,4
+'bool_col','BOOLEAN',2,-1,1,1
+'tinyint_col','INT',0,-1,4,4
+'smallint_col','INT',0,-1,4,4
+'int_col','INT',0,-1,4,4
+'bigint_col','BIGINT',0,-1,8,8
+'float_col','FLOAT',0,-1,4,4
+'double_col','DOUBLE',0,-1,8,8
+'date_string_col','STRING',0,-1,0,0
+'string_col','STRING',0,-1,0,0
+'timestamp_col','STRING',0,-1,0,0
+'year','INT',0,0,4,4
+'month','INT',0,0,4,4
+---- TYPES
+STRING, STRING, BIGINT, BIGINT, INT, DOUBLE
+====
+---- QUERY
 # For IMPALA-1055, using a database called `parquet` to test cases where the name of
 # the database is a keyword.
----- QUERY
 CREATE TABLE `parquet`.billion_parquet(id INT);
 ====
 ---- QUERY
@@ -525,4 +847,64 @@ COMPUTE STATS `parquet`.`parquet`
 'Updated 1 partition(s) and 1 column(s).'
 ---- TYPES
 STRING
+====
+---- QUERY
+# IMPALA-883: Compute table stats for an empty partition.
+create table compute_stats_db.empty_partitioned (i int) partitioned by (j int);
+alter table compute_stats_db.empty_partitioned add partition (j=1);
+====
+---- QUERY
+compute stats compute_stats_db.empty_partitioned
+---- RESULTS
+'Updated 1 partition(s) and 1 column(s).'
+---- TYPES
+STRING
+====
+---- QUERY
+show table stats compute_stats_db.empty_partitioned
+---- RESULTS
+'1',0,0,'0B','NOT CACHED','TEXT','false'
+'Total',0,0,'0B','0B','',''
+---- TYPES
+STRING, BIGINT, BIGINT, STRING, STRING, STRING, STRING
+====
+---- QUERY
+# Insert non empty partition to the table with empty partition.
+insert into table compute_stats_db.empty_partitioned partition (j=2) select 1;
+====
+---- QUERY
+# Verify partition stats work with empty and non-empty partition.
+drop stats compute_stats_db.empty_partitioned;
+compute stats compute_stats_db.empty_partitioned;
+---- RESULTS
+'Updated 2 partition(s) and 1 column(s).'
+---- TYPES
+STRING
+====
+---- QUERY
+show table stats compute_stats_db.empty_partitioned
+---- RESULTS
+'1',0,0,'0B','NOT CACHED','TEXT','false'
+'2',1,1,'2B','NOT CACHED','TEXT','false'
+'Total',1,1,'2B','0B','',''
+---- TYPES
+STRING, BIGINT, BIGINT, STRING, STRING, STRING, STRING
+====
+---- QUERY
+# Verify partition stats work with empty and non-empty partition.
+drop stats compute_stats_db.empty_partitioned;
+compute stats compute_stats_db.empty_partitioned;
+---- RESULTS
+'Updated 2 partition(s) and 1 column(s).'
+---- TYPES
+STRING
+====
+---- QUERY
+show table stats compute_stats_db.empty_partitioned
+---- RESULTS
+'1',0,0,'0B','NOT CACHED','TEXT','false'
+'2',1,1,'2B','NOT CACHED','TEXT','false'
+'Total',1,1,'2B','0B','',''
+---- TYPES
+STRING, BIGINT, BIGINT, STRING, STRING, STRING, STRING
 ====

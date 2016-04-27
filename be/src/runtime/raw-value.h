@@ -81,6 +81,11 @@ class RawValue {
   // src must be non-NULL.
   static void Write(const void* src, void* dst, const ColumnType& type, MemPool* pool);
 
+  // Writes 'src' into 'dst' for type.
+  // String values are copied into *buffer and *buffer is updated by the length. *buf
+  // must be preallocated to be large enough.
+  static void Write(const void* src, const ColumnType& type, void* dst, uint8_t** buf);
+
   // Returns true if v1 == v2.
   // This is more performant than Compare() == 0 for string equality, mostly because of
   // the length comparison check.
@@ -124,15 +129,20 @@ inline bool RawValue::Eq(const void* v1, const void* v2, const ColumnType& type)
       return *reinterpret_cast<const double*>(v1)
           == *reinterpret_cast<const double*>(v2);
     case TYPE_STRING:
+    case TYPE_VARCHAR:
       string_value1 = reinterpret_cast<const StringValue*>(v1);
       string_value2 = reinterpret_cast<const StringValue*>(v2);
       return string_value1->Eq(*string_value2);
     case TYPE_TIMESTAMP:
       return *reinterpret_cast<const TimestampValue*>(v1) ==
           *reinterpret_cast<const TimestampValue*>(v2);
-    case TYPE_CHAR:
-      return StringCompare(reinterpret_cast<const char*>(v1), type.len,
-          reinterpret_cast<const char*>(v2), type.len, type.len) == 0;
+    case TYPE_CHAR: {
+      const char* v1ptr = StringValue::CharSlotToPtr(v1, type);
+      const char* v2ptr = StringValue::CharSlotToPtr(v2, type);
+      int64_t l1 = StringValue::UnpaddedCharLength(v1ptr, type.len);
+      int64_t l2 = StringValue::UnpaddedCharLength(v2ptr, type.len);
+      return StringCompare(v1ptr, l1, v2ptr, l2, std::min(l1, l2)) == 0;
+    }
     case TYPE_DECIMAL:
       switch (type.GetByteSize()) {
         case 4:
@@ -161,7 +171,8 @@ inline uint32_t RawValue::GetHashValue(const void* v, const ColumnType& type,
   if (v == NULL) return HashCombine32(0, seed);
 
   switch (type.type) {
-    case TYPE_STRING: {
+    case TYPE_STRING:
+    case TYPE_VARCHAR: {
       const StringValue* string_value = reinterpret_cast<const StringValue*>(v);
       return HashUtil::Hash(string_value->ptr, string_value->len, seed);
     }
@@ -173,7 +184,8 @@ inline uint32_t RawValue::GetHashValue(const void* v, const ColumnType& type,
     case TYPE_FLOAT: return HashUtil::Hash(v, 4, seed);
     case TYPE_DOUBLE: return HashUtil::Hash(v, 8, seed);
     case TYPE_TIMESTAMP: return HashUtil::Hash(v, 12, seed);
-    case TYPE_CHAR: return HashUtil::Hash(v, type.len, seed);
+    case TYPE_CHAR: return HashUtil::Hash(StringValue::CharSlotToPtr(v, type),
+                                          type.len, seed);
     case TYPE_DECIMAL: return HashUtil::Hash(v, type.GetByteSize(), seed);
     default:
       DCHECK(false);
@@ -187,7 +199,8 @@ inline uint32_t RawValue::GetHashValueFnv(const void* v, const ColumnType& type,
   if (v == NULL) return HashCombine32(0, seed);
 
   switch (type.type ) {
-    case TYPE_STRING: {
+    case TYPE_STRING:
+    case TYPE_VARCHAR: {
       const StringValue* string_value = reinterpret_cast<const StringValue*>(v);
       return HashUtil::FnvHash64to32(string_value->ptr, string_value->len, seed);
     }
@@ -199,7 +212,8 @@ inline uint32_t RawValue::GetHashValueFnv(const void* v, const ColumnType& type,
     case TYPE_FLOAT: return HashUtil::FnvHash64to32(v, 4, seed);
     case TYPE_DOUBLE: return HashUtil::FnvHash64to32(v, 8, seed);
     case TYPE_TIMESTAMP: return HashUtil::FnvHash64to32(v, 12, seed);
-    case TYPE_CHAR: return HashUtil::FnvHash64to32(v, type.len, seed);
+    case TYPE_CHAR: return HashUtil::FnvHash64to32(StringValue::CharSlotToPtr(v, type),
+                                                   type.len, seed);
     case TYPE_DECIMAL: return HashUtil::FnvHash64to32(v, type.GetByteSize(), seed);
     default:
       DCHECK(false);
@@ -271,15 +285,17 @@ inline void RawValue::PrintValue(const void* value, const ColumnType& type, int 
         }
       }
       break;
+    case TYPE_VARCHAR:
     case TYPE_STRING:
       string_val = reinterpret_cast<const StringValue*>(value);
+      if (type.type == TYPE_VARCHAR) DCHECK(string_val->len <= type.len);
       stream->write(string_val->ptr, string_val->len);
       break;
     case TYPE_TIMESTAMP:
       *stream << *reinterpret_cast<const TimestampValue*>(value);
       break;
     case TYPE_CHAR:
-      stream->write(static_cast<const char*>(value), type.len);
+      stream->write(StringValue::CharSlotToPtr(value, type), type.len);
       break;
     case TYPE_DECIMAL:
       switch (type.GetByteSize()) {

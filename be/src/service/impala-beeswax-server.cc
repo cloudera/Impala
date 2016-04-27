@@ -99,6 +99,7 @@ class ImpalaServer::AsciiQueryResultSet : public ImpalaServer::QueryResultSet {
 
   // Convert expr values (col_values) to ASCII using "\t" as column delimiter and store
   // it in this result set.
+  // TODO: Handle complex types.
   virtual Status AddOneRow(const vector<void*>& col_values, const vector<int>& scales) {
     int num_col = col_values.size();
     DCHECK_EQ(num_col, metadata_.columns.size());
@@ -107,8 +108,10 @@ class ImpalaServer::AsciiQueryResultSet : public ImpalaServer::QueryResultSet {
     for (int i = 0; i < num_col; ++i) {
       // ODBC-187 - ODBC can only take "\t" as the delimiter
       out_stream << (i > 0 ? "\t" : "");
-      const ColumnType type(metadata_.columns[i].columnType);
-      RawValue::PrintValue(col_values[i], type, scales[i], &out_stream);
+      DCHECK_EQ(1, metadata_.columns[i].columnType.types.size());
+      RawValue::PrintValue(col_values[i],
+          ColumnType(metadata_.columns[i].columnType),
+          scales[i], &out_stream);
     }
     result_set_->push_back(out_stream.str());
     return Status::OK;
@@ -140,7 +143,7 @@ class ImpalaServer::AsciiQueryResultSet : public ImpalaServer::QueryResultSet {
     return rows_added;
   }
 
-  virtual int64_t BytesSize(int start_idx, int num_rows) {
+  virtual int64_t ByteSize(int start_idx, int num_rows) {
     int64_t bytes = 0;
     const int end = min(static_cast<size_t>(num_rows), result_set_->size() - start_idx);
     for (int i = start_idx; i < start_idx + end; ++i) {
@@ -181,11 +184,17 @@ void ImpalaServer::query(QueryHandle& query_handle, const Query& query) {
       SQLSTATE_SYNTAX_ERROR_OR_ACCESS_VIOLATION);
 
   exec_state->UpdateQueryState(QueryState::RUNNING);
-  TUniqueIdToQueryHandle(exec_state->query_id(), &query_handle);
-
   // start thread to wait for results to become available, which will allow
   // us to advance query state to FINISHED or EXCEPTION
   exec_state->WaitAsync();
+  // Once the query is running do a final check for session closure and add it to the
+  // set of in-flight queries.
+  Status status = SetQueryInflight(session, exec_state);
+  if (!status.ok()) {
+    UnregisterQuery(exec_state->query_id(), false, &status);
+    RaiseBeeswaxException(status.GetErrorMsg(), SQLSTATE_GENERAL_ERROR);
+  }
+  TUniqueIdToQueryHandle(exec_state->query_id(), &query_handle);
 }
 
 void ImpalaServer::executeAndWait(QueryHandle& query_handle, const Query& query,
@@ -216,11 +225,18 @@ void ImpalaServer::executeAndWait(QueryHandle& query_handle, const Query& query,
       SQLSTATE_SYNTAX_ERROR_OR_ACCESS_VIOLATION);
 
   exec_state->UpdateQueryState(QueryState::RUNNING);
+  // Once the query is running do a final check for session closure and add it to the
+  // set of in-flight queries.
+  Status status = SetQueryInflight(session, exec_state);
+  if (!status.ok()) {
+    UnregisterQuery(exec_state->query_id(), false, &status);
+    RaiseBeeswaxException(status.GetErrorMsg(), SQLSTATE_GENERAL_ERROR);
+  }
   // block until results are ready
   exec_state->Wait();
-  const Status& status = exec_state->query_status();
+  status = exec_state->query_status();
   if (!status.ok()) {
-    UnregisterQuery(exec_state->query_id(), &status);
+    UnregisterQuery(exec_state->query_id(), false, &status);
     RaiseBeeswaxException(status.GetErrorMsg(), SQLSTATE_GENERAL_ERROR);
   }
 
@@ -271,11 +287,12 @@ void ImpalaServer::fetch(Results& query_results, const QueryHandle& query_handle
   VLOG_ROW << "fetch result: #results=" << query_results.data.size()
            << " has_more=" << (query_results.has_more ? "true" : "false");
   if (!status.ok()) {
-    UnregisterQuery(query_id, &status);
+    UnregisterQuery(query_id, false, &status);
     RaiseBeeswaxException(status.GetErrorMsg(), SQLSTATE_GENERAL_ERROR);
   }
 }
 
+// TODO: Handle complex types.
 void ImpalaServer::get_results_metadata(ResultsMetadata& results_metadata,
     const QueryHandle& handle) {
   ScopedSessionState session_handle(this);
@@ -301,7 +318,11 @@ void ImpalaServer::get_results_metadata(ResultsMetadata& results_metadata,
     results_metadata.schema.__isset.fieldSchemas = true;
     results_metadata.schema.fieldSchemas.resize(result_set_md->columns.size());
     for (int i = 0; i < results_metadata.schema.fieldSchemas.size(); ++i) {
-      TPrimitiveType::type col_type = result_set_md->columns[i].columnType.type;
+      const TColumnType& type = result_set_md->columns[i].columnType;
+      DCHECK_EQ(1, type.types.size());
+      DCHECK_EQ(TTypeNodeType::SCALAR, type.types[0].type);
+      DCHECK(type.types[0].__isset.scalar_type);
+      TPrimitiveType::type col_type = type.types[0].scalar_type.type;
       results_metadata.schema.fieldSchemas[i].__set_type(
           TypeToOdbcString(ThriftToType(col_type)));
 
@@ -324,13 +345,9 @@ void ImpalaServer::close(const QueryHandle& handle) {
   TUniqueId query_id;
   QueryHandleToTUniqueId(handle, &query_id);
   VLOG_QUERY << "close(): query_id=" << PrintId(query_id);
-
-  // TODO: do we need to raise an exception if the query state is
-  // EXCEPTION?
+  // TODO: do we need to raise an exception if the query state is EXCEPTION?
   // TODO: use timeout to get rid of unwanted exec_state.
-  if (!UnregisterQuery(query_id)) {
-    RaiseBeeswaxException("Invalid query handle", SQLSTATE_GENERAL_ERROR);
-  }
+  RAISE_IF_ERROR(UnregisterQuery(query_id, true), SQLSTATE_GENERAL_ERROR);
 }
 
 QueryState::type ImpalaServer::get_state(const QueryHandle& handle) {
@@ -421,12 +438,8 @@ void ImpalaServer::Cancel(impala::TStatus& tstatus,
   // Convert QueryHandle to TUniqueId and get the query exec state.
   TUniqueId query_id;
   QueryHandleToTUniqueId(query_handle, &query_id);
-  Status status = CancelInternal(query_id);
-  if (status.ok()) {
-    tstatus.status_code = TStatusCode::OK;
-  } else {
-    RaiseBeeswaxException(status.GetErrorMsg(), SQLSTATE_GENERAL_ERROR);
-  }
+  RAISE_IF_ERROR(CancelInternal(query_id, true), SQLSTATE_GENERAL_ERROR);
+  tstatus.status_code = TStatusCode::OK;
 }
 
 void ImpalaServer::CloseInsert(TInsertResult& insert_result,
@@ -496,7 +509,6 @@ void ImpalaServer::ResetTable(impala::TStatus& status, const TResetTableReq& req
 
 Status ImpalaServer::QueryToTQueryContext(const Query& query,
     TQueryCtx* query_ctx) {
-  query_ctx->request.query_options = default_query_options_;
   query_ctx->request.stmt = query.query;
   VLOG_QUERY << "query: " << ThriftDebugString(query);
   {
@@ -504,13 +516,15 @@ Status ImpalaServer::QueryToTQueryContext(const Query& query,
     const TUniqueId& session_id = ThriftServer::GetThreadConnectionId();
     RETURN_IF_ERROR(GetSessionState(session_id, &session));
     DCHECK(session != NULL);
+    {
+      // The session is created when the client connects. Depending on the underlying
+      // transport, the username may be known at that time. If the username hasn't been
+      // set yet, set it now.
+      lock_guard<mutex> l(session->lock);
+      if (session->connected_user.empty()) session->connected_user = query.hadoop_user;
+      query_ctx->request.query_options = session->default_query_options;
+    }
     session->ToThrift(session_id, &query_ctx->session);
-    // The session is created when the client connects. Depending on the underlying
-    // transport, the username may be known at that time. If the username hasn't been set
-    // yet, set it now.
-    lock_guard<mutex> l(session->lock);
-    if (session->connected_user.empty()) session->connected_user = query.hadoop_user;
-    query_ctx->session.connected_user = session->connected_user;
   }
 
   // Override default query options with Query.Configuration
@@ -561,10 +575,8 @@ Status ImpalaServer::FetchInternal(const TUniqueId& query_id,
     exec_state->query_events()->MarkEvent("First row fetched");
   }
 
-  if (exec_state->query_state() == QueryState::EXCEPTION) {
-    // we got cancelled or saw an error; either way, return now
-    return exec_state->query_status();
-  }
+  // Check for cancellation or an error.
+  RETURN_IF_ERROR(exec_state->query_status());
 
   // ODBC-190: set Beeswax's Results.columns to work around bug ODBC-190;
   // TODO: remove the block of code when ODBC-190 is resolved.
@@ -574,7 +586,12 @@ Status ImpalaServer::FetchInternal(const TUniqueId& query_id,
     // TODO: As of today, the ODBC driver does not support boolean and timestamp data
     // type but it should. This is tracked by ODBC-189. We should verify that our
     // boolean and timestamp type are correctly recognized when ODBC-189 is closed.
-    TPrimitiveType::type col_type = result_metadata->columns[i].columnType.type;
+    // TODO: Handle complex types.
+    const TColumnType& type = result_metadata->columns[i].columnType;
+    DCHECK_EQ(1, type.types.size());
+    DCHECK_EQ(TTypeNodeType::SCALAR, type.types[0].type);
+    DCHECK(type.types[0].__isset.scalar_type);
+    TPrimitiveType::type col_type = type.types[0].scalar_type.type;
     query_results->columns[i] = TypeToOdbcString(ThriftToType(col_type));
   }
   query_results->__isset.columns = true;
@@ -621,12 +638,7 @@ Status ImpalaServer::CloseInsertInternal(const TUniqueId& query_id,
       }
     }
   }
-
-  if (!UnregisterQuery(query_id)) {
-    stringstream ss;
-    ss << "Failed to unregister query ID '" << ThriftDebugString(query_id) << "'";
-    return Status(ss.str());
-  }
+  RETURN_IF_ERROR(UnregisterQuery(query_id, true));
   return query_status;
 }
 

@@ -32,6 +32,7 @@ SelectNode::SelectNode(
 }
 
 Status SelectNode::Prepare(RuntimeState* state) {
+  SCOPED_TIMER(runtime_profile_->total_time_counter());
   RETURN_IF_ERROR(ExecNode::Prepare(state));
   child_row_batch_.reset(
       new RowBatch(child(0)->row_desc(), state->batch_size(), mem_tracker()));
@@ -39,16 +40,15 @@ Status SelectNode::Prepare(RuntimeState* state) {
 }
 
 Status SelectNode::Open(RuntimeState* state) {
+  SCOPED_TIMER(runtime_profile_->total_time_counter());
   RETURN_IF_ERROR(ExecNode::Open(state));
   RETURN_IF_ERROR(child(0)->Open(state));
   return Status::OK;
 }
 
 Status SelectNode::GetNext(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-  RETURN_IF_ERROR(ExecDebugAction(TExecNodePhase::GETNEXT, state));
-  RETURN_IF_CANCELLED(state);
-  RETURN_IF_ERROR(state->CheckQueryState());
   SCOPED_TIMER(runtime_profile_->total_time_counter());
+  RETURN_IF_ERROR(ExecDebugAction(TExecNodePhase::GETNEXT, state));
 
   if (ReachedLimit() || (child_row_idx_ == child_row_batch_->num_rows() && child_eos_)) {
     // we're already done or we exhausted the last child batch and there won't be any
@@ -56,15 +56,19 @@ Status SelectNode::GetNext(RuntimeState* state, RowBatch* row_batch, bool* eos) 
     *eos = true;
     return Status::OK;
   }
+  *eos = false;
 
   // start (or continue) consuming row batches from child
   while (true) {
+    RETURN_IF_CANCELLED(state);
+    RETURN_IF_ERROR(QueryMaintenance(state));
     if (child_row_idx_ == child_row_batch_->num_rows()) {
+      child_row_idx_ = 0;
       // fetch next batch
       child_row_batch_->TransferResourceOwnership(row_batch);
       child_row_batch_->Reset();
+      if (row_batch->AtCapacity()) return Status::OK;
       RETURN_IF_ERROR(child(0)->GetNext(state, child_row_batch_.get(), &child_eos_));
-      child_row_idx_ = 0;
     }
 
     if (CopyRows(row_batch)) {
@@ -82,8 +86,8 @@ Status SelectNode::GetNext(RuntimeState* state, RowBatch* row_batch, bool* eos) 
 }
 
 bool SelectNode::CopyRows(RowBatch* output_batch) {
-  Expr** conjuncts = &conjuncts_[0];
-  int num_conjuncts = conjuncts_.size();
+  ExprContext** conjunct_ctxs = &conjunct_ctxs_[0];
+  int num_conjunct_ctxs = conjunct_ctxs_.size();
 
   for (; child_row_idx_ < child_row_batch_->num_rows(); ++child_row_idx_) {
     // Add a new row to output_batch
@@ -92,7 +96,7 @@ bool SelectNode::CopyRows(RowBatch* output_batch) {
     TupleRow* dst_row = output_batch->GetRow(dst_row_idx);
     TupleRow* src_row = child_row_batch_->GetRow(child_row_idx_);
 
-    if (EvalConjuncts(conjuncts, num_conjuncts, src_row)) {
+    if (EvalConjuncts(conjunct_ctxs, num_conjunct_ctxs, src_row)) {
       output_batch->CopyRow(src_row, dst_row);
       output_batch->CommitLastRow();
       ++num_rows_returned_;

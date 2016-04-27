@@ -48,6 +48,8 @@ const parquet::Type::type IMPALA_TO_PARQUET_TYPES[] = {
   parquet::Type::BYTE_ARRAY,  // DateTime, NYI
   parquet::Type::BYTE_ARRAY,  // Binary NYI
   parquet::Type::FIXED_LEN_BYTE_ARRAY, // Decimal
+  parquet::Type::BYTE_ARRAY,  // VARCHAR(N)
+  parquet::Type::BYTE_ARRAY,  // CHAR(N)
 };
 
 // Mapping of Parquet codec enums to Impala enums
@@ -72,7 +74,7 @@ const parquet::CompressionCodec::type IMPALA_TO_PARQUET_CODEC[] = {
 // The plain encoding does not maintain any state so all these functions
 // are static helpers.
 // TODO: we are using templates to provide a generic interface (over the
-// types) to avoid performance penalities. This makes the code more complex
+// types) to avoid performance penalties. This makes the code more complex
 // and should be removed when we have codegen support to inline virtual
 // calls.
 class ParquetPlainEncoder {
@@ -86,6 +88,9 @@ class ParquetPlainEncoder {
   static int ByteSize(const ColumnType& t) {
     switch (t.type) {
       case TYPE_STRING:
+      case TYPE_VARCHAR:
+      case TYPE_CHAR:
+        // CHAR is varlen here because we don't write the padding to the file
         return -1;
       case TYPE_TINYINT:
       case TYPE_SMALLINT:
@@ -99,7 +104,6 @@ class ParquetPlainEncoder {
         return 12;
       case TYPE_DECIMAL:
         return DecimalSize(t);
-
       case TYPE_NULL:
       case TYPE_BOOLEAN: // These types are not plain encoded.
       default:
@@ -262,7 +266,10 @@ inline int ParquetPlainEncoder::Decode(
     uint8_t* buffer, int fixed_len_size, StringValue* v) {
   memcpy(&v->len, buffer, sizeof(int32_t));
   v->ptr = reinterpret_cast<char*>(buffer) + sizeof(int32_t);
-  return ByteSize(*v);
+  int bytesize = ByteSize(*v);
+  if (fixed_len_size > 0) v->len = std::min(v->len, fixed_len_size);
+  // we still read bytesize bytes, even if we truncate
+  return bytesize;
 }
 
 // Write decimals as big endian (byte comparable) to benefit from common prefixes.

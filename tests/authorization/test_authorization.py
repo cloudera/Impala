@@ -22,7 +22,7 @@ import tempfile
 import json
 from time import sleep, time
 from getpass import getuser
-from cli_service import TCLIService
+from TCLIService import TCLIService
 from thrift.transport.TSocket import TSocket
 from thrift.transport.TTransport import TBufferedTransport
 from thrift.protocol import TBinaryProtocol
@@ -49,6 +49,36 @@ class TestAuthorization(CustomClusterTestSuite):
   @pytest.mark.execute_serially
   @CustomClusterTestSuite.with_args("--server_name=server1\
       --authorization_policy_file=/test-warehouse/authz-policy.ini\
+      --authorization_policy_provider_class=%s" %
+      "org.apache.sentry.provider.file.LocalGroupResourceAuthorizationProvider")
+  def test_custom_authorization_provider(self):
+    from tests.hs2.test_hs2 import TestHS2
+    open_session_req = TCLIService.TOpenSessionReq()
+    # User is 'test_user' (defined in the authorization policy file)
+    open_session_req.username = 'test_user'
+    open_session_req.configuration = dict()
+    resp = self.hs2_client.OpenSession(open_session_req)
+    TestHS2.check_response(resp)
+
+    # Try to query a table we are not authorized to access.
+    self.session_handle = resp.sessionHandle
+    execute_statement_req = TCLIService.TExecuteStatementReq()
+    execute_statement_req.sessionHandle = self.session_handle
+    execute_statement_req.statement = "describe tpch_seq.lineitem"
+    execute_statement_resp = self.hs2_client.ExecuteStatement(execute_statement_req)
+    assert 'User \'%s\' does not have privileges to access' % 'test_user' in\
+        str(execute_statement_resp)
+
+    # Now try the same operation on a table we are authorized to access.
+    execute_statement_req = TCLIService.TExecuteStatementReq()
+    execute_statement_req.sessionHandle = self.session_handle
+    execute_statement_req.statement = "describe tpch.lineitem"
+    execute_statement_resp = self.hs2_client.ExecuteStatement(execute_statement_req)
+    TestHS2.check_response(execute_statement_resp)
+
+  @pytest.mark.execute_serially
+  @CustomClusterTestSuite.with_args("--server_name=server1\
+      --authorization_policy_file=/test-warehouse/authz-policy.ini\
       --authorized_proxy_user_config=hue=%s\
       --audit_event_log_dir=%s" % (getuser(), AUDIT_LOG_DIR))
   def test_impersonation(self):
@@ -64,7 +94,7 @@ class TestAuthorization(CustomClusterTestSuite):
     # Connected user is 'hue'
     open_session_req.username = 'hue'
     open_session_req.configuration = dict()
-    # Impersonated user is the current user
+    # Delegated user is the current user
     open_session_req.configuration['impala.doas.user'] = getuser()
     resp = self.hs2_client.OpenSession(open_session_req)
     TestHS2.check_response(resp)
@@ -94,12 +124,12 @@ class TestAuthorization(CustomClusterTestSuite):
         execute_statement_resp.operationHandle.operationId)
     profile_page = self.cluster.impalads[0].service.read_query_profile_page(query_id)
     self.__verify_profile_user_fields(profile_page, effective_user=getuser(),
-        impersonated_user=getuser(), connected_user='hue')
+        delegated_user=getuser(), connected_user='hue')
 
-    # Try to impersonate as a user we are not authorized to impersonate.
+    # Try to user we are not authorized to delegate to.
     open_session_req.configuration['impala.doas.user'] = 'some_user'
     resp = self.hs2_client.OpenSession(open_session_req)
-    assert 'User \'hue\' is not authorized to impersonate \'some_user\'' in str(resp)
+    assert 'User \'hue\' is not authorized to delegate to \'some_user\'' in str(resp)
 
     # Create a new session which does not have a do_as_user.
     open_session_req.username = 'hue'
@@ -115,23 +145,23 @@ class TestAuthorization(CustomClusterTestSuite):
     TestHS2.check_response(execute_statement_resp)
 
     # Verify the correct user information is in the runtime profile. Since there is
-    # no do_as_user the Impersonated User field should be empty.
+    # no do_as_user the Delegated User field should be empty.
     query_id = operation_id_to_query_id(
         execute_statement_resp.operationHandle.operationId)
     profile_page = self.cluster.impalads[0].service.read_query_profile_page(query_id)
     self.__verify_profile_user_fields(profile_page, effective_user='hue',
-        impersonated_user='', connected_user='hue')
+        delegated_user='', connected_user='hue')
 
     self.socket.close()
     self.socket = None
 
   def __verify_profile_user_fields(self, profile_str, effective_user, connected_user,
-      impersonated_user):
+      delegated_user):
     """Verifies the given runtime profile string contains the specified values for
-    User, Connected User, and Impersonated User"""
+    User, Connected User, and Delegated User"""
     assert '\n    User: %s\n' % effective_user in profile_str
     assert '\n    Connected User: %s\n' % connected_user in profile_str
-    assert '\n    Impersonated User: %s\n' % impersonated_user in profile_str
+    assert '\n    Delegated User: %s\n' % delegated_user in profile_str
 
   def __wait_for_audit_record(self, user, impersonator, timeout_secs=30):
     """Waits until an audit log record is found that contains the given user and

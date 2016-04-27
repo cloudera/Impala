@@ -59,7 +59,13 @@ export IMPALA_AUX_TEST_HOME=${IMPALA_AUX_TEST_HOME-~/impala-auxiliary-tests}
 # Directory where local cluster logs will go when running tests or loading data
 export IMPALA_TEST_CLUSTER_LOG_DIR=${IMPALA_HOME}/cluster_logs
 # Reduce the concurrency for local tests to half the number of cores in the system.
-export NUM_CONCURRENT_TESTS=${NUM_CONCURRENT_TESTS-$(($(nproc) / 2))}
+# Note than nproc may not be available on older distributions (centos5.5)
+if type nproc >/dev/null 2>&1; then
+  CORES=$(($(nproc) / 2))
+else
+  CORES='4'
+fi
+export NUM_CONCURRENT_TESTS=${NUM_CONCURRENT_TESTS-${CORES}}
 
 export IMPALA_GFLAGS_VERSION=2.0
 export IMPALA_GPERFTOOLS_VERSION=2.0
@@ -74,6 +80,7 @@ export IMPALA_HADOOP_VERSION=2.0.0-cdh4.5.0
 export IMPALA_HBASE_VERSION=0.94.6-cdh4.5.0
 export IMPALA_HIVE_VERSION=0.10.0-cdh4.5.0
 export IMPALA_SENTRY_VERSION=1.1.0
+# If the thrift version changes, please update ext-data-source/pom.xml
 export IMPALA_THRIFT_VERSION=0.9.0
 export IMPALA_AVRO_VERSION=1.7.4
 export IMPALA_LLVM_VERSION=3.3
@@ -81,6 +88,10 @@ export IMPALA_PARQUET_VERSION=1.2.5
 export IMPALA_PARQUET_HADOOP_VERSION=1.5.0
 export IMPALA_PARQUET_FORMAT_VERSION=2.1.0
 export IMPALA_LLAMA_VERSION=1.0.0-cdh5.0.0-SNAPSHOT
+
+# Sasl has problems with 'make install' if the path contains a ~. In our
+# packaging jobs, the path contains ~ so we'll just install somewhere else.
+export IMPALA_CYRUS_SASL_INSTALL_DIR=/tmp/impala-build/cyrus-sasl-${IMPALA_CYRUS_SASL_VERSION}/build
 
 export IMPALA_FE_DIR=$IMPALA_HOME/fe
 export IMPALA_BE_DIR=$IMPALA_HOME/be

@@ -15,11 +15,11 @@
 #ifndef IMPALA_RUNTIME_SORTER_H_
 #define IMPALA_RUNTIME_SORTER_H_
 
+#include "runtime/buffered-block-mgr.h"
 #include "util/tuple-row-compare.h"
 
 namespace impala {
 
-class BufferedBlockMgr;
 class SortedRunMerger;
 class RuntimeProfile;
 class RowBatch;
@@ -32,7 +32,7 @@ class RowBatch;
 // The client API for Sorter is as follows:
 // AddBatch() is used to add input rows to be sorted. Multiple tuples in an input row are
 // materialized into a row with a single tuple (the sort tuple) using the materialization
-// exprs in sort_tuple_slot_exprs_. The sort tuples are sorted according to the sort
+// exprs in sort_tuple_slot_expr_ctxs_. The sort tuples are sorted according to the sort
 // parameters and output by the sorter.
 // AddBatch() can be called multiple times.
 //
@@ -86,9 +86,9 @@ class Sorter {
   // merge_batch_size_ is the size of the batches created to provide rows to the merger
   // and retrieve rows from an intermediate merger.
   Sorter(const TupleRowComparator& compare_less_than,
-      const std::vector<Expr*>& sort_tuple_slot_exprs, BufferedBlockMgr* block_mgr,
-      RowDescriptor* output_row_desc, MemTracker* mem_tracker, RuntimeProfile* profile,
-      RuntimeState* state);
+      const std::vector<ExprContext*>& sort_tuple_slot_expr_ctxs,
+      RowDescriptor* output_row_desc, MemTracker* mem_tracker,
+      RuntimeProfile* profile, RuntimeState* state);
 
   ~Sorter();
 
@@ -149,12 +149,16 @@ class Sorter {
   // Block manager object used to allocate, pin and release runs. Not owned by Sorter.
   BufferedBlockMgr* block_mgr_;
 
+  // Handle to block mgr to make allocations from.
+  BufferedBlockMgr::Client* block_mgr_client_;
+
   // True if the tuples to be sorted have var-length slots.
   bool has_var_len_slots_;
 
   // The current unsorted run that is being collected. Is sorted and added to
   // sorted_runs_ after it is full (i.e. number of blocks allocated == max available
   // buffers) or after the input is complete. Owned and placed in obj_pool_.
+  // When it is added to sorted_runs_, it is set to NULL.
   Run* unsorted_run_;
 
   // List of sorted runs that have been produced but not merged. unsorted_run_ is added
@@ -168,7 +172,7 @@ class Sorter {
 
   // Expressions used to materialize the sort tuple. Contains one expr per slot in the
   // tuple.
-  std::vector<Expr*> sort_tuple_slot_exprs_;
+  std::vector<ExprContext*> sort_tuple_slot_expr_ctxs_;
 
   // Mem tracker for batches created during merge. Not owned by Sorter.
   MemTracker* mem_tracker_;
@@ -178,15 +182,19 @@ class Sorter {
   // memory.
   boost::scoped_ptr<SortedRunMerger> merger_;
 
+  // Runs that are currently processed by the merge_.
+  // These runs can be deleted when we are done with the current merge.
+  std::list<Run*> merging_runs_;
+
   // Pool of owned Run objects.
   ObjectPool obj_pool_;
 
   // Runtime profile and counters for this sorter instance.
   RuntimeProfile* profile_;
-  RuntimeProfile::Counter* num_runs_counter_;
+  RuntimeProfile::Counter* initial_runs_counter_;
   RuntimeProfile::Counter* num_merges_counter_;
   RuntimeProfile::Counter* in_mem_sort_timer_;
-  RuntimeProfile::Counter* sort_bytes_counter_;
+  RuntimeProfile::Counter* sorted_data_size_;
 };
 
 } // namespace impala

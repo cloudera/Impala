@@ -28,6 +28,7 @@
 
 namespace impala {
 
+class BufferedTupleStream;
 class MemTracker;
 class TRowBatch;
 class Tuple;
@@ -61,9 +62,7 @@ class TupleDescriptor;
 // excessive memory.
 //
 // A row batch is considered at capacity if all the rows are full or it has accumulated
-// auxiliary memory up to a soft cap. (See AT_CAPACITY_MEM_USAGE comment).
-//
-// TODO: stick tuple_ptrs_ into a pool?
+// auxiliary memory up to a soft cap. (See at_capacity_mem_usage_ comment).
 class RowBatch {
  public:
   // Create RowBatch for a maximum of 'capacity' rows of tuples specified
@@ -119,7 +118,18 @@ class RowBatch {
   // Returns true if the row batch has filled all the rows or has accumulated
   // enough memory.
   bool AtCapacity() {
-    return num_rows_ == capacity_ || auxiliary_mem_usage_ >= AT_CAPACITY_MEM_USAGE;
+    return num_rows_ == capacity_ || auxiliary_mem_usage_ >= AT_CAPACITY_MEM_USAGE ||
+      num_tuple_streams() > 0 || need_to_return_;
+  }
+
+  // Returns true if the row batch has filled all the rows or has accumulated
+  // enough memory. tuple_pool is an intermediate memory pool containing tuple data
+  // that will eventually be attached to this row batch. We need to make sure
+  // the tuple pool does not accumulate excessive memory.
+  bool AtCapacity(MemPool* tuple_pool) {
+    DCHECK(tuple_pool != NULL);
+    return AtCapacity() ||
+        (tuple_pool->total_allocated_bytes() > AT_CAPACITY_MEM_USAGE && num_rows_ > 0);
   }
 
   // The total size of all data represented in this row batch (tuples and referenced
@@ -136,13 +146,25 @@ class RowBatch {
 
   int row_byte_size() { return num_tuples_per_row_ * sizeof(Tuple*); }
   MemPool* tuple_data_pool() { return tuple_data_pool_.get(); }
-  int num_io_buffers() { return io_buffers_.size(); }
+  int num_io_buffers() const { return io_buffers_.size(); }
+  int num_tuple_streams() const { return tuple_streams_.size(); }
 
   // Resets the row batch, returning all resources it has accumulated.
   void Reset();
 
-  // Add buffer to this row batch.
+  // Add io buffer to this row batch.
   void AddIoBuffer(DiskIoMgr::BufferDescriptor* buffer);
+
+  // Add tuple stream to this row batch. The row batch must call Close() on the stream
+  // when freeing resources.
+  void AddTupleStream(BufferedTupleStream* stream);
+
+  // Called to indicate this row batch must be returned up the operator tree.
+  // This is used to control memory management for streaming rows.
+  // TODO: consider using this mechanism instead of AddIoBuffer/AddTupleStream. This is
+  // the property we need rather than meticulously passing resources up so the operator
+  // tree.
+  void MarkNeedToReturn() { need_to_return_ = true; }
 
   // Transfer ownership of resources to dest.  This includes tuple data in mem
   // pool and io buffers.
@@ -164,10 +186,6 @@ class RowBatch {
 
   void ClearRow(TupleRow* row) {
     memset(row, 0, num_tuples_per_row_ * sizeof(Tuple*));
-  }
-
-  void ClearBatch() {
-    memset(tuple_ptrs_, 0, capacity_ * num_tuples_per_row_ * sizeof(Tuple*));
   }
 
   // Acquires state from the 'src' row batch into this row batch. This includes all IO
@@ -201,12 +219,10 @@ class RowBatch {
 
   // Max memory that this row batch can accumulate in tuple_data_pool_ before it
   // is considered at capacity.
-  // If this value is larger, we will use more memory. If this value is smaller,
-  // we are more likely to generate row batches less than the maximum number of rows.
-  // The value currently is very large compared to the typical row size.
-  // TODO: is this numbers reasonable? We can make this dynamic based on the estimated
-  // row size and mem limit.
-  static const int AT_CAPACITY_MEM_USAGE = 8 * 1024 * 1024;
+  static const int AT_CAPACITY_MEM_USAGE;
+
+  // Computes the maximum size needed to store tuple data for this row batch.
+  int MaxTupleBufferSize();
 
  private:
   MemTracker* mem_tracker_;  // not owned
@@ -229,6 +245,10 @@ class RowBatch {
   // TransferResourceOwnership().
   int64_t auxiliary_mem_usage_;
 
+  // If true, this batch is considered at capacity. This is explicitly set by streaming
+  // components that return rows via row batches.
+  bool need_to_return_;
+
   // holding (some of the) data referenced by rows
   boost::scoped_ptr<MemPool> tuple_data_pool_;
 
@@ -236,6 +256,9 @@ class RowBatch {
   // between row batches. Any IO buffer will be owned by at most one row batch
   // (i.e. they are not ref counted) so most row batches don't own any.
   std::vector<DiskIoMgr::BufferDescriptor*> io_buffers_;
+
+  // Tuple streams currently owned by this row batch.
+  std::vector<BufferedTupleStream*> tuple_streams_;
 
   // String to write compressed tuple data to in Serialize().
   // This is a string so we can swap() with the string in the TRowBatch we're serializing

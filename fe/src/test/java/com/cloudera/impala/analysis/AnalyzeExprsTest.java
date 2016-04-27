@@ -16,6 +16,7 @@ package com.cloudera.impala.analysis;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -26,92 +27,96 @@ import junit.framework.Assert;
 import org.junit.Test;
 
 import com.cloudera.impala.analysis.TimestampArithmeticExpr.TimeUnit;
-import com.cloudera.impala.catalog.ColumnType;
+import com.cloudera.impala.catalog.CatalogException;
+import com.cloudera.impala.catalog.Column;
 import com.cloudera.impala.catalog.PrimitiveType;
 import com.cloudera.impala.catalog.ScalarFunction;
+import com.cloudera.impala.catalog.ScalarType;
+import com.cloudera.impala.catalog.Table;
 import com.cloudera.impala.catalog.TestSchemaUtils;
+import com.cloudera.impala.catalog.Type;
 import com.cloudera.impala.common.AnalysisException;
+import com.cloudera.impala.thrift.TExpr;
+import com.cloudera.impala.thrift.TQueryOptions;
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Predicates;
 import com.google.common.collect.Lists;
 
 public class AnalyzeExprsTest extends AnalyzerTest {
 
   @Test
   public void TestNumericLiteralMinMaxValues() {
-    testNumericLiteral(Byte.toString(Byte.MIN_VALUE), ColumnType.TINYINT);
-    testNumericLiteral(Byte.toString(Byte.MAX_VALUE), ColumnType.TINYINT);
-    testNumericLiteral("- " + Byte.toString(Byte.MIN_VALUE), ColumnType.SMALLINT);
-    testNumericLiteral("- " + Byte.toString(Byte.MAX_VALUE), ColumnType.TINYINT);
+    testNumericLiteral(Byte.toString(Byte.MIN_VALUE), Type.TINYINT);
+    testNumericLiteral(Byte.toString(Byte.MAX_VALUE), Type.TINYINT);
+    testNumericLiteral("- " + Byte.toString(Byte.MIN_VALUE), Type.SMALLINT);
+    testNumericLiteral("- " + Byte.toString(Byte.MAX_VALUE), Type.TINYINT);
 
-    testNumericLiteral(Short.toString(Short.MIN_VALUE), ColumnType.SMALLINT);
-    testNumericLiteral(Short.toString(Short.MAX_VALUE), ColumnType.SMALLINT);
-    testNumericLiteral("- " + Short.toString(Short.MIN_VALUE), ColumnType.INT);
-    testNumericLiteral("- " + Short.toString(Short.MAX_VALUE), ColumnType.SMALLINT);
+    testNumericLiteral(Short.toString(Short.MIN_VALUE), Type.SMALLINT);
+    testNumericLiteral(Short.toString(Short.MAX_VALUE), Type.SMALLINT);
+    testNumericLiteral("- " + Short.toString(Short.MIN_VALUE), Type.INT);
+    testNumericLiteral("- " + Short.toString(Short.MAX_VALUE), Type.SMALLINT);
 
-    testNumericLiteral(Integer.toString(Integer.MIN_VALUE), ColumnType.INT);
-    testNumericLiteral(Integer.toString(Integer.MAX_VALUE), ColumnType.INT);
-    testNumericLiteral("- " + Integer.toString(Integer.MIN_VALUE), ColumnType.BIGINT);
-    testNumericLiteral("- " + Integer.toString(Integer.MAX_VALUE), ColumnType.INT);
+    testNumericLiteral(Integer.toString(Integer.MIN_VALUE), Type.INT);
+    testNumericLiteral(Integer.toString(Integer.MAX_VALUE), Type.INT);
+    testNumericLiteral("- " + Integer.toString(Integer.MIN_VALUE), Type.BIGINT);
+    testNumericLiteral("- " + Integer.toString(Integer.MAX_VALUE), Type.INT);
 
-    testNumericLiteral(Long.toString(Long.MIN_VALUE), ColumnType.BIGINT);
-    testNumericLiteral(Long.toString(Long.MAX_VALUE), ColumnType.BIGINT);
-    AnalysisError(String.format("select - %s", Long.toString(Long.MIN_VALUE)),
-        "Literal '9223372036854775808' exceeds maximum range of integers.");
-    testNumericLiteral("- " + Long.toString(Long.MAX_VALUE), ColumnType.BIGINT);
+    testNumericLiteral(Long.toString(Long.MIN_VALUE), Type.BIGINT);
+    testNumericLiteral(Long.toString(Long.MAX_VALUE), Type.BIGINT);
+    testNumericLiteral(Long.toString(Long.MIN_VALUE), Type.BIGINT);
+    testNumericLiteral("- " + Long.toString(Long.MAX_VALUE), Type.BIGINT);
 
-    // Test overflow/underflow.
-    AnalysisError(String.format("select %s1", Long.toString(Long.MIN_VALUE)),
-        "Literal '-92233720368547758081' exceeds maximum range of integers.");
-    AnalysisError(String.format("select %s1", Long.toString(Long.MAX_VALUE)),
-        "Literal '92233720368547758071' exceeds maximum range of integers.");
+    // Result type is a decimal because Long can't hold the value.
+    testNumericLiteral(Long.toString(Long.MIN_VALUE) + "1",
+        ScalarType.createDecimalType(20, 0));
+    testNumericLiteral(Long.toString(Long.MIN_VALUE) + "1",
+        ScalarType.createDecimalType(20, 0));
     // Test min int64-1.
     BigInteger minMinusOne = BigInteger.valueOf(Long.MIN_VALUE);
     minMinusOne = minMinusOne.subtract(BigInteger.ONE);
-    AnalysisError(String.format("select %s", minMinusOne.toString()),
-        "Literal '-9223372036854775809' exceeds maximum range of integers.");
+    testNumericLiteral(minMinusOne.toString(), ScalarType.createDecimalType(19, 0));
     // Test max int64+1.
     BigInteger maxPlusOne = BigInteger.valueOf(Long.MAX_VALUE);
     maxPlusOne = maxPlusOne.add(BigInteger.ONE);
-    AnalysisError(String.format("select %s", maxPlusOne.toString()),
-        "Literal '9223372036854775808' exceeds maximum range of integers.");
+    testNumericLiteral(maxPlusOne.toString(), ScalarType.createDecimalType(19, 0));
 
     // Test floating-point types.
-    testNumericLiteral(Float.toString(Float.MIN_VALUE), ColumnType.DOUBLE);
-    testNumericLiteral(Float.toString(Float.MAX_VALUE), ColumnType.DOUBLE);
-    testNumericLiteral("-" + Float.toString(Float.MIN_VALUE), ColumnType.DOUBLE);
-    testNumericLiteral("-" + Float.toString(Float.MAX_VALUE), ColumnType.DOUBLE);
-    testNumericLiteral(Double.toString(Double.MIN_VALUE), ColumnType.DOUBLE);
-    testNumericLiteral(Double.toString(Double.MAX_VALUE), ColumnType.DOUBLE);
-    testNumericLiteral("-" + Double.toString(Double.MIN_VALUE), ColumnType.DOUBLE);
-    testNumericLiteral("-" + Double.toString(Double.MAX_VALUE), ColumnType.DOUBLE);
+    testNumericLiteral(Float.toString(Float.MIN_VALUE), Type.DOUBLE);
+    testNumericLiteral(Float.toString(Float.MAX_VALUE), Type.DOUBLE);
+    testNumericLiteral("-" + Float.toString(Float.MIN_VALUE), Type.DOUBLE);
+    testNumericLiteral("-" + Float.toString(Float.MAX_VALUE), Type.DOUBLE);
+    testNumericLiteral(Double.toString(Double.MIN_VALUE), Type.DOUBLE);
+    testNumericLiteral(Double.toString(Double.MAX_VALUE), Type.DOUBLE);
+    testNumericLiteral("-" + Double.toString(Double.MIN_VALUE), Type.DOUBLE);
+    testNumericLiteral("-" + Double.toString(Double.MAX_VALUE), Type.DOUBLE);
 
     AnalysisError(String.format("select %s1", Double.toString(Double.MAX_VALUE)),
-      "Decimal literal '1.7976931348623157E+3081' exceeds maximum range of doubles.");
+      "Numeric literal '1.7976931348623157E+3081' exceeds maximum range of doubles.");
     AnalysisError(String.format("select %s1", Double.toString(Double.MIN_VALUE)),
-      "Decimal literal '4.9E-3241' underflows minimum resolution of doubles.");
+      "Numeric literal '4.9E-3241' underflows minimum resolution of doubles.");
 
     testNumericLiteral("0.99999999999999999999999999999999999999",
-        ColumnType.createDecimalType(38,38));
+        ScalarType.createDecimalType(38,38));
     testNumericLiteral("99999999999999999999999999999999999999.",
-        ColumnType.createDecimalType(38,0));
+        ScalarType.createDecimalType(38,0));
     testNumericLiteral("-0.99999999999999999999999999999999999999",
-        ColumnType.createDecimalType(38,38));
+        ScalarType.createDecimalType(38,38));
     testNumericLiteral("-99999999999999999999999999999999999999.",
-        ColumnType.createDecimalType(38,0));
+        ScalarType.createDecimalType(38,0));
     testNumericLiteral("999999999999999999999.99999999999999999",
-        ColumnType.createDecimalType(38,17));
+        ScalarType.createDecimalType(38,17));
     testNumericLiteral("-999999999999999999.99999999999999999999",
-        ColumnType.createDecimalType(38,20));
-
+        ScalarType.createDecimalType(38,20));
   }
 
   /**
    * Asserts that "select literal" analyzes ok and that the expectedType
    * matches the actual type.
    */
-  private void testNumericLiteral(String literal, ColumnType expectedType) {
+  private void testNumericLiteral(String literal, Type expectedType) {
     SelectStmt selectStmt = (SelectStmt) AnalyzesOk("select " + literal);
-    ColumnType actualType = selectStmt.resultExprs_.get(0).getType();
+    Type actualType = selectStmt.resultExprs_.get(0).getType();
     Assert.assertTrue("Expected Type: " + expectedType + " Actual type: " + actualType,
         expectedType.equals(actualType));
   }
@@ -175,9 +180,31 @@ public class AnalyzeExprsTest extends AnalyzerTest {
     AnalyzesOk("select * from functional.alltypes where double_col > NULL");
     AnalyzesOk("select * from functional.alltypes where string_col = NULL");
     AnalyzesOk("select * from functional.alltypes where timestamp_col = NULL");
+
+    AnalyzesOk("select cast('hi' as CHAR(2)) = cast('hi' as CHAR(3))");
+    AnalyzesOk("select cast('hi' as CHAR(2)) = 'hi'");
+
     // invalid casts
     AnalysisError("select * from functional.alltypes where bool_col = '15'",
         "operands of type BOOLEAN and STRING are not comparable: bool_col = '15'");
+    // Complex types are not comparable.
+    AnalysisError("select 1 from functional.allcomplextypes where int_array_col = 1",
+        "operands of type ARRAY<INT> and TINYINT are not comparable: int_array_col = 1");
+    AnalysisError("select 1 from functional.allcomplextypes where int_map_col = 1",
+        "operands of type MAP<STRING,INT> and TINYINT are not comparable: " +
+        "int_map_col = 1");
+    AnalysisError("select 1 from functional.allcomplextypes where int_struct_col = 1",
+        "operands of type STRUCT<f1:INT,f2:INT> and TINYINT are not comparable: " +
+        "int_struct_col = 1");
+    // Complex types are not comparable even if identical.
+    // TODO: Reconsider this behavior. Such a comparison should ideally work,
+    // but may require complex-typed SlotRefs and BE functions able to accept
+    // complex-typed parameters.
+    AnalysisError("select 1 from functional.allcomplextypes " +
+        "where int_map_col = int_map_col",
+        "operands of type MAP<STRING,INT> and MAP<STRING,INT> are not comparable: " +
+        "int_map_col = int_map_col");
+    // TODO: Enable once date and datetime are implemented.
     // AnalysisError("select * from functional.alltypes where date_col = 15",
     // "operands are not comparable: date_col = 15");
     // AnalysisError("select * from functional.alltypes where datetime_col = 1.0",
@@ -195,8 +222,10 @@ public class AnalyzeExprsTest extends AnalyzerTest {
     AnalysisError("select cast(cast(1 as timestamp) as decimal)",
         "Invalid type cast of CAST(1 AS TIMESTAMP) from TIMESTAMP to DECIMAL(9,0)");
 
-    for (ColumnType type: ColumnType.getSupportedTypes()) {
-      if (type.isNull() || type.isDecimal() || type.isBoolean() || type.isDateType()) {
+    for (Type type: Type.getSupportedTypes()) {
+      if (type.isNull() || type.isDecimal() || type.isBoolean() || type.isDateType()
+          || type.getPrimitiveType() == PrimitiveType.VARCHAR
+          || type.getPrimitiveType() == PrimitiveType.CHAR) {
         continue;
       }
       AnalyzesOk("select cast(1.1 as " + type + ")");
@@ -204,16 +233,27 @@ public class AnalyzeExprsTest extends AnalyzerTest {
     }
 
     // Casts to all other decimals are supported.
-    for (int precision = 1; precision <= ColumnType.MAX_PRECISION; ++precision) {
+    for (int precision = 1; precision <= ScalarType.MAX_PRECISION; ++precision) {
       for (int scale = 0; scale < precision; ++scale) {
-        ColumnType t = ColumnType.createDecimalType(precision, scale);
-        AnalyzesOk("select cast(1.1 as " + t + ")");
-        AnalyzesOk("select cast(cast(1 as " + t + ") as decimal)");
+        Type t = ScalarType.createDecimalType(precision, scale);
+        AnalyzesOk("select cast(1.1 as " + t.toSql() + ")");
+        AnalyzesOk("select cast(cast(1 as " + t.toSql() + ") as decimal)");
       }
     }
 
     AnalysisError("select cast(1 as decimal(0, 1))",
         "Decimal precision must be greater than 0.");
+  }
+
+  /**
+   * Asserts that an expression can be cast as the specified type
+   */
+  private void testExprCast(String literal, Type expectedType) {
+    SelectStmt selectStmt = (SelectStmt) AnalyzesOk("select cast(" + literal +
+        " as " + expectedType.toSql() + ")");
+    Type actualType = selectStmt.resultExprs_.get(0).getType();
+    Assert.assertTrue("Expected Type: " + expectedType + " Actual type: " + actualType,
+        expectedType.equals(actualType));
   }
 
   @Test
@@ -284,6 +324,47 @@ public class AnalyzeExprsTest extends AnalyzerTest {
 
     // Cast decimal to string
     AnalyzesOk("select cast(cast('1.234' as decimal) as string)");
+
+    // Cast to / from VARCHAR
+    AnalyzesOk("select cast('helloworld' as VARCHAR(3))");
+    AnalyzesOk("select cast(cast('helloworld' as VARCHAR(3)) as string)");
+    AnalyzesOk("select cast(cast('3.0' as VARCHAR(5)) as float)");
+    AnalyzesOk("select NULL = cast('123' as CHAR(3))");
+    AnalysisError("select now() = cast('hi' as CHAR(3))",
+        "operands of type TIMESTAMP and CHAR(3) are not comparable: " +
+        "now() = CAST('hi' AS CHAR(3))");
+    testExprCast("cast('Hello' as VARCHAR(5))", ScalarType.createVarcharType(7));
+    testExprCast("cast('Hello' as VARCHAR(5))", ScalarType.createVarcharType(3));
+
+    AnalysisError("select cast('foo' as varchar(0))",
+        "Varchar size must be > 0. Size is too small: 0.");
+    AnalysisError("select cast('foo' as varchar(65356))",
+        "Varchar size must be <= 65355. Size is too large: 65356.");
+    AnalysisError("select cast('foo' as char(0))",
+        "Char size must be > 0. Size is too small: 0.");
+    AnalysisError("select cast('foo' as char(256))",
+        "Char size must be <= 255. Size is too large: 256.");
+
+    testExprCast("'Hello'", ScalarType.createCharType(5));
+    testExprCast("cast('Hello' as CHAR(5))", ScalarType.STRING);
+    testExprCast("cast('Hello' as CHAR(5))", ScalarType.createVarcharType(7));
+    testExprCast("cast('Hello' as VARCHAR(5))", ScalarType.createCharType(7));
+    testExprCast("cast('Hello' as CHAR(7))", ScalarType.createVarcharType(5));
+    testExprCast("cast('Hello' as VARCHAR(7))", ScalarType.createCharType(5));
+    testExprCast("cast('Hello' as CHAR(5))", ScalarType.createVarcharType(5));
+    testExprCast("cast('Hello' as VARCHAR(5))", ScalarType.createCharType(5));
+    testExprCast("1", ScalarType.createCharType(5));
+
+    testExprCast("cast('abcde' as char(10)) IN " +
+        "(cast('abcde' as CHAR(20)), cast('abcde' as VARCHAR(10)), 'abcde')",
+        ScalarType.createCharType(10));
+    testExprCast("'abcde' IN " +
+        "(cast('abcde' as CHAR(20)), cast('abcde' as VARCHAR(10)), 'abcde')",
+        ScalarType.STRING);
+    testExprCast("cast('abcde' as varchar(10)) IN " +
+        "(cast('abcde' as CHAR(20)), cast('abcde' as VARCHAR(10)), 'abcde')",
+        ScalarType.createVarcharType(10));
+
   }
 
   /**
@@ -291,21 +372,31 @@ public class AnalyzeExprsTest extends AnalyzerTest {
    */
   @Test
   public void TestNullCasts() throws AnalysisException {
-    for (ColumnType type: ColumnType.getSupportedTypes()) {
-      // TODO: Implement CHAR
-      if (type.getPrimitiveType() == PrimitiveType.CHAR) continue;
+    for (Type type: Type.getSupportedTypes()) {
        // Cannot cast to NULL_TYPE
       if (type.isNull()) continue;
-      if (type.isDecimal()) type = ColumnType.DEFAULT_DECIMAL;
+      if (type.isDecimal()) type = Type.DEFAULT_DECIMAL;
+      if (type.getPrimitiveType() == PrimitiveType.VARCHAR) {
+        type = ScalarType.createVarcharType(1);
+      }
+      if (type.getPrimitiveType() == PrimitiveType.CHAR) {
+        type = ScalarType.createCharType(1);
+      }
       checkExprType("select cast(null as " + type + ")", type);
     }
   }
 
-  // Analyzes query and asserts that the first result expr returns the given type.
-  // Requires query to parse to a SelectStmt.
-  private void checkExprType(String query, ColumnType type) {
-    SelectStmt select = (SelectStmt) AnalyzesOk(query);
-    assertEquals(select.getResultExprs().get(0).getType(), type);
+  /**
+   * Tests that casts to complex types fail with an appropriate error message.
+   */
+  @Test
+  public void TestComplexTypeCasts() throws AnalysisException {
+    AnalysisError("select cast(1 as array<int>)",
+        "Unsupported cast to complex type: ARRAY<INT>");
+    AnalysisError("select cast(1 as map<int, int>)",
+        "Unsupported cast to complex type: MAP<INT,INT>");
+    AnalysisError("select cast(1 as struct<a:int,b:char(20)>)",
+        "Unsupported cast to complex type: STRUCT<a:INT,b:CHAR(20)>");
   }
 
   @Test
@@ -382,6 +473,15 @@ public class AnalyzeExprsTest extends AnalyzerTest {
     AnalysisError("select * from functional.alltypes where bool_col or double_col",
         "Operand 'double_col' part of predicate 'bool_col OR double_col' should " +
             "return type 'BOOLEAN' but returns type 'DOUBLE'.");
+    AnalysisError("select int_array_col or true from functional.allcomplextypes",
+        "Operand 'int_array_col' part of predicate 'int_array_col OR TRUE' should " +
+            "return type 'BOOLEAN' but returns type 'ARRAY<INT>'");
+    AnalysisError("select false and int_struct_col from functional.allcomplextypes",
+        "Operand 'int_struct_col' part of predicate 'FALSE AND int_struct_col' should " +
+            "return type 'BOOLEAN' but returns type 'STRUCT<f1:INT,f2:INT>'.");
+    AnalysisError("select not int_map_col from functional.allcomplextypes",
+        "Operand 'int_map_col' part of predicate 'NOT int_map_col' should return " +
+            "type 'BOOLEAN' but returns type 'MAP<STRING,INT>'.");
   }
 
   @Test
@@ -389,6 +489,7 @@ public class AnalyzeExprsTest extends AnalyzerTest {
     AnalyzesOk("select * from functional.alltypes where int_col is null");
     AnalyzesOk("select * from functional.alltypes where string_col is not null");
     AnalyzesOk("select * from functional.alltypes where null is not null");
+    AnalyzesOk("select 1 from functional.allcomplextypes where int_map_col is null");
   }
 
   @Test
@@ -442,6 +543,10 @@ public class AnalyzeExprsTest extends AnalyzerTest {
         "where timestamp_col between int_col and double_col",
         "Incompatible return types 'TIMESTAMP' and 'INT' " +
         "of exprs 'timestamp_col' and 'int_col'.");
+    AnalysisError("select 1 from functional.allcomplextypes " +
+        "where int_struct_col between 10 and 20",
+        "Incompatible return types 'STRUCT<f1:INT,f2:INT>' and 'TINYINT' " +
+        "of exprs 'int_struct_col' and '10'.");
   }
 
   @Test
@@ -482,6 +587,375 @@ public class AnalyzeExprsTest extends AnalyzerTest {
         "timestamp_col in (NULL, int_col)",
         "Incompatible return types 'TIMESTAMP' and 'INT' " +
         "of exprs 'timestamp_col' and 'int_col'.");
+    AnalysisError("select 1 from functional.allcomplextypes where " +
+        "int_array_col in (id, NULL)",
+        "Incompatible return types 'ARRAY<INT>' and 'INT' " +
+        "of exprs 'int_array_col' and 'id'.");
+  }
+
+  @Test
+  public void TestAnalyticExprs() throws AnalysisException {
+    AnalyzesOk("select int_col from functional.alltypessmall order by count(*) over () "
+        + "limit 10");
+    AnalyzesOk("select sum(int_col) over () from functional.alltypes");
+    AnalyzesOk("select avg(bigint_col) over (partition by id) from functional.alltypes");
+    AnalyzesOk("select count(smallint_col) over (partition by id order by tinyint_col) "
+        + "from functional.alltypes");
+    AnalyzesOk("select min(int_col) over (partition by id order by tinyint_col "
+        + "rows between unbounded preceding and current row) from functional.alltypes");
+    AnalyzesOk("select sum(int_col) over (partition by id order by tinyint_col "
+        + "rows 2 preceding) from functional.alltypes");
+    AnalyzesOk("select sum(int_col) over (partition by id order by tinyint_col "
+        + "rows between 2 preceding and unbounded following) from functional.alltypes");
+    AnalyzesOk("select min(int_col) over (partition by id order by tinyint_col "
+        + "rows between unbounded preceding and 2 preceding) from functional.alltypes");
+    AnalyzesOk("select sum(int_col) over (partition by id order by tinyint_col "
+        + "rows between 2 following and unbounded following) from functional.alltypes");
+    // TODO: Enable after RANGE windows with offset boundaries are supported
+    //AnalyzesOk("select sum(int_col) over (partition by id order by tinyint_col "
+    //    + "range between 2 preceding and unbounded following) from functional.alltypes");
+    //AnalyzesOk("select sum(int_col) over (partition by id order by tinyint_col "
+    //    + "range between 2 preceding and unbounded following) from functional.alltypes");
+    AnalyzesOk("select sum(int_col) over (partition by id order by tinyint_col "
+        + "rows between 2 preceding and 6 following) from functional.alltypes");
+        // TODO: substitute constants in-line so that 2*3 becomes implicitly castable
+        // to tinyint
+        //+ "range between 2 preceding and 2 * 3 following) from functional.alltypes");
+    AnalyzesOk("select sum(int_col) over (partition by id order by tinyint_col "
+        + "rows between 2 preceding and unbounded following) from functional.alltypes");
+    AnalyzesOk("select lead(int_col, 1, null) over "
+        + "(partition by id order by tinyint_col) from functional.alltypes");
+    AnalyzesOk("select rank() over "
+        + "(partition by id order by tinyint_col) from functional.alltypes");
+    AnalyzesOk(
+        "select id from functional.alltypes order by rank() over (order by tinyint_col)");
+
+    // legal combinations of analytic and agg functions
+    AnalyzesOk("select sum(count(id)) over (partition by min(int_col) "
+        + "order by max(bigint_col)) from functional.alltypes group by id, tinyint_col "
+        + "order by rank() over (order by max(bool_col), tinyint_col)");
+    AnalyzesOk("select lead(count(id)) over (order by tinyint_col) "
+        + "from functional.alltypes group by id, tinyint_col "
+        + "order by rank() over (order by tinyint_col)");
+    AnalyzesOk("select min(count(id)) over (order by tinyint_col) "
+        + "from functional.alltypes group by id, tinyint_col "
+        + "order by rank() over (order by tinyint_col)");
+    // IMPALA-1231: COUNT(t1.int_col) shows up in two different ways: as agg output
+    // and as an analytic fn call
+    AnalyzesOk("select t1.int_col, COUNT(t1.int_col) OVER (ORDER BY t1.int_col) "
+        + "FROM functional.alltypes t1 GROUP BY t1.int_col HAVING COUNT(t1.int_col) > 1");
+
+    // legal windows
+    AnalyzesOk(
+        "select sum(int_col) over (partition by id order by tinyint_col, int_col "
+          + "rows between 2 following and 4 following) from functional.alltypes");
+    AnalyzesOk(
+        "select max(int_col) over (partition by id order by tinyint_col, int_col "
+          + "range between unbounded preceding and current row) "
+          + "from functional.alltypes");
+    AnalyzesOk(
+        "select sum(int_col) over (partition by id order by tinyint_col, int_col "
+          + "range between current row and unbounded following) "
+          + "from functional.alltypes");
+    AnalyzesOk(
+        "select max(int_col) over (partition by id order by tinyint_col, int_col "
+          + "range between unbounded preceding and unbounded following) "
+          + "from functional.alltypes");
+    AnalyzesOk("select sum(int_col) over (partition by id order by tinyint_col "
+        + "rows between 4 preceding and 2 preceding) from functional.alltypes");
+    AnalyzesOk("select sum(int_col) over (partition by id order by tinyint_col "
+        + "rows between 2 following and 4 following) from functional.alltypes");
+    AnalyzesOk( "select "
+        + "2 * min(tinyint_col) over (partition by id order by tinyint_col "
+        + "  rows between unbounded preceding and current row), "
+        + "concat(max(string_col) over (partition by timestamp_col, int_col "
+        + "  order by tinyint_col, smallint_col "
+        + "  rows between unbounded preceding and current row), "
+        + "min(string_col) over (partition by timestamp_col, int_col "
+        + "  order by tinyint_col, smallint_col "
+        + "  rows between unbounded preceding and current row)) "
+        + "from functional.alltypes");
+    AnalyzesOk(
+        "select sum(int_col) over (partition by id order by tinyint_col, int_col "
+          + "rows between current row and current row) from functional.alltypes");
+    AnalysisError(
+        "select sum(int_col) over (partition by id order by tinyint_col, int_col "
+          + "range between current row and current row) from functional.alltypes",
+        "RANGE is only supported with both the lower and upper bounds UNBOUNDED or one "
+          + "UNBOUNDED and the other CURRENT ROW.");
+    AnalysisError("select sum(int_col) over (partition by id order by tinyint_col "
+          + "range between 2 following and 2 following) from functional.alltypes",
+        "RANGE is only supported with both the lower and upper bounds UNBOUNDED or one "
+            + "UNBOUNDED and the other CURRENT ROW.");
+
+    // Min/max do not support start bounds with offsets
+    AnalysisError("select max(int_col) over (partition by id order by tinyint_col "
+        + "rows 2 preceding) from functional.alltypes",
+        "'max(int_col)' is only supported with an UNBOUNDED PRECEDING start bound.");
+    // If the query can be re-written so that the start is unbounded, it should
+    // be supported (IMPALA-1433).
+    AnalyzesOk("select max(id) over (order by id rows between current row and "
+        + "unbounded following) from functional.alltypes");
+    AnalyzesOk("select min(int_col) over (partition by id order by tinyint_col "
+        + "rows between 2 preceding and unbounded following) from functional.alltypes");
+    // TODO: Enable after RANGE windows with offset boundaries are supported
+    //AnalysisError("select max(int_col) over (partition by id order by tinyint_col "
+    //    + "range 2 preceding) from functional.alltypes",
+    //    "'max(int_col)' is only supported with an UNBOUNDED PRECEDING start bound.");
+
+    // missing grouping expr
+    AnalysisError(
+        "select lead(count(bigint_col)) over (order by tinyint_col) "
+          + "from functional.alltypes group by id, tinyint_col "
+          + "order by rank() over (order by smallint_col)",
+        "ORDER BY expression not produced by aggregation output (missing from GROUP "
+          + "BY clause?): rank() OVER (ORDER BY smallint_col ASC)");
+    // missing Over clause
+    AnalysisError("select 1, lag(int_col) from functional.alltypes",
+        "Analytic function requires an OVER clause: lag(int_col)");
+    // no FROM clause
+    AnalysisError("select 1, count(*) over()",
+        "Analytic expressions require FROM clause");
+    // can't mix DISTINCT and analytics
+    AnalysisError(
+        "select distinct int_col, sum(double_col) over () from functional.alltypes",
+        "cannot combine SELECT DISTINCT with analytic functions");
+    // analytic expr in Group By
+    AnalysisError(
+        "select id, count(*) from functional.alltypes "
+          + "group by 1, rank() over(order by int_col)",
+        "GROUP BY expression must not contain analytic expressions: rank() OVER "
+          + "(ORDER BY int_col ASC)");
+    AnalysisError(
+        "select id, rank() over(order by int_col), count(*) "
+          + "from functional.alltypes group by 1, 2",
+        "GROUP BY expression must not contain analytic expressions: rank() OVER "
+          + "(ORDER BY int_col ASC)");
+    // analytic expr in Having
+    AnalysisError(
+        "select id, count(*) from functional.alltypes group by 1 "
+          + "having rank() over(order by int_col) > 1",
+        "HAVING clause must not contain analytic expressions: rank() OVER "
+          + "(ORDER BY int_col ASC)");
+    // analytic expr in Where
+    AnalysisError(
+        "select id, tinyint_col from functional.alltypes "
+          + "where row_number() over(order by id) > 1",
+        "WHERE clause must not contain analytic expressions: row_number() OVER "
+          + "(ORDER BY id ASC)");
+    // analytic expr with Distinct
+    AnalysisError(
+        "select id, tinyint_col, sum(distinct tinyint_col) over(order by id) "
+          + "from functional.alltypes",
+        "DISTINCT not allowed in analytic function");
+    // select list alias needs to be ignored
+    AnalysisError(
+        "select min(id) over (order by tinyint_col) as X from functional.alltypes "
+          + "group by id, tinyint_col order by rank() over (order by X)",
+        "Nesting of analytic expressions is not allowed");
+    // IMPALA-1256: AnalyticExpr.resetAnalysisState() didn't sync up w/ orderByElements_
+    AnalyzesOk("with t as ("
+        + "select * from (select sum(t1.year) over ("
+        + "  order by max(t1.id), t1.year "
+        + "  rows between unbounded preceding and 5 preceding) "
+        + "from functional.alltypes t1 group by t1.year) t1) select * from t");
+    AnalyzesOk("with t as ("
+        + "select sum(t1.smallint_col) over () from functional.alltypes t1) "
+        + "select * from t");
+    // IMPALA-1234
+    AnalyzesOk("with t as (select 1 as int_col_1 from functional.alltypesagg t1) "
+        + "select count(t1.int_col_1) as int_col_1 from t t1 where t1.int_col_1 is null "
+        + "group by t1.int_col_1 union all "
+        + "select min(t1.day) over () from functional.alltypesagg t1");
+    // IMPALA-1354: Constant expressions in order by and partition by exprs
+    AnalysisError(
+        "select rank() over (order by 1) from functional.alltypestiny",
+        "Expressions in the ORDER BY clause must not be constant: 1");
+    AnalysisError(
+        "select rank() over (partition by 2 order by id) from functional.alltypestiny",
+        "Expressions in the PARTITION BY clause must not be constant: 2");
+    AnalysisError(
+        "select rank() over (partition by 2 order by 1) from functional.alltypestiny",
+        "Expressions in the PARTITION BY clause must not be constant: 2");
+
+    // nested analytic exprs
+    AnalysisError(
+        "select sum(int_col) over (partition by id, rank() over (order by int_col) "
+          + "order by tinyint_col, int_col "
+          + "rows between 2 following and 4 following) from functional.alltypes",
+        "Nesting of analytic expressions is not allowed");
+    AnalysisError(
+        "select lead(rank() over (order by int_col)) over (partition by id "
+          + "order by tinyint_col, int_col) from functional.alltypes",
+        "Nesting of analytic expressions is not allowed");
+    AnalysisError(
+        "select max(int_col) over (partition by id "
+          + "order by rank() over (order by tinyint_col), int_col) "
+          + "from functional.alltypes",
+        "Nesting of analytic expressions is not allowed");
+
+    // lead/lag variants
+    AnalyzesOk(
+        "select lag(int_col, 10, 5 + 1) over (partition by id, bool_col "
+          + "order by tinyint_col, int_col) from functional.alltypes");
+    AnalyzesOk(
+        "select lead(string_col, 1, 'default') over ("
+          + "order by tinyint_col, int_col) from functional.alltypes");
+    AnalyzesOk(
+        "select lag(bool_col, 3) over ("
+          + "order by id, int_col) from functional.alltypes");
+    AnalyzesOk(
+        "select lead(float_col, 2) over (partition by string_col, timestamp_col "
+          + "order by tinyint_col, int_col) from functional.alltypes");
+    AnalyzesOk(
+        "select lag(double_col) over ("
+          + "order by string_col, int_col) from functional.alltypes");
+    AnalyzesOk(
+        "select lead(timestamp_col) over (partition by id "
+          + "order by tinyint_col, int_col) from functional.alltypes");
+    // missing offset w/ default
+    AnalysisError(
+        "select lag(string_col, 'x') over (partition by id "
+          + "order by tinyint_col, int_col) from functional.alltypes",
+        "No matching function with signature: lag(STRING, STRING)");
+    // mismatched default type
+    AnalysisError(
+        "select lead(int_col, 1, 'x') over ("
+          + "order by tinyint_col, int_col) from functional.alltypes",
+        "No matching function with signature: lead(INT, TINYINT, STRING)");
+    // missing params
+    AnalysisError(
+        "select lag() over (partition by id "
+          + "order by tinyint_col, int_col) from functional.alltypes",
+        "No matching function with signature: lag()");
+    // bad offsets
+    AnalysisError(
+        "select lead(int_col, -1) over ("
+          + "order by tinyint_col, int_col) from functional.alltypes",
+        "The offset parameter of LEAD/LAG must be a constant positive integer");
+    AnalysisError(
+        "select lag(int_col, tinyint_col * 2, 5) over ("
+          + "order by tinyint_col, int_col) from functional.alltypes",
+        "The offset parameter of LEAD/LAG must be a constant positive integer");
+    AnalysisError(
+        "select lag(int_col, 1, int_col) over ("
+          + "order by tinyint_col, int_col) from functional.alltypes",
+        "The default parameter (parameter 3) of LEAD/LAG must be a constant");
+
+    // wrong type of function
+    AnalysisError("select abs(float_col) over (partition by id order by tinyint_col "
+        + "rows between unbounded preceding and current row) from functional.alltypes",
+        "OVER clause requires aggregate or analytic function: abs(float_col)");
+    AnalysisError("select group_concat(string_col) over (order by tinyint_col "
+        + "rows between unbounded preceding and current row) from functional.alltypes",
+        "Aggregate function 'group_concat(string_col)' not supported with OVER clause.");
+    // Order By missing
+    AnalysisError("select sum(int_col) over (partition by id "
+        + "rows between unbounded preceding and current row) from functional.alltypes",
+        "Windowing clause requires ORDER BY clause");
+    // Order By missing for ranking fn
+    AnalysisError("select dense_rank() over (partition by id) from functional.alltypes",
+        "'dense_rank()' requires an ORDER BY clause");
+    // Order By missing for offset fn
+    AnalysisError("select lag(tinyint_col, 1, null) over (partition by id) "
+        + "from functional.alltypes",
+        "'lag(tinyint_col, 1, NULL)' requires an ORDER BY clause");
+    // Window for ranking fn
+    AnalysisError("select row_number() over (partition by id order by tinyint_col "
+        + "rows between unbounded preceding and current row) from functional.alltypes",
+        "Windowing clause not allowed with 'row_number()'");
+    // Window for offset fn
+    AnalysisError("select lead(tinyint_col, 1, null) over (partition by id "
+        + "order by tinyint_col rows between unbounded preceding and current row) "
+        + "from functional.alltypes",
+        "Windowing clause not allowed with 'lead(tinyint_col, 1, NULL)'");
+
+    // windows
+    AnalysisError("select sum(tinyint_col) over (partition by id "
+        + "order by tinyint_col rows between unbounded following and current row) "
+        + "from functional.alltypes",
+        "UNBOUNDED FOLLOWING is only allowed for upper bound of BETWEEN");
+    AnalysisError("select sum(tinyint_col) over (partition by id "
+        + "order by tinyint_col rows unbounded following) from functional.alltypes",
+        "UNBOUNDED FOLLOWING is only allowed for upper bound of BETWEEN");
+    AnalysisError("select sum(tinyint_col) over (partition by id "
+        + "order by tinyint_col rows between current row and unbounded preceding) "
+        + "from functional.alltypes",
+        "UNBOUNDED PRECEDING is only allowed for lower bound of BETWEEN");
+    AnalysisError("select sum(tinyint_col) over (partition by id "
+        + "order by tinyint_col rows 2 following) from functional.alltypes",
+        "FOLLOWING requires a BETWEEN clause");
+    AnalysisError(
+        "select sum(tinyint_col) over (partition by id "
+          + "order by tinyint_col rows between 2 following and current row) "
+          + "from functional.alltypes",
+        "A lower window bound of FOLLOWING requires that the upper bound also be "
+          + "FOLLOWING");
+    AnalysisError(
+        "select sum(tinyint_col) over (partition by id "
+          + "order by tinyint_col rows between current row and 2 preceding) "
+          + "from functional.alltypes",
+        "An upper window bound of PRECEDING requires that the lower bound also be "
+          + "PRECEDING");
+
+    // offset boundaries
+    AnalysisError(
+        "select min(int_col) over (partition by id order by tinyint_col "
+          + "rows between tinyint_col preceding and current row) "
+          + "from functional.alltypes",
+        "For ROWS window, the value of a PRECEDING/FOLLOWING offset must be a "
+          + "constant positive integer: tinyint_col PRECEDING");
+    AnalysisError(
+        "select min(int_col) over (partition by id order by tinyint_col "
+          + "rows between current row and '2' following) from functional.alltypes",
+        "For ROWS window, the value of a PRECEDING/FOLLOWING offset must be a "
+          + "constant positive integer: '2' FOLLOWING");
+    AnalysisError(
+        "select min(int_col) over (partition by id order by tinyint_col "
+          + "rows between -2 preceding and current row) from functional.alltypes",
+        "For ROWS window, the value of a PRECEDING/FOLLOWING offset must be a "
+          + "constant positive integer: -2 PRECEDING");
+    AnalysisError(
+        "select min(int_col) over (partition by id order by tinyint_col "
+          + "rows between 2 preceding and 3 preceding) from functional.alltypes",
+        "Offset boundaries are in the wrong order: ROWS BETWEEN 2 PRECEDING AND "
+          + "3 PRECEDING");
+    AnalysisError(
+        "select min(int_col) over (partition by id order by tinyint_col "
+          + "rows between count(*) preceding and current row) from functional.alltypes",
+        "For ROWS window, the value of a PRECEDING/FOLLOWING offset must be a "
+          + "constant positive integer: count(*) PRECEDING");
+
+    // TODO: Enable after RANGE windows with offset boundaries are supported.
+    //AnalysisError(
+    //    "select min(int_col) over (partition by id order by float_col "
+    //      + "range between -2.1 preceding and current row) from functional.alltypes",
+    //    "For RANGE window, the value of a PRECEDING/FOLLOWING offset must be a "
+    //      + "constant positive number: -2.1 PRECEDING");
+    //AnalysisError(
+    //    "select min(int_col) over (partition by id order by int_col "
+    //      + "range between current row and 2.1 following) from functional.alltypes",
+    //    "The value expression of a PRECEDING/FOLLOWING clause of a RANGE window must "
+    //      + "be implicitly convertable to the ORDER BY expression's type: 2.1 cannot "
+    //      + "be implicitly converted to INT");
+    //AnalysisError(
+    //    "select min(int_col) over (partition by id order by int_col "
+    //      + "range between 2 * tinyint_col preceding and current row) "
+    //      + "from functional.alltypes",
+    //    "For RANGE window, the value of a PRECEDING/FOLLOWING offset must be a "
+    //      + "constant positive number");
+    //AnalysisError(
+    //    "select min(int_col) over (partition by id order by int_col "
+    //      + "range between 3.1 following and 2.0 following) "
+    //      + "from functional.alltypes",
+    //    "Offset boundaries are in the wrong order");
+    //// multiple ordering exprs w/ range offset
+    //AnalysisError(
+    //    "select min(int_col) over (partition by id order by int_col, tinyint_col "
+    //      + "range between 2 preceding and current row) "
+    //      + "from functional.alltypes",
+    //    "Only one ORDER BY expression allowed if used with a RANGE window with "
+    //      + "PRECEDING/FOLLOWING");
   }
 
   /**
@@ -489,23 +963,21 @@ public class AnalyzeExprsTest extends AnalyzerTest {
    */
   @Test
   public void TestArithmeticTypeCasts() throws AnalysisException {
-    // test all numeric types and the null type
-    List<ColumnType> numericTypes =
-        new ArrayList<ColumnType>(ColumnType.getFixedSizeNumericTypes());
-    numericTypes.add(ColumnType.NULL);
-    for (ColumnType type1 : numericTypes) {
-      // Decimal has custom type promotion rules which are tested elsewhere.
-      if (type1.isDecimal()) continue;
-      for (ColumnType type2 : numericTypes) {
-        if (type2.isDecimal()) continue;
-
-        ColumnType compatibleType =
-            ColumnType.getAssignmentCompatibleType(type1, type2);
-        ColumnType promotedType = compatibleType.getNextResolutionType();
+    // Test all non-decimal numeric types and the null type.
+    // Decimal has custom type promotion rules which are tested elsewhere.
+    Type[] numericTypes = new Type[] { Type.TINYINT, Type.SMALLINT, Type.INT,
+        Type.BIGINT, Type.FLOAT, Type.DOUBLE , Type.NULL };
+    for (Type type1: numericTypes) {
+      for (Type type2: numericTypes) {
+        Type t = Type.getAssignmentCompatibleType(type1, type2);
+        assertTrue(t.isScalarType());
+        ScalarType compatibleType = (ScalarType) t;
+        Type promotedType = compatibleType.getNextResolutionType();
         boolean inputsNull = false;
         if (type1.isNull() && type2.isNull()) {
           inputsNull = true;
-          promotedType = compatibleType = ColumnType.INT;
+          promotedType = Type.DOUBLE;
+          compatibleType = Type.INT;
         }
 
         // +, -, *, %
@@ -522,15 +994,15 @@ public class AnalyzeExprsTest extends AnalyzerTest {
         typeCastTest(type1, type2, true, ArithmeticExpr.Operator.MULTIPLY, null,
             promotedType);
         typeCastTest(type1, type2, false, ArithmeticExpr.Operator.MOD, null,
-            compatibleType);
+            inputsNull ? Type.DOUBLE : compatibleType);
         typeCastTest(type1, type2, true, ArithmeticExpr.Operator.MOD, null,
-            compatibleType);
+            inputsNull ? Type.DOUBLE : compatibleType);
 
         // /
         typeCastTest(type1, type2, false, ArithmeticExpr.Operator.DIVIDE, null,
-            inputsNull ? promotedType : ColumnType.DOUBLE);
+            Type.DOUBLE);
         typeCastTest(type1, type2, true, ArithmeticExpr.Operator.DIVIDE, null,
-            inputsNull ? promotedType : ColumnType.DOUBLE);
+            Type.DOUBLE);
 
         // div, &, |, ^ only for fixed-point types
         if ((!type1.isFixedPointType() && !type1.isNull())
@@ -556,12 +1028,11 @@ public class AnalyzeExprsTest extends AnalyzerTest {
       }
     }
 
-    List<ColumnType> fixedPointTypes = new ArrayList<ColumnType>(
-        ColumnType.getIntegerTypes());
-    fixedPointTypes.add(ColumnType.NULL);
-    for (ColumnType type: fixedPointTypes) {
+    List<Type> fixedPointTypes = new ArrayList<Type>(Type.getIntegerTypes());
+    fixedPointTypes.add(Type.NULL);
+    for (Type type: fixedPointTypes) {
       typeCastTest(null, type, false, ArithmeticExpr.Operator.BITNOT, null,
-          type.isNull() ? ColumnType.INT : type);
+          type.isNull() ? Type.INT : type);
     }
   }
 
@@ -570,17 +1041,17 @@ public class AnalyzeExprsTest extends AnalyzerTest {
    */
   @Test
   public void TestComparisonTypeCasts() throws AnalysisException {
-    // test all numeric types and the null type
-    List<ColumnType> types =
-        new ArrayList<ColumnType>(ColumnType.getFixedSizeNumericTypes());
-    types.add(ColumnType.NULL);
+    // Test all non-decimal numeric types and the null type.
+    // Decimal has custom type promotion rules which are tested elsewhere.
+    Type[] types = new Type[] { Type.TINYINT, Type.SMALLINT, Type.INT,
+        Type.BIGINT, Type.FLOAT, Type.DOUBLE , Type.NULL };
 
     // test on all comparison ops
-    for (BinaryPredicate.Operator cmpOp : BinaryPredicate.Operator.values()) {
-      for (ColumnType type1 : types) {
-        for (ColumnType type2 : types) {
-          ColumnType compatibleType =
-              ColumnType.getAssignmentCompatibleType(type1, type2);
+    for (BinaryPredicate.Operator cmpOp: BinaryPredicate.Operator.values()) {
+      for (Type type1: types) {
+        for (Type type2: types) {
+          Type compatibleType =
+              Type.getAssignmentCompatibleType(type1, type2);
           typeCastTest(type1, type2, false, null, cmpOp, compatibleType);
           typeCastTest(type1, type2, true, null, cmpOp, compatibleType);
         }
@@ -592,11 +1063,10 @@ public class AnalyzeExprsTest extends AnalyzerTest {
    * Generate an expr of the form "<type1> <arithmeticOp | cmpOp> <type2>"
    * and make sure that the expr has the correct type (opType for arithmetic
    * ops or bool for comparisons) and that both operands are of type 'opType'.
-   * @throws AnalysisException
    */
-  private void typeCastTest(ColumnType type1, ColumnType type2,
+  private void typeCastTest(Type type1, Type type2,
       boolean op1IsLiteral, ArithmeticExpr.Operator arithmeticOp,
-      BinaryPredicate.Operator cmpOp, ColumnType opType) throws AnalysisException {
+      BinaryPredicate.Operator cmpOp, Type opType) throws AnalysisException {
     Preconditions.checkState((arithmeticOp == null) != (cmpOp == null));
     boolean arithmeticMode = arithmeticOp != null;
     String op1 = "";
@@ -624,18 +1094,19 @@ public class AnalyzeExprsTest extends AnalyzerTest {
       assertEquals(selectListExprs.size(), 1);
       // check the first expr in select list
       expr = selectListExprs.get(0);
-      assert(opType.equals(expr.getType()));
+      Assert.assertEquals("opType= " + opType + " exprType=" + expr.getType(),
+          opType, expr.getType());
     } else {
       // check the where clause
       expr = select.getWhereClause();
       if (!expr.getType().isNull()) {
-        assertEquals(PrimitiveType.BOOLEAN, expr.getType().getPrimitiveType());
+        assertEquals(Type.BOOLEAN, expr.getType());
       }
     }
     checkCasts(expr);
     // The children's types must be NULL or equal to the requested opType.
-    ColumnType child1Type = expr.getChild(0).getType();
-    ColumnType child2Type = type1 == null ? null : expr.getChild(1).getType();
+    Type child1Type = expr.getChild(0).getType();
+    Type child2Type = type1 == null ? null : expr.getChild(1).getType();
     Assert.assertTrue("opType= " + opType + " child1Type=" + child1Type,
         opType.equals(child1Type) || opType.isNull() || child1Type.isNull());
     if (type1 != null) {
@@ -644,7 +1115,7 @@ public class AnalyzeExprsTest extends AnalyzerTest {
     }
   }
 
-  private void checkReturnType(String stmt, ColumnType resultType) {
+  private void checkReturnType(String stmt, Type resultType) {
     SelectStmt select = (SelectStmt) AnalyzesOk(stmt);
     ArrayList<Expr> selectListExprs = select.getResultExprs();
     assertNotNull(selectListExprs);
@@ -657,62 +1128,62 @@ public class AnalyzeExprsTest extends AnalyzerTest {
 
   @Test
   public void TestNumericLiteralTypeResolution() throws AnalysisException {
-    checkReturnType("select 1", ColumnType.TINYINT);
-    checkReturnType("select 1.1", ColumnType.createDecimalType(2,1));
-    checkReturnType("select 01.1", ColumnType.createDecimalType(2,1));
-    checkReturnType("select 1 + 1.1", ColumnType.DOUBLE);
-    checkReturnType("select 0.23 + 1.1", ColumnType.createDecimalType(4,2));
+    checkReturnType("select 1", Type.TINYINT);
+    checkReturnType("select 1.1", ScalarType.createDecimalType(2,1));
+    checkReturnType("select 01.1", ScalarType.createDecimalType(2,1));
+    checkReturnType("select 1 + 1.1", Type.DOUBLE);
+    checkReturnType("select 0.23 + 1.1", ScalarType.createDecimalType(4,2));
 
     checkReturnType("select float_col + float_col from functional.alltypestiny",
-        ColumnType.DOUBLE);
+        Type.DOUBLE);
     checkReturnType("select int_col + int_col from functional.alltypestiny",
-        ColumnType.BIGINT);
+        Type.BIGINT);
 
     // floating point + numeric literal = floating point
     checkReturnType("select float_col + 1.1 from functional.alltypestiny",
-        ColumnType.DOUBLE);
+        Type.DOUBLE);
     // decimal + numeric literal = decimal
     checkReturnType("select d1 + 1.1 from functional.decimal_tbl",
-        ColumnType.createDecimalType(11,1));
+        ScalarType.createDecimalType(11,1));
     // int + numeric literal = floating point
     checkReturnType("select int_col + 1.1 from functional.alltypestiny",
-        ColumnType.DOUBLE);
+        Type.DOUBLE);
 
     // Explicitly casting the literal to a decimal will override the behavior
     checkReturnType("select int_col + cast(1.1 as decimal(2,1)) from "
-        + " functional.alltypestiny", ColumnType.createDecimalType(12,1));
+        + " functional.alltypestiny", ScalarType.createDecimalType(12,1));
     checkReturnType("select float_col + cast(1.1 as decimal(2,1)) from "
-        + " functional.alltypestiny", ColumnType.createDecimalType(38,9));
+        + " functional.alltypestiny", ScalarType.createDecimalType(38,9));
     checkReturnType("select float_col + cast(1.1*1.2+1.3 as decimal(2,1)) from "
-        + " functional.alltypestiny", ColumnType.createDecimalType(38,9));
+        + " functional.alltypestiny", ScalarType.createDecimalType(38,9));
 
     // The location and complexity of the expr should not matter.
     checkReturnType("select 1.0 + float_col + 1.1 from functional.alltypestiny",
-        ColumnType.DOUBLE);
+        Type.DOUBLE);
     checkReturnType("select 1.0 + 2.0 + float_col from functional.alltypestiny",
-        ColumnType.DOUBLE);
+        Type.DOUBLE);
     checkReturnType("select 1.0 + 2.0 + pi() * float_col from functional.alltypestiny",
-        ColumnType.DOUBLE);
+        Type.DOUBLE);
     checkReturnType("select 1.0 + d1 + 1.1 from functional.decimal_tbl",
-        ColumnType.createDecimalType(12,1));
+        ScalarType.createDecimalType(12,1));
     checkReturnType("select 1.0 + 2.0 + d1 from functional.decimal_tbl",
-        ColumnType.createDecimalType(11,1));
+        ScalarType.createDecimalType(11,1));
     checkReturnType("select 1.0 + 2.0 + pi()*d1 from functional.decimal_tbl",
-        ColumnType.createDecimalType(38,17));
+        ScalarType.createDecimalType(38,17));
 
     // Test with multiple cols
     checkReturnType("select double_col + 1.23 + float_col + 1.0 " +
-        " from functional.alltypestiny", ColumnType.DOUBLE);
+        " from functional.alltypestiny", Type.DOUBLE);
     checkReturnType("select double_col + 1.23 + float_col + 1.0 + int_col " +
-        " + bigint_col from functional.alltypestiny", ColumnType.DOUBLE);
+        " + bigint_col from functional.alltypestiny", Type.DOUBLE);
     checkReturnType("select d1 + 1.23 + d2 + 1.0 " +
-        " from functional.decimal_tbl", ColumnType.createDecimalType(14,2));
+        " from functional.decimal_tbl", ScalarType.createDecimalType(14,2));
 
     // Test with slot of both decimal and non-decimal
     checkReturnType("select t1.int_col + t2.c1 from functional.alltypestiny t1 " +
-        " cross join functional.decimal_tiny t2", ColumnType.createDecimalType(15,4));
+        " cross join functional.decimal_tiny t2", ScalarType.createDecimalType(15,4));
     checkReturnType("select 1.1 + t1.int_col + t2.c1 from functional.alltypestiny t1 " +
-        " cross join functional.decimal_tiny t2", ColumnType.createDecimalType(38,17));
+        " cross join functional.decimal_tiny t2", ScalarType.createDecimalType(38,17));
   }
 
   /**
@@ -787,9 +1258,9 @@ public class AnalyzeExprsTest extends AnalyzerTest {
         new String[] {"tinyint_col", "smallint_col", "int_col", "bigint_col", "NULL"};
 
     // Tests all time units.
-    for (TimeUnit timeUnit : TimeUnit.values()) {
+    for (TimeUnit timeUnit: TimeUnit.values()) {
       // Tests on all valid time value types (fixed points).
-      for (String col : valueTypeCols) {
+      for (String col: valueTypeCols) {
         // Non-function call like version.
         AnalyzesOk("select timestamp_col + interval " + col + " " + timeUnit.toString() +
             " from functional.alltypes");
@@ -821,6 +1292,11 @@ public class AnalyzeExprsTest extends AnalyzerTest {
         "Operand 'string_col' of timestamp arithmetic expression " +
         "'string_col + INTERVAL 10 years' returns type 'STRING'. " +
         "Expected type 'TIMESTAMP'.");
+    AnalysisError(
+        "select int_struct_col + interval 10 years from functional.allcomplextypes",
+        "Operand 'int_struct_col' of timestamp arithmetic expression " +
+        "'int_struct_col + INTERVAL 10 years' returns type 'STRUCT<f1:INT,f2:INT>'. " +
+        "Expected type 'TIMESTAMP'.");
     // Reversed interval and timestamp using addition.
     AnalysisError("select interval 10 years + float_col from functional.alltypes",
         "Operand 'float_col' of timestamp arithmetic expression " +
@@ -830,6 +1306,11 @@ public class AnalyzeExprsTest extends AnalyzerTest {
         "Operand 'string_col' of timestamp arithmetic expression " +
         "'INTERVAL 10 years + string_col' returns type 'STRING'. " +
         "Expected type 'TIMESTAMP'");
+    AnalysisError(
+        "select interval 10 years + int_array_col from functional.allcomplextypes",
+        "Operand 'int_array_col' of timestamp arithmetic expression " +
+        "'INTERVAL 10 years + int_array_col' returns type 'ARRAY<INT>'. " +
+        "Expected type 'TIMESTAMP'.");
     // First operand does not return a timestamp. Function-call like version.
     AnalysisError("select date_add(float_col, interval 10 years) " +
         "from functional.alltypes",
@@ -841,6 +1322,11 @@ public class AnalyzeExprsTest extends AnalyzerTest {
         "Operand 'string_col' of timestamp arithmetic expression " +
         "'DATE_ADD(string_col, INTERVAL 10 years)' returns type 'STRING'. " +
         "Expected type 'TIMESTAMP'.");
+    AnalysisError("select date_add(int_map_col, interval 10 years) " +
+        "from functional.allcomplextypes",
+        "Operand 'int_map_col' of timestamp arithmetic expression " +
+        "'DATE_ADD(int_map_col, INTERVAL 10 years)' returns type 'MAP<STRING,INT>'. " +
+        "Expected type 'TIMESTAMP'.");
 
     // Second operand is not compatible with a fixed-point type.
     // Non-function-call like version.
@@ -848,6 +1334,11 @@ public class AnalyzeExprsTest extends AnalyzerTest {
         "Operand '5.2' of timestamp arithmetic expression " +
         "'timestamp_col + INTERVAL 5.2 years' returns type 'DECIMAL(2,1)'. " +
         "Expected an integer type.");
+    AnalysisError("select cast(0 as timestamp) + interval int_array_col years " +
+        "from functional.allcomplextypes",
+        "Operand 'int_array_col' of timestamp arithmetic expression " +
+        "'CAST(0 AS TIMESTAMP) + INTERVAL int_array_col years' " +
+        "returns type 'ARRAY<INT>'. Expected an integer type.");
 
     // No implicit cast from STRING to integer types.
     AnalysisError("select timestamp_col + interval '10' years from functional.alltypes",
@@ -903,7 +1394,7 @@ public class AnalyzeExprsTest extends AnalyzerTest {
   }
 
   @Test
-  public void TestFunctions() throws AnalysisException {
+  public void TestFunctionCallExpr() throws AnalysisException {
     AnalyzesOk("select pi()");
     AnalyzesOk("select sin(pi())");
     AnalyzesOk("select sin(cos(pi()))");
@@ -924,6 +1415,23 @@ public class AnalyzeExprsTest extends AnalyzerTest {
     AnalyzesOk("select round(cast('1.1' as decimal), cast(1 as int))");
     // 1 is a tinyint, so the function is not a perfect match
     AnalyzesOk("select round(cast('1.1' as decimal), 1)");
+
+    // No matching signature for complex type.
+    AnalysisError("select lower(int_struct_col) from functional.allcomplextypes",
+        "No matching function with signature: lower(STRUCT<f1:INT,f2:INT>).");
+
+    // Special cases for FROM in function call
+    AnalyzesOk("select extract(year from now())");
+    AnalysisError("select extract(foo from now())",
+        "Time unit 'foo' in expression 'EXTRACT(foo FROM now())' is invalid. Expected " +
+        "one of YEAR, MONTH, DAY, HOUR, MINUTE, SECOND, MILLISECOND, EPOCH.");
+    AnalysisError("select extract(year from 0)",
+        "Expression '0' in 'EXTRACT(year FROM 0)' has a return type of TINYINT but a " +
+        "TIMESTAMP is required.");
+    AnalysisError("select functional.extract(year from now())",
+        "Function functional.extract conflicts with the EXTRACT builtin");
+    AnalysisError("select date_part(year from now())",
+        "Function DATE_PART does not accept the keyword FROM");
   }
 
   @Test
@@ -998,11 +1506,19 @@ public class AnalyzeExprsTest extends AnalyzerTest {
     AnalysisError("select case when 20 then 20 when 1 > 2 then timestamp_col " +
         "when 4 < 5 then 2 else 15 end from functional.alltypes",
         "When expr '20' is not of type boolean and not castable to type boolean.");
+    AnalysisError("select case when int_array_col then 20 when 1 > 2 then id end " +
+        "from functional.allcomplextypes",
+        "When expr 'int_array_col' is not of type boolean and not castable to " +
+        "type boolean.");
     // Then exprs return incompatible types.
     AnalysisError("select case when 20 > 10 then 20 when 1 > 2 then timestamp_col " +
         "when 4 < 5 then 2 else 15 end from functional.alltypes",
         "Incompatible return types 'TINYINT' and 'TIMESTAMP' " +
          "of exprs '20' and 'timestamp_col'.");
+    AnalysisError("select case when 20 > 10 then 20 when 1 > 2 then int_map_col " +
+        "else 15 end from functional.allcomplextypes",
+        "Incompatible return types 'TINYINT' and 'MAP<STRING,INT>' of exprs " +
+        "'20' and 'int_map_col'.");
 
     // With case expr.
     AnalyzesOk("select case int_col when 20 then 30 else 15 end " +
@@ -1045,6 +1561,76 @@ public class AnalyzeExprsTest extends AnalyzerTest {
   }
 
   @Test
+  public void TestDecodeExpr() throws AnalysisException {
+    AnalyzesOk("select decode(1, 1, 1)");
+    AnalyzesOk("select decode(1, 1, 'foo')");
+    AnalyzesOk("select decode(1, 2, true, false)");
+    AnalyzesOk("select decode(null, null, null, null, null, null)");
+    assertCaseEquivalence(
+        "CASE WHEN 1 = 2 THEN NULL ELSE 'foo' END",
+        "decode(1, 2, NULL, 'foo')");
+    assertCaseEquivalence(
+        "CASE WHEN 1 = 2 THEN NULL ELSE 4 END",
+        "decode(1, 2, NULL, 4)");
+    assertCaseEquivalence(
+        "CASE WHEN string_col = 'a' THEN 1 WHEN string_col = 'b' THEN 2 ELSE 3 END",
+        "decode(string_col, 'a', 1, 'b', 2, 3)");
+    assertCaseEquivalence(
+        "CASE WHEN int_col IS NULL AND bigint_col IS NULL "
+            + "OR int_col = bigint_col THEN tinyint_col ELSE smallint_col END",
+        "decode(int_col, bigint_col, tinyint_col, smallint_col)");
+    assertCaseEquivalence(
+        "CASE WHEN int_col = 1 THEN 1 WHEN int_col IS NULL AND bigint_col IS NULL OR "
+            + "int_col = bigint_col THEN 2 WHEN int_col IS NULL THEN 3 ELSE 4 END",
+        "decode(int_col, 1, 1, bigint_col, 2, NULL, 3, 4)");
+    assertCaseEquivalence(
+        "CASE WHEN NULL IS NULL THEN NULL ELSE NULL END",
+        "decode(null, null, null, null)");
+
+    AnalysisError("select decode()",
+        "DECODE in 'decode()' requires at least 3 arguments");
+    AnalysisError("select decode(1)",
+        "DECODE in 'decode(1)' requires at least 3 arguments");
+    AnalysisError("select decode(1, 2)",
+        "DECODE in 'decode(1, 2)' requires at least 3 arguments");
+    AnalysisError("select decode(*)", "Cannot pass '*'");
+    AnalysisError("select decode(distinct 1, 2, 3)", "Cannot pass 'DISTINCT'");
+    AnalysisError("select decode(true, 'foo', 1)",
+        "operands of type BOOLEAN and STRING are not comparable: TRUE = 'foo'");
+    AnalysisError("select functional.decode(1, 1, 1)", "functional.decode() unknown");
+  }
+
+  /**
+   * Assert that the caseSql and decodeSql have the same underlying child expr
+   * and thrift representation.
+   */
+  void assertCaseEquivalence(String caseSql, String decodeSql)
+      throws AnalysisException {
+    String sqlTemplate = "select %s from functional.alltypes";
+    SelectStmt stmt = (SelectStmt)AnalyzesOk(String.format(sqlTemplate, caseSql));
+    CaseExpr caseExpr =
+        (CaseExpr)stmt.getSelectList().getItems().get(0).getExpr();
+    List<SlotRef> slotRefs = Lists.newArrayList();
+    caseExpr.collect(Predicates.instanceOf(SlotRef.class), slotRefs);
+    for (SlotRef slotRef: slotRefs) {
+      slotRef.getDesc().setIsMaterialized(true);
+      slotRef.getDesc().setByteOffset(0);
+    }
+    TExpr caseThrift = caseExpr.treeToThrift();
+    stmt = (SelectStmt)AnalyzesOk(String.format(sqlTemplate, decodeSql));
+    CaseExpr decodeExpr =
+        (CaseExpr)stmt.getSelectList().getItems().get(0).getExpr();
+    Assert.assertEquals(caseSql, decodeExpr.toCaseSql());
+    slotRefs.clear();
+    decodeExpr.collect(Predicates.instanceOf(SlotRef.class), slotRefs);
+    for (SlotRef slotRef: slotRefs) {
+      slotRef.getDesc().setIsMaterialized(true);
+      slotRef.getDesc().setByteOffset(0);
+    }
+    Assert.assertEquals(caseThrift, decodeExpr.treeToThrift());
+  }
+
+  @Test
   public void TestConditionalExprs() {
     // Test IF conditional expr.
     AnalyzesOk("select if(true, false, false)");
@@ -1056,6 +1642,11 @@ public class AnalyzeExprsTest extends AnalyzerTest {
     AnalyzesOk("select if(bool_col, NULL, true) from functional.alltypes");
     AnalyzesOk("select if(bool_col, false, NULL) from functional.alltypes");
     AnalyzesOk("select if(NULL, NULL, NULL) from functional.alltypes");
+    // No matching signature.
+    AnalysisError("select if(true, int_struct_col, int_struct_col) " +
+        "from functional.allcomplextypes",
+        "No matching function with signature: " +
+        "if(BOOLEAN, STRUCT<f1:INT,f2:INT>, STRUCT<f1:INT,f2:INT>).");
 
     // if() only accepts three arguments
     AnalysisError("select if(true, false, true, true)",
@@ -1081,6 +1672,9 @@ public class AnalyzeExprsTest extends AnalyzerTest {
     // Incompatible types.
     AnalysisError("select isnull('a', true)",
         "No matching function with signature: isnull(STRING, BOOLEAN).");
+    // No matching signature.
+    AnalysisError("select isnull(1, int_array_col) from functional.allcomplextypes",
+        "No matching function with signature: isnull(TINYINT, ARRAY<INT>).");
   }
 
   @Test
@@ -1094,24 +1688,23 @@ public class AnalyzeExprsTest extends AnalyzerTest {
     // Add a udf default.udf(), default.udf(int), default.udf(string...),
     // default.udf(int, string...) and functional.udf(double)
     catalog_.addFunction(new ScalarFunction(new FunctionName("default", "udf"),
-        new ArrayList<ColumnType>(), ColumnType.INT, dummyUri, null, null, null));
+        new ArrayList<Type>(), Type.INT, dummyUri, null, null, null));
     catalog_.addFunction(new ScalarFunction(new FunctionName("default", "udf"),
-        Lists.newArrayList(ColumnType.INT),
-        ColumnType.INT, dummyUri, null, null, null));
+        Lists.<Type>newArrayList(Type.INT),
+        Type.INT, dummyUri, null, null, null));
     ScalarFunction varArgsUdf1 = new ScalarFunction(new FunctionName("default", "udf"),
-        Lists.newArrayList(ColumnType.STRING),
-        ColumnType.INT, dummyUri, null, null, null);
+        Lists.<Type>newArrayList(Type.STRING),
+        Type.INT, dummyUri, null, null, null);
     varArgsUdf1.setHasVarArgs(true);
     catalog_.addFunction(varArgsUdf1);
     ScalarFunction varArgsUdf2 = new ScalarFunction(new FunctionName("default", "udf"),
-        Lists.newArrayList(
-            ColumnType.INT, ColumnType.STRING),
-        ColumnType.INT, dummyUri, null, null, null);
+        Lists.<Type>newArrayList(Type.INT, Type.STRING),
+        Type.INT, dummyUri, null, null, null);
     varArgsUdf2.setHasVarArgs(true);
     catalog_.addFunction(varArgsUdf2);
     ScalarFunction udf = new ScalarFunction(new FunctionName("functional", "udf"),
-        Lists.newArrayList(ColumnType.DOUBLE),
-        ColumnType.INT, dummyUri, null, null, null);
+        Lists.<Type>newArrayList(Type.DOUBLE),
+        Type.INT, dummyUri, null, null, null);
     catalog_.addFunction(udf);
 
     AnalyzesOk("select udf()");
@@ -1178,16 +1771,17 @@ public class AnalyzeExprsTest extends AnalyzerTest {
     testInfixExprDepthLimit("select true", " and false");
     testInfixExprDepthLimit("select true", " or false");
 
-    // Arithmetic expr.
-    testInfixExprDepthLimit("select 1 ", " + 1");
+    // Arithmetic expr. Use a bigint value to avoid casts that make reasoning about the
+    // expr depth more difficult.
+    testInfixExprDepthLimit("select " + String.valueOf(Long.MAX_VALUE),
+        " + " + String.valueOf(Long.MAX_VALUE));
 
     // Function-call expr.
     testFuncExprDepthLimit("lower(", "'abc'", ")");
 
     // UDF.
     ScalarFunction udf = new ScalarFunction(new FunctionName("default", "udf"),
-        Lists.newArrayList(ColumnType.INT),
-        ColumnType.INT, new HdfsUri(""), null, null, null);
+        Lists.<Type>newArrayList(Type.INT), Type.INT, new HdfsUri(""), null, null, null);
     catalog_.addFunction(udf);
     try {
       testFuncExprDepthLimit("udf(", "1", ")");
@@ -1203,10 +1797,10 @@ public class AnalyzeExprsTest extends AnalyzerTest {
   }
 
   // Verifies the resulting expr decimal type is exptectedType
-  private void testDecimalExpr(String expr, ColumnType expectedType) {
+  private void testDecimalExpr(String expr, Type expectedType) {
     SelectStmt selectStmt = (SelectStmt) AnalyzesOk("select " + expr);
     Expr root = selectStmt.resultExprs_.get(0);
-    ColumnType actualType = root.getType();
+    Type actualType = root.getType();
     Assert.assertTrue(
         "Expr: " + expr + " Expected: " + expectedType + " Actual: " + actualType,
         expectedType.equals(actualType));
@@ -1218,103 +1812,103 @@ public class AnalyzeExprsTest extends AnalyzerTest {
     String decimal_5_5 = "cast(1 as decimal(5, 5))";
     String decimal_38_34 = "cast(1 as decimal(38, 34))";
 
-    testDecimalExpr(decimal_10_0, ColumnType.createDecimalType(10, 0));
-    testDecimalExpr(decimal_5_5, ColumnType.createDecimalType(5, 5));
-    testDecimalExpr(decimal_38_34, ColumnType.createDecimalType(38, 34));
+    testDecimalExpr(decimal_10_0, ScalarType.createDecimalType(10, 0));
+    testDecimalExpr(decimal_5_5, ScalarType.createDecimalType(5, 5));
+    testDecimalExpr(decimal_38_34, ScalarType.createDecimalType(38, 34));
 
     // Test arithmetic operations.
     testDecimalExpr(decimal_10_0 + " + " + decimal_10_0,
-        ColumnType.createDecimalType(11, 0));
+        ScalarType.createDecimalType(11, 0));
     testDecimalExpr(decimal_10_0 + " - " + decimal_10_0,
-        ColumnType.createDecimalType(11, 0));
+        ScalarType.createDecimalType(11, 0));
     testDecimalExpr(decimal_10_0 + " * " + decimal_10_0,
-        ColumnType.createDecimalType(21, 0));
+        ScalarType.createDecimalType(20, 0));
     testDecimalExpr(decimal_10_0 + " / " + decimal_10_0,
-        ColumnType.createDecimalType(21, 11));
+        ScalarType.createDecimalType(21, 11));
     testDecimalExpr(decimal_10_0 + " % " + decimal_10_0,
-        ColumnType.createDecimalType(10, 0));
+        ScalarType.createDecimalType(10, 0));
 
     testDecimalExpr(decimal_10_0 + " + " + decimal_5_5,
-        ColumnType.createDecimalType(16, 5));
+        ScalarType.createDecimalType(16, 5));
     testDecimalExpr(decimal_10_0 + " - " + decimal_5_5,
-        ColumnType.createDecimalType(16, 5));
+        ScalarType.createDecimalType(16, 5));
     testDecimalExpr(decimal_10_0 + " * " + decimal_5_5,
-        ColumnType.createDecimalType(16, 5));
+        ScalarType.createDecimalType(15, 5));
     testDecimalExpr(decimal_10_0 + " / " + decimal_5_5,
-        ColumnType.createDecimalType(21, 6));
+        ScalarType.createDecimalType(21, 6));
     testDecimalExpr(decimal_10_0 + " % " + decimal_5_5,
-            ColumnType.createDecimalType(5, 5));
+        ScalarType.createDecimalType(5, 5));
 
     testDecimalExpr(decimal_5_5 + " + " + decimal_10_0,
-        ColumnType.createDecimalType(16, 5));
+        ScalarType.createDecimalType(16, 5));
     testDecimalExpr(decimal_5_5 + " - " + decimal_10_0,
-        ColumnType.createDecimalType(16, 5));
+        ScalarType.createDecimalType(16, 5));
     testDecimalExpr(decimal_5_5 + " * " + decimal_10_0,
-        ColumnType.createDecimalType(16, 5));
+        ScalarType.createDecimalType(15, 5));
     testDecimalExpr(decimal_5_5 + " / " + decimal_10_0,
-        ColumnType.createDecimalType(16, 16));
+        ScalarType.createDecimalType(16, 16));
     testDecimalExpr(decimal_5_5 + " % " + decimal_10_0,
-        ColumnType.createDecimalType(5, 5));
+        ScalarType.createDecimalType(5, 5));
 
     // Test some overflow cases.
     testDecimalExpr(decimal_10_0 + " + " + decimal_38_34,
-        ColumnType.createDecimalType(38, 34));
+        ScalarType.createDecimalType(38, 34));
     testDecimalExpr(decimal_10_0 + " - " + decimal_38_34,
-        ColumnType.createDecimalType(38, 34));
+        ScalarType.createDecimalType(38, 34));
     testDecimalExpr(decimal_10_0 + " * " + decimal_38_34,
-        ColumnType.createDecimalType(38, 34));
+        ScalarType.createDecimalType(38, 34));
     testDecimalExpr(decimal_10_0 + " / " + decimal_38_34,
-        ColumnType.createDecimalType(38, 34));
+        ScalarType.createDecimalType(38, 34));
     testDecimalExpr(decimal_10_0 + " % " + decimal_38_34,
-        ColumnType.createDecimalType(38, 34));
+        ScalarType.createDecimalType(38, 34));
 
     testDecimalExpr(decimal_38_34 + " + " + decimal_5_5,
-        ColumnType.createDecimalType(38, 34));
+        ScalarType.createDecimalType(38, 34));
     testDecimalExpr(decimal_38_34 + " - " + decimal_5_5,
-        ColumnType.createDecimalType(38, 34));
+        ScalarType.createDecimalType(38, 34));
     testDecimalExpr(decimal_38_34 + " * " + decimal_5_5,
-        ColumnType.createDecimalType(38, 38));
+        ScalarType.createDecimalType(38, 38));
     testDecimalExpr(decimal_38_34 + " / " + decimal_5_5,
-        ColumnType.createDecimalType(38, 34));
+        ScalarType.createDecimalType(38, 34));
     testDecimalExpr(decimal_38_34 + " % " + decimal_5_5,
-        ColumnType.createDecimalType(34, 34));
+        ScalarType.createDecimalType(34, 34));
 
     testDecimalExpr(decimal_10_0 + " + " + decimal_10_0 + " + " + decimal_10_0,
-        ColumnType.createDecimalType(12, 0));
+        ScalarType.createDecimalType(12, 0));
     testDecimalExpr(decimal_10_0 + " - " + decimal_10_0 + " * " + decimal_10_0,
-        ColumnType.createDecimalType(22, 0));
+        ScalarType.createDecimalType(21, 0));
     testDecimalExpr(decimal_10_0 + " / " + decimal_10_0 + " / " + decimal_10_0,
-        ColumnType.createDecimalType(32, 22));
+        ScalarType.createDecimalType(32, 22));
     testDecimalExpr(decimal_10_0 + " % " + decimal_10_0 + " + " + decimal_10_0,
-        ColumnType.createDecimalType(11, 0));
+        ScalarType.createDecimalType(11, 0));
 
     // Operators between decimal and numeric types should be supported. The int
     // should be cast to the appropriate decimal (e.g. tinyint -> decimal(3,0)).
     testDecimalExpr(decimal_10_0 + " + cast(1 as tinyint)",
-        ColumnType.createDecimalType(11, 0));
+        ScalarType.createDecimalType(11, 0));
     testDecimalExpr(decimal_10_0 + " + cast(1 as smallint)",
-        ColumnType.createDecimalType(11, 0));
+        ScalarType.createDecimalType(11, 0));
     testDecimalExpr(decimal_10_0 + " + cast(1 as int)",
-        ColumnType.createDecimalType(11, 0));
+        ScalarType.createDecimalType(11, 0));
     testDecimalExpr(decimal_10_0 + " + cast(1 as bigint)",
-        ColumnType.createDecimalType(20, 0));
+        ScalarType.createDecimalType(20, 0));
     testDecimalExpr(decimal_10_0 + " + cast(1 as float)",
-        ColumnType.createDecimalType(38, 9));
+        ScalarType.createDecimalType(38, 9));
     testDecimalExpr(decimal_10_0 + " + cast(1 as double)",
-        ColumnType.createDecimalType(38, 17));
+        ScalarType.createDecimalType(38, 17));
 
     testDecimalExpr(decimal_5_5 + " + cast(1 as tinyint)",
-        ColumnType.createDecimalType(9, 5));
+        ScalarType.createDecimalType(9, 5));
     testDecimalExpr(decimal_5_5 + " - cast(1 as smallint)",
-        ColumnType.createDecimalType(11, 5));
+        ScalarType.createDecimalType(11, 5));
     testDecimalExpr(decimal_5_5 + " * cast(1 as int)",
-        ColumnType.createDecimalType(16, 5));
+        ScalarType.createDecimalType(15, 5));
     testDecimalExpr(decimal_5_5 + " % cast(1 as bigint)",
-        ColumnType.createDecimalType(5, 5));
+        ScalarType.createDecimalType(5, 5));
     testDecimalExpr(decimal_5_5 + " / cast(1 as float)",
-        ColumnType.createDecimalType(38, 9));
+        ScalarType.createDecimalType(38, 9));
     testDecimalExpr(decimal_5_5 + " + cast(1 as double)",
-        ColumnType.createDecimalType(38, 17));
+        ScalarType.createDecimalType(38, 17));
 
     AnalyzesOk("select " + decimal_5_5 + " = cast(1 as tinyint)");
     AnalyzesOk("select " + decimal_5_5 + " != cast(1 as smallint)");
@@ -1414,14 +2008,36 @@ public class AnalyzeExprsTest extends AnalyzerTest {
     AnalysisError("select round(cast(1.123 as decimal(10,3)), NULL)",
         "round() cannot be called with a NULL second argument.");
 
-    testDecimalExpr("round(1.23)", ColumnType.createDecimalType(1, 0));
-    testDecimalExpr("round(1.23, 1)", ColumnType.createDecimalType(2, 1));
-    testDecimalExpr("round(1.23, 0)", ColumnType.createDecimalType(1, 0));
-    testDecimalExpr("round(1.23, 3)", ColumnType.createDecimalType(4, 3));
-    testDecimalExpr("round(1.23, -1)", ColumnType.createDecimalType(1, 0));
-    testDecimalExpr("round(1.23, -2)", ColumnType.createDecimalType(1, 0));
+    // This has 39 digits and can only be represented as a DOUBLE.
+    AnalysisError("select precision(999999999999999999999999999999999999999.)",
+        "No matching function with signature: precision(DOUBLE).");
+
+    AnalysisError("select precision(cast(1 as float))",
+        "No matching function with signature: precision(FLOAT)");
+
+    AnalysisError("select precision(NULL)",
+        "Cannot resolve DECIMAL precision and scale from NULL type.");
+    AnalysisError("select scale(NULL)",
+        "Cannot resolve DECIMAL precision and scale from NULL type.");
+
+    testDecimalExpr("round(1.23)", ScalarType.createDecimalType(2, 0));
+    testDecimalExpr("round(1.23, 1)", ScalarType.createDecimalType(3, 1));
+    testDecimalExpr("round(1.23, 0)", ScalarType.createDecimalType(2, 0));
+    testDecimalExpr("round(1.23, 3)", ScalarType.createDecimalType(4, 3));
+    testDecimalExpr("round(1.23, -1)", ScalarType.createDecimalType(2, 0));
+    testDecimalExpr("round(1.23, -2)", ScalarType.createDecimalType(2, 0));
     testDecimalExpr("round(cast(1.23 as decimal(3,2)), -2)",
-        ColumnType.createDecimalType(1, 0));
+        ScalarType.createDecimalType(2, 0));
+
+    testDecimalExpr("ceil(123.45)", ScalarType.createDecimalType(4, 0));
+    testDecimalExpr("floor(12.345)", ScalarType.createDecimalType(3, 0));
+
+    testDecimalExpr("truncate(1.23)", ScalarType.createDecimalType(1, 0));
+    testDecimalExpr("truncate(1.23, 1)", ScalarType.createDecimalType(2, 1));
+    testDecimalExpr("truncate(1.23, 0)", ScalarType.createDecimalType(1, 0));
+    testDecimalExpr("truncate(1.23, 3)", ScalarType.createDecimalType(4, 3));
+    testDecimalExpr("truncate(1.23, -1)", ScalarType.createDecimalType(1, 0));
+    testDecimalExpr("truncate(1.23, -2)", ScalarType.createDecimalType(1, 0));
   }
 
   /**
@@ -1436,7 +2052,7 @@ public class AnalyzeExprsTest extends AnalyzerTest {
     AnalyzesOk(exprStr.toString());
     exprStr.append(repeatSuffix);
     AnalysisError(exprStr.toString(),
-        String.format("Exceeded the maximum depth of an expresison tree (%s).",
+        String.format("Exceeded the maximum depth of an expression tree (%s).",
         Expr.EXPR_DEPTH_LIMIT));
 
     // Test 10x the safe depth (already at 1x, append 9x).
@@ -1444,7 +2060,7 @@ public class AnalyzeExprsTest extends AnalyzerTest {
       exprStr.append(repeatSuffix);
     }
     AnalysisError(exprStr.toString(),
-        String.format("Exceeded the maximum depth of an expresison tree (%s).",
+        String.format("Exceeded the maximum depth of an expression tree (%s).",
         Expr.EXPR_DEPTH_LIMIT));
   }
 
@@ -1458,12 +2074,12 @@ public class AnalyzeExprsTest extends AnalyzerTest {
         Expr.EXPR_DEPTH_LIMIT - 1));
     AnalysisError("select " + getNestedFuncExpr(openFunc, baseArg, closeFunc,
         Expr.EXPR_DEPTH_LIMIT),
-        String.format("Exceeded the maximum depth of an expresison tree (%s).",
+        String.format("Exceeded the maximum depth of an expression tree (%s).",
         Expr.EXPR_DEPTH_LIMIT));
     // Test 10x the safe depth.
     AnalysisError("select " + getNestedFuncExpr(openFunc, baseArg, closeFunc,
         Expr.EXPR_DEPTH_LIMIT * 10),
-        String.format("Exceeded the maximum depth of an expresison tree (%s).",
+        String.format("Exceeded the maximum depth of an expression tree (%s).",
         Expr.EXPR_DEPTH_LIMIT));
   }
 
@@ -1482,5 +2098,70 @@ public class AnalyzeExprsTest extends AnalyzerTest {
       exprStr.append(closeFunc);
     }
     return exprStr.toString();
+  }
+
+  @Test
+  public void TestAppxCountDistinctOption() throws AnalysisException, CatalogException {
+    TQueryOptions queryOptions = new TQueryOptions();
+    queryOptions.setAppx_count_distinct(true);
+
+    // Accumulates count(distinct) for all columns of alltypesTbl or decimalTbl.
+    List<String> countDistinctFns = Lists.newArrayList();
+    // Accumulates count(distinct) for all columns of both alltypesTbl and decimalTbl.
+    List<String> allCountDistinctFns = Lists.newArrayList();
+
+    Table alltypesTbl = catalog_.getTable("functional", "alltypes");
+    for (Column col: alltypesTbl.getColumns()) {
+      String colName = col.getName();
+      // Test a single count(distinct) with some other aggs.
+      AnalyzesOk(String.format(
+          "select count(distinct %s), sum(distinct smallint_col), " +
+          "avg(float_col), min(%s) " +
+          "from functional.alltypes",
+          colName, colName), createAnalyzer(queryOptions));
+      countDistinctFns.add(String.format("count(distinct %s)", colName));
+    }
+    // Test a single query with a count(distinct) on all columns of alltypesTbl.
+    AnalyzesOk(String.format("select %s from functional.alltypes",
+        Joiner.on(",").join(countDistinctFns)), createAnalyzer(queryOptions));
+
+    allCountDistinctFns.addAll(countDistinctFns);
+    countDistinctFns.clear();
+    Table decimalTbl = catalog_.getTable("functional", "decimal_tbl");
+    for (Column col: decimalTbl.getColumns()) {
+      String colName = col.getName();
+      // Test a single count(distinct) with some other aggs.
+      AnalyzesOk(String.format(
+          "select count(distinct %s), sum(distinct d1), " +
+          "avg(d2), min(%s) " +
+          "from functional.decimal_tbl",
+          colName, colName), createAnalyzer(queryOptions));
+      countDistinctFns.add(String.format("count(distinct %s)", colName));
+    }
+    // Test a single query with a count(distinct) on all columns of decimalTbl.
+    AnalyzesOk(String.format("select %s from functional.decimal_tbl",
+        Joiner.on(",").join(countDistinctFns)), createAnalyzer(queryOptions));
+
+    allCountDistinctFns.addAll(countDistinctFns);
+
+    // Test a single query with a count(distinct) on all columns of both
+    // alltypes/decimalTbl.
+    AnalyzesOk(String.format(
+        "select %s from functional.alltypes cross join functional.decimal_tbl",
+        Joiner.on(",").join(countDistinctFns)), createAnalyzer(queryOptions));
+
+    // The rewrite does not work for multiple count() arguments.
+    AnalysisError("select count(distinct int_col, bigint_col), " +
+        "count(distinct string_col, float_col) from functional.alltypes",
+        createAnalyzer(queryOptions),
+        "all DISTINCT aggregate functions need to have the same set of parameters as " +
+        "count(DISTINCT int_col, bigint_col); deviating function: " +
+        "count(DISTINCT string_col, float_col)");
+    // The rewrite only applies to the count() function.
+    AnalysisError(
+        "select avg(distinct int_col), sum(distinct float_col) from functional.alltypes",
+        createAnalyzer(queryOptions),
+        "all DISTINCT aggregate functions need to have the same set of parameters as " +
+        "avg(DISTINCT int_col); deviating function: sum(DISTINCT");
   }
 }

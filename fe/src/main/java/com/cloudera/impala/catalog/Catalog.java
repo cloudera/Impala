@@ -62,6 +62,10 @@ public abstract class Catalog {
 
   protected final MetaStoreClientPool metaStoreClientPool_ = new MetaStoreClientPool(0);
 
+  // Cache of authorization policy metadata. Populated from data retried from the
+  // Sentry Service, if configured.
+  protected AuthorizationPolicy authPolicy_ = new AuthorizationPolicy();
+
   // Thread safe cache of database metadata. Uses an AtomicReference so reset()
   // operations can atomically swap dbCache_ references.
   // TODO: Update this to use a CatalogObjectCache?
@@ -93,7 +97,7 @@ public abstract class Catalog {
     addDb(builtinsDb_);
   }
 
-  public Db getBuiltinsDb() { return builtinsDb_;}
+  public Db getBuiltinsDb() { return builtinsDb_; }
 
   /**
    * Adds a new database to the catalog, replacing any existing database with the same
@@ -138,7 +142,7 @@ public abstract class Catalog {
    * metadata load if the table metadata is not yet cached.
    */
   public Table getTable(String dbName, String tableName) throws
-      DatabaseNotFoundException {
+      CatalogException {
     Db db = getDb(dbName);
     if (db == null) {
       throw new DatabaseNotFoundException("Database '" + dbName + "' not found");
@@ -176,6 +180,10 @@ public abstract class Catalog {
     return filterStringsByPattern(db.getAllTableNames(), tablePattern);
   }
 
+  /**
+   * Returns true if the table and the database exist in the Impala Catalog. Returns
+   * false if either the table or the database do not exist.
+   */
   public boolean containsTable(String dbName, String tableName) {
     Db db = getDb(dbName);
     return (db == null) ? false : db.containsTable(tableName);
@@ -351,8 +359,7 @@ public abstract class Catalog {
    * @throws TableLoadingException - If there is an error loading the table metadata.
    */
   public HdfsPartition getHdfsPartition(String dbName, String tableName,
-      List<TPartitionKeyValue> partitionSpec) throws DatabaseNotFoundException,
-      PartitionNotFoundException, TableNotFoundException, TableLoadingException {
+      List<TPartitionKeyValue> partitionSpec) throws CatalogException {
     String partitionNotFoundMsg =
         "Partition not found: " + Joiner.on(", ").join(partitionSpec);
     Table table = getTable(dbName, tableName);
@@ -375,8 +382,7 @@ public abstract class Catalog {
    * @throws TableLoadingException - If there is an error loading the table metadata.
    */
   public boolean containsHdfsPartition(String dbName, String tableName,
-      List<TPartitionKeyValue> partitionSpec) throws DatabaseNotFoundException,
-      TableNotFoundException, TableLoadingException {
+      List<TPartitionKeyValue> partitionSpec) throws CatalogException {
     try {
       return getHdfsPartition(dbName, tableName, partitionSpec) != null;
     } catch (PartitionNotFoundException e) {
@@ -452,6 +458,34 @@ public abstract class Catalog {
         result.setCache_pool(pool.toThrift());
         break;
       }
+      case ROLE:
+        Role role = authPolicy_.getRole(objectDesc.getRole().getRole_name());
+        if (role == null) {
+          throw new CatalogException("Role not found: " +
+              objectDesc.getRole().getRole_name());
+        }
+        result.setType(role.getCatalogObjectType());
+        result.setCatalog_version(role.getCatalogVersion());
+        result.setRole(role.toThrift());
+        break;
+      case PRIVILEGE:
+        Role tmpRole = authPolicy_.getRole(objectDesc.getPrivilege().getRole_id());
+        if (tmpRole == null) {
+          throw new CatalogException("No role associated with ID: " +
+              objectDesc.getPrivilege().getRole_id());
+        }
+        for (RolePrivilege p: tmpRole.getPrivileges()) {
+          if (p.getName().equalsIgnoreCase(
+              objectDesc.getPrivilege().getPrivilege_name())) {
+            result.setType(p.getCatalogObjectType());
+            result.setCatalog_version(p.getCatalogVersion());
+            result.setPrivilege(p.toThrift());
+            return result;
+          }
+        }
+        throw new CatalogException(String.format("Role '%s' does not contain " +
+            "privilege: '%s'", tmpRole.getName(),
+            objectDesc.getPrivilege().getPrivilege_name()));
       default: throw new IllegalStateException(
           "Unexpected TCatalogObject type: " + objectDesc.getType());
     }

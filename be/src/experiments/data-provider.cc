@@ -37,7 +37,7 @@ void DataProvider::SetSeed(int seed) {
   rand_generator_.seed(seed);
 }
 
-void RandString(MemPool* pool, StringValue* result, 
+void RandString(MemPool* pool, StringValue* result,
     const StringValue& min, const StringValue& max, double r,
     variate_generator<minstd_rand&, uniform_real<> >& rand) {
   int min_len = min.len;
@@ -46,7 +46,7 @@ void RandString(MemPool* pool, StringValue* result,
   char* ptr = reinterpret_cast<char*>(pool->Allocate(len));
   result->len = len;
   result->ptr = ptr;
-  
+
   for (int i = 0; i < len; ++i) {
     int min_char = i < min_len ? min.ptr[i] : 'a';
     int max_char = (i < max_len ? max.ptr[i] : 'z') + 1;
@@ -58,8 +58,7 @@ void* DataProvider::NextBatch(int* rows_returned) {
   int num_rows = min(batch_size_, num_rows_ - rows_returned_);
   *rows_returned = num_rows;
   if (num_rows == 0) return NULL;
-
-  COUNTER_UPDATE(bytes_generated_, num_rows * row_size_);
+  COUNTER_ADD(bytes_generated_, num_rows * row_size_);
 
   uniform_real<> dist(0,1);
   variate_generator<minstd_rand&, uniform_real<> > rand_double(rand_generator_, dist);
@@ -91,6 +90,7 @@ void* DataProvider::NextBatch(int* rows_returned) {
         case TYPE_DOUBLE:
           *reinterpret_cast<double*>(data) = col.Generate<double>(r, row_idx);
           break;
+        case TYPE_VARCHAR:
         case TYPE_STRING: {
           // TODO: generate sequential strings
           StringValue* str = reinterpret_cast<StringValue*>(data);
@@ -134,6 +134,7 @@ void DataProvider::Print(ostream* stream, char* data, int rows) const {
           *stream << *reinterpret_cast<double*>(next_col);
           break;
         case TYPE_STRING:
+        case TYPE_VARCHAR:
           *stream << *reinterpret_cast<StringValue*>(next_col);
           break;
         default:

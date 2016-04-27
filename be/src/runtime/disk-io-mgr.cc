@@ -18,6 +18,8 @@
 #include <gutil/strings/substitute.h>
 #include <boost/algorithm/string.hpp>
 
+DECLARE_bool(disable_mem_pools);
+
 using namespace boost;
 using namespace impala;
 using namespace std;
@@ -36,10 +38,9 @@ DEFINE_int32(num_threads_per_disk, 0, "number of threads per disk");
 DEFINE_int32(read_size, 8 * 1024 * 1024, "Read Size (in bytes)");
 DEFINE_int32(min_buffer_size, 1024, "The minimum read buffer size (in bytes)");
 
-// Turning this to false will make asan much more effective for IO buffer related
-// bugs.
-DEFINE_bool(reuse_io_buffers, true, "(Advanced) If true, IoMgr will reuse IoBuffers "
-                                     "across queries.");
+// With 1024B through 8MB buffers, this is up to ~2GB of buffers.
+DEFINE_int32(max_free_io_buffers, 128,
+    "For each io buffer size, the maximum number of buffers the IoMgr will hold onto");
 
 // Rotational disks should have 1 thread per disk to minimize seeks.  Non-rotational
 // don't have this penalty and benefit from multiple concurrent IO requests.
@@ -408,6 +409,14 @@ int64_t DiskIoMgr::bytes_read_dn_cache(RequestContext* reader) const {
   return reader->bytes_read_dn_cache_;
 }
 
+int DiskIoMgr::num_remote_ranges(RequestContext* reader) const {
+  return reader->num_remote_ranges_;
+}
+
+int64_t DiskIoMgr::unexpected_remote_bytes(RequestContext* reader) const {
+  return reader->unexpected_remote_bytes_;
+}
+
 int64_t DiskIoMgr::GetReadThroughput() {
   return RuntimeProfile::UnitsPerSecond(&total_bytes_read_counter_, &read_timer_);
 }
@@ -674,16 +683,22 @@ void DiskIoMgr::ReturnFreeBuffer(char* buffer, int64_t buffer_size) {
   DCHECK_EQ(BitUtil::Ceil(buffer_size, min_buffer_size_) & ~(1 << idx), 0)
       << "buffer_size_ / min_buffer_size_ should be power of 2, got buffer_size = "
       << buffer_size << ", min_buffer_size_ = " << min_buffer_size_;
-  if (FLAGS_reuse_io_buffers) {
-    unique_lock<mutex> lock(free_buffers_lock_);
+  unique_lock<mutex> lock(free_buffers_lock_);
+  if (!FLAGS_disable_mem_pools && free_buffers_[idx].size() < FLAGS_max_free_io_buffers) {
     free_buffers_[idx].push_back(buffer);
+    if (ImpaladMetrics::IO_MGR_NUM_UNUSED_BUFFERS != NULL) {
+      ImpaladMetrics::IO_MGR_NUM_UNUSED_BUFFERS->Increment(1L);
+    }
   } else {
     process_mem_tracker_->Release(buffer_size);
     --num_allocated_buffers_;
     delete[] buffer;
-  }
-  if (ImpaladMetrics::IO_MGR_NUM_UNUSED_BUFFERS != NULL) {
-    ImpaladMetrics::IO_MGR_NUM_UNUSED_BUFFERS->Increment(1L);
+    if (ImpaladMetrics::IO_MGR_NUM_BUFFERS != NULL) {
+      ImpaladMetrics::IO_MGR_NUM_BUFFERS->Increment(-1L);
+    }
+    if (ImpaladMetrics::IO_MGR_TOTAL_BYTES != NULL) {
+      ImpaladMetrics::IO_MGR_TOTAL_BYTES->Increment(-buffer_size);
+    }
   }
 }
 
@@ -971,7 +986,7 @@ void DiskIoMgr::ReadRange(DiskQueue* disk_queue, RequestContext* reader,
   if (buffer_desc->status_.ok()) {
     // Update counters.
     if (reader->active_read_thread_counter_) {
-      reader->active_read_thread_counter_->Update(1L);
+      reader->active_read_thread_counter_->Add(1L);
     }
     if (reader->disks_accessed_bitmap_) {
       int64_t disk_bit = 1 << disk_queue->disk_id;
@@ -984,12 +999,12 @@ void DiskIoMgr::ReadRange(DiskQueue* disk_queue, RequestContext* reader,
     buffer_desc->scan_range_offset_ = range->bytes_read_ - buffer_desc->len_;
 
     if (reader->bytes_read_counter_ != NULL) {
-      COUNTER_UPDATE(reader->bytes_read_counter_, buffer_desc->len_);
+      COUNTER_ADD(reader->bytes_read_counter_, buffer_desc->len_);
     }
 
-    COUNTER_UPDATE(&total_bytes_read_counter_, buffer_desc->len_);
+    COUNTER_ADD(&total_bytes_read_counter_, buffer_desc->len_);
     if (reader->active_read_thread_counter_) {
-      reader->active_read_thread_counter_->Update(-1L);
+      reader->active_read_thread_counter_->Add(-1L);
     }
   }
 
@@ -1043,6 +1058,9 @@ Status DiskIoMgr::WriteRangeHelper(FILE* file_handle, WriteRange* write_range) {
     return Status(TStatusCode::RUNTIME_ERROR,
         Substitute("fwrite(buffer, 1, $0, $1) failed with errno=$2 description=$3",
             write_range->len_, write_range->file_, errno, GetStrErrMsg()));
+  }
+  if (ImpaladMetrics::IO_MGR_BYTES_WRITTEN != NULL) {
+    ImpaladMetrics::IO_MGR_BYTES_WRITTEN->Increment(write_range->len_);
   }
 
   return Status::OK;

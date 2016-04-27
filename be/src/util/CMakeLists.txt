@@ -25,6 +25,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_OUTPUT_ROOT_DIRECTORY}/util")
 
 add_library(Util
   benchmark.cc
+  bitmap.cc
   cgroups-mgr.cc
   codec.cc
   compress.cc
@@ -36,41 +37,43 @@ add_library(Util
   default-path-handlers.cc
   disk-info.cc
   error-util.cc
-  fe-test-info.cc
   filesystem-util.cc
   hdfs-util.cc
   hdfs-bulk-ops.cc
   impalad-metrics.cc
   jni-util.cc
+  llama-util.cc
   logging-support.cc
   mem-info.cc
+  memory-metrics.cc
   metrics.cc
   network-util.cc
   os-info.cc
+  os-util.cc
   parse-util.cc
   path-builder.cc
   periodic-counter-updater
   pprof-path-handlers.cc
 # TODO: not supported on RHEL 5
 #  perf-counters.cc
-  os-util.cc
-  thread.cc
-  time.cc
   progress-updater.cc
   runtime-profile.cc
   simple-logger.cc
   symbols-util.cc
   static-asserts.cc
-  memory-metrics.cc
+  summary-util.cc
+  table-printer.cc
+  test-info.cc
+  thread.cc
+  time.cc
   url-parser.cc
   url-coding.cc
-  llama-util.cc
-  table-printer.cc
 )
 
 add_library(Webserver STATIC
   ${SQUEASEL_SRC_DIR}/squeasel.c
   webserver.cc
+  ${MUSTACHE_SRC_DIR}/mustache.cc
 )
 
 # Squeasel requires C99 compatibility to build.
@@ -82,7 +85,7 @@ add_library(loggingsupport SHARED
   logging-support.cc
 )
 
-target_link_libraries(Webserver pthread dl Util ssl)
+target_link_libraries(Webserver pthread dl Util ssl crypto)
 
 add_executable(network-perf-benchmark network-perf-benchmark.cc)
 add_executable(parquet-reader parquet-reader.cc)

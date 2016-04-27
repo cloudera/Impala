@@ -27,6 +27,7 @@ import org.junit.Test;
 import com.cloudera.impala.analysis.LiteralExpr;
 import com.cloudera.impala.common.AnalysisException;
 import com.cloudera.impala.common.ImpalaException;
+import com.cloudera.impala.testutil.CatalogServiceTestCatalog;
 import com.cloudera.impala.thrift.ImpalaInternalServiceConstants;
 import com.cloudera.impala.thrift.TAccessLevel;
 import com.cloudera.impala.thrift.THBaseTable;
@@ -44,15 +45,14 @@ public class CatalogObjectToFromThriftTest {
 
   @BeforeClass
   public static void setUp() throws Exception {
-    catalog_ = CatalogServiceCatalog.createForTesting(false);
+    catalog_ = CatalogServiceTestCatalog.create();
   }
 
   @AfterClass
   public static void cleanUp() { catalog_.close(); }
 
   @Test
-  public void TestPartitionedTable() throws DatabaseNotFoundException,
-      AuthorizationException, TableLoadingException {
+  public void TestPartitionedTable() throws CatalogException {
     String[] dbNames = {"functional", "functional_avro", "functional_parquet",
                         "functional_seq"};
     for (String dbName: dbNames) {
@@ -120,8 +120,7 @@ public class CatalogObjectToFromThriftTest {
    * definition will override any columns defined in the table.
    */
   @Test
-  public void TestMismatchedAvroAndTableSchemas() throws DatabaseNotFoundException,
-      TableNotFoundException, TableLoadingException {
+  public void TestMismatchedAvroAndTableSchemas() throws CatalogException {
     Table table = catalog_.getOrLoadTable("functional_avro_snap",
         "schema_resolution_test");
     TTable thriftTable = table.toThrift();
@@ -141,8 +140,7 @@ public class CatalogObjectToFromThriftTest {
   }
 
   @Test
-  public void TestHBaseTables() throws DatabaseNotFoundException,
-      TableNotFoundException, TableLoadingException {
+  public void TestHBaseTables() throws CatalogException {
     String dbName = "functional_hbase";
     Table table = catalog_.getOrLoadTable(dbName, "alltypes");
     TTable thriftTable = table.toThrift();
@@ -165,14 +163,13 @@ public class CatalogObjectToFromThriftTest {
     HBaseTable newHBaseTable = (HBaseTable) newTable;
     Assert.assertEquals(newHBaseTable.getColumns().size(), 13);
     Assert.assertEquals(newHBaseTable.getColumn("double_col").getType(),
-        ColumnType.DOUBLE);
+        Type.DOUBLE);
     Assert.assertEquals(newHBaseTable.getNumClusteringCols(), 1);
   }
 
   @Test
   public void TestHBaseTableWithBinaryEncodedCols()
-      throws DatabaseNotFoundException, TableNotFoundException,
-      TableLoadingException {
+      throws CatalogException {
     String dbName = "functional_hbase";
     Table table = catalog_.getOrLoadTable(dbName, "alltypessmallbinary");
     TTable thriftTable = table.toThrift();
@@ -200,7 +197,7 @@ public class CatalogObjectToFromThriftTest {
     HBaseTable newHBaseTable = (HBaseTable) newTable;
     Assert.assertEquals(newHBaseTable.getColumns().size(), 13);
     Assert.assertEquals(newHBaseTable.getColumn("double_col").getType(),
-        ColumnType.DOUBLE);
+        Type.DOUBLE);
     Assert.assertEquals(newHBaseTable.getNumClusteringCols(), 1);
   }
 
@@ -220,8 +217,8 @@ public class CatalogObjectToFromThriftTest {
     // Create a dummy partition with an invalid decimal type.
     try {
       HdfsPartition dummyPart = new HdfsPartition(hdfsTable, part.getMetaStorePartition(),
-        Lists.newArrayList(LiteralExpr.create("1.1", ColumnType.createDecimalType(1, 0)),
-            LiteralExpr.create("1.1", ColumnType.createDecimalType(1, 0))),
+        Lists.newArrayList(LiteralExpr.create("1.1", ScalarType.createDecimalType(1, 0)),
+            LiteralExpr.create("1.1", ScalarType.createDecimalType(1, 0))),
         null, Lists.<HdfsPartition.FileDescriptor>newArrayList(),
         TAccessLevel.READ_WRITE);
       fail("Expected metadata to be malformed.");
@@ -231,8 +228,7 @@ public class CatalogObjectToFromThriftTest {
   }
 
   @Test
-  public void TestView() throws DatabaseNotFoundException,
-      TableNotFoundException, TableLoadingException {
+  public void TestView() throws CatalogException {
     Table table = catalog_.getOrLoadTable("functional", "view_view");
     TTable thriftTable = table.toThrift();
     Assert.assertEquals(thriftTable.tbl_name, "view_view");

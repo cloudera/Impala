@@ -14,25 +14,28 @@
 
 package com.cloudera.impala.planner;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.cloudera.impala.analysis.Analyzer;
+import com.cloudera.impala.analysis.BinaryPredicate;
 import com.cloudera.impala.analysis.Expr;
 import com.cloudera.impala.analysis.JoinOperator;
 import com.cloudera.impala.analysis.SlotRef;
-import com.cloudera.impala.analysis.TupleId;
+import com.cloudera.impala.catalog.HdfsFileFormat;
+import com.cloudera.impala.catalog.HdfsTable;
+import com.cloudera.impala.common.AnalysisException;
 import com.cloudera.impala.common.InternalException;
 import com.cloudera.impala.common.NotImplementedException;
-import com.cloudera.impala.common.Pair;
 import com.cloudera.impala.planner.HashJoinNode.DistributionMode;
 import com.cloudera.impala.thrift.TExplainLevel;
 import com.cloudera.impala.thrift.TPartitionType;
 import com.cloudera.impala.thrift.TPlanFragment;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Predicates;
+import com.google.common.collect.Lists;
 
 /**
  * A PlanFragment is part of a tree of such fragments that together make
@@ -45,6 +48,11 @@ import com.google.common.base.Preconditions;
  * are used to produce the output of the plan fragment, as well as output exprs,
  * destination node, etc. If there are no output exprs, the full row that is
  * is produced by the plan root is marked as materialized.
+ *
+ * A hash-partitioned plan fragment is the result of one or more hash-partitioning data
+ * streams being received by plan nodes in this fragment. In the future, a fragment's
+ * data partition could also be hash partitioned based on a scan node that is reading
+ * from a physically hash-partitioned table.
  *
  * The sequence of calls is:
  * - c'tor
@@ -64,7 +72,7 @@ public class PlanFragment {
   private ExchangeNode destNode_;
 
   // if null, outputs the entire row produced by planRoot_
-  private ArrayList<Expr> outputExprs_;
+  private List<Expr> outputExprs_;
 
   // created in finalize() or set in setSink()
   private DataSink sink_;
@@ -105,19 +113,21 @@ public class PlanFragment {
     }
   }
 
-  public void setOutputExprs(ArrayList<Expr> outputExprs) {
-    this.outputExprs_ = Expr.cloneList(outputExprs, null);
+  public void setOutputExprs(List<Expr> outputExprs) {
+    outputExprs_ = Expr.cloneList(outputExprs);
   }
+  public List<Expr> getOutputExprs() { return outputExprs_; }
 
   /**
    * Finalize plan tree and create stream sink, if needed.
+   * If this fragment is hash partitioned, ensures that the corresponding partition
+   * exprs of all hash-partitioning senders are cast to identical types.
+   * Otherwise, the hashes generated for identical partition values may differ
+   * among senders if the partition-expr types are not identical.
    */
   public void finalize(Analyzer analyzer)
       throws InternalException, NotImplementedException {
-    if (planRoot_ != null) {
-      setRowTupleIds(planRoot_, null);
-      computeCanAddSlotFilters(planRoot_);
-    }
+    if (planRoot_ != null) computeCanAddSlotFilters(planRoot_);
 
     if (destNode_ != null) {
       Preconditions.checkState(sink_ == null);
@@ -125,6 +135,40 @@ public class PlanFragment {
       DataStreamSink streamSink = new DataStreamSink(destNode_, outputPartition_);
       streamSink.setFragment(this);
       sink_ = streamSink;
+    }
+
+    if (!dataPartition_.isHashPartitioned()) return;
+
+    // This fragment is hash partitioned. Gather all exchange nodes and ensure
+    // that all hash-partitioning senders hash on exprs-values of the same type.
+    List<ExchangeNode> exchNodes = Lists.newArrayList();
+    planRoot_.collect(Predicates.instanceOf(ExchangeNode.class), exchNodes);
+
+    // Contains partition-expr lists of all hash-partitioning sender fragments.
+    List<List<Expr>> senderPartitionExprs = Lists.newArrayList();
+    for (ExchangeNode exchNode: exchNodes) {
+      Preconditions.checkState(!exchNode.getChildren().isEmpty());
+      PlanFragment senderFragment = exchNode.getChild(0).getFragment();
+      Preconditions.checkNotNull(senderFragment);
+      if (!senderFragment.getOutputPartition().isHashPartitioned()) continue;
+      List<Expr> partExprs = senderFragment.getOutputPartition().getPartitionExprs();
+      // All hash-partitioning senders must have compatible partition exprs, otherwise
+      // this fragment's data partition must not be hash partitioned.
+      Preconditions.checkState(
+          partExprs.size() == dataPartition_.getPartitionExprs().size());
+      senderPartitionExprs.add(partExprs);
+    }
+
+    // Cast all corresponding hash partition exprs of all hash-partitioning senders
+    // to their compatible types. Also cast the data partition's exprs for consistency,
+    // although not strictly necessary. They should already be type identical to the
+    // exprs of one of the senders and they are not directly used for hashing in the BE.
+    senderPartitionExprs.add(dataPartition_.getPartitionExprs());
+    try {
+      analyzer.castToUnionCompatibleTypes(senderPartitionExprs);
+    } catch (AnalysisException e) {
+      // Should never happen. Analysis should have ensured type compatibility already.
+      throw new IllegalStateException(e);
     }
   }
 
@@ -137,45 +181,6 @@ public class PlanFragment {
   }
 
   /**
-   * Sets node.rowTupleIds, which is either the parent's rowTupleIds or the
-   * list of materialized ids. Propagates row tuple ids to the children according
-   * to the requirements of the particular node.
-   */
-  private void setRowTupleIds(PlanNode node, ArrayList<TupleId> parentRowTupleIds) {
-    if (parentRowTupleIds != null) {
-      // we don't output less than we materialize
-      Preconditions.checkState(parentRowTupleIds.containsAll(node.tupleIds_));
-      node.rowTupleIds_ = parentRowTupleIds;
-    } else {
-      node.rowTupleIds_ = node.tupleIds_;
-    }
-
-    if (node instanceof ScanNode || node instanceof ExchangeNode) {
-      // nothing to propagate for leaves
-      return;
-    } else if (node instanceof AggregationNode || node instanceof UnionNode) {
-      for (PlanNode child: node.getChildren()) {
-        // row composition changes at an aggregation node
-        setRowTupleIds(child, null);
-      }
-    } else if (node instanceof SortNode) {
-      Preconditions.checkState(node.getChildren().size() == 1);
-      // top-n only materializes rows as wide as the input
-      node.rowTupleIds_ = node.tupleIds_;
-      setRowTupleIds(node.getChild(0), null);
-    } else if (node instanceof SelectNode) {
-      // propagate parent's row composition to child
-      Preconditions.checkState(node.getChildren().size() == 1);
-      setRowTupleIds(node.getChild(0), node.rowTupleIds_);
-    } else if (node instanceof HashJoinNode || node instanceof CrossJoinNode) {
-      // propagate parent's row composition only to left child
-      Preconditions.checkState(node.getChildren().size() == 2);
-      setRowTupleIds(node.getChild(0), node.rowTupleIds_);
-      setRowTupleIds(node.getChild(1), null);
-    }
-  }
-
-  /**
    * Returns true and sets node.canAddPredicate, if we can add single-slot filters at
    * execution time (i.e. after Prepare() to the plan tree rooted at this node.
    * That is, 'node' can add filters that can be evaluated at nodes below.
@@ -183,7 +188,7 @@ public class PlanFragment {
    * We compute this by walking the tree bottom up.
    *
    * TODO: move this to PlanNode.init() which is normally responsible for computing
-   * internal state of PlanNodes. We can't do this currently since we need the
+   * internal state of PlanNodes. We cannot do this currently since we need the
    * distrubutionMode() set on HashJoin nodes. Once we call init() properly for
    * repartitioned joins, this logic can move to init().
    */
@@ -193,9 +198,11 @@ public class PlanFragment {
       boolean childResult = computeCanAddSlotFilters(node.getChild(0));
       if (!childResult) return false;
       if (hashJoinNode.getJoinOp().equals(JoinOperator.FULL_OUTER_JOIN) ||
-          hashJoinNode.getJoinOp().equals(JoinOperator.LEFT_OUTER_JOIN)) {
-        // Never correct to push through an outer join on the probe side. We can't
-        // filter those rows out.
+          hashJoinNode.getJoinOp().equals(JoinOperator.LEFT_OUTER_JOIN) ||
+          hashJoinNode.getJoinOp().equals(JoinOperator.LEFT_ANTI_JOIN) ||
+          hashJoinNode.getJoinOp().equals(JoinOperator.NULL_AWARE_LEFT_ANTI_JOIN)) {
+        // It is not correct to push through an outer or anti join on the probe side.
+        // We cannot filter those rows out.
         return false;
       }
       // We can't push down predicates for partitioned joins yet.
@@ -204,12 +211,12 @@ public class PlanFragment {
         return false;
       }
 
-      List<Pair<Expr, Expr>> joinConjuncts = hashJoinNode.getEqJoinConjuncts();
+      List<BinaryPredicate> joinConjuncts = hashJoinNode.getEqJoinConjuncts();
       // We can only add these filters for conjuncts of the form:
       // <probe_slot> = *. If the hash join has any equal join conjuncts in this form,
       // mark the hash join node.
-      for (Pair<Expr, Expr> c: joinConjuncts) {
-        if (c.first instanceof SlotRef) {
+      for (Expr c: joinConjuncts) {
+        if (c.getChild(0) instanceof SlotRef) {
           hashJoinNode.setAddProbeFilters(true);
           break;
         }
@@ -217,7 +224,20 @@ public class PlanFragment {
       // Even if this join cannot add predicates, return true so the parent node can.
       return true;
     } else if (node instanceof HdfsScanNode) {
-      return true;
+      // Since currently only the Parquet scanner employs the slot filter optimization,
+      // we enable it only if the majority format is Parquet. Otherwise we are adding
+      // the overhead of creating the SlotFilters in the build side in queries not on
+      // Parquet data.
+      // TODO: Modify the other scanners to exploit the slot filter optimization.
+      HdfsScanNode scanNode = (HdfsScanNode) node;
+      Preconditions.checkNotNull(scanNode.desc_);
+      Preconditions.checkNotNull(scanNode.desc_.getTable() instanceof HdfsTable);
+      HdfsTable table = (HdfsTable) scanNode.desc_.getTable();
+      if (table.getMajorityFormat() == HdfsFileFormat.PARQUET) {
+        return true;
+      } else {
+        return false;
+      }
     } else {
       for (PlanNode child : node.getChildren()) {
         computeCanAddSlotFilters(child);
@@ -245,10 +265,9 @@ public class PlanFragment {
         break;
       }
       if (dataPartition_.getPartitionExprs().contains(expr)) {
-        result *= Math.max((double) numDistinct / (double) numNodes, 1L);
-      } else {
-        result *= numDistinct;
+        numDistinct = (long)Math.max((double) numDistinct / (double) numNodes, 1L);
       }
+      result = PlanNode.multiplyCardinalities(result, numDistinct);
     }
     return result;
   }

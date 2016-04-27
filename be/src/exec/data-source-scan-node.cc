@@ -300,24 +300,24 @@ Status DataSourceScanNode::GetNext(RuntimeState* state, RowBatch* row_batch, boo
 
   // create new tuple buffer for row_batch
   MemPool* tuple_pool = row_batch->tuple_data_pool();
-  int tuple_buffer_size = row_batch->capacity() * tuple_desc_->byte_size();
+  int tuple_buffer_size = row_batch->MaxTupleBufferSize();
   void* tuple_buffer = tuple_pool->Allocate(tuple_buffer_size);
   tuple_ = reinterpret_cast<Tuple*>(tuple_buffer);
-  Expr** conjuncts = &conjuncts_[0];
-  int num_conjuncts = conjuncts_.size();
+  ExprContext** ctxs = &conjunct_ctxs_[0];
+  int num_ctxs = conjunct_ctxs_.size();
 
   while (true) {
     {
       SCOPED_TIMER(materialize_tuple_timer());
       // copy rows until we hit the limit/capacity or until we exhaust input_batch_
-      while (!ReachedLimit() && !row_batch->AtCapacity() && InputBatchHasNext() &&
-          tuple_pool->total_allocated_bytes() < RowBatch::AT_CAPACITY_MEM_USAGE) {
+      while (!ReachedLimit() && !row_batch->AtCapacity(tuple_pool) &&
+          InputBatchHasNext()) {
         RETURN_IF_ERROR(MaterializeNextRow(tuple_pool));
         int row_idx = row_batch->AddRow();
         TupleRow* tuple_row = row_batch->GetRow(row_idx);
         tuple_row->SetTuple(tuple_idx_, tuple_);
 
-        if (ExecNode::EvalConjuncts(conjuncts, num_conjuncts, tuple_row)) {
+        if (ExecNode::EvalConjuncts(ctxs, num_ctxs, tuple_row)) {
           row_batch->CommitLastRow();
           char* new_tuple = reinterpret_cast<char*>(tuple_);
           new_tuple += tuple_desc_->byte_size();

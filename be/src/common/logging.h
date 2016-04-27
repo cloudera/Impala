@@ -28,9 +28,11 @@
   #define DCHECK_LT(a, b) while(false) std::cout
   #define DCHECK_GE(a, b) while(false) std::cout
   #define DCHECK_LE(a, b) while(false) std::cout
+  #define DCHECK_NOTNULL(a) while(false) std::cout
   // Similar to how glog defines DCHECK for release.
   #define LOG(level) while(false) std::cout
   #define VLOG(level) while(false) std::cout
+  #define VLOG_IS_ON(level) (false)
 #else
   // GLOG defines this based on the system but doesn't check if it's already
   // been defined.  undef it first to avoid warnings.
@@ -39,10 +41,17 @@
   #undef _XOPEN_SOURCE
   #include <glog/logging.h>
   #include <gflags/gflags.h>
+
+  #ifdef NDEBUG
+  #undef DCHECK_NOTNULL
+  // Fix warnings of unused variables when NDEBUG is defined (glog emits (a) for the
+  // following macro which triggers the warning).
+  #define DCHECK_NOTNULL(a) while(false)
+  #endif
 #endif
 
-// Define verbose logging levels.  Per-row logging is ore verbase than per-file / per-rpc
-// logging which is more verbose than per-connection / per-query logging.
+// Define verbose logging levels.  Per-row logging is more verbase than per-file /
+// per-rpc logging which is more verbose than per-connection / per-query logging.
 #define VLOG_CONNECTION VLOG(1)
 #define VLOG_RPC        VLOG(2)
 #define VLOG_QUERY      VLOG(1)

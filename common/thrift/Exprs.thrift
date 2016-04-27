@@ -18,13 +18,9 @@ namespace java com.cloudera.impala.thrift
 include "Types.thrift"
 
 enum TExprNodeType {
-  ARITHMETIC_EXPR,
-  BINARY_PRED,
   BOOL_LITERAL,
   CASE_EXPR,
-  CAST_EXPR,
   COMPOUND_PRED,
-  DATE_LITERAL,
   FLOAT_LITERAL,
   INT_LITERAL,
   IN_PRED,
@@ -37,8 +33,6 @@ enum TExprNodeType {
   TUPLE_IS_NULL_PRED,
   FUNCTION_CALL,
   AGGREGATE_EXPR,
-  // TODO: old style compute functions. this will be deprecated
-  COMPUTE_FUNCTION_CALL,
   DECIMAL_LITERAL,
 }
 
@@ -69,16 +63,27 @@ struct TIntLiteral {
   1: required i64 value
 }
 
+// The units which can be used when extracting a Timestamp. TExtractField is never used
+// in any messages. This enum is here to provide a single definition that can be shared
+// by the front and backend.
+enum TExtractField {
+  INVALID_FIELD,
+  YEAR,
+  MONTH,
+  DAY,
+  HOUR,
+  MINUTE,
+  SECOND,
+  MILLISECOND,
+  EPOCH
+}
+
 struct TInPredicate {
   1: required bool is_not_in
 }
 
 struct TIsNullPredicate {
   1: required bool is_not_null
-}
-
-struct TLikePredicate {
-  1: required string escape_char;
 }
 
 struct TLiteralPredicate {
@@ -98,6 +103,11 @@ struct TStringLiteral {
   1: required string value;
 }
 
+struct TAggregateExpr {
+  // Indicates whether this expr is the merge() of an aggregation.
+  1: required bool is_merge_agg
+}
+
 // This is essentially a union over the subclasses of Expr.
 struct TExprNode {
   1: required TExprNodeType node_type
@@ -106,6 +116,7 @@ struct TExprNode {
 
   // The function to execute. Not set for SlotRefs and Literals.
   4: optional Types.TFunction fn
+
   // If set, child[vararg_start_idx] is the first vararg child.
   5: optional i32 vararg_start_idx
 
@@ -116,12 +127,12 @@ struct TExprNode {
   10: optional TIntLiteral int_literal
   11: optional TInPredicate in_predicate
   12: optional TIsNullPredicate is_null_pred
-  13: optional TLikePredicate like_pred
-  14: optional TLiteralPredicate literal_pred
-  15: optional TSlotRef slot_ref
-  16: optional TStringLiteral string_literal
-  17: optional TTupleIsNullPredicate tuple_is_null_pred
-  18: optional TDecimalLiteral decimal_literal
+  13: optional TLiteralPredicate literal_pred
+  14: optional TSlotRef slot_ref
+  15: optional TStringLiteral string_literal
+  16: optional TTupleIsNullPredicate tuple_is_null_pred
+  17: optional TDecimalLiteral decimal_literal
+  18: optional TAggregateExpr agg_expr
 }
 
 // A flattened representation of a tree of Expr nodes, obtained by depth-first

@@ -44,6 +44,7 @@ class TSlotDescriptor;
 class TTable;
 class TTupleDescriptor;
 class Expr;
+class ExprContext;
 class RuntimeState;
 
 struct LlvmTupleStruct {
@@ -74,7 +75,7 @@ std::ostream& operator<<(std::ostream& os, const NullIndicatorOffset& null_indic
 class SlotDescriptor {
  public:
   SlotId id() const { return id_; }
-  ColumnType type() const { return type_; }
+  const ColumnType& type() const { return type_; }
   TupleId parent() const { return parent_; }
   // Returns the column index of this slot, including partition keys.
   // (e.g., col_pos - num_partition_keys = the table column this slot corresponds to)
@@ -169,16 +170,18 @@ class HdfsPartitionDescriptor {
   char collection_delim() const { return collection_delim_; }
   char escape_char() const { return escape_char_; }
   THdfsFileFormat::type file_format() const { return file_format_; }
-  const std::vector<Expr*>& partition_key_values() const { return partition_key_values_; }
+  const std::vector<ExprContext*>& partition_key_value_ctxs() const {
+    return partition_key_value_ctxs_;
+  }
   int block_size() const { return block_size_; }
   const std::string& location() const { return location_; }
-  THdfsCompression::type compression() const { return compression_; }
   int64_t id() const { return id_; }
 
-  // Calls Prepare() on all partition key exprs. Calls after the first are no-ops.
-  // Note that because these exprs are always literals, they do not need to be opened or
-  // closed.
+  // Calls Prepare()/Open()/Close() on all partition key exprs. Idempotent (this is
+  // because both HdfsScanNode and HdfsTableSink may both use the same partition desc).
   Status PrepareExprs(RuntimeState* state);
+  Status OpenExprs(RuntimeState* state);
+  void CloseExprs(RuntimeState* state);
 
   std::string DebugString() const;
 
@@ -189,17 +192,16 @@ class HdfsPartitionDescriptor {
   char escape_char_;
   int block_size_;
   std::string location_;
-  THdfsCompression::type compression_;
   int64_t id_;
 
   // True if PrepareExprs has been called, to prevent repeating expensive codegen
   bool exprs_prepared_;
+  bool exprs_opened_;
+  bool exprs_closed_;
 
-  // List of literal (and therefore constant) expressions for each
-  // partition key. The Expr objects are owned by the local object
-  // pool. Their order corresponds to the first num_clustering_cols of
-  // the parent table.
-  std::vector<Expr*> partition_key_values_;
+  // List of literal (and therefore constant) expressions for each partition key. Their
+  // order corresponds to the first num_clustering_cols of the parent table.
+  std::vector<ExprContext*> partition_key_value_ctxs_;
 
   // The format (e.g. text, sequence file etc.) of data in the files in this partition
   THdfsFileFormat::type file_format_;
@@ -367,8 +369,13 @@ class RowDescriptor {
       tuple_idx_map_(desc.tuple_idx_map_) {
   }
 
+  // c'tor for a row assembled from two rows
+  RowDescriptor(const RowDescriptor& lhs_row_desc, const RowDescriptor& rhs_row_desc);
+
   RowDescriptor(const std::vector<TupleDescriptor*>& tuple_descs,
       const std::vector<bool>& nullable_tuples);
+
+  RowDescriptor(TupleDescriptor* tuple_desc, bool is_nullable);
 
   // dummy descriptor, needed for the JNI EvalPredicate() function
   RowDescriptor() {}
@@ -385,6 +392,9 @@ class RowDescriptor {
 
   // Return true if the Tuple of the given Tuple index is nullable.
   bool TupleIsNullable(int tuple_idx) const;
+
+  // Return true if any Tuple of the row is nullable.
+  bool IsAnyTupleNullable() const;
 
   // Return descriptors for all tuples in this row, in order of appearance.
   const std::vector<TupleDescriptor*>& tuple_descriptors() const {

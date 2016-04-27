@@ -10,16 +10,23 @@
 #   client = ImpalaBeeswaxClient(impalad)
 #   client.connect()
 #   result = client.execute(query_string)
-#   where result is an object of the class QueryResult.
+#   where result is an object of the class ImpalaBeeswaxResult.
 import time
 import sys
 import shlex
 import traceback
 import getpass
 import re
+import prettytable
 
 from beeswaxd import BeeswaxService
 from beeswaxd.BeeswaxService import QueryState
+from datetime import datetime
+try:
+  # If Exec Summary is not implemented in Impala, this cannot be imported
+  from ExecStats.ttypes import TExecStats
+except ImportError:
+  pass
 from ImpalaService import ImpalaService
 from ImpalaService.ImpalaService import TImpalaQueryOptions, TResetTableReq
 from tests.util.thrift_util import create_transport
@@ -41,23 +48,22 @@ class ImpalaBeeswaxException(Exception):
   def __str__(self):
     return "%s:\n %s" % (self.__name__, self.__message)
 
-# Encapsulates a typical query result.
-class QueryResult(object):
-  def __init__(self, query=None, success=False, data=None, schema=None,
-               time_taken=0, summary='', runtime_profile=str()):
-    self.query = query
-    self.success = success
+class ImpalaBeeswaxResult(object):
+  def __init__(self, **kwargs):
+    self.query = kwargs.get('query', None)
+    self.success = kwargs.get('success', False)
     # Insert returns an int, convert into list to have a uniform data type.
     # TODO: We should revisit this if we have more datatypes to deal with.
-    self.data = data
+    self.data = kwargs.get('data', None)
     if not isinstance(self.data, list):
       self.data = str(self.data)
       self.data = [self.data]
-    self.time_taken = time_taken
-    self.summary = summary
-    self.schema = schema
-    self.runtime_profile = runtime_profile
     self.log = None
+    self.time_taken = kwargs.get('time_taken', 0)
+    self.summary = kwargs.get('summary', str())
+    self.schema = kwargs.get('schema', None)
+    self.runtime_profile = kwargs.get('runtime_profile', str())
+    self.exec_summary = kwargs.get('exec_summary', None)
 
   def get_data(self):
     return self.__format_data()
@@ -148,14 +154,16 @@ class ImpalaBeeswaxClient(object):
                             service='impala', transport_type=trans_type, user=self.user,
                             password=self.password, use_ssl=self.use_ssl)
 
-  def execute(self, query_string):
-    """Re-directs the query to its appropriate handler, returns QueryResult"""
+  def execute(self, query_string, user=None):
+    """Re-directs the query to its appropriate handler, returns ImpalaBeeswaxResult"""
     # Take care of leading/trailing whitespaces.
     query_string = query_string.strip()
     start = time.time()
-    handle = self.__execute_query(query_string.strip())
-    result = self.fetch_results(query_string,  handle)
+    start_time = datetime.now()
+    handle = self.__execute_query(query_string.strip(), user=user)
+    result = self.fetch_results(query_string, handle)
     result.time_taken = time.time() - start
+    result.start_time = start_time
     # Don't include the time it takes to get the runtime profile in the execution time
     result.runtime_profile = self.get_runtime_profile(handle)
     result.log = self.get_log(handle.log_context)
@@ -163,12 +171,133 @@ class ImpalaBeeswaxClient(object):
     # the handle twice.
     if self.__get_query_type(query_string) != 'insert':
       self.close_query(handle)
+    result.exec_summary = self.get_exec_summary(handle)
     return result
+
+  def get_exec_summary(self, handle):
+    """Calls GetExecSummary() for the last query handle"""
+    try:
+      summary = self.__do_rpc(lambda: self.imp_service.GetExecSummary(handle))
+    except ImpalaBeeswaxException:
+      summary = None
+
+    if summary is None or summary.nodes is None:
+      return None
+      # If exec summary is not implemented in Impala, this function returns, so we do not
+      # get the function __build_summary_table which requires TExecStats to be imported.
+
+    output = []
+    self.__build_summary_table(summary, 0, False, 0, False, output)
+    return output
+
+  def __build_summary_table(self, summary, idx, is_fragment_root, indent_level,
+      new_indent_level, output):
+    """NOTE: This was taken impala_shell.py. This method will be a placed in a library
+    that is shared between impala_shell and this file.
+
+    Direct translation of Coordinator::PrintExecSummary() to recursively build a list
+    of rows of summary statistics, one per exec node
+
+    summary: the TExecSummary object that contains all the summary data
+
+    idx: the index of the node to print
+
+    is_fragment_root: true if the node to print is the root of a fragment (and therefore
+    feeds into an exchange)
+
+    indent_level: the number of spaces to print before writing the node's label, to give
+    the appearance of a tree. The 0th child of a node has the same indent_level as its
+    parent. All other children have an indent_level of one greater than their parent.
+
+    new_indent_level: If true, this indent level is different from the previous row's.
+
+    output: the list of rows into which to append the rows produced for this node and its
+    children.
+
+    Returns the index of the next exec node in summary.exec_nodes that should be
+    processed, used internally to this method only.
+    """
+    attrs = ["latency_ns", "cpu_time_ns", "cardinality", "memory_used"]
+
+    # Initialise aggregate and maximum stats
+    agg_stats, max_stats = TExecStats(), TExecStats()
+    for attr in attrs:
+      setattr(agg_stats, attr, 0)
+      setattr(max_stats, attr, 0)
+
+    node = summary.nodes[idx]
+    for stats in node.exec_stats:
+      for attr in attrs:
+        val = getattr(stats, attr)
+        if val is not None:
+          setattr(agg_stats, attr, getattr(agg_stats, attr) + val)
+          setattr(max_stats, attr, max(getattr(max_stats, attr), val))
+
+    if len(node.exec_stats) > 0:
+      avg_time = agg_stats.latency_ns / len(node.exec_stats)
+    else:
+      avg_time = 0
+
+    # If the node is a broadcast-receiving exchange node, the cardinality of rows produced
+    # is the max over all instances (which should all have received the same number of
+    # rows). Otherwise, the cardinality is the sum over all instances which process
+    # disjoint partitions.
+    if node.is_broadcast and is_fragment_root:
+      cardinality = max_stats.cardinality
+    else:
+      cardinality = agg_stats.cardinality
+
+    est_stats = node.estimated_stats
+
+    label_prefix = ""
+    if indent_level > 0:
+      label_prefix = "|"
+      label_prefix += "  |" * (indent_level - 1)
+      if new_indent_level:
+        label_prefix += "--"
+      else:
+        label_prefix += "  "
+
+    row = {}
+    row["prefix"] = label_prefix
+    row["operator"] = node.label
+    row["num_hosts"] = len(node.exec_stats)
+    row["avg_time"] = avg_time
+    row["max_time"] = max_stats.latency_ns
+    row["num_rows"] = cardinality
+    row["est_num_rows"] = est_stats.cardinality
+    row["peak_mem"] = max_stats.memory_used
+    row["est_peak_mem"] = est_stats.memory_used
+    row["detail"] = node.label_detail
+    output.append(row)
+
+    try:
+      sender_idx = summary.exch_to_sender_map[idx]
+      # This is an exchange node, so the sender is a fragment root, and should be printed
+      # next.
+      self.__build_summary_table(summary, sender_idx, True, indent_level, False, output)
+    except (KeyError, TypeError):
+      # Fall through if idx not in map, or if exch_to_sender_map itself is not set
+      pass
+
+    idx += 1
+    if node.num_children > 0:
+      first_child_output = []
+      idx = \
+        self.__build_summary_table(
+            summary, idx, False, indent_level, False, first_child_output)
+      for child_idx in xrange(1, node.num_children):
+        # All other children are indented (we only have 0, 1 or 2 children for every exec
+        # node at the moment)
+        idx = self.__build_summary_table(
+            summary, idx, False, indent_level + 1, True, output)
+      output += first_child_output
+    return idx
 
   def get_runtime_profile(self, handle):
     return self.__do_rpc(lambda: self.imp_service.GetRuntimeProfile(handle))
 
-  def execute_query_async(self, query_string):
+  def execute_query_async(self, query_string, user=None):
     """
     Executes a query asynchronously
 
@@ -176,13 +305,13 @@ class ImpalaBeeswaxClient(object):
     """
     query = BeeswaxService.Query()
     query.query = query_string
-    query.hadoop_user = getpass.getuser()
+    query.hadoop_user = user if user is not None else getpass.getuser()
     query.configuration = self.__options_to_string_list()
     return self.__do_rpc(lambda: self.imp_service.query(query,))
 
-  def __execute_query(self, query_string):
+  def __execute_query(self, query_string, user=None):
     """Executes a query and waits for completion"""
-    handle = self.execute_query_async(query_string)
+    handle = self.execute_query_async(query_string, user=user)
     # Wait for the query to finish execution.
     self.wait_for_completion(handle)
     return handle
@@ -229,7 +358,7 @@ class ImpalaBeeswaxClient(object):
     if query_type == 'use':
       # TODO: "use <database>" does not currently throw an error. Need to update this
       # to handle the error case once that behavior has been changed.
-      return QueryResult(query=query_string, success=True, data=[''])
+      return ImpalaBeeswaxResult(query=query_string, success=True, data=[''])
 
     # Result fetching for insert is different from other queries.
     exec_result = None
@@ -241,7 +370,7 @@ class ImpalaBeeswaxClient(object):
     return exec_result
 
   def __fetch_results(self, handle, max_rows = -1):
-    """Handles query results, returns a QueryResult object"""
+    """Handles query results, returns a ImpalaBeeswaxResult object"""
     schema = self.__do_rpc(lambda: self.imp_service.get_results_metadata(handle)).schema
     # The query has finished, we can fetch the results
     result_rows = []
@@ -253,7 +382,7 @@ class ImpalaBeeswaxClient(object):
         break
 
     # The query executed successfully and all the data was fetched.
-    exec_result = QueryResult(success=True, data=result_rows, schema=schema)
+    exec_result = ImpalaBeeswaxResult(success=True, data=result_rows, schema=schema)
     exec_result.summary = 'Returned %d rows' % (len(result_rows))
     return exec_result
 
@@ -263,7 +392,7 @@ class ImpalaBeeswaxClient(object):
     # The insert was successful
     num_rows = sum(map(int, result.rows_appended.values()))
     data = ["%s: %s" % row for row in result.rows_appended.iteritems()]
-    exec_result = QueryResult(success=True, data=data)
+    exec_result = ImpalaBeeswaxResult(success=True, data=data)
     exec_result.summary = "Inserted %d rows" % (num_rows,)
     return exec_result
 

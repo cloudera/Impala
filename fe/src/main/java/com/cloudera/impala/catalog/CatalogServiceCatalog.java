@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -26,6 +27,8 @@ import org.apache.hadoop.hive.metastore.api.UnknownDBException;
 import org.apache.log4j.Logger;
 import org.apache.thrift.TException;
 
+import com.cloudera.impala.analysis.TableName;
+import com.cloudera.impala.authorization.SentryConfig;
 import com.cloudera.impala.catalog.MetaStoreClientPool.MetaStoreClient;
 import com.cloudera.impala.common.ImpalaException;
 import com.cloudera.impala.common.Pair;
@@ -34,10 +37,13 @@ import com.cloudera.impala.thrift.TCatalogObject;
 import com.cloudera.impala.thrift.TCatalogObjectType;
 import com.cloudera.impala.thrift.TFunctionBinaryType;
 import com.cloudera.impala.thrift.TGetAllCatalogObjectsResponse;
+import com.cloudera.impala.thrift.TPartitionKeyValue;
+import com.cloudera.impala.thrift.TPrivilege;
 import com.cloudera.impala.thrift.TTable;
 import com.cloudera.impala.thrift.TTableName;
 import com.cloudera.impala.thrift.TUniqueId;
 import com.cloudera.impala.util.PatternMatcher;
+import com.cloudera.impala.util.SentryProxy;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 
@@ -93,30 +99,28 @@ public class CatalogServiceCatalog extends Catalog {
 
   private final boolean loadInBackground_;
 
+  // Proxy to access the Sentry Service and also periodically refreshes the
+  // policy metadata. Null if Sentry Service is not enabled.
+  private final SentryProxy sentryProxy_;
+
   /**
-   * Initialize the CatalogServiceCatalog, loading all table metadata
-   * lazily.
+   * Initialize the CatalogServiceCatalog. If loadInBackground is true, table metadata
+   * will be loaded in the background
    */
   public CatalogServiceCatalog(boolean loadInBackground, int numLoadingThreads,
-      TUniqueId catalogServiceId) {
+      SentryConfig sentryConfig, TUniqueId catalogServiceId) {
     super(true);
     catalogServiceId_ = catalogServiceId;
     tableLoadingMgr_ = new TableLoadingMgr(this, numLoadingThreads);
     loadInBackground_ = loadInBackground;
-  }
 
-  /**
-   * Only used for testing. Creates a catalog server with default options.
-   */
-  public static CatalogServiceCatalog createForTesting(boolean loadInBackground) {
-    CatalogServiceCatalog cs =
-        new CatalogServiceCatalog(loadInBackground, 16, new TUniqueId());
-    try {
-      cs.reset();
-    } catch (CatalogException e) {
-      throw new IllegalStateException(e.getMessage(), e);
+    if (sentryConfig != null && Boolean.FALSE) {
+      // Sentry Service is not supported on CDH4. Should never make it here.
+      Preconditions.checkState(false);
+      sentryProxy_ = new SentryProxy(sentryConfig, this);
+    } else {
+      sentryProxy_ = null;
     }
-    return cs;
   }
 
   /**
@@ -213,6 +217,23 @@ public class CatalogServiceCatalog extends Catalog {
             cachePool.getCatalogVersion());
         pool.setCache_pool(cachePool.toThrift());
         resp.addToObjects(pool);
+      }
+
+      // Get all roles
+      for (Role role: authPolicy_.getAllRoles()) {
+        TCatalogObject thriftRole = new TCatalogObject();
+        thriftRole.setRole(role.toThrift());
+        thriftRole.setCatalog_version(role.getCatalogVersion());
+        thriftRole.setType(role.getCatalogObjectType());
+        resp.addToObjects(thriftRole);
+
+        for (RolePrivilege p: role.getPrivileges()) {
+          TCatalogObject privilege = new TCatalogObject();
+          privilege.setPrivilege(p.toThrift());
+          privilege.setCatalog_version(p.getCatalogVersion());
+          privilege.setType(p.getCatalogObjectType());
+          resp.addToObjects(privilege);
+        }
       }
 
       // Each update should contain a single "TCatalog" object which is used to
@@ -385,7 +406,7 @@ public class CatalogServiceCatalog extends Catalog {
    * (not yet loaded table) will be returned.
    */
   public Table getOrLoadTable(String dbName, String tblName)
-      throws DatabaseNotFoundException {
+      throws CatalogException {
     TTableName tableName = new TTableName(dbName.toLowerCase(), tblName.toLowerCase());
     TableLoadingMgr.LoadRequest loadReq;
 
@@ -576,7 +597,6 @@ public class CatalogServiceCatalog extends Catalog {
     } finally {
       catalogLock_.readLock().unlock();
     }
-
     Preconditions.checkNotNull(loadReq);
 
     try {
@@ -584,6 +604,58 @@ public class CatalogServiceCatalog extends Catalog {
     } finally {
       loadReq.close();
     }
+  }
+
+  /**
+   * Drops the partition from its HdfsTable.
+   * If the HdfsTable does not exist, an exception is thrown.
+   * If the partition having the given partition spec does not exist, null is returned.
+   * Otherwise, the table with an updated catalog version is returned.
+   */
+  public Table dropPartition(TableName tableName, List<TPartitionKeyValue> partitionSpec)
+      throws CatalogException {
+    Preconditions.checkNotNull(partitionSpec);
+    Table tbl = getOrLoadTable(tableName.getDb(), tableName.getTbl());
+    if (tbl == null) {
+      throw new TableNotFoundException("Table not found: " + tbl.getFullName());
+    }
+    if (!(tbl instanceof HdfsTable)) {
+      throw new CatalogException("Table " + tbl.getFullName() + " is not an Hdfs table");
+    }
+    HdfsTable hdfsTable = (HdfsTable) tbl;
+    // Locking the catalog here because this accesses hdfsTable's partition list and
+    // updates its catalog version.
+    // TODO: Fix this locking pattern.
+    catalogLock_.writeLock().lock();
+    try {
+      HdfsPartition hdfsPartition = hdfsTable.dropPartition(partitionSpec);
+      if (hdfsPartition == null) return null;
+      return replaceTableIfUnchanged(hdfsTable, hdfsTable.getCatalogVersion());
+    } finally {
+      catalogLock_.writeLock().unlock();
+    }
+  }
+
+  /**
+   * Adds the partition to its HdfsTable. Returns the table with an updated catalog
+   * version.
+   */
+  public Table addPartition(HdfsPartition partition) throws CatalogException {
+    Preconditions.checkNotNull(partition);
+    HdfsTable hdfsTable = partition.getTable();
+    Db db = getDb(hdfsTable.getDb().getName());
+    // Locking the catalog here because this accesses the hdfsTable's partition list and
+    // updates its catalog version.
+    // TODO: Fix this locking pattern.
+    catalogLock_.writeLock().lock();
+    try {
+      hdfsTable.addPartition(partition);
+      hdfsTable.setCatalogVersion(incrementAndGetCatalogVersion());
+      db.addTable(hdfsTable);
+    } finally {
+      catalogLock_.writeLock().unlock();
+    }
+    return hdfsTable;
   }
 
   /**
@@ -668,6 +740,131 @@ public class CatalogServiceCatalog extends Catalog {
   }
 
   /**
+   * Adds a new role with the given name and grant groups to the AuthorizationPolicy.
+   * If a role with the same name already exists it will be overwritten.
+   */
+  public Role addRole(String roleName, Set<String> grantGroups) {
+    catalogLock_.writeLock().lock();
+    try {
+      Role role = new Role(roleName, grantGroups);
+      role.setCatalogVersion(incrementAndGetCatalogVersion());
+      authPolicy_.addRole(role);
+      return role;
+    } finally {
+      catalogLock_.writeLock().unlock();
+    }
+  }
+
+  /**
+   * Removes the role with the given name from the AuthorizationPolicy. Returns the
+   * removed role with an incremented catalog version, or null if no role with this name
+   * exists.
+   */
+  public Role removeRole(String roleName) {
+    catalogLock_.writeLock().lock();
+    try {
+      Role role = authPolicy_.removeRole(roleName);
+      if (role == null) return null;
+      role.setCatalogVersion(incrementAndGetCatalogVersion());
+      return role;
+    } finally {
+      catalogLock_.writeLock().unlock();
+    }
+  }
+
+  /**
+   * Adds a grant group to the given role name and returns the modified Role with
+   * an updated catalog version. If the role does not exist a CatalogException is thrown.
+   */
+  public Role addRoleGrantGroup(String roleName, String groupName)
+      throws CatalogException {
+    catalogLock_.writeLock().lock();
+    try {
+      Role role = authPolicy_.addGrantGroup(roleName, groupName);
+      Preconditions.checkNotNull(role);
+      role.setCatalogVersion(incrementAndGetCatalogVersion());
+      return role;
+    } finally {
+      catalogLock_.writeLock().unlock();
+    }
+  }
+
+  /**
+   * Removes a grant group from the given role name and returns the modified Role with
+   * an updated catalog version. If the role does not exist a CatalogException is thrown.
+   */
+  public Role removeRoleGrantGroup(String roleName, String groupName)
+      throws CatalogException {
+    catalogLock_.writeLock().lock();
+    try {
+      Role role = authPolicy_.removeGrantGroup(roleName, groupName);
+      Preconditions.checkNotNull(role);
+      role.setCatalogVersion(incrementAndGetCatalogVersion());
+      return role;
+    } finally {
+      catalogLock_.writeLock().unlock();
+    }
+  }
+
+  /**
+   * Adds a privilege to the given role name. Returns the new RolePrivilege and
+   * increments the catalog version. If the parent role does not exist a CatalogException
+   * is thrown.
+   */
+  public RolePrivilege addRolePrivilege(String roleName, TPrivilege thriftPriv)
+      throws CatalogException {
+    catalogLock_.writeLock().lock();
+    try {
+      Role role = authPolicy_.getRole(roleName);
+      if (role == null) throw new CatalogException("Role does not exist: " + roleName);
+      RolePrivilege priv = RolePrivilege.fromThrift(thriftPriv);
+      priv.setCatalogVersion(incrementAndGetCatalogVersion());
+      authPolicy_.addPrivilege(priv);
+      return priv;
+    } finally {
+      catalogLock_.writeLock().unlock();
+    }
+  }
+
+  /**
+   * Removes a RolePrivilege from the given role name. Returns the removed
+   * RolePrivilege with an incremented catalog version or null if no matching privilege
+   * was found. Throws a CatalogException if no role exists with this name.
+   */
+  public RolePrivilege removeRolePrivilege(String roleName, TPrivilege thriftPriv)
+      throws CatalogException {
+    catalogLock_.writeLock().lock();
+    try {
+      Role role = authPolicy_.getRole(roleName);
+      if (role == null) throw new CatalogException("Role does not exist: " + roleName);
+      RolePrivilege rolePrivilege =
+          role.removePrivilege(thriftPriv.getPrivilege_name());
+      if (rolePrivilege == null) return null;
+      rolePrivilege.setCatalogVersion(incrementAndGetCatalogVersion());
+      return rolePrivilege;
+    } finally {
+      catalogLock_.writeLock().unlock();
+    }
+  }
+
+  /**
+   * Gets a RolePrivilege from the given role name. Returns the privilege if it exists,
+   * or null if no privilege matching the privilege spec exist.
+   * Throws a CatalogException if the role does not exist.
+   */
+  public RolePrivilege getRolePrivilege(String roleName, TPrivilege privSpec)
+      throws CatalogException {
+    catalogLock_.readLock().lock();
+    try {
+      Role role = authPolicy_.getRole(roleName);
+      if (role == null) throw new CatalogException("Role does not exist: " + roleName);
+      return role.getPrivilege(privSpec.getPrivilege_name());
+    } finally {
+      catalogLock_.readLock().unlock();
+    }
+  }
+
+  /**
    * Increments the current Catalog version and returns the new value.
    */
   public long incrementAndGetCatalogVersion() {
@@ -695,4 +892,6 @@ public class CatalogServiceCatalog extends Catalog {
    * Gets the next table ID and increments the table ID counter.
    */
   public TableId getNextTableId() { return new TableId(nextTableId_.getAndIncrement()); }
+  public SentryProxy getSentryProxy() { return sentryProxy_; }
+  public AuthorizationPolicy getAuthPolicy() { return authPolicy_; }
 }

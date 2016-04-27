@@ -146,6 +146,43 @@ select * from t2
 bigint,int,int
 ====
 ---- QUERY
+# Add some complex-typed columns
+alter table t2 add columns (
+x array<int>,
+y map<string,float> comment 'Map Col',
+z struct<f1:boolean,f2:bigint>)
+---- RESULTS
+====
+---- QUERY
+describe t2
+---- RESULTS
+'id_col','bigint','id col'
+'int_col','int','changed to int col'
+'c3','int','added a comment'
+'x','array<int>',''
+'y','map<string,float>','Map Col'
+'z','struct<f1:boolean,f2:bigint>',''
+---- TYPES
+string,string,string
+====
+---- QUERY
+# Replace columns with some complex-typed columns
+alter table t2 replace columns (
+a int comment 'Int Col',
+b struct<f1:array<int>,f2:map<string,struct<f1:bigint>>>,
+c double)
+---- RESULTS
+====
+---- QUERY
+describe t2
+---- RESULTS
+'a','int','Int Col'
+'b','struct<f1:array<int>,f2:map<string,struct<f1:bigint>>>',''
+'c','double',''
+---- TYPES
+string,string,string
+====
+---- QUERY
 create external table jointbl_test like functional.jointbl
 ---- RESULTS
 ====
@@ -536,13 +573,13 @@ int,bigint
 # Show the table stats before altering.
 show table stats alltypes_test
 ---- LABELS
-YEAR, MONTH, #ROWS, #FILES, SIZE, BYTES CACHED, FORMAT
+YEAR, MONTH, #ROWS, #FILES, SIZE, BYTES CACHED, FORMAT, INCREMENTAL STATS
 ---- RESULTS
-2009,4,-1,1,regex:.+KB,'NOT CACHED','SEQUENCE_FILE'
-2009,5,-1,1,regex:.+KB,'NOT CACHED','RC_FILE'
-Total,,-1,2,regex:.+KB,'0B',''
+'2009','4',-1,1,regex:.+KB,'NOT CACHED','SEQUENCE_FILE','false'
+'2009','5',-1,1,regex:.+KB,'NOT CACHED','RC_FILE','false'
+'Total','',-1,2,regex:.+KB,'0B','',''
 ---- TYPES
-INT, INT, BIGINT, BIGINT, STRING, STRING, STRING
+STRING, STRING, BIGINT, BIGINT, STRING, STRING, STRING, STRING
 ====
 ---- QUERY
 # Test altering the 'numRows' table property of a table.
@@ -559,13 +596,13 @@ set tblproperties ('numRows'='30')
 # Show the table stats after altering the table and partition stats.
 show table stats alltypes_test
 ---- LABELS
-YEAR, MONTH, #ROWS, #FILES, SIZE, BYTES CACHED, FORMAT
+YEAR, MONTH, #ROWS, #FILES, SIZE, BYTES CACHED, FORMAT, INCREMENTAL STATS
 ---- RESULTS
-2009,4,30,1,regex:.+KB,'NOT CACHED','SEQUENCE_FILE'
-2009,5,-1,1,regex:.+KB,'NOT CACHED','RC_FILE'
-Total,,200,2,regex:.+KB,'0B',''
+'2009','4',30,1,regex:.+KB,'NOT CACHED','SEQUENCE_FILE','false'
+'2009','5',-1,1,regex:.+KB,'NOT CACHED','RC_FILE','false'
+'Total','',200,2,regex:.+KB,'0B','',''
 ---- TYPES
-INT, INT, BIGINT, BIGINT, STRING, STRING, STRING
+STRING, STRING, BIGINT, BIGINT, STRING, STRING, STRING, STRING
 ====
 ---- QUERY
 # IMPALA-1016: Testing scanning newly added columns

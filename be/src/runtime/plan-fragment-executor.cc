@@ -18,6 +18,7 @@
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <boost/unordered_map.hpp>
 #include <boost/foreach.hpp>
+#include <gutil/strings/substitute.h>
 
 #include "codegen/llvm-codegen.h"
 #include "common/logging.h"
@@ -48,10 +49,12 @@ DECLARE_bool(enable_rm);
 
 using namespace std;
 using namespace boost;
-
+using namespace strings;
 using namespace apache::thrift;
 
 namespace impala {
+
+const string PlanFragmentExecutor::PER_HOST_PEAK_MEM_COUNTER = "PerHostPeakMemUsage";
 
 PlanFragmentExecutor::PlanFragmentExecutor(ExecEnv* exec_env,
     const ReportStatusCallback& report_status_cb) :
@@ -92,6 +95,9 @@ Status PlanFragmentExecutor::Prepare(const TExecPlanFragmentParams& request) {
   runtime_state_.reset(
       new RuntimeState(request.fragment_instance_ctx, cgroup, exec_env_));
 
+  // total_time_counter() is in the runtime_state_ so start it up now.
+  SCOPED_TIMER(profile()->total_time_counter());
+
   // Register after setting runtime_state_ to ensure proper cleanup.
   if (FLAGS_enable_rm && !cgroup.empty() && request.__isset.reserved_resource) {
     bool is_first;
@@ -126,21 +132,36 @@ Status PlanFragmentExecutor::Prepare(const TExecPlanFragmentParams& request) {
 
   // reservation or a query option.
   int64_t bytes_limit = -1;
-  if (request.__isset.reserved_resource && request.reserved_resource.memory_mb > 0) {
-    bytes_limit =
-        static_cast<int64_t>(request.reserved_resource.memory_mb) * 1024L * 1024L;
-    VLOG_QUERY << "Using query memory limit from resource reservation: "
-        << PrettyPrinter::Print(bytes_limit, TCounterType::BYTES);
-  } else if (runtime_state_->query_options().__isset.mem_limit &&
+  if (runtime_state_->query_options().__isset.mem_limit &&
       runtime_state_->query_options().mem_limit > 0) {
     bytes_limit = runtime_state_->query_options().mem_limit;
     VLOG_QUERY << "Using query memory limit from query options: "
                << PrettyPrinter::Print(bytes_limit, TCounterType::BYTES);
   }
 
+  int64_t rm_reservation_size_bytes = -1;
+  if (request.__isset.reserved_resource && request.reserved_resource.memory_mb > 0) {
+    rm_reservation_size_bytes =
+        static_cast<int64_t>(request.reserved_resource.memory_mb) * 1024L * 1024L;
+    // Queries that use more than the hard limit will be killed, so it's not useful to
+    // have a reservation larger than the hard limit. Clamp reservation bytes limit to the
+    // hard limit (if it exists).
+    if (rm_reservation_size_bytes > bytes_limit && bytes_limit != -1) {
+      runtime_state_->LogError(Substitute("Reserved resource size ($0) is larger than "
+          "query mem limit ($1), and will be restricted to $1. Configure the reservation "
+          "size by setting RM_INITIAL_MEM.",
+          PrettyPrinter::PrintBytes(rm_reservation_size_bytes),
+          PrettyPrinter::PrintBytes(bytes_limit)));
+      rm_reservation_size_bytes = bytes_limit;
+    }
+    VLOG_QUERY << "Using RM reservation memory limit from resource reservation: "
+               << PrettyPrinter::Print(rm_reservation_size_bytes, TCounterType::BYTES);
+  }
+
   DCHECK(!params.request_pool.empty());
-  RETURN_IF_ERROR(runtime_state_->InitMemTrackers(query_id_, &params.request_pool,
-      bytes_limit));
+  runtime_state_->InitMemTrackers(query_id_, &params.request_pool,
+      bytes_limit, rm_reservation_size_bytes);
+  RETURN_IF_ERROR(runtime_state_->CreateBlockMgr());
 
   // Reserve one main thread from the pool
   runtime_state_->resource_pool()->AcquireThreadToken();
@@ -234,17 +255,23 @@ Status PlanFragmentExecutor::Prepare(const TExecPlanFragmentParams& request) {
   profile()->AddChild(plan_->runtime_profile());
   rows_produced_counter_ =
       ADD_COUNTER(profile(), "RowsProduced", TCounterType::UNIT);
+  per_host_mem_usage_ =
+      ADD_COUNTER(profile(), PER_HOST_PEAK_MEM_COUNTER, TCounterType::BYTES);
 
   row_batch_.reset(new RowBatch(plan_->row_desc(), runtime_state_->batch_size(),
         runtime_state_->instance_mem_tracker()));
-  VLOG(3) << "plan_root=\n" << plan_->DebugString();
+  VLOG(2) << "plan_root=\n" << plan_->DebugString();
   prepared_ = true;
   return Status::OK;
 }
 
 void PlanFragmentExecutor::OptimizeLlvmModule() {
-  if (runtime_state_->codegen() == NULL) return;
-  Status status = runtime_state_->codegen()->FinalizeModule();
+  if (!runtime_state_->codegen_created()) return;
+  LlvmCodeGen* codegen;
+  Status status = runtime_state_->GetCodegen(&codegen, /* initalize */ false);
+  DCHECK(status.ok());
+  DCHECK_NOTNULL(codegen);
+  status = codegen->FinalizeModule();
   if (!status.ok()) {
     stringstream ss;
     ss << "Error with codegen for this query: " << status.GetErrorMsg();
@@ -254,8 +281,7 @@ void PlanFragmentExecutor::OptimizeLlvmModule() {
 
 void PlanFragmentExecutor::PrintVolumeIds(
     const PerNodeScanRanges& per_node_scan_ranges) {
-  if (per_node_scan_ranges.empty())
-    return;
+  if (per_node_scan_ranges.empty()) return;
 
   HdfsScanNode::PerVolumnStats per_volume_stats;
   BOOST_FOREACH(const PerNodeScanRanges::value_type& entry, per_node_scan_ranges) {
@@ -315,13 +341,11 @@ Status PlanFragmentExecutor::OpenInternal() {
   while (!done_) {
     RowBatch* batch;
     RETURN_IF_ERROR(GetNextInternal(&batch));
-    if (batch == NULL)
-      break;
+    if (batch == NULL) break;
     if (VLOG_ROW_IS_ON) {
       VLOG_ROW << "OpenInternal: #rows=" << batch->num_rows();
       for (int i = 0; i < batch->num_rows(); ++i) {
-        TupleRow* row = batch->GetRow(i);
-        VLOG_ROW << PrintRow(row, row_desc());
+        VLOG_ROW << PrintRow(batch->GetRow(i), row_desc());
       }
     }
 
@@ -337,6 +361,7 @@ Status PlanFragmentExecutor::OpenInternal() {
   // either in error or have returned a status report with done =
   // true, so tearing down any data stream state (a separate
   // channel) in Close is safe.
+  SCOPED_TIMER(profile()->total_time_counter());
   sink_->Close(runtime_state());
   done_ = true;
 
@@ -381,8 +406,7 @@ void PlanFragmentExecutor::ReportProfile() {
       VLOG_FILE << ss.str();
     }
 
-    if (!report_thread_active_)
-      break;
+    if (!report_thread_active_) break;
 
     if (completed_report_sent_.Read() == 0) {
       // No complete fragment report has been sent.
@@ -395,14 +419,16 @@ void PlanFragmentExecutor::ReportProfile() {
 }
 
 void PlanFragmentExecutor::SendReport(bool done) {
-  if (report_status_cb_.empty())
-    return;
+  if (report_status_cb_.empty()) return;
 
   Status status;
   {
     lock_guard<mutex> l(status_lock_);
     status = status_;
   }
+
+  // Update the counter for the peak per host mem usage.
+  per_host_mem_usage_->Set(runtime_state()->query_mem_tracker()->peak_consumption());
 
   // This will send a report even if we are cancelled.  If the query completed correctly
   // but fragments still need to be cancelled (e.g. limit reached), the coordinator will
@@ -411,8 +437,7 @@ void PlanFragmentExecutor::SendReport(bool done) {
 }
 
 void PlanFragmentExecutor::StopReportThread() {
-  if (!report_thread_active_)
-    return;
+  if (!report_thread_active_) return;
   {
     lock_guard<mutex> l(report_thread_lock_);
     report_thread_active_ = false;
@@ -421,6 +446,10 @@ void PlanFragmentExecutor::StopReportThread() {
   report_thread_->Join();
 }
 
+// TODO: why can't we just put the total_time_counter() at the
+// beginning of Open() and GetNext(). This seems to really mess
+// the timer here, presumably because the data stream sender is
+// multithreaded and the timer we use gets confused.
 Status PlanFragmentExecutor::GetNext(RowBatch** batch) {
   VLOG_FILE << "GetNext(): instance_id="
       << runtime_state_->fragment_instance_id();
@@ -431,8 +460,7 @@ Status PlanFragmentExecutor::GetNext(RowBatch** batch) {
         << " instance_id=" << PrintId(runtime_state_->fragment_instance_id());
     FragmentComplete();
     // GetNext() uses *batch = NULL to signal the end.
-    if (*batch != NULL && (*batch)->num_rows() == 0)
-      *batch = NULL;
+    if (*batch != NULL && (*batch)->num_rows() == 0) *batch = NULL;
   }
 
   return status;
@@ -451,7 +479,7 @@ Status PlanFragmentExecutor::GetNextInternal(RowBatch** batch) {
         plan_->GetNext(runtime_state_.get(), row_batch_.get(), &done_));
     *batch = row_batch_.get();
     if (row_batch_->num_rows() > 0) {
-      COUNTER_UPDATE(rows_produced_counter_, row_batch_->num_rows());
+      COUNTER_ADD(rows_produced_counter_, row_batch_->num_rows());
       break;
     }
   }
@@ -462,7 +490,7 @@ Status PlanFragmentExecutor::GetNextInternal(RowBatch** batch) {
 void PlanFragmentExecutor::FragmentComplete() {
   // Check the atomic flag. If it is set, then a fragment complete report has already
   // been sent.
-  bool send_report = completed_report_sent_.Swap(0,1);
+  bool send_report = completed_report_sent_.CompareAndSwap(0,1);
 
   fragment_sw_.Stop();
   int64_t cpu_and_wait_time = fragment_sw_.ElapsedTime();
@@ -474,7 +502,7 @@ void PlanFragmentExecutor::FragmentComplete() {
   // Timing is not perfect.
   if (cpu_time < 0)
     cpu_time = 0;
-  runtime_state_->total_cpu_timer()->Update(cpu_time);
+  runtime_state_->total_cpu_timer()->Add(cpu_time);
 
   ReleaseThreadToken();
   StopReportThread();
@@ -482,10 +510,9 @@ void PlanFragmentExecutor::FragmentComplete() {
 }
 
 void PlanFragmentExecutor::UpdateStatus(const Status& status) {
-  if (status.ok())
-    return;
+  if (status.ok()) return;
 
-  bool send_report = completed_report_sent_.Swap(0,1);
+  bool send_report = completed_report_sent_.CompareAndSwap(0,1);
 
   {
     lock_guard<mutex> l(status_lock_);

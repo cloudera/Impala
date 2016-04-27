@@ -20,6 +20,7 @@
 #include "common/logging.h"
 #include "exec/aggregation-node.h"
 #include "exprs/aggregate-functions.h"
+#include "exprs/expr-context.h"
 #include "exprs/anyval-util.h"
 #include "runtime/lib-cache.h"
 #include "runtime/runtime-state.h"
@@ -56,29 +57,44 @@ typedef void (*UpdateFn8)(FunctionContext*, const AnyVal&, const AnyVal&,
     const AnyVal&, const AnyVal&, const AnyVal&, const AnyVal&, const AnyVal&,
     const AnyVal&, AnyVal*);
 typedef StringVal (*SerializeFn)(FunctionContext*, const StringVal&);
+typedef AnyVal (*GetValueFn)(FunctionContext*, const AnyVal&);
 typedef AnyVal (*FinalizeFn)(FunctionContext*, const AnyVal&);
 
 Status AggFnEvaluator::Create(ObjectPool* pool, const TExpr& desc,
     AggFnEvaluator** result) {
+  return Create(pool, desc, false, result);
+}
+
+Status AggFnEvaluator::Create(ObjectPool* pool, const TExpr& desc,
+    bool is_analytic_fn, AggFnEvaluator** result) {
   DCHECK_GT(desc.nodes.size(), 0);
-  *result = pool->Add(new AggFnEvaluator(desc.nodes[0]));
+  *result = pool->Add(new AggFnEvaluator(desc.nodes[0], is_analytic_fn));
   int node_idx = 0;
   for (int i = 0; i < desc.nodes[0].num_children; ++i) {
     ++node_idx;
     Expr* expr = NULL;
+    ExprContext* ctx = NULL;
     RETURN_IF_ERROR(Expr::CreateTreeFromThrift(
-        pool, desc.nodes, NULL, &node_idx, &expr));
-    (*result)->input_exprs_.push_back(expr);
+        pool, desc.nodes, NULL, &node_idx, &expr, &ctx));
+    (*result)->input_expr_ctxs_.push_back(ctx);
   }
   return Status::OK;
 }
 
-AggFnEvaluator::AggFnEvaluator(const TExprNode& desc)
+AggFnEvaluator::AggFnEvaluator(const TExprNode& desc, bool is_analytic_fn)
   : fn_(desc.fn),
-    return_type_(desc.type),
-    intermediate_type_(desc.fn.aggregate_fn.intermediate_type),
+    is_merge_(desc.agg_expr.is_merge_agg),
+    is_analytic_fn_(is_analytic_fn),
+    intermediate_slot_desc_(NULL),
     output_slot_desc_(NULL),
-    cache_entry_(NULL) {
+    cache_entry_(NULL),
+    init_fn_(NULL),
+    update_fn_(NULL),
+    remove_fn_(NULL),
+    merge_fn_(NULL),
+    serialize_fn_(NULL),
+    get_value_fn_(NULL),
+    finalize_fn_(NULL) {
   DCHECK(desc.fn.__isset.aggregate_fn);
   DCHECK(desc.node_type == TExprNodeType::AGGREGATE_EXPR);
   // TODO: remove. See comment with AggregationOp
@@ -90,7 +106,10 @@ AggFnEvaluator::AggFnEvaluator(const TExprNode& desc)
     agg_op_ = MAX;
   } else if (fn_.name.function_name == "sum") {
     agg_op_ = SUM;
-  } else if (fn_.name.function_name == "ndv") {
+  } else if (fn_.name.function_name == "avg") {
+    agg_op_ = AVG;
+  } else if (fn_.name.function_name == "ndv" ||
+      fn_.name.function_name == "ndv_no_finalize") {
     agg_op_ = NDV;
   } else {
     agg_op_ = OTHER;
@@ -102,23 +121,40 @@ AggFnEvaluator::~AggFnEvaluator() {
 }
 
 Status AggFnEvaluator::Prepare(RuntimeState* state, const RowDescriptor& desc,
-      const SlotDescriptor* output_slot_desc) {
+      const SlotDescriptor* intermediate_slot_desc,
+      const SlotDescriptor* output_slot_desc,
+      MemPool* agg_fn_pool, FunctionContext** agg_fn_ctx) {
+  DCHECK(intermediate_slot_desc != NULL);
+  DCHECK_EQ(intermediate_slot_desc->type().type,
+      ColumnType(fn_.aggregate_fn.intermediate_type).type);
+  DCHECK(intermediate_slot_desc_ == NULL);
+  intermediate_slot_desc_ = intermediate_slot_desc;
+
   DCHECK(output_slot_desc != NULL);
+  DCHECK_EQ(output_slot_desc->type().type, ColumnType(fn_.ret_type).type);
   DCHECK(output_slot_desc_ == NULL);
   output_slot_desc_ = output_slot_desc;
 
-  RETURN_IF_ERROR(Expr::Prepare(input_exprs_, state, desc, false));
+  RETURN_IF_ERROR(
+      Expr::Prepare(input_expr_ctxs_, state, desc, agg_fn_pool->mem_tracker()));
 
   ObjectPool* obj_pool = state->obj_pool();
-  for (int i = 0; i < input_exprs().size(); ++i) {
-    staging_input_vals_.push_back(CreateAnyVal(obj_pool, input_exprs()[i]->type()));
+  for (int i = 0; i < input_expr_ctxs_.size(); ++i) {
+    staging_input_vals_.push_back(
+        CreateAnyVal(obj_pool, input_expr_ctxs_[i]->root()->type()));
   }
-  staging_output_val_ = CreateAnyVal(obj_pool, output_slot_desc_->type());
+  staging_intermediate_val_ = CreateAnyVal(obj_pool, intermediate_type());
+  staging_merge_input_val_ = CreateAnyVal(obj_pool, intermediate_type());
 
-  // Load the function pointers.
+  if (is_merge_) {
+    DCHECK_EQ(staging_input_vals_.size(), 1) << "Merge should only have 1 input.";
+  }
+
+  // Load the function pointers. Merge is not required if this is evaluating an
+  // analytic function.
   if (fn_.aggregate_fn.init_fn_symbol.empty() ||
       fn_.aggregate_fn.update_fn_symbol.empty() ||
-      fn_.aggregate_fn.merge_fn_symbol.empty()) {
+      (!is_analytic_fn_ && fn_.aggregate_fn.merge_fn_symbol.empty())) {
     // This path is only for partially implemented builtins.
     DCHECK_EQ(fn_.binary_type, TFunctionBinaryType::BUILTIN);
     stringstream ss;
@@ -130,60 +166,65 @@ Status AggFnEvaluator::Prepare(RuntimeState* state, const RowDescriptor& desc,
       fn_.hdfs_location, fn_.aggregate_fn.init_fn_symbol, &init_fn_, &cache_entry_));
   RETURN_IF_ERROR(LibCache::instance()->GetSoFunctionPtr(
       fn_.hdfs_location, fn_.aggregate_fn.update_fn_symbol, &update_fn_, &cache_entry_));
-  RETURN_IF_ERROR(LibCache::instance()->GetSoFunctionPtr(
-      fn_.hdfs_location, fn_.aggregate_fn.merge_fn_symbol, &merge_fn_, &cache_entry_));
 
-  // Serialize and Finalize are optional
+  // Merge() is not loaded if evaluating the agg fn as an analytic function.
+  if (!is_analytic_fn_) {
+    RETURN_IF_ERROR(LibCache::instance()->GetSoFunctionPtr(fn_.hdfs_location,
+          fn_.aggregate_fn.merge_fn_symbol, &merge_fn_, &cache_entry_));
+  }
+
+  // Serialize(), GetValue(), Remove() and Finalize() are optional
   if (!fn_.aggregate_fn.serialize_fn_symbol.empty()) {
     RETURN_IF_ERROR(LibCache::instance()->GetSoFunctionPtr(
         fn_.hdfs_location, fn_.aggregate_fn.serialize_fn_symbol, &serialize_fn_,
         &cache_entry_));
-  } else {
-    serialize_fn_ = NULL;
+  }
+  if (!fn_.aggregate_fn.get_value_fn_symbol.empty()) {
+    RETURN_IF_ERROR(LibCache::instance()->GetSoFunctionPtr(
+        fn_.hdfs_location, fn_.aggregate_fn.get_value_fn_symbol, &get_value_fn_,
+        &cache_entry_));
+  }
+  if (!fn_.aggregate_fn.remove_fn_symbol.empty()) {
+    RETURN_IF_ERROR(LibCache::instance()->GetSoFunctionPtr(
+        fn_.hdfs_location, fn_.aggregate_fn.remove_fn_symbol, &remove_fn_,
+        &cache_entry_));
   }
   if (!fn_.aggregate_fn.finalize_fn_symbol.empty()) {
     RETURN_IF_ERROR(LibCache::instance()->GetSoFunctionPtr(
         fn_.hdfs_location, fn_.aggregate_fn.finalize_fn_symbol, &finalize_fn_,
         &cache_entry_));
-  } else {
-    finalize_fn_ = NULL;
   }
 
-  vector<FunctionContext::TypeDesc> arg_types(input_exprs_.size());
-  for (int i = 0; i < input_exprs_.size(); ++i) {
-    AnyValUtil::ColumnTypeToTypeDesc(input_exprs_[i]->type(), &arg_types[i]);
+  vector<FunctionContext::TypeDesc> arg_types;
+  for (int i = 0; i < input_expr_ctxs_.size(); ++i) {
+    arg_types.push_back(
+        AnyValUtil::ColumnTypeToTypeDesc(input_expr_ctxs_[i]->root()->type()));
   }
-  ctx_.reset(FunctionContextImpl::CreateContext(state, state->udf_pool(), arg_types));
 
+  FunctionContext::TypeDesc intermediate_type =
+      AnyValUtil::ColumnTypeToTypeDesc(intermediate_slot_desc_->type());
+  FunctionContext::TypeDesc output_type =
+       AnyValUtil::ColumnTypeToTypeDesc(output_slot_desc_->type());
+  *agg_fn_ctx = FunctionContextImpl::CreateContext(
+      state, agg_fn_pool, intermediate_type, output_type, arg_types);
   return Status::OK;
 }
 
-Status AggFnEvaluator::Open(RuntimeState* state) {
-  RETURN_IF_ERROR(Expr::Open(input_exprs_, state));
+Status AggFnEvaluator::Open(RuntimeState* state, FunctionContext* agg_fn_ctx) {
+  RETURN_IF_ERROR(Expr::Open(input_expr_ctxs_, state));
   // Now that we have opened all our input exprs, it is safe to evaluate any constant
   // values for the UDA's FunctionContext (we cannot evaluate exprs before calling Open()
   // on them).
-  vector<AnyVal*> constant_args(input_exprs_.size());
-  for (int i = 0; i < input_exprs_.size(); ++i) {
-    constant_args[i] = input_exprs_[i]->GetConstVal();
+  vector<AnyVal*> constant_args(input_expr_ctxs_.size());
+  for (int i = 0; i < input_expr_ctxs_.size(); ++i) {
+    constant_args[i] = input_expr_ctxs_[i]->root()->GetConstVal(input_expr_ctxs_[i]);
   }
-  ctx_->impl()->SetConstantArgs(constant_args);
+  agg_fn_ctx->impl()->SetConstantArgs(constant_args);
   return Status::OK;
 }
 
 void AggFnEvaluator::Close(RuntimeState* state) {
-  Expr::Close(input_exprs_, state);
-
-  if (ctx_.get() != NULL) {
-    bool previous_error = ctx_->has_error();
-    ctx_->impl()->Close();
-    if (!previous_error && ctx_->has_error()) {
-      // TODO: revisit this (see comment in NativeUdfExpr)
-      stringstream ss;
-      ss << "UDA ERROR: " << ctx_->error_msg();
-      state->LogError(ss.str());
-    }
-  }
+  Expr::Close(input_expr_ctxs_, state);
 
   if (cache_entry_ != NULL) {
     LibCache::instance()->DecrementUseCount(cache_entry_);
@@ -191,80 +232,16 @@ void AggFnEvaluator::Close(RuntimeState* state) {
   }
 }
 
-// Utility to put val into an AnyVal struct
-inline void AggFnEvaluator::SetAnyVal(const void* slot,
-    const ColumnType& type, AnyVal* dst) {
-  if (slot == NULL) {
-    dst->is_null = true;
-    return;
-  }
-
-  dst->is_null = false;
-  switch (type.type) {
-    case TYPE_NULL: return;
-    case TYPE_BOOLEAN:
-      reinterpret_cast<BooleanVal*>(dst)->val = *reinterpret_cast<const bool*>(slot);
-      return;
-    case TYPE_TINYINT:
-      reinterpret_cast<TinyIntVal*>(dst)->val = *reinterpret_cast<const int8_t*>(slot);
-      return;
-    case TYPE_SMALLINT:
-      reinterpret_cast<SmallIntVal*>(dst)->val = *reinterpret_cast<const int16_t*>(slot);
-      return;
-    case TYPE_INT:
-      reinterpret_cast<IntVal*>(dst)->val = *reinterpret_cast<const int32_t*>(slot);
-      return;
-    case TYPE_BIGINT:
-      reinterpret_cast<BigIntVal*>(dst)->val = *reinterpret_cast<const int64_t*>(slot);
-      return;
-    case TYPE_FLOAT:
-      reinterpret_cast<FloatVal*>(dst)->val = *reinterpret_cast<const float*>(slot);
-      return;
-    case TYPE_DOUBLE:
-      reinterpret_cast<DoubleVal*>(dst)->val = *reinterpret_cast<const double*>(slot);
-      return;
-    case TYPE_STRING:
-      reinterpret_cast<const StringValue*>(slot)->ToStringVal(
-          reinterpret_cast<StringVal*>(dst));
-      return;
-    case TYPE_TIMESTAMP:
-      reinterpret_cast<const TimestampValue*>(slot)->ToTimestampVal(
-          reinterpret_cast<TimestampVal*>(dst));
-      return;
-    case TYPE_DECIMAL:
-      switch (type.GetByteSize()) {
-        case 4:
-          reinterpret_cast<DecimalVal*>(dst)->val4 =
-              *reinterpret_cast<const int32_t*>(slot);
-          return;
-        case 8:
-          reinterpret_cast<DecimalVal*>(dst)->val8 =
-              *reinterpret_cast<const int64_t*>(slot);
-          return;
-#if __BYTE_ORDER == __LITTLE_ENDIAN
-        case 16:
-          memcpy(&reinterpret_cast<DecimalVal*>(dst)->val4, slot, type.GetByteSize());
-#else
-          DCHECK(false) << "Not implemented.";
-#endif
-          return;
-        default:
-          break;
-      }
-    default:
-      DCHECK(false) << "NYI: " << type;
-  }
-}
-
-inline void AggFnEvaluator::SetOutputSlot(const AnyVal* src, Tuple* dst) {
+inline void AggFnEvaluator::SetDstSlot(FunctionContext* ctx, const AnyVal* src,
+    const SlotDescriptor* dst_slot_desc, Tuple* dst) {
   if (src->is_null) {
-    dst->SetNull(output_slot_desc_->null_indicator_offset());
+    dst->SetNull(dst_slot_desc->null_indicator_offset());
     return;
   }
 
-  dst->SetNotNull(output_slot_desc_->null_indicator_offset());
-  void* slot = dst->GetSlot(output_slot_desc_->tuple_offset());
-  switch (output_slot_desc_->type().type) {
+  dst->SetNotNull(dst_slot_desc->null_indicator_offset());
+  void* slot = dst->GetSlot(dst_slot_desc->tuple_offset());
+  switch (dst_slot_desc->type().type) {
     case TYPE_NULL:
       return;
     case TYPE_BOOLEAN:
@@ -289,15 +266,21 @@ inline void AggFnEvaluator::SetOutputSlot(const AnyVal* src, Tuple* dst) {
       *reinterpret_cast<double*>(slot) = reinterpret_cast<const DoubleVal*>(src)->val;
       return;
     case TYPE_STRING:
+    case TYPE_VARCHAR:
       *reinterpret_cast<StringValue*>(slot) =
           StringValue::FromStringVal(*reinterpret_cast<const StringVal*>(src));
+      return;
+    case TYPE_CHAR:
+      if (slot != reinterpret_cast<const StringVal*>(src)->ptr) {
+        ctx->SetError("UDA should not set pointer of CHAR(N) intermediate");
+      }
       return;
     case TYPE_TIMESTAMP:
       *reinterpret_cast<TimestampValue*>(slot) = TimestampValue::FromTimestampVal(
           *reinterpret_cast<const TimestampVal*>(src));
       return;
     case TYPE_DECIMAL:
-      switch (output_slot_desc_->type().GetByteSize()) {
+      switch (dst_slot_desc->type().GetByteSize()) {
         case 4:
           *reinterpret_cast<int32_t*>(slot) =
               reinterpret_cast<const DecimalVal*>(src)->val4;
@@ -313,7 +296,7 @@ inline void AggFnEvaluator::SetOutputSlot(const AnyVal* src, Tuple* dst) {
           // Be careful when modifying this. See IMPALA-959 for more details.
           // I suspect an issue with xmm registers not reading from aligned memory.
           memcpy(slot, &reinterpret_cast<const DecimalVal*>(src)->val4,
-              output_slot_desc_->type().GetByteSize());
+              dst_slot_desc->type().GetByteSize());
 #else
           DCHECK(false) << "Not implemented.";
 #endif
@@ -322,171 +305,203 @@ inline void AggFnEvaluator::SetOutputSlot(const AnyVal* src, Tuple* dst) {
           break;
       }
     default:
-      DCHECK(false) << "NYI: " << output_slot_desc_->type();
+      DCHECK(false) << "NYI: " << dst_slot_desc->type();
   }
 }
 
 // This function would be replaced in codegen.
-void AggFnEvaluator::Init(Tuple* dst) {
+void AggFnEvaluator::Init(FunctionContext* agg_fn_ctx, Tuple* dst) {
   DCHECK(init_fn_ != NULL);
-  reinterpret_cast<InitFn>(init_fn_)(ctx_.get(), staging_output_val_);
-  SetOutputSlot(staging_output_val_, dst);
+  if (intermediate_type().type == TYPE_CHAR) {
+    // For type char, we want to initialize the staging_intermediate_val_ with
+    // a pointer into the tuple (the UDA should not be allocating it).
+    void* slot = dst->GetSlot(intermediate_slot_desc_->tuple_offset());
+    StringVal* sv = reinterpret_cast<StringVal*>(staging_intermediate_val_);
+    sv->is_null = dst->IsNull(intermediate_slot_desc_->null_indicator_offset());
+    sv->ptr = reinterpret_cast<uint8_t*>(
+        StringValue::CharSlotToPtr(slot, intermediate_type()));
+    sv->len = intermediate_type().len;
+  }
+  reinterpret_cast<InitFn>(init_fn_)(agg_fn_ctx, staging_intermediate_val_);
+  SetDstSlot(agg_fn_ctx, staging_intermediate_val_, intermediate_slot_desc_, dst);
+  agg_fn_ctx->impl()->set_num_updates(0);
+  agg_fn_ctx->impl()->set_num_removes(0);
 }
 
-void AggFnEvaluator::UpdateOrMerge(TupleRow* row, Tuple* dst, void* fn) {
+static void SetAnyVal(const SlotDescriptor* desc, Tuple* tuple, AnyVal* dst) {
+  bool is_null = tuple->IsNull(desc->null_indicator_offset());
+  void* slot = NULL;
+  if (!is_null) slot = tuple->GetSlot(desc->tuple_offset());
+  AnyValUtil::SetAnyVal(slot, desc->type(), dst);
+}
+
+void AggFnEvaluator::Update(
+    FunctionContext* agg_fn_ctx, TupleRow* row, Tuple* dst, void* fn) {
   if (fn == NULL) return;
 
-  bool dst_null = dst->IsNull(output_slot_desc_->null_indicator_offset());
-  void* dst_slot = NULL;
-  if (!dst_null) dst_slot = dst->GetSlot(output_slot_desc_->tuple_offset());
-  SetAnyVal(dst_slot, output_slot_desc_->type(), staging_output_val_);
+  SetAnyVal(intermediate_slot_desc_, dst, staging_intermediate_val_);
 
-  for (int i = 0; i < input_exprs().size(); ++i) {
-    void* src_slot = input_exprs()[i]->GetValue(row);
-    SetAnyVal(src_slot, input_exprs()[i]->type(), staging_input_vals_[i]);
+  for (int i = 0; i < input_expr_ctxs_.size(); ++i) {
+    void* src_slot = input_expr_ctxs_[i]->GetValue(row);
+    AnyValUtil::SetAnyVal(
+        src_slot, input_expr_ctxs_[i]->root()->type(), staging_input_vals_[i]);
   }
 
   // TODO: this part is not so good and not scalable. It can be replaced with
   // codegen but we can also consider leaving it for the first few cases for
   // debugging.
-  switch (input_exprs().size()) {
+  switch (input_expr_ctxs_.size()) {
     case 0:
-      reinterpret_cast<UpdateFn0>(fn)(ctx_.get(), staging_output_val_);
+      reinterpret_cast<UpdateFn0>(fn)(agg_fn_ctx, staging_intermediate_val_);
       break;
     case 1:
-      reinterpret_cast<UpdateFn1>(fn)(ctx_.get(),
-          *staging_input_vals_[0], staging_output_val_);
+      reinterpret_cast<UpdateFn1>(fn)(agg_fn_ctx,
+          *staging_input_vals_[0], staging_intermediate_val_);
       break;
     case 2:
-      reinterpret_cast<UpdateFn2>(fn)(ctx_.get(),
-          *staging_input_vals_[0], *staging_input_vals_[1], staging_output_val_);
+      reinterpret_cast<UpdateFn2>(fn)(agg_fn_ctx,
+          *staging_input_vals_[0], *staging_input_vals_[1], staging_intermediate_val_);
       break;
     case 3:
-      reinterpret_cast<UpdateFn3>(fn)(ctx_.get(),
+      reinterpret_cast<UpdateFn3>(fn)(agg_fn_ctx,
           *staging_input_vals_[0], *staging_input_vals_[1],
-          *staging_input_vals_[2], staging_output_val_);
+          *staging_input_vals_[2], staging_intermediate_val_);
       break;
     case 4:
-      reinterpret_cast<UpdateFn4>(fn)(ctx_.get(),
+      reinterpret_cast<UpdateFn4>(fn)(agg_fn_ctx,
           *staging_input_vals_[0], *staging_input_vals_[1],
-          *staging_input_vals_[2], *staging_input_vals_[3], staging_output_val_);
+          *staging_input_vals_[2], *staging_input_vals_[3], staging_intermediate_val_);
       break;
     case 5:
-      reinterpret_cast<UpdateFn5>(fn)(ctx_.get(),
+      reinterpret_cast<UpdateFn5>(fn)(agg_fn_ctx,
           *staging_input_vals_[0], *staging_input_vals_[1],
           *staging_input_vals_[2], *staging_input_vals_[3],
-          *staging_input_vals_[4], staging_output_val_);
+          *staging_input_vals_[4], staging_intermediate_val_);
       break;
     case 6:
-      reinterpret_cast<UpdateFn6>(fn)(ctx_.get(),
+      reinterpret_cast<UpdateFn6>(fn)(agg_fn_ctx,
           *staging_input_vals_[0], *staging_input_vals_[1],
           *staging_input_vals_[2], *staging_input_vals_[3],
-          *staging_input_vals_[4], *staging_input_vals_[5], staging_output_val_);
+          *staging_input_vals_[4], *staging_input_vals_[5], staging_intermediate_val_);
       break;
     case 7:
-      reinterpret_cast<UpdateFn7>(fn)(ctx_.get(),
+      reinterpret_cast<UpdateFn7>(fn)(agg_fn_ctx,
           *staging_input_vals_[0], *staging_input_vals_[1],
           *staging_input_vals_[2], *staging_input_vals_[3],
           *staging_input_vals_[4], *staging_input_vals_[5],
-          *staging_input_vals_[6], staging_output_val_);
+          *staging_input_vals_[6], staging_intermediate_val_);
       break;
     case 8:
-      reinterpret_cast<UpdateFn8>(fn)(ctx_.get(),
+      reinterpret_cast<UpdateFn8>(fn)(agg_fn_ctx,
           *staging_input_vals_[0], *staging_input_vals_[1],
           *staging_input_vals_[2], *staging_input_vals_[3],
           *staging_input_vals_[4], *staging_input_vals_[5],
           *staging_input_vals_[6], *staging_input_vals_[7],
-          staging_output_val_);
+          staging_intermediate_val_);
       break;
     default:
       DCHECK(false) << "NYI";
   }
-  SetOutputSlot(staging_output_val_, dst);
+  SetDstSlot(agg_fn_ctx, staging_intermediate_val_, intermediate_slot_desc_, dst);
 }
 
-void AggFnEvaluator::Update(TupleRow* row, Tuple* dst) {
-  return UpdateOrMerge(row, dst, update_fn_);
+void AggFnEvaluator::Merge(FunctionContext* agg_fn_ctx, Tuple* src, Tuple* dst) {
+  DCHECK(merge_fn_ != NULL);
+
+  SetAnyVal(intermediate_slot_desc_, dst, staging_intermediate_val_);
+  SetAnyVal(intermediate_slot_desc_, src, staging_merge_input_val_);
+
+  // The merge fn always takes one input argument.
+  reinterpret_cast<UpdateFn1>(merge_fn_)(agg_fn_ctx,
+      *staging_merge_input_val_, staging_intermediate_val_);
+  SetDstSlot(agg_fn_ctx, staging_intermediate_val_, intermediate_slot_desc_, dst);
 }
 
-void AggFnEvaluator::Merge(TupleRow* row, Tuple* dst) {
-  return UpdateOrMerge(row, dst, merge_fn_);
-}
+void AggFnEvaluator::SerializeOrFinalize(FunctionContext* agg_fn_ctx, Tuple* src,
+    const SlotDescriptor* dst_slot_desc, Tuple* dst, void* fn) {
+  // No fn was given and the src and dst are identical. Nothing to be done.
+  if (fn == NULL && src == dst) return;
+  // src != dst means we are performing a Finalize(), so even if fn == null we
+  // still must copy the value of the src slot into dst.
 
-void AggFnEvaluator::SerializeOrFinalize(Tuple* tuple, void* fn) {
-  DCHECK_EQ(output_slot_desc_->type().type, return_type_.type);
-  if (fn == NULL) return;
+  bool src_slot_null = src->IsNull(intermediate_slot_desc_->null_indicator_offset());
+  void* src_slot = NULL;
+  if (!src_slot_null) src_slot = src->GetSlot(intermediate_slot_desc_->tuple_offset());
 
-  bool slot_null = tuple->IsNull(output_slot_desc_->null_indicator_offset());
-  void* slot = NULL;
-  if (!slot_null) slot = tuple->GetSlot(output_slot_desc_->tuple_offset());
-  SetAnyVal(slot, output_slot_desc_->type(), staging_output_val_);
+  // No fn was given but the src and dst tuples are different (doing a Finalize()).
+  // Just copy the src slot into the dst tuple.
+  if (fn == NULL) {
+    DCHECK_EQ(intermediate_type(), dst_slot_desc->type());
+    RawValue::Write(src_slot, dst, dst_slot_desc, NULL);
+    return;
+  }
 
-  switch (return_type_.type) {
+  AnyValUtil::SetAnyVal(src_slot, intermediate_type(), staging_intermediate_val_);
+  switch (dst_slot_desc->type().type) {
     case TYPE_BOOLEAN: {
       typedef BooleanVal(*Fn)(FunctionContext*, AnyVal*);
-      BooleanVal v = reinterpret_cast<Fn>(fn)(ctx_.get(), staging_output_val_);
-      SetOutputSlot(&v, tuple);
+      BooleanVal v = reinterpret_cast<Fn>(fn)(agg_fn_ctx, staging_intermediate_val_);
+      SetDstSlot(agg_fn_ctx, &v, dst_slot_desc, dst);
       break;
     }
     case TYPE_TINYINT: {
       typedef TinyIntVal(*Fn)(FunctionContext*, AnyVal*);
-      TinyIntVal v = reinterpret_cast<Fn>(fn)(ctx_.get(), staging_output_val_);
-      SetOutputSlot(&v, tuple);
+      TinyIntVal v = reinterpret_cast<Fn>(fn)(agg_fn_ctx, staging_intermediate_val_);
+      SetDstSlot(agg_fn_ctx, &v, dst_slot_desc, dst);
       break;
     }
     case TYPE_SMALLINT: {
       typedef SmallIntVal(*Fn)(FunctionContext*, AnyVal*);
-      SmallIntVal v = reinterpret_cast<Fn>(fn)(ctx_.get(), staging_output_val_);
-      SetOutputSlot(&v, tuple);
+      SmallIntVal v = reinterpret_cast<Fn>(fn)(agg_fn_ctx, staging_intermediate_val_);
+      SetDstSlot(agg_fn_ctx, &v, dst_slot_desc, dst);
       break;
     }
     case TYPE_INT: {
       typedef IntVal(*Fn)(FunctionContext*, AnyVal*);
-      IntVal v = reinterpret_cast<Fn>(fn)(ctx_.get(), staging_output_val_);
-      SetOutputSlot(&v, tuple);
+      IntVal v = reinterpret_cast<Fn>(fn)(agg_fn_ctx, staging_intermediate_val_);
+      SetDstSlot(agg_fn_ctx, &v, dst_slot_desc, dst);
       break;
     }
     case TYPE_BIGINT: {
       typedef BigIntVal(*Fn)(FunctionContext*, AnyVal*);
-      BigIntVal v = reinterpret_cast<Fn>(fn)(ctx_.get(), staging_output_val_);
-      SetOutputSlot(&v, tuple);
+      BigIntVal v = reinterpret_cast<Fn>(fn)(agg_fn_ctx, staging_intermediate_val_);
+      SetDstSlot(agg_fn_ctx, &v, dst_slot_desc, dst);
       break;
     }
     case TYPE_FLOAT: {
       typedef FloatVal(*Fn)(FunctionContext*, AnyVal*);
-      FloatVal v = reinterpret_cast<Fn>(fn)(ctx_.get(), staging_output_val_);
-      SetOutputSlot(&v, tuple);
+      FloatVal v = reinterpret_cast<Fn>(fn)(agg_fn_ctx, staging_intermediate_val_);
+      SetDstSlot(agg_fn_ctx, &v, dst_slot_desc, dst);
       break;
     }
     case TYPE_DOUBLE: {
       typedef DoubleVal(*Fn)(FunctionContext*, AnyVal*);
-      DoubleVal v = reinterpret_cast<Fn>(fn)(ctx_.get(), staging_output_val_);
-      SetOutputSlot(&v, tuple);
+      DoubleVal v = reinterpret_cast<Fn>(fn)(agg_fn_ctx, staging_intermediate_val_);
+      SetDstSlot(agg_fn_ctx, &v, dst_slot_desc, dst);
       break;
     }
-    case TYPE_STRING: {
+    case TYPE_STRING:
+    case TYPE_VARCHAR: {
       typedef StringVal(*Fn)(FunctionContext*, AnyVal*);
-      StringVal v = reinterpret_cast<Fn>(fn)(ctx_.get(), staging_output_val_);
-      SetOutputSlot(&v, tuple);
+      StringVal v = reinterpret_cast<Fn>(fn)(agg_fn_ctx, staging_intermediate_val_);
+      SetDstSlot(agg_fn_ctx, &v, dst_slot_desc, dst);
       break;
     }
     case TYPE_DECIMAL: {
       typedef DecimalVal(*Fn)(FunctionContext*, AnyVal*);
-      DecimalVal v = reinterpret_cast<Fn>(fn)(ctx_.get(), staging_output_val_);
-      SetOutputSlot(&v, tuple);
+      DecimalVal v = reinterpret_cast<Fn>(fn)(agg_fn_ctx, staging_intermediate_val_);
+      SetDstSlot(agg_fn_ctx, &v, dst_slot_desc, dst);
+      break;
+    }
+    case TYPE_TIMESTAMP: {
+      typedef TimestampVal(*Fn)(FunctionContext*, AnyVal*);
+      TimestampVal v = reinterpret_cast<Fn>(fn)(agg_fn_ctx, staging_intermediate_val_);
+      SetDstSlot(agg_fn_ctx, &v, dst_slot_desc, dst);
       break;
     }
     default:
       DCHECK(false) << "NYI";
   }
-}
-
-void AggFnEvaluator::Serialize(Tuple* tuple) {
-  SerializeOrFinalize(tuple, serialize_fn_);
-}
-
-void AggFnEvaluator::Finalize(Tuple* tuple) {
-  SerializeOrFinalize(tuple, finalize_fn_);
 }
 
 string AggFnEvaluator::DebugString(const vector<AggFnEvaluator*>& exprs) {
@@ -502,10 +517,9 @@ string AggFnEvaluator::DebugString(const vector<AggFnEvaluator*>& exprs) {
 string AggFnEvaluator::DebugString() const {
   stringstream out;
   out << "AggFnEvaluator(op=" << agg_op_;
-  for (int i = 0; i < input_exprs_.size(); ++i) {
-    out << " " << input_exprs_[i]->DebugString() << ")";
+  for (int i = 0; i < input_expr_ctxs_.size(); ++i) {
+    out << " " << input_expr_ctxs_[i]->root()->DebugString() << ")";
   }
   out << ")";
   return out.str();
 }
-

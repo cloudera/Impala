@@ -9,11 +9,11 @@ set(THIRDPARTY_LDAP thirdparty/openldap-$ENV{IMPALA_OPENLDAP_VERSION})
 
 set (THIRDPARTY ${CMAKE_SOURCE_DIR}/thirdparty)
 set(LDAP_SEARCH_LIB_PATH
-  ${THIRDPARTY}/openldap-$ENV{IMPALA_OPENLDAP_VERSION}/install/lib
+  ${THIRDPARTY}/openldap-$ENV{IMPALA_OPENLDAP_VERSION}/impala_install/lib
 )
 
 set(LDAP_INCLUDE_DIR
-  ${THIRDPARTY_LDAP}/install/include
+  ${THIRDPARTY_LDAP}/impala_install/include
 )
 
 find_library(LDAP_LIB_PATH NAMES ldap

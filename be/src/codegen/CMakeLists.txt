@@ -23,6 +23,7 @@ add_library(CodeGen
   codegen-anyval.cc
   llvm-codegen.cc
   subexpr-elimination.cc
+  instruction-counter.cc
 )
 
 # output cross compile to ir metadata
@@ -46,16 +47,36 @@ add_library(CodeGen
 # this code gets cross compiled to a single IR module, impala.ll.  
 # Custom build commands don't seem to propagate dependencies correctly
 # list all the ir files 
+# Don't include any .cc files that contain the initialize for complex (i.e. boost)
+# static objects. These cannot be trimmed for the module and greatly increases
+# our runtime compile time.
 set(IR_DEPENDENT_FILES
   impala-ir.cc
+  codegen-anyval-ir.cc
   ../exec/aggregation-node-ir.cc
   ../exec/hash-join-node-ir.cc
+  ../exec/hash-table-ir.cc
+  ../exec/hdfs-avro-scanner-ir.cc
   ../exec/hdfs-scanner-ir.cc
+  ../exec/partitioned-aggregation-node-ir.cc
+  ../exec/partitioned-hash-join-node-ir.cc
   ../exprs/aggregate-functions.cc
+  ../exprs/cast-functions.cc
+  ../exprs/compound-predicates-ir.cc
+  ../exprs/conditional-functions-ir.cc
+  ../exprs/decimal-functions.cc
+  ../exprs/decimal-operators.cc
   ../exprs/expr-ir.cc
+  ../exprs/in-predicate-ir.cc
+  ../exprs/is-null-predicate.cc
+  ../exprs/like-predicate.cc
+  ../exprs/math-functions.cc
+  ../exprs/operators.cc
+  ../exprs/string-functions.cc
+  ../exprs/timestamp-functions.cc
   ../exprs/udf-builtins.cc
-  ../runtime/string-value-ir.cc
-  ../udf/udf.cc
+  ../exprs/utility-functions.cc
+  ../udf/udf-ir.cc
   ../util/hash-util-ir.cc
 )
 
@@ -90,4 +111,5 @@ add_custom_target(compile_to_ir_sse ALL DEPENDS ${IR_SSE_OUTPUT_FILE})
 add_custom_target(compile_to_ir_no_sse ALL DEPENDS ${IR_NO_SSE_OUTPUT_FILE})
 
 ADD_BE_TEST(llvm-codegen-test)
+ADD_BE_TEST(instruction-counter-test)
 

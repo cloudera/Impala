@@ -22,6 +22,7 @@
 #include "common/object-pool.h"
 #include "common/status.h"
 #include "exprs/expr.h"
+#include "runtime/buffered-block-mgr.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime-state.h"
 #include "runtime/timestamp-value.h"
@@ -44,6 +45,19 @@ using namespace boost;
 using namespace llvm;
 using namespace std;
 using namespace boost::algorithm;
+
+// The fraction of the query mem limit that is used for the block mgr. Operators
+// that accumulate memory all use the block mgr so the majority of the memory should
+// be allocated to the block mgr. The remaining memory is used by the non-spilling
+// operators and should be independent of data size.
+static const float BLOCK_MGR_MEM_FRACTION = 0.8f;
+
+// The minimum amount of memory that must be left after the block mgr reserves the
+// BLOCK_MGR_MEM_FRACTION. The block limit is:
+// min(query_limit * BLOCK_MGR_MEM_FRACTION, query_limit - BLOCK_MGR_MEM_MIN_REMAINING)
+// TODO: this value was picked arbitrarily and the tests are written to rely on this
+// for the minimum memory required to run the query. Revisit.
+static const int64_t BLOCK_MGR_MEM_MIN_REMAINING = 100 * 1024 * 1024;
 
 namespace impala {
 
@@ -80,7 +94,17 @@ RuntimeState::RuntimeState(const TQueryCtx& query_ctx)
 }
 
 RuntimeState::~RuntimeState() {
-  if (udf_pool_.get() != NULL) udf_pool_->FreeAll();
+  block_mgr_.reset();
+
+  typedef boost::unordered_map<SlotId, Bitmap*>::iterator SlotBitmapIterator;
+  for (SlotBitmapIterator it = slot_bitmap_filters_.begin();
+       it != slot_bitmap_filters_.end(); ++it) {
+    if (it->second != NULL) {
+      delete it->second;
+      it->second = NULL;
+    }
+  }
+
   // query_mem_tracker_ must be valid as long as instance_mem_tracker_ is so
   // delete instance_mem_tracker_ first.
   // LogUsage() walks the MemTracker tree top-down when the memory limit is exceeded.
@@ -96,14 +120,10 @@ RuntimeState::~RuntimeState() {
 }
 
 Status RuntimeState::Init(ExecEnv* exec_env) {
+  SCOPED_TIMER(profile_.total_time_counter());
   exec_env_ = exec_env;
   TQueryOptions& query_options =
       fragment_instance_ctx_.query_ctx.request.query_options;
-  if (!query_options.disable_codegen) {
-    RETURN_IF_ERROR(CreateCodegen());
-  } else {
-    codegen_.reset(NULL);
-  }
   if (query_options.max_errors <= 0) {
     // TODO: fix linker error and uncomment this
     //query_options_.max_errors = FLAGS_max_errors;
@@ -127,23 +147,39 @@ Status RuntimeState::Init(ExecEnv* exec_env) {
   return Status::OK;
 }
 
-Status RuntimeState::InitMemTrackers(const TUniqueId& query_id,
-    const string* pool_name, int64_t query_bytes_limit) {
+void RuntimeState::InitMemTrackers(const TUniqueId& query_id, const string* pool_name,
+    int64_t query_bytes_limit, int64_t query_rm_reservation_limit_bytes) {
   MemTracker* query_parent_tracker = exec_env_->process_mem_tracker();
   if (pool_name != NULL) {
     query_parent_tracker = MemTracker::GetRequestPoolMemTracker(*pool_name,
         query_parent_tracker);
   }
   query_mem_tracker_ =
-      MemTracker::GetQueryMemTracker(query_id, query_bytes_limit, query_parent_tracker,
-          query_resource_mgr());
-  instance_mem_tracker_.reset(new MemTracker(runtime_profile(), -1,
+      MemTracker::GetQueryMemTracker(query_id, query_bytes_limit,
+          query_rm_reservation_limit_bytes, query_parent_tracker, query_resource_mgr());
+  instance_mem_tracker_.reset(new MemTracker(runtime_profile(), -1, -1,
       runtime_profile()->name(), query_mem_tracker_.get()));
+}
 
-  // TODO: this is a stopgap until we implement ExprContext
-  udf_mem_tracker_.reset(
-      new MemTracker(-1, "UDFs", instance_mem_tracker_.get()));
-  udf_pool_.reset(new MemPool(udf_mem_tracker_.get()));
+Status RuntimeState::CreateBlockMgr() {
+  DCHECK(block_mgr_.get() == NULL);
+
+  // Compute the max memory the block mgr will use.
+  int64_t block_mgr_limit = query_mem_tracker_->lowest_limit();
+  if (block_mgr_limit < 0) block_mgr_limit = numeric_limits<int64_t>::max();
+  block_mgr_limit = min(static_cast<int64_t>(block_mgr_limit * BLOCK_MGR_MEM_FRACTION),
+      block_mgr_limit - BLOCK_MGR_MEM_MIN_REMAINING);
+  if (block_mgr_limit < 0) block_mgr_limit = 0;
+  if (query_options().__isset.max_block_mgr_memory &&
+      query_options().max_block_mgr_memory > 0) {
+    block_mgr_limit = query_options().max_block_mgr_memory;
+    LOG(ERROR) << "Block mgr mem limit: "
+               << PrettyPrinter::Print(block_mgr_limit, TCounterType::BYTES);
+  }
+
+  RETURN_IF_ERROR(BufferedBlockMgr::Create(this, query_mem_tracker(),
+        runtime_profile(), block_mgr_limit, io_mgr()->max_read_buffer_size(),
+        &block_mgr_));
   return Status::OK;
 }
 
@@ -258,20 +294,28 @@ Status RuntimeState::CheckQueryState() {
   return query_status_;
 }
 
-void RuntimeState::AddBitmapFilter(SlotId slot, const Bitmap* bitmap) {
-  lock_guard<mutex> l(bitmap_lock_);
+void RuntimeState::AddBitmapFilter(SlotId slot, Bitmap* bitmap,
+    bool* acquired_ownership) {
+  *acquired_ownership = false;
   if (bitmap != NULL) {
-    Bitmap* existing_bitmap = NULL;
+    ScopedSpinLock l(&bitmap_lock_);
     if (slot_bitmap_filters_.find(slot) != slot_bitmap_filters_.end()) {
-      existing_bitmap = slot_bitmap_filters_[slot];
+      Bitmap* existing_bitmap = slot_bitmap_filters_[slot];
+      DCHECK_NOTNULL(existing_bitmap);
+      existing_bitmap->And(bitmap);
     } else {
-      existing_bitmap = obj_pool_->Add(new Bitmap(slot_filter_bitmap_size()));
-      existing_bitmap->SetAllBits(true);
-      slot_bitmap_filters_[slot] = existing_bitmap;
+      // This is the first time we set the slot_bitmap_filters_[slot]. We avoid
+      // allocating a new bitmap by using the passed bitmap.
+      slot_bitmap_filters_[slot] = bitmap;
+      *acquired_ownership = true;
     }
-    DCHECK(existing_bitmap != NULL);
-    existing_bitmap->And(bitmap);
   }
+}
+
+Status RuntimeState::GetCodegen(LlvmCodeGen** codegen, bool initialize) {
+  if (codegen_.get() == NULL && initialize) RETURN_IF_ERROR(CreateCodegen());
+  *codegen = codegen_.get();
+  return Status::OK;
 }
 
 }

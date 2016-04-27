@@ -20,9 +20,11 @@ import java.util.List;
 import com.cloudera.impala.analysis.FunctionArgs;
 import com.cloudera.impala.analysis.FunctionName;
 import com.cloudera.impala.analysis.HdfsUri;
+import com.cloudera.impala.common.AnalysisException;
 import com.cloudera.impala.thrift.TFunction;
 import com.cloudera.impala.thrift.TFunctionBinaryType;
 import com.cloudera.impala.thrift.TScalarFunction;
+import com.cloudera.impala.thrift.TSymbolType;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 
@@ -36,17 +38,12 @@ public class ScalarFunction extends Function {
   private String prepareFnSymbol_;
   private String closeFnSymbol_;
 
-  // If true, this function is implemented with the Udf interface. Otherwise,
-  // it is implemented using the old ComputeFn interface.
-  // TODO: remove when ComputeFn interface is removed.
-  private boolean udfInterface_;
-
-  public ScalarFunction(FunctionName fnName, FunctionArgs args, ColumnType retType) {
+  public ScalarFunction(FunctionName fnName, FunctionArgs args, Type retType) {
     super(fnName, args.argTypes, retType, args.hasVarArgs);
   }
 
-  public ScalarFunction(FunctionName fnName, List<ColumnType> argTypes,
-      ColumnType retType, HdfsUri location, String symbolName, String initFnSymbol,
+  public ScalarFunction(FunctionName fnName, List<Type> argTypes,
+      Type retType, HdfsUri location, String symbolName, String initFnSymbol,
       String closeFnSymbol) {
     super(fnName, argTypes, retType, false);
     setLocation(location);
@@ -57,29 +54,26 @@ public class ScalarFunction extends Function {
 
   /**
    * Creates a builtin scalar function. This is a helper that wraps a few steps
-   * into one call. This defaults to not using a Prepare/Close function.
-   */
-  public static ScalarFunction createBuiltin(String name, ArrayList<ColumnType> argTypes,
-      boolean hasVarArgs, ColumnType retType, String symbol, boolean udfInterface) {
-    return createBuiltin(name, argTypes, hasVarArgs, retType,
-                         symbol, null, null, udfInterface);
-  }
-
-  /**
-   * Creates a builtin scalar function. This is a helper that wraps a few steps
    * into one call.
    */
-  public static ScalarFunction createBuiltin(String name, ArrayList<ColumnType> argTypes,
-      boolean hasVarArgs, ColumnType retType, String symbol,
-      String prepareFnSymbol, String closeFnSymbol, boolean udfInterface) {
+  public static ScalarFunction createBuiltin(String name, ArrayList<Type> argTypes,
+      boolean hasVarArgs, Type retType, String symbol,
+      String prepareFnSymbol, String closeFnSymbol, boolean isOperator) {
     Preconditions.checkNotNull(symbol);
     FunctionArgs fnArgs = new FunctionArgs(argTypes, hasVarArgs);
     ScalarFunction fn =
         new ScalarFunction(new FunctionName(Catalog.BUILTINS_DB, name), fnArgs, retType);
     fn.setBinaryType(TFunctionBinaryType.BUILTIN);
-    fn.setUserVisible(true);
-    fn.udfInterface_ = udfInterface;
-    fn.symbolName_ = symbol;
+    fn.setUserVisible(!isOperator);
+    try {
+      fn.symbolName_ = fn.lookupSymbol(symbol, TSymbolType.UDF_EVALUATE, null,
+          fn.hasVarArgs(), fn.getArgs());
+    } catch (AnalysisException e) {
+      // This should never happen
+      Preconditions.checkState(false, "Builtin symbol '" + symbol + "'" + argTypes
+          + " not found!" + e.getStackTrace());
+      throw new RuntimeException("Builtin symbol not found!", e);
+    }
     fn.prepareFnSymbol_ = prepareFnSymbol;
     fn.closeFnSymbol_ = closeFnSymbol;
     return fn;
@@ -92,89 +86,94 @@ public class ScalarFunction extends Function {
    * implementations. (gen_functions.py). Is there a better way to coordinate this.
    */
   public static ScalarFunction createBuiltinOperator(String name,
-      ArrayList<ColumnType> argTypes, ColumnType retType) {
+      ArrayList<Type> argTypes, Type retType) {
     // Operators have a well defined symbol based on the function name and type.
-    // Convert Add(TINYINT, TINYINT) --> Add_char_char
+    // Convert Add(TINYINT, TINYINT) --> Add_TinyIntVal_TinyIntVal
     String beFn = Character.toUpperCase(name.charAt(0)) + name.substring(1);
     boolean usesDecimal = false;
     for (int i = 0; i < argTypes.size(); ++i) {
       switch (argTypes.get(i).getPrimitiveType()) {
         case BOOLEAN:
-          beFn += "_bool";
+          beFn += "_BooleanVal";
           break;
         case TINYINT:
-          beFn += "_char";
+          beFn += "_TinyIntVal";
           break;
         case SMALLINT:
-          beFn += "_short";
+          beFn += "_SmallIntVal";
           break;
         case INT:
-          beFn += "_int";
+          beFn += "_IntVal";
           break;
         case BIGINT:
-          beFn += "_long";
+          beFn += "_BigIntVal";
           break;
         case FLOAT:
-          beFn += "_float";
+          beFn += "_FloatVal";
           break;
         case DOUBLE:
-          beFn += "_double";
+          beFn += "_DoubleVal";
           break;
         case STRING:
-          beFn += "_StringValue";
+        case VARCHAR:
+          beFn += "_StringVal";
+          break;
+        case CHAR:
+          beFn += "_Char";
           break;
         case TIMESTAMP:
-          beFn += "_TimestampValue";
+          beFn += "_TimestampVal";
           break;
         case DECIMAL:
-          beFn += "_decimal";
+          beFn += "_DecimalVal";
           usesDecimal = true;
           break;
         default:
-          Preconditions.checkState(false);
+          Preconditions.checkState(false,
+              "Argument type not supported: " + argTypes.get(i).toSql());
       }
     }
-    String beClass = usesDecimal ? "DecimalOperators" : "ComputeFunctions";
-    return createBuiltinOperator(name, beClass, beFn, argTypes, retType);
+    String beClass = usesDecimal ? "DecimalOperators" : "Operators";
+    String symbol = "impala::" + beClass + "::" + beFn;
+    return createBuiltinOperator(name, symbol, argTypes, retType);
   }
 
-  /**
-   * Create a builtin function with the symbol beClass::beFn
-   */
-  public static ScalarFunction createBuiltinOperator(String name,
-      String beClass, String beFn, ArrayList<ColumnType> argTypes, ColumnType retType) {
-    FunctionArgs fnArgs = new FunctionArgs(argTypes, false);
+  public static ScalarFunction createBuiltinOperator(String name, String symbol,
+      ArrayList<Type> argTypes, Type retType) {
+    return createBuiltin(name, symbol, argTypes, false, retType, false);
+  }
+
+  public static ScalarFunction createBuiltin(String name, String symbol,
+      ArrayList<Type> argTypes, boolean hasVarArgs, Type retType,
+      boolean userVisible) {
+    FunctionArgs fnArgs = new FunctionArgs(argTypes, hasVarArgs);
     ScalarFunction fn =
         new ScalarFunction(new FunctionName(Catalog.BUILTINS_DB, name), fnArgs, retType);
     fn.setBinaryType(TFunctionBinaryType.BUILTIN);
-    fn.setUserVisible(false);
-    fn.udfInterface_ = false;
-    fn.symbolName_ = GetComputeFnSymbol(beClass, beFn);
+    fn.setUserVisible(userVisible);
+    try {
+      fn.symbolName_ = fn.lookupSymbol(symbol, TSymbolType.UDF_EVALUATE, null,
+          fn.hasVarArgs(), fn.getArgs());
+    } catch (AnalysisException e) {
+      // This should never happen
+      Preconditions.checkState(false, "Builtin symbol '" + symbol + "'" + argTypes
+          + " not found!" + e.getStackTrace());
+      throw new RuntimeException("Builtin symbol not found!", e);
+    }
     return fn;
-  }
-
-  // Convert ComputeFunctions::Add_char_char
-  // '_ZN6impala16ComputeFunctions13Add_char_charEPNS_4ExprEPNS_8TupleRowE'
-  // TODO: this needs to be updated when we retire the ComputeFunction interface.
-  private static String GetComputeFnSymbol(String beClass, String beFn) {
-    String result = "_ZN6impala";
-    result += beClass.length() + beClass;
-    result += beFn.length() + beFn;
-    result += "EPNS_4ExprEPNS_8TupleRowE";
-    return result;
   }
 
   /**
    * Create a function that is used to search the catalog for a matching builtin. Only
    * the fields necessary for matching function prototypes are specified.
    */
-  public static ScalarFunction createBuiltinSearchDesc(String name, ColumnType[] argTypes,
+  public static ScalarFunction createBuiltinSearchDesc(String name, Type[] argTypes,
       boolean hasVarArgs) {
     FunctionArgs fnArgs = new FunctionArgs(
-        argTypes == null ? new ArrayList<ColumnType>() : Lists.newArrayList(argTypes),
+        argTypes == null ? new ArrayList<Type>() : Lists.newArrayList(argTypes),
         hasVarArgs);
     ScalarFunction fn = new ScalarFunction(
-        new FunctionName(Catalog.BUILTINS_DB, name), fnArgs, ColumnType.INVALID);
+        new FunctionName(Catalog.BUILTINS_DB, name), fnArgs, Type.INVALID);
     fn.setBinaryType(TFunctionBinaryType.BUILTIN);
     return fn;
   }
@@ -186,8 +185,6 @@ public class ScalarFunction extends Function {
   public String getSymbolName() { return symbolName_; }
   public String getPrepareFnSymbol() { return prepareFnSymbol_; }
   public String getCloseFnSymbol() { return closeFnSymbol_; }
-
-  public boolean isUdfInterface() { return udfInterface_; }
 
   @Override
   public TFunction toThrift() {

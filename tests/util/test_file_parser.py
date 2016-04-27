@@ -77,8 +77,10 @@ def parse_query_test_file(file_name, valid_section_names=None, encoding=None):
   # (ex. planner, data error)
   section_names = valid_section_names
   if section_names is None:
-    section_names = ['QUERY', 'RESULTS', 'TYPES', 'LABELS', 'SETUP', 'CATCH', 'ERRORS']
-  return parse_test_file(file_name, section_names, encoding=encoding)
+    section_names = ['QUERY', 'RESULTS', 'TYPES', 'LABELS', 'SETUP', 'CATCH', 'ERRORS',
+        'USER']
+  return parse_test_file(file_name, section_names, encoding=encoding,
+      skip_unknown_sections=False)
 
 def parse_table_constraints(constraints_file):
   """Reads a table contraints file, if one exists"""

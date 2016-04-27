@@ -64,23 +64,16 @@ public class ExchangeNode extends PlanNode {
     if (!children_.isEmpty()) {
       Preconditions.checkState(limit_ == node.limit_);
       Preconditions.checkState(tupleIds_.equals(node.tupleIds_));
-      Preconditions.checkState(rowTupleIds_.equals(node.rowTupleIds_));
       Preconditions.checkState(nullableTupleIds_.equals(node.nullableTupleIds_));
-      Preconditions.checkState(compactData_ == node.compactData_);
     } else {
       // Only apply the limit at the receiver if there are multiple senders.
       if (node.getFragment().isPartitioned()) limit_ = node.limit_;
       tupleIds_ = Lists.newArrayList(node.tupleIds_);
-      rowTupleIds_ = Lists.newArrayList(node.rowTupleIds_);
       nullableTupleIds_ = Sets.newHashSet(node.nullableTupleIds_);
-      compactData_ = node.compactData_;
     }
-    if (copyConjuncts) conjuncts_.addAll(Expr.cloneList(node.conjuncts_, null));
+    if (copyConjuncts) conjuncts_.addAll(Expr.cloneList(node.conjuncts_));
     children_.add(node);
   }
-
-  @Override
-  public void setCompactData(boolean on) { this.compactData_ = on; }
 
   @Override
   public void computeStats(Analyzer analyzer) {
@@ -92,7 +85,7 @@ public class ExchangeNode extends PlanNode {
         cardinality_ = -1;
         break;
       }
-      cardinality_ += child.getCardinality();
+      cardinality_ = addCardinalities(cardinality_, child.getCardinality());
     }
 
     if (hasLimit()) {
@@ -138,7 +131,7 @@ public class ExchangeNode extends PlanNode {
       output.append(detailPrefix + "offset: ").append(offset_).append("\n");
     }
 
-    if (mergeInfo_ != null) {
+    if (mergeInfo_ != null && detailLevel.ordinal() > TExplainLevel.MINIMAL.ordinal()) {
       output.append(detailPrefix + "order by: ");
       for (int i = 0; i < mergeInfo_.getOrderingExprs().size(); ++i) {
         if (i > 0) output.append(", ");

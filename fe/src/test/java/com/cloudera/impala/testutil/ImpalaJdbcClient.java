@@ -163,11 +163,27 @@ public class ImpalaJdbcClient {
     options.addOption("i", true, "host:port of target machine impalad is listening on");
     options.addOption("c", true,
         "Full connection string to use. Overrides host/port value");
+    options.addOption("t", true, "SASL/NOSASL, whether to use SASL transport or not");
     options.addOption("q", true, "Query String");
     options.addOption("help", false, "Help");
 
     BasicParser optionParser = new BasicParser();
     CommandLine cmdArgs = optionParser.parse(options, args);
+
+    String transportOption = cmdArgs.getOptionValue("t");
+    if (transportOption == null) {
+      LOG.error("Must specify '-t' option, whether to use SASL transport or not.");
+      LOG.error("Using the wrong type of transport will cause the program to hang.");
+      LOG.error("Usage: " + options.toString());
+      System.exit(1);
+    }
+    if (!transportOption.equalsIgnoreCase("SASL") &&
+        !transportOption.equalsIgnoreCase("NOSASL")) {
+      LOG.error("Invalid argument " + transportOption + " to '-t' option.");
+      LOG.error("Usage: " + options.toString());
+      System.exit(1);
+    }
+    boolean useSasl = transportOption.equalsIgnoreCase("SASL");
 
     String connStr = cmdArgs.getOptionValue("c", null);
 
@@ -175,7 +191,14 @@ public class ImpalaJdbcClient {
     // string using HiveServer 2 JDBC driver and no security.
     if (connStr == null) {
       String hostPort = cmdArgs.getOptionValue("i", "localhost:21050");
-      connStr = "jdbc:hive2://" + hostPort + "/;auth=noSasl";
+      connStr = "jdbc:hive2://" + hostPort + "/";
+    }
+    // Append appropriate auth option to connection string.
+    if (useSasl) {
+      connStr = connStr + ";auth=none";
+    } else {
+      // As of Hive 0.11 'noSasl' is case sensitive. See HIVE-4232 for more details.
+      connStr = connStr + ";auth=noSasl";
     }
 
     String query = cmdArgs.getOptionValue("q");
@@ -217,13 +240,15 @@ public class ImpalaJdbcClient {
 
     String[] queries = queryString.trim().split(";");
     for (String query: queries) {
-      query = query.trim().toLowerCase();
-      if (query.startsWith("use")) {
-        String[] split_query = query.split(" ");
-        String db_name = split_query[split_query.length - 1];
-        client.changeDatabase(db_name);
-        client.getStatement().close();
-        continue;
+      query = query.trim();
+      if (query.indexOf(" ") > -1) {
+        if (query.substring(0, query.indexOf(" ")).equalsIgnoreCase("use")) {
+          String[] split_query = query.split(" ");
+          String db_name = split_query[split_query.length - 1];
+          client.changeDatabase(db_name);
+          client.getStatement().close();
+          continue;
+        }
       }
       long startTime = System.currentTimeMillis();
       ResultSet res = client.execQuery(query);
@@ -261,8 +286,6 @@ public class ImpalaJdbcClient {
    */
   public static void main(String[] args) throws SQLException, ClassNotFoundException,
         ParseException {
-    ClientExecOptions execOptions = parseOptions(args);
-
     // Remove all prefixes from the logging output to make it easier to parse and disable
     // the root logger from spewing anything. This is done to make it easier to parse
     // the output.
@@ -270,6 +293,8 @@ public class ImpalaJdbcClient {
     ConsoleAppender consoleAppender = new ConsoleAppender(layout);
     LOG.addAppender(consoleAppender);
     LOG.setAdditivity(false);
+
+    ClientExecOptions execOptions = parseOptions(args);
 
     ImpalaJdbcClient client =
       ImpalaJdbcClient.createClientUsingHiveJdbcDriver(execOptions.getConnStr());

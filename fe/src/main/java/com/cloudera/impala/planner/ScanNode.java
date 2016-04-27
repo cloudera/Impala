@@ -23,6 +23,7 @@ import com.cloudera.impala.thrift.TNetworkAddress;
 import com.cloudera.impala.thrift.TScanRangeLocations;
 import com.google.common.base.Joiner;
 import com.google.common.base.Objects;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 
 /**
@@ -30,6 +31,15 @@ import com.google.common.collect.Lists;
  */
 abstract public class ScanNode extends PlanNode {
   protected final TupleDescriptor desc_;
+
+  // Total number of rows this node is expected to process
+  protected long inputCardinality_ = -1;
+
+  // Counter indicating if partitions have missing statistics
+  protected int numPartitionsMissingStats_ = 0;
+
+  // List of scan-range locations. Populated in init().
+  protected List<TScanRangeLocations> scanRanges_;
 
   public ScanNode(PlanNodeId id, TupleDescriptor desc, String displayName) {
     super(id, desc.getId().asList(), displayName);
@@ -39,12 +49,12 @@ abstract public class ScanNode extends PlanNode {
   public TupleDescriptor getTupleDesc() { return desc_; }
 
   /**
-   * Returns all scan ranges plus their locations. Needs to be preceded by a call to
-   * finalize().
-   * @param maxScanRangeLength The maximum number of bytes each scan range should scan;
-   *     only applicable to HDFS; less than or equal to zero means no maximum.
+   * Returns all scan ranges plus their locations.
    */
-  abstract public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength);
+  public List<TScanRangeLocations> getScanRangeLocations() {
+    Preconditions.checkNotNull(scanRanges_, "Need to call init() first.");
+    return scanRanges_;
+  }
 
   @Override
   protected String debugString() {
@@ -96,16 +106,25 @@ abstract public class ScanNode extends PlanNode {
    * or column stats relevant to this scan node.
    */
   public boolean isTableMissingStats() {
+    return isTableMissingColumnStats() || isTableMissingTableStats();
+  }
+
+  public boolean isTableMissingTableStats() {
     if (desc_.getTable().getNumRows() == -1) return true;
+    return numPartitionsMissingStats_ > 0;
+  }
+
+  public boolean isTableMissingColumnStats() {
     for (SlotDescriptor slot: desc_.getSlots()) {
       if (!slot.getStats().hasStats()) return true;
     }
     return false;
   }
 
+
   /**
    * Helper function to parse a "host:port" address string into TNetworkAddress
-   * This is called with ipaddress:port when doing scan range assigment.
+   * This is called with ipaddress:port when doing scan range assignment.
    */
   protected static TNetworkAddress addressToTNetworkAddress(String address) {
     TNetworkAddress result = new TNetworkAddress();
@@ -115,4 +134,9 @@ abstract public class ScanNode extends PlanNode {
     return result;
   }
 
+  @Override
+  public long getInputCardinality() {
+    if (getConjuncts().isEmpty() && hasLimit()) return getLimit();
+    return inputCardinality_;
+  }
 }

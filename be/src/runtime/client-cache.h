@@ -151,7 +151,8 @@ class ClientCacheHelper {
   // Map from client key back to its associated ThriftClientImpl transport. This is where
   // all the clients are actually stored, and client instances are owned by this class and
   // persist for exactly as long as they are present in this map.
-  typedef boost::unordered_map<ClientKey, boost::shared_ptr<ThriftClientImpl> > ClientMap;
+  // We use a map (vs. unordered_map) so we get iterator consistency across operations.
+  typedef std::map<ClientKey, boost::shared_ptr<ThriftClientImpl> > ClientMap;
   ClientMap client_map_;
 
   // Number of attempts to make to open a connection. 0 means retry indefinitely.
@@ -296,8 +297,8 @@ class ClientCache {
 
   // Close and delete the underlying transport. Return a new client connecting to the
   // same host/port.
-  // Return an error status if a new connection cannot be established and *client will be
-  // NULL in that case.
+  // Returns an error status if a new connection cannot be established and *client will
+  // be unaffected in that case.
   Status ReopenClient(T** client) {
     return client_cache_helper_.ReopenClient(client_factory_,
         reinterpret_cast<ClientKey*>(client));

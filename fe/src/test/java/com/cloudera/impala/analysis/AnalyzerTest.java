@@ -30,50 +30,61 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.cloudera.impala.authorization.AuthorizationConfig;
-import com.cloudera.impala.catalog.AuthorizationException;
+import com.cloudera.impala.catalog.AggregateFunction;
 import com.cloudera.impala.catalog.Catalog;
-import com.cloudera.impala.catalog.ColumnType;
 import com.cloudera.impala.catalog.Function;
 import com.cloudera.impala.catalog.ImpaladCatalog;
 import com.cloudera.impala.catalog.PrimitiveType;
 import com.cloudera.impala.catalog.ScalarFunction;
+import com.cloudera.impala.catalog.ScalarType;
+import com.cloudera.impala.catalog.Type;
 import com.cloudera.impala.common.AnalysisException;
-import com.cloudera.impala.common.ImpalaException;
 import com.cloudera.impala.testutil.ImpaladTestCatalog;
 import com.cloudera.impala.testutil.TestUtils;
 import com.cloudera.impala.thrift.TExpr;
 import com.cloudera.impala.thrift.TQueryCtx;
+import com.cloudera.impala.thrift.TQueryOptions;
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 
 public class AnalyzerTest {
   protected final static Logger LOG = LoggerFactory.getLogger(AnalyzerTest.class);
-  protected static ImpaladCatalog catalog_ = new ImpaladTestCatalog(
-      AuthorizationConfig.createAuthDisabledConfig());
+  protected static ImpaladCatalog catalog_ = new ImpaladTestCatalog();
 
   protected Analyzer analyzer_;
 
   // maps from type to string that will result in literal of that type
-  protected static Map<ColumnType, String> typeToLiteralValue_ =
-      new HashMap<ColumnType, String>();
+  protected static Map<ScalarType, String> typeToLiteralValue_ =
+      new HashMap<ScalarType, String>();
   static {
-    typeToLiteralValue_.put(ColumnType.BOOLEAN, "true");
-    typeToLiteralValue_.put(ColumnType.TINYINT, "1");
-    typeToLiteralValue_.put(ColumnType.SMALLINT, (Byte.MAX_VALUE + 1) + "");
-    typeToLiteralValue_.put(ColumnType.INT, (Short.MAX_VALUE + 1) + "");
-    typeToLiteralValue_.put(ColumnType.BIGINT, ((long) Integer.MAX_VALUE + 1) + "");
-    typeToLiteralValue_.put(ColumnType.FLOAT, "cast(1.0 as float)");
-    typeToLiteralValue_.put(ColumnType.DOUBLE,
+    typeToLiteralValue_.put(Type.BOOLEAN, "true");
+    typeToLiteralValue_.put(Type.TINYINT, "1");
+    typeToLiteralValue_.put(Type.SMALLINT, (Byte.MAX_VALUE + 1) + "");
+    typeToLiteralValue_.put(Type.INT, (Short.MAX_VALUE + 1) + "");
+    typeToLiteralValue_.put(Type.BIGINT,
+        ((long) Integer.MAX_VALUE + 1) + "");
+    typeToLiteralValue_.put(Type.FLOAT, "cast(1.0 as float)");
+    typeToLiteralValue_.put(Type.DOUBLE,
         "cast(" + (Float.MAX_VALUE + 1) + " as double)");
-    typeToLiteralValue_.put(ColumnType.TIMESTAMP,
+    typeToLiteralValue_.put(Type.TIMESTAMP,
         "cast('2012-12-21 00:00:00.000' as timestamp)");
-    typeToLiteralValue_.put(ColumnType.STRING, "'Hello, World!'");
-    typeToLiteralValue_.put(ColumnType.NULL, "NULL");
+    typeToLiteralValue_.put(Type.STRING, "'Hello, World!'");
+    typeToLiteralValue_.put(Type.NULL, "NULL");
   }
 
   protected Analyzer createAnalyzer(String defaultDb) {
     TQueryCtx queryCtx =
         TestUtils.createQueryContext(defaultDb, System.getProperty("user.name"));
-    return new Analyzer(catalog_, queryCtx);
+    return new Analyzer(catalog_, queryCtx,
+        AuthorizationConfig.createAuthDisabledConfig());
+  }
+
+  protected Analyzer createAnalyzer(TQueryOptions queryOptions) {
+    TQueryCtx queryCtx = TestUtils.createQueryContext();
+    queryCtx.request.query_options = queryOptions;
+    return new Analyzer(catalog_, queryCtx,
+        AuthorizationConfig.createAuthDisabledConfig());
   }
 
   protected Analyzer createAnalyzerUsingHiveColLabels() {
@@ -86,17 +97,30 @@ public class AnalyzerTest {
   // TODO: we could consider having this be the sql to run instead but that requires
   // connecting to the BE.
   protected Function addTestFunction(String name,
-      ArrayList<ColumnType> args, boolean varArgs) {
+      ArrayList<ScalarType> args, boolean varArgs) {
     return addTestFunction("default", name, args, varArgs);
   }
 
+  protected Function addTestFunction(String name,
+      ScalarType arg, boolean varArgs) {
+    return addTestFunction("default", name, Lists.newArrayList(arg), varArgs);
+  }
+
   protected Function addTestFunction(String db, String fnName,
-      ArrayList<ColumnType> args, boolean varArgs) {
+      ArrayList<ScalarType> args, boolean varArgs) {
+    ArrayList<Type> argTypes = Lists.newArrayList();
+    argTypes.addAll(args);
     Function fn = new ScalarFunction(
-        new FunctionName(db, fnName), args, ColumnType.INT, null, null, null, null);
+        new FunctionName(db, fnName), argTypes, Type.INT, null, null, null, null);
     fn.setHasVarArgs(varArgs);
     catalog_.addFunction(fn);
     return fn;
+  }
+
+  protected void addTestUda(String name, Type retType, Type... argTypes) {
+    FunctionName fnName = new FunctionName("default", name);
+    catalog_.addFunction(new AggregateFunction(fnName,
+        new FunctionArgs(Lists.newArrayList(argTypes), false), retType));
   }
 
   /**
@@ -140,7 +164,6 @@ public class AnalyzerTest {
     }
   }
 
-
   /**
    * Parse 'stmt' and return the root ParseNode.
    */
@@ -151,7 +174,7 @@ public class AnalyzerTest {
     try {
       node = (ParseNode) parser.parse().value;
     } catch (Exception e) {
-      System.err.println(e.toString());
+      e.printStackTrace();
       fail("\nParser error:\n" + parser.getErrorMsg(stmt));
     }
     assertNotNull(node);
@@ -175,38 +198,53 @@ public class AnalyzerTest {
 
   /**
    * Analyze 'stmt', expecting it to pass. Asserts in case of analysis error.
-   */
-  public ParseNode AnalyzesOk(String stmt, Analyzer analyzer) {
-    return AnalyzesOk(stmt, analyzer, null);
-  }
-
-  /**
-   * Analyze 'stmt', expecting it to pass. Asserts in case of analysis error.
    * If 'expectedWarning' is not null, asserts that a warning is produced.
    */
   public ParseNode AnalyzesOk(String stmt, Analyzer analyzer, String expectedWarning) {
-    this.analyzer_ = analyzer;
-    LOG.info("analyzing " + stmt);
-    ParseNode node = ParsesOk(stmt);
-    assertNotNull(node);
     try {
-      node.analyze(analyzer);
+      analyzer_ = analyzer;
+      AnalysisContext analysisCtx = new AnalysisContext(catalog_,
+          TestUtils.createQueryContext(Catalog.DEFAULT_DB,
+              System.getProperty("user.name")),
+              AuthorizationConfig.createAuthDisabledConfig());
+      analysisCtx.analyze(stmt, analyzer);
+      AnalysisContext.AnalysisResult analysisResult = analysisCtx.getAnalysisResult();
       if (expectedWarning != null) {
-        List<String> actualWarnings = analyzer.getWarnings();
+        List<String> actualWarnings = analysisResult.getAnalyzer().getWarnings();
         boolean matchedWarning = false;
-        for (String actualWarn: actualWarnings) {
-          if (actualWarn.startsWith(expectedWarning)) {
+        for (String actualWarning: actualWarnings) {
+          if (actualWarning.startsWith(expectedWarning)) {
             matchedWarning = true;
             break;
           }
         }
-        if (!matchedWarning) fail("Did not produce expected warning " + expectedWarning);
+        if (!matchedWarning) {
+          fail(String.format("Did not produce expected warning.\n" +
+              "Expected warning:\n%s.\nActual warnings:\n%s",
+              expectedWarning, Joiner.on("\n").join(actualWarnings)));
+        }
       }
-    } catch (ImpalaException e) {
+      Preconditions.checkNotNull(analysisResult.getStmt());
+      return analysisResult.getStmt();
+    } catch (Exception e) {
       e.printStackTrace();
       fail("Error:\n" + e.toString());
     }
-    return node;
+    return null;
+  }
+
+  /**
+   * Asserts if stmt passes analysis.
+   */
+  public void AnalysisError(String stmt) {
+    AnalysisError(stmt, null);
+  }
+
+  /**
+   * Analyze 'stmt', expecting it to pass. Asserts in case of analysis error.
+   */
+  public ParseNode AnalyzesOk(String stmt, Analyzer analyzer) {
+    return AnalyzesOk(stmt, analyzer, null);
   }
 
   /**
@@ -223,37 +261,23 @@ public class AnalyzerTest {
    */
   public void AnalysisError(String stmt, Analyzer analyzer, String expectedErrorString) {
     Preconditions.checkNotNull(expectedErrorString, "No expected error message given.");
-    this.analyzer_ = analyzer;
-    LOG.info("analyzing " + stmt);
-    SqlScanner input = new SqlScanner(new StringReader(stmt));
-    SqlParser parser = new SqlParser(input);
-    ParseNode node = null;
+    LOG.info("processing " + stmt);
     try {
-      node = (ParseNode) parser.parse().value;
+      AnalysisContext analysisCtx = new AnalysisContext(catalog_,
+          TestUtils.createQueryContext(Catalog.DEFAULT_DB,
+              System.getProperty("user.name")),
+              AuthorizationConfig.createAuthDisabledConfig());
+      analysisCtx.analyze(stmt, analyzer);
+      AnalysisContext.AnalysisResult analysisResult = analysisCtx.getAnalysisResult();
+      Preconditions.checkNotNull(analysisResult.getStmt());
     } catch (Exception e) {
-      System.err.println(e.toString());
-      fail("\nParser error:\n" + parser.getErrorMsg(stmt));
-    }
-    assertNotNull(node);
-    try {
-      node.analyze(analyzer);
-    } catch (AnalysisException e) {
       String errorString = e.getMessage();
       Assert.assertTrue(
           "got error:\n" + errorString + "\nexpected:\n" + expectedErrorString,
           errorString.startsWith(expectedErrorString));
       return;
-    } catch (AuthorizationException e) {
-      fail("Authorization error: " + e.getMessage());
     }
     fail("Stmt didn't result in analysis error: " + stmt);
-  }
-
-  /**
-   * Asserts if stmt passes analysis.
-   */
-  public void AnalysisError(String stmt) {
-    AnalysisError(stmt, null);
   }
 
   /**
@@ -274,14 +298,24 @@ public class AnalyzerTest {
   }
 
   @Test
-  public void TestMemLayout() throws AnalysisException, AuthorizationException {
+  public void TestCompressedText() throws AnalysisException {
+    AnalyzesOk("SELECT count(*) FROM functional_text_lzo.tinyinttable");
+    // TODO: Disabling the text/{gzip,bzip,snap} analysis test until the corresponding
+    //       databases are loaded.
+    // AnalyzesOk("SELECT count(*) FROM functional_text_gzip.tinyinttable");
+    // AnalyzesOk("SELECT count(*) FROM functional_text_snap.tinyinttable");
+    // AnalyzesOk("SELECT count(*) FROM functional_text_bzip.tinyinttable");
+  }
+
+  @Test
+  public void TestMemLayout() throws AnalysisException {
     testSelectStar();
     testNonNullable();
     testMixedNullable();
     testNonMaterializedSlots();
   }
 
-  private void testSelectStar() throws AnalysisException, AuthorizationException {
+  private void testSelectStar() throws AnalysisException {
     AnalyzesOk("select * from functional.AllTypes");
     DescriptorTable descTbl = analyzer_.getDescTbl();
     TupleDescriptor tupleD = descTbl.getTupleDesc(new TupleId(0));
@@ -393,6 +427,13 @@ public class AnalyzerTest {
     checkLayoutParams(d, byteSize, byteOffset, nullIndicatorByte, nullIndicatorBit);
   }
 
+  // Analyzes query and asserts that the first result expr returns the given type.
+  // Requires query to parse to a SelectStmt.
+  protected void checkExprType(String query, Type type) {
+    SelectStmt select = (SelectStmt) AnalyzesOk(query);
+    Assert.assertEquals(select.getResultExprs().get(0).getType(), type);
+  }
+
   /**
    * We distinguish between three classes of unsupported types:
    * 1. Complex types, e.g., map
@@ -405,10 +446,7 @@ public class AnalyzerTest {
    *    We do not support table partitioning on timestamp columns
    */
   @Test
-  public void TestUnsupportedTypes() throws AuthorizationException {
-    // The table metadata should not have been loaded.
-    AnalysisError("select * from functional.map_table",
-        "Failed to load metadata for table: functional.map_table");
+  public void TestUnsupportedTypes() {
     // Select supported types from a table with mixed supported/unsupported types.
     AnalyzesOk("select int_col, str_col, bigint_col from functional.unsupported_types");
     // Unsupported type binary.
@@ -423,9 +461,7 @@ public class AnalyzerTest {
         "Failed to load metadata for table: functional.unsupported_partition_types");
 
     // Try with hbase
-    AnalyzesOk("describe functional_hbase.map_table_hbase");
-    AnalysisError("select * from functional_hbase.map_table_hbase",
-        "Unsupported type in 'functional_hbase.map_table_hbase.map_col'.");
+    AnalyzesOk("describe functional_hbase.allcomplextypes");
   }
 
   @Test
@@ -556,9 +592,8 @@ public class AnalyzerTest {
         "Table does not exist: default.doesnt_exist");
   }
 
-  private Function createFunction(boolean hasVarArgs, ColumnType... args) {
-    return new Function(
-        new FunctionName("test"), args, ColumnType.INVALID, hasVarArgs);
+  private Function createFunction(boolean hasVarArgs, Type... args) {
+    return new Function(new FunctionName("test"), args, Type.INVALID, hasVarArgs);
   }
 
   @Test
@@ -569,47 +604,45 @@ public class AnalyzerTest {
     fns[0] = createFunction(false);
 
     // test(int)
-    fns[1] = createFunction(false, ColumnType.INT);
+    fns[1] = createFunction(false, Type.INT);
 
     // test(int...)
-    fns[2] = createFunction(true, ColumnType.INT);
+    fns[2] = createFunction(true, Type.INT);
 
     // test(tinyint)
-    fns[3] = createFunction(false, ColumnType.TINYINT);
+    fns[3] = createFunction(false, Type.TINYINT);
 
     // test(tinyint...)
-    fns[4] = createFunction(true, ColumnType.TINYINT);
+    fns[4] = createFunction(true, Type.TINYINT);
 
     // test(double)
-    fns[5] = createFunction(false, ColumnType.DOUBLE);
+    fns[5] = createFunction(false, Type.DOUBLE);
 
     // test(double...)
-    fns[6] = createFunction(true, ColumnType.DOUBLE);
+    fns[6] = createFunction(true, Type.DOUBLE);
 
     // test(double, double)
-    fns[7] = createFunction(false, ColumnType.DOUBLE, ColumnType.DOUBLE);
+    fns[7] = createFunction(false, Type.DOUBLE, Type.DOUBLE);
 
     // test(double, double...)
-    fns[8] = createFunction(true, ColumnType.DOUBLE, ColumnType.DOUBLE);
+    fns[8] = createFunction(true, Type.DOUBLE, Type.DOUBLE);
 
     // test(smallint, tinyint)
-    fns[9] = createFunction(false, ColumnType.SMALLINT, ColumnType.TINYINT);
+    fns[9] = createFunction(false, Type.SMALLINT, Type.TINYINT);
 
     // test(int, double, double, double)
-    fns[10] = createFunction(false, ColumnType.INT, ColumnType.DOUBLE,
-        ColumnType.DOUBLE, ColumnType.DOUBLE);
+    fns[10] = createFunction(false, Type.INT, Type.DOUBLE, Type.DOUBLE, Type.DOUBLE);
 
     // test(int, string, int...)
-    fns[11] = createFunction(
-        true, ColumnType.INT, ColumnType.STRING, ColumnType.INT);
+    fns[11] = createFunction(true, Type.INT, Type.STRING, Type.INT);
 
     // test(tinying, string, tinyint, int, tinyint)
-    fns[12] = createFunction(false, ColumnType.TINYINT, ColumnType.STRING,
-        ColumnType.TINYINT, ColumnType.INT, ColumnType.TINYINT);
+    fns[12] = createFunction(false, Type.TINYINT, Type.STRING, Type.TINYINT, Type.INT,
+        Type.TINYINT);
 
     // test(tinying, string, bigint, int, tinyint)
-    fns[13] = createFunction(false, ColumnType.TINYINT, ColumnType.STRING,
-        ColumnType.BIGINT, ColumnType.INT, ColumnType.TINYINT);
+    fns[13] = createFunction(false, Type.TINYINT, Type.STRING, Type.BIGINT, Type.INT,
+        Type.TINYINT);
 
     Assert.assertFalse(fns[1].compare(fns[0], Function.CompareMode.IS_SUPERTYPE_OF));
     Assert.assertTrue(fns[1].compare(fns[2], Function.CompareMode.IS_SUPERTYPE_OF));

@@ -19,11 +19,12 @@
 
 namespace impala {
 
-// Look up smybols in a dynamically linked library.
+// Look up symbols in a dynamically linked library.
 // handle -- handle to the library. NULL if loading from the current process.
 // symbol -- symbol to lookup.
 // fn_ptr -- pointer tor retun addres of function.
-Status DynamicLookup(void* handle, const char* symbol, void** fn_ptr);
+// quiet -- if true, returned error status won't be logged
+Status DynamicLookup(void* handle, const char* symbol, void** fn_ptr, bool quiet = false);
 
 // Open a dynamicly loaded library.
 // library -- name of the library.  The default paths will be searched.

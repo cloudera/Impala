@@ -23,7 +23,7 @@ import org.apache.log4j.Logger;
 import com.cloudera.impala.catalog.Function.CompareMode;
 import com.cloudera.impala.thrift.TCatalogObjectType;
 import com.cloudera.impala.thrift.TDatabase;
-import com.cloudera.impala.thrift.TFunctionType;
+import com.cloudera.impala.thrift.TFunctionCategory;
 import com.cloudera.impala.util.PatternMatcher;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
@@ -177,6 +177,7 @@ public class Db implements CatalogObject {
    * See comment in Catalog.
    */
   public boolean addFunction(Function fn) {
+    Preconditions.checkState(fn.dbName().equals(getName()));
     // TODO: add this to persistent store
     synchronized (functions_) {
       if (getFunction(fn, Function.CompareMode.IS_INDISTINGUISHABLE) != null) {
@@ -224,21 +225,20 @@ public class Db implements CatalogObject {
    * Add a builtin with the specified name and signatures to this db.
    * This defaults to not using a Prepare/Close function.
    */
-  public void addScalarBuiltin(boolean udfInterface, String fnName, String symbol,
-      boolean varArgs, ColumnType retType, ColumnType ... args) {
-    addScalarBuiltin(udfInterface, fnName, symbol, null, null, varArgs, retType, args);
+  public void addScalarBuiltin(String fnName, String symbol, boolean varArgs,
+      Type retType, Type ... args) {
+    addScalarBuiltin(fnName, symbol, null, null, varArgs, retType, args);
   }
 
   /**
    * Add a builtin with the specified name and signatures to this db.
    */
-  public void addScalarBuiltin(boolean udfInterface, String fnName, String symbol,
-      String prepareFnSymbol, String closeFnSymbol, boolean varArgs, ColumnType retType,
-      ColumnType ... args) {
+  public void addScalarBuiltin(String fnName, String symbol, String prepareFnSymbol,
+      String closeFnSymbol, boolean varArgs, Type retType, Type ... args) {
     Preconditions.checkState(isSystemDb());
     addBuiltin(ScalarFunction.createBuiltin(
         fnName, Lists.newArrayList(args), varArgs, retType,
-        symbol, prepareFnSymbol, closeFnSymbol, udfInterface));
+        symbol, prepareFnSymbol, closeFnSymbol, false));
   }
 
   /**
@@ -247,7 +247,7 @@ public class Db implements CatalogObject {
   public void addBuiltin(Function fn) {
     Preconditions.checkState(isSystemDb());
     Preconditions.checkState(fn != null);
-    Preconditions.checkState(getFunction(fn, CompareMode.IS_INDISTINGUISHABLE) == null);
+    Preconditions.checkState(getFunction(fn, CompareMode.IS_IDENTICAL) == null);
     addFunction(fn);
   }
 
@@ -263,16 +263,22 @@ public class Db implements CatalogObject {
   /**
    * Returns all functions that match 'fnPattern'.
    */
-  public List<Function> getFunctions(TFunctionType type, PatternMatcher fnPattern) {
+  public List<Function> getFunctions(TFunctionCategory category,
+      PatternMatcher fnPattern) {
     List<Function> functions = Lists.newArrayList();
     synchronized (functions_) {
       for (Map.Entry<String, List<Function>> fns: functions_.entrySet()) {
         if (fnPattern.matches(fns.getKey())) {
           for (Function fn: fns.getValue()) {
-            if (fn.userVisible()) {
-              if (type == null ||
-                  (type == TFunctionType.SCALAR && fn instanceof ScalarFunction) ||
-                  (type == TFunctionType.AGGREGATE && fn instanceof AggregateFunction))
+            if (!fn.userVisible()) continue;
+            if (category == null
+                || (category == TFunctionCategory.SCALAR && fn instanceof ScalarFunction)
+                || (category == TFunctionCategory.AGGREGATE
+                    && fn instanceof AggregateFunction
+                    && ((AggregateFunction)fn).isAggregateFn())
+                || (category == TFunctionCategory.ANALYTIC
+                    && fn instanceof AggregateFunction
+                    && ((AggregateFunction)fn).isAnalyticFn())) {
               functions.add(fn);
             }
           }

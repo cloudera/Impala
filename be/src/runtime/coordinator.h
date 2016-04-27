@@ -52,6 +52,7 @@ class ObjectPool;
 class RuntimeState;
 class ImpalaInternalServiceClient;
 class Expr;
+class ExprContext;
 class ExecEnv;
 class TUpdateCatalogRequest;
 class TQueryExecRequest;
@@ -83,22 +84,19 @@ class TablePrinter;
 //
 // The implementation ensures that setting an overall error status and initiating
 // cancellation of local and all remote fragments is atomic.
-//
-// TODO:
-// - add profile counters for coordinator (how much time do we spend in startup?)
 class Coordinator {
  public:
-  Coordinator(ExecEnv* exec_env);
+  Coordinator(ExecEnv* exec_env, RuntimeProfile::EventSequence* events);
   ~Coordinator();
 
   // Initiate asynchronous execution of a query with the given schedule. Returns as soon
   // as all plan fragments have started executing at their respective backends.
   // 'schedule' must contain at least a coordinator plan fragment (ie, can't
   // be for a query like 'SELECT 1').
-  // Populates and prepares output_exprs from the coordinator's fragment if there is one,
-  // and LLVM optimizes them together with the fragment's other exprs.
+  // Populates and prepares output_expr_ctxs from the coordinator's fragment if there is
+  // one, and LLVM optimizes them together with the fragment's other exprs.
   // A call to Exec() must precede all other member function calls.
-  Status Exec(QuerySchedule& schedule, std::vector<Expr*>* output_exprs);
+  Status Exec(QuerySchedule& schedule, std::vector<ExprContext*>* output_expr_ctxs);
 
   // Blocks until result rows are ready to be retrieved via GetNext(), or, if the
   // query doesn't return rows, until the query finishes or is cancelled.
@@ -126,6 +124,7 @@ class Coordinator {
   // Cancel execution of query. This includes the execution of the local plan fragment,
   // if any, as well as all plan fragments on remote nodes. Sets query_status_ to
   // the given cause if non-NULL. Otherwise, sets query_status_ to Status::CANCELLED.
+  // Idempotent.
   void Cancel(const Status* cause = NULL);
 
   // Updates status and query execution metadata of a particular
@@ -168,10 +167,12 @@ class Coordinator {
   // Returns query_status_.
   Status GetStatus();
 
-  const TExecSummary& exec_summary() const { return exec_summary_; }
-
-  // Print the exec summary as a formatted table.
-  std::string PrintExecSummary() const;
+  // Returns the exec summary. The function returns with the exec summary lock taken.
+  // (By setting lock). The caller must not block while holding the lock.
+  const TExecSummary& exec_summary(ScopedSpinLock* lock) const {
+    lock->AcquireLock(&exec_summary_lock_);
+    return exec_summary_;
+  }
 
  private:
   class BackendExecState;
@@ -292,6 +293,7 @@ class Coordinator {
   boost::scoped_ptr<ObjectPool> obj_pool_;
 
   // Execution summary for this query.
+  mutable SpinLock exec_summary_lock_;
   TExecSummary exec_summary_;
 
   // A mapping of plan node ids to index into exec_summary_.nodes
@@ -299,6 +301,9 @@ class Coordinator {
 
   // Aggregate counters for the entire query.
   boost::scoped_ptr<RuntimeProfile> query_profile_;
+
+  // Event timeline for this query. Unowned.
+  RuntimeProfile::EventSequence* query_events_;
 
   // Per fragment profile information
   struct PerFragmentProfileData {
@@ -428,16 +433,7 @@ class Coordinator {
 
   // Populates the summary execution stats from the profile. Can only be called when the
   // query is done.
-  // TODO: we should be able to call this and get live updating stats.
-  void UpdateExecSummary(RuntimeProfile* profile);
-
-  // Helper function for PrintExecSummary() that walks the exec summary recursively.
-  // Output for this node is appended to *result. Each value in *result should contain
-  // the statistics for a single exec summary node.
-  // node_idx is an in/out parameter. It is called with the idx (into exec_summary_.nodes)
-  // for the current node and on return, will contain the id of the next node.
-  void PrintExecSummary(int indent_level, bool is_child_fragment, int* node_idx,
-      std::vector<std::vector<std::string> >* result) const;
+  void UpdateExecSummary(int fragment_idx, int instance_idx, RuntimeProfile* profile);
 
   // Determines what the permissions of directories created by INSERT statements should be
   // if permission inheritance is enabled. Populates a map from all prefixes of path_str

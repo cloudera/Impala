@@ -38,13 +38,22 @@ class PluginRunner(object):
   def __init__(self, plugin_infos):
     self.__available_modules = self.__get_plugin_modules()
     self.__get_plugins_from_modules(plugin_infos)
-    self.plugins = self.__plugins
+
+  @property
+  def plugins(self):
+    return self.__plugins
+
+  def __getstate__(self):
+    state = self.__dict__.copy()
+    del state['__available_modules']
+    return state
 
   def __get_plugin_modules(self):
     ''' Gets all the modules in the directory and imports them'''
     modules = pkgutil.iter_modules(path=[PLUGIN_DIR])
+    available_modules = []
     for loader, mod_name, ispkg in modules:
-      yield __import__("tests.benchmark.plugins.%s" % mod_name, fromlist=[mod_name])
+      yield  __import__("tests.benchmark.plugins.%s" % mod_name, fromlist=[mod_name])
 
   def __get_plugins_from_modules(self, plugin_infos):
     '''Look for user specified plugins in the available modules.'''

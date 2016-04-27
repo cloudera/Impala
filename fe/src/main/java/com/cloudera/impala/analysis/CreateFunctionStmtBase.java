@@ -15,16 +15,19 @@
 package com.cloudera.impala.analysis;
 
 import java.util.HashMap;
+import java.util.List;
 
+import com.cloudera.impala.authorization.AuthorizeableFn;
 import com.cloudera.impala.authorization.Privilege;
-import com.cloudera.impala.catalog.AuthorizationException;
+import com.cloudera.impala.authorization.PrivilegeRequest;
 import com.cloudera.impala.catalog.Catalog;
-import com.cloudera.impala.catalog.ColumnType;
 import com.cloudera.impala.catalog.Db;
 import com.cloudera.impala.catalog.Function;
+import com.cloudera.impala.catalog.Type;
 import com.cloudera.impala.common.AnalysisException;
 import com.cloudera.impala.thrift.TCreateFunctionParams;
 import com.cloudera.impala.thrift.TFunctionBinaryType;
+import com.google.common.collect.Lists;
 
 /**
  * Base class for CREATE [] FUNCTION.
@@ -109,15 +112,16 @@ public class CreateFunctionStmtBase extends StatementBase {
   }
 
   @Override
-  public void analyze(Analyzer analyzer)
-      throws AnalysisException, AuthorizationException {
+  public void analyze(Analyzer analyzer) throws AnalysisException {
+    // Validate function name is legal
+    fn_.getFunctionName().analyze(analyzer);
+
     // For now, if authorization is enabled, the user needs ALL on the server
     // to create functions.
     // TODO: this is not the right granularity but acceptable for now.
-    analyzer.getCatalog().checkCreateDropFunctionAccess(analyzer.getUser());
+    analyzer.registerPrivReq(new PrivilegeRequest(
+        new AuthorizeableFn(fn_.signatureString()), Privilege.ALL));
 
-    // Validate function name is legal
-    fn_.getFunctionName().analyze(analyzer);
     Db builtinsDb = analyzer.getCatalog().getDb(Catalog.BUILTINS_DB);
     if (builtinsDb.containsFunction(fn_.getName())) {
       throw new AnalysisException("Function cannot have the same name as a builtin: " +
@@ -125,13 +129,22 @@ public class CreateFunctionStmtBase extends StatementBase {
     }
 
     // Validate function arguments
-    for (ColumnType t: fn_.getArgs()) {
+    for (Type t: fn_.getArgs()) {
       t.analyze();
     }
     fn_.getReturnType().analyze();
 
-    if (analyzer.getCatalog().getDb(
-        fn_.dbName(), analyzer.getUser(), Privilege.CREATE) == null) {
+    // Forbid unsupported and complex types.
+    List<Type> refdTypes = Lists.newArrayList(fn_.getReturnType());
+    refdTypes.addAll(Lists.newArrayList(fn_.getArgs()));
+    for (Type t: refdTypes) {
+      if (!t.isSupported() || t.isComplexType()) {
+        throw new AnalysisException(
+            String.format("Type '%s' is not supported in UDFs/UDAs.", t.toSql()));
+      }
+    }
+
+    if (analyzer.getDb(fn_.dbName(), Privilege.CREATE) == null) {
       throw new AnalysisException(Analyzer.DB_DOES_NOT_EXIST_ERROR_MSG + fn_.dbName());
     }
 

@@ -48,10 +48,12 @@ HdfsSequenceScanner::~HdfsSequenceScanner() {
 
 // Codegen for materialized parsed data into tuples.
 Function* HdfsSequenceScanner::Codegen(HdfsScanNode* node,
-    const vector<Expr*>& conjuncts) {
+    const vector<ExprContext*>& conjunct_ctxs) {
   if (!node->runtime_state()->codegen_enabled()) return NULL;
-  LlvmCodeGen* codegen = node->runtime_state()->codegen();
-  Function* write_complete_tuple_fn = CodegenWriteCompleteTuple(node, codegen, conjuncts);
+  LlvmCodeGen* codegen;
+  if (!node->runtime_state()->GetCodegen(&codegen).ok()) return NULL;
+  Function* write_complete_tuple_fn =
+      CodegenWriteCompleteTuple(node, codegen, conjunct_ctxs);
   if (write_complete_tuple_fn == NULL) return NULL;
   return CodegenWriteAlignedTuples(node, codegen, write_complete_tuple_fn);
 }
@@ -74,9 +76,7 @@ Status HdfsSequenceScanner::InitNewRange() {
 
   SeqFileHeader* seq_header = reinterpret_cast<SeqFileHeader*>(header_);
   if (seq_header->is_compressed) {
-    RETURN_IF_ERROR(Codec::CreateDecompressor(
-        data_buffer_pool_.get(), scan_node_->tuple_desc()->string_slots().empty(),
-        header_->codec, &decompressor_));
+    RETURN_IF_ERROR(UpdateDecompressor(header_->codec));
   }
 
   // Initialize codegen fn
@@ -111,7 +111,7 @@ inline Status HdfsSequenceScanner::GetRecord(uint8_t** record_ptr,
   RETURN_IF_FALSE(stream_->SkipBytes(current_key_length_, &parse_status_));
 
   if (header_->is_compressed) {
-    int in_size = current_block_length_ - current_key_length_;
+    int64_t in_size = current_block_length_ - current_key_length_;
     if (in_size < 0) {
       stringstream ss;
       ss << "Invalid record size: " << in_size;
@@ -121,7 +121,7 @@ inline Status HdfsSequenceScanner::GetRecord(uint8_t** record_ptr,
     RETURN_IF_FALSE(
         stream_->ReadBytes(in_size, &compressed_data, &parse_status_));
 
-    int len;
+    int64_t len;
     {
       SCOPED_TIMER(decompress_timer_);
       RETURN_IF_ERROR(decompressor_->ProcessBlock(false, in_size, compressed_data,
@@ -205,7 +205,7 @@ Status HdfsSequenceScanner::ProcessDecompressedBlock() {
   if (scan_node_->materialized_slots().empty()) {
     // Handle case where there are no slots to materialize (e.g. count(*))
     num_to_process = WriteEmptyTuples(context_, tuple_row, num_to_process);
-    COUNTER_UPDATE(scan_node_->rows_read_counter(), num_to_process);
+    COUNTER_ADD(scan_node_->rows_read_counter(), num_to_process);
     RETURN_IF_ERROR(CommitRows(num_to_process));
     return Status::OK;
   }
@@ -263,7 +263,7 @@ Status HdfsSequenceScanner::ProcessDecompressedBlock() {
   }
 
   if (tuples_returned == -1) return parse_status_;
-  COUNTER_UPDATE(scan_node_->rows_read_counter(), num_to_process);
+  COUNTER_ADD(scan_node_->rows_read_counter(), num_to_process);
   RETURN_IF_ERROR(CommitRows(tuples_returned));
   return Status::OK;
 }
@@ -323,7 +323,7 @@ Status HdfsSequenceScanner::ProcessRange() {
       add_row = WriteEmptyTuples(context_, tuple_row_mem, 1);
     }
 
-    COUNTER_UPDATE(scan_node_->rows_read_counter(), 1);
+    COUNTER_ADD(scan_node_->rows_read_counter(), 1);
     if (add_row) RETURN_IF_ERROR(CommitRows(1));
     if (scan_node_->ReachedLimit()) break;
 
@@ -359,7 +359,7 @@ Status HdfsSequenceScanner::ReadFileHeader() {
   RETURN_IF_FALSE(stream_->SkipText(&parse_status_));
 
   uint8_t* class_name;
-  int len;
+  int64_t len;
   RETURN_IF_FALSE(stream_->ReadText(&class_name, &len, &parse_status_));
   if (memcmp(class_name, HdfsSequenceScanner::SEQFILE_VALUE_CLASS_NAME, len)) {
     stringstream ss;
@@ -466,8 +466,8 @@ Status HdfsSequenceScanner::ReadCompressedBlock() {
   RETURN_IF_FALSE(stream_->SkipText(&parse_status_));
 
   // Read the compressed value buffer from the unbuffered stream.
-  int block_size = 0;
-  RETURN_IF_FALSE(stream_->ReadVInt(&block_size, &parse_status_));
+  int64_t block_size = 0;
+  RETURN_IF_FALSE(stream_->ReadVLong(&block_size, &parse_status_));
   // Check for a reasonable size
   if (block_size > MAX_BLOCK_SIZE || block_size < 0) {
     stringstream ss;
@@ -479,7 +479,7 @@ Status HdfsSequenceScanner::ReadCompressedBlock() {
   RETURN_IF_FALSE(stream_->ReadBytes(block_size, &compressed_data, &parse_status_));
 
   {
-    int len;
+    int64_t len;
     SCOPED_TIMER(decompress_timer_);
     RETURN_IF_ERROR(decompressor_->ProcessBlock(false, block_size, compressed_data,
                                                 &len, &unparsed_data_buffer_));

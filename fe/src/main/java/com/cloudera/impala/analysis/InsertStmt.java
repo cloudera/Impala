@@ -14,26 +14,26 @@
 
 package com.cloudera.impala.analysis;
 
+import java.io.IOException;
 import java.util.ArrayList;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
 
+import org.apache.hadoop.fs.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.cloudera.impala.authorization.Privilege;
 import com.cloudera.impala.authorization.PrivilegeRequestBuilder;
-import com.cloudera.impala.catalog.AuthorizationException;
 import com.cloudera.impala.catalog.Column;
-import com.cloudera.impala.catalog.ColumnType;
 import com.cloudera.impala.catalog.HBaseTable;
 import com.cloudera.impala.catalog.HdfsTable;
 import com.cloudera.impala.catalog.Table;
+import com.cloudera.impala.catalog.Type;
 import com.cloudera.impala.catalog.View;
 import com.cloudera.impala.common.AnalysisException;
+import com.cloudera.impala.common.FileSystemUtil;
 import com.cloudera.impala.planner.DataSink;
-import com.cloudera.impala.thrift.THdfsFileFormat;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
@@ -45,10 +45,6 @@ import com.google.common.collect.Sets;
  */
 public class InsertStmt extends StatementBase {
   private final static Logger LOG = LoggerFactory.getLogger(InsertStmt.class);
-
-  // Insert formats currently supported by Impala.
-  private final static EnumSet<THdfsFileFormat> SUPPORTED_INSERT_FORMATS =
-      EnumSet.of(THdfsFileFormat.PARQUET, THdfsFileFormat.TEXT);
 
   // List of inline views that may be referenced in queryStmt.
   private final WithClause withClause_;
@@ -82,9 +78,6 @@ public class InsertStmt extends StatementBase {
 
   // Set in analyze(). Exprs corresponding to the partitionKeyValues,
   private final List<Expr> partitionKeyExprs_ = new ArrayList<Expr>();
-
-  // True if this InsertStmt is the top level query from an EXPLAIN <query>
-  private boolean isExplain_ = false;
 
   // True to force re-partitioning before the table sink, false to prevent it. Set in
   // analyze() based on planHints_. Null if no explicit hint was given (the planner
@@ -132,10 +125,28 @@ public class InsertStmt extends StatementBase {
     table_ = null;
   }
 
+  /**
+   * C'tor used in clone().
+   */
+  public InsertStmt(InsertStmt other) {
+    withClause_ = other.withClause_ != null ? other.withClause_.clone() : null;
+    targetTableName_ = other.targetTableName_;
+    originalTableName_ = other.targetTableName_;
+    overwrite_ = other.overwrite_;
+    partitionKeyValues_ = other.partitionKeyValues_;
+    planHints_ = other.planHints_;
+    queryStmt_ = other.queryStmt_ != null ? other.queryStmt_.clone() : null;
+    needsGeneratedQueryStatement_ = other.needsGeneratedQueryStatement_;
+    columnPermutation_ = other.columnPermutation_;
+    table_ = other.table_;
+  }
+
   @Override
-  public void analyze(Analyzer analyzer) throws AnalysisException,
-      AuthorizationException {
-    analyzer.setIsInsertStmt(true);
+  public InsertStmt clone() { return new InsertStmt(this); }
+
+  @Override
+  public void analyze(Analyzer analyzer) throws AnalysisException {
+    if (isExplain_) analyzer.setIsExplain();
     try {
       if (withClause_ != null) withClause_.analyze(analyzer);
     } catch (AnalysisException e) {
@@ -144,13 +155,21 @@ public class InsertStmt extends StatementBase {
       if (analyzer.getMissingTbls().isEmpty()) throw e;
     }
 
-    analyzer.setIsExplain(isExplain_);
-    if (queryStmt_ != null) queryStmt_.setIsExplain(isExplain_);
-
     List<Expr> selectListExprs = null;
     if (!needsGeneratedQueryStatement_) {
       try {
-        queryStmt_.analyze(analyzer);
+        // Use a child analyzer for the query stmt to properly scope WITH-clause
+        // views and to ignore irrelevant ORDER BYs.
+        Analyzer queryStmtAnalyzer = new Analyzer(analyzer);
+        queryStmt_.analyze(queryStmtAnalyzer);
+
+        if (analyzer.containsSubquery()) {
+          StmtRewriter.rewriteQueryStatement(queryStmt_, queryStmtAnalyzer);
+          queryStmt_ = queryStmt_.clone();
+          queryStmtAnalyzer = new Analyzer(analyzer);
+          queryStmt_.analyze(queryStmtAnalyzer);
+        }
+
         selectListExprs = Expr.cloneList(queryStmt_.getBaseTblResultExprs());
       } catch (AnalysisException e) {
         if (analyzer.getMissingTbls().isEmpty()) throw e;
@@ -265,7 +284,7 @@ public class InsertStmt extends StatementBase {
     prepareExpressions(selectExprTargetColumns, selectListExprs, table_, analyzer);
     // Analyze plan hints at the end to prefer reporting other error messages first
     // (e.g., the PARTITION clause is not applicable to unpartitioned and HBase tables).
-    analyzePlanHints();
+    analyzePlanHints(analyzer);
   }
 
   /**
@@ -276,8 +295,7 @@ public class InsertStmt extends StatementBase {
    * - Cannot insert into a view
    * Adds table_ to the analyzer's descriptor table if analysis succeeds.
    */
-  private void setTargetTable(Analyzer analyzer)
-      throws AnalysisException, AuthorizationException {
+  private void setTargetTable(Analyzer analyzer) throws AnalysisException {
     // If the table has not yet been set, load it from the Catalog. This allows for
     // callers to set a table to analyze that may not actually be created in the Catalog.
     // One example use case is CREATE TABLE AS SELECT which must run analysis on the
@@ -291,9 +309,8 @@ public class InsertStmt extends StatementBase {
     } else {
       targetTableName_ = new TableName(table_.getDb().getName(), table_.getName());
       PrivilegeRequestBuilder pb = new PrivilegeRequestBuilder();
-      analyzer.getCatalog().checkAccess(analyzer.getUser(),
-          pb.onTable(table_.getDb().getName(), table_.getName()).allOf(Privilege.INSERT)
-          .toRequest());
+      analyzer.registerPrivReq(pb.onTable(table_.getDb().getName(), table_.getName())
+          .allOf(Privilege.INSERT).toRequest());
     }
 
     // We do not support inserting into views.
@@ -326,14 +343,27 @@ public class InsertStmt extends StatementBase {
             "(%s) because Impala does not have WRITE access to at least one HDFS path" +
             ": %s", targetTableName_, hdfsTable.getFirstLocationWithoutWriteAccess()));
       }
-
+      if (hdfsTable.spansMultipleFileSystems()) {
+        throw new AnalysisException(String.format("Unable to INSERT into target table " +
+            "(%s) because the table spans multiple file-systems.", targetTableName_));
+      }
+      try {
+        if (!FileSystemUtil.isDistributedFileSystem(new Path(hdfsTable.getLocation()))) {
+          throw new AnalysisException(String.format("Unable to INSERT into target " +
+              "table (%s) because %s is not an HDFS file-system.", targetTableName_,
+               hdfsTable.getLocation()));
+        }
+      } catch (IOException e) {
+        throw new AnalysisException(String.format("Unable to INSERT into target " +
+            "table (%s): %s.", targetTableName_, e.getMessage()), e);
+      }
       for (int colIdx = 0; colIdx < numClusteringCols; ++colIdx) {
         Column col = hdfsTable.getColumns().get(colIdx);
         // Hive has a number of issues handling BOOLEAN partition columns (see HIVE-6590).
         // Instead of working around the Hive bugs, INSERT is disabled for BOOLEAN
         // partitions in Impala. Once the Hive JIRA is resolved, we can remove this
         // analysis check.
-        if (col.getType() == ColumnType.BOOLEAN) {
+        if (col.getType() == Type.BOOLEAN) {
           throw new AnalysisException(String.format("INSERT into table with BOOLEAN " +
               "partition column (%s) is not supported: %s", col.getName(),
               targetTableName_));
@@ -436,7 +466,7 @@ public class InsertStmt extends StatementBase {
    */
   private void prepareExpressions(List<Column> selectExprTargetColumns,
       List<Expr> selectListExprs, Table tbl, Analyzer analyzer)
-      throws AnalysisException, AuthorizationException {
+      throws AnalysisException {
     // Temporary lists of partition key exprs and names in an arbitrary order.
     List<Expr> tmpPartitionKeyExprs = new ArrayList<Expr>();
     List<String> tmpPartitionKeyNames = new ArrayList<String>();
@@ -505,7 +535,7 @@ public class InsertStmt extends StatementBase {
         if (tblColumn.getPosition() >= numClusteringCols) {
           // Unmentioned non-clustering columns get NULL literals with the appropriate
           // target type because Parquet cannot handle NULL_TYPE (IMPALA-617).
-          resultExprs_.add(new NullLiteral().castTo(tblColumn.getType()));
+          resultExprs_.add(NullLiteral.create(tblColumn.getType()));
         }
       }
     }
@@ -530,13 +560,13 @@ public class InsertStmt extends StatementBase {
       throws AnalysisException {
     // Check for compatible type, and add casts to the selectListExprs if necessary.
     // We don't allow casting to a lower precision type.
-    ColumnType colType = column.getType();
-    ColumnType exprType = expr.getType();
+    Type colType = column.getType();
+    Type exprType = expr.getType();
     // Trivially compatible.
     if (colType.equals(exprType)) return expr;
 
-    ColumnType compatibleType =
-        ColumnType.getAssignmentCompatibleType(colType, exprType);
+    Type compatibleType =
+        Type.getAssignmentCompatibleType(colType, exprType);
     // Incompatible types.
     if (!compatibleType.isValid()) {
       throw new AnalysisException(
@@ -558,7 +588,7 @@ public class InsertStmt extends StatementBase {
     return expr.castTo(compatibleType);
   }
 
-  private void analyzePlanHints() throws AnalysisException {
+  private void analyzePlanHints(Analyzer analyzer) throws AnalysisException {
     if (planHints_ == null) return;
     if (!planHints_.isEmpty() &&
         (partitionKeyValues_ == null || table_ instanceof HBaseTable)) {
@@ -571,21 +601,20 @@ public class InsertStmt extends StatementBase {
           throw new AnalysisException("Conflicting INSERT hint: " + hint);
         }
         isRepartition_ = Boolean.TRUE;
+        analyzer.setHasPlanHints();
       } else if (hint.equalsIgnoreCase("NOSHUFFLE")) {
         if (isRepartition_ != null && isRepartition_) {
           throw new AnalysisException("Conflicting INSERT hint: " + hint);
         }
         isRepartition_ = Boolean.FALSE;
+        analyzer.setHasPlanHints();
       } else {
-        throw new AnalysisException("INSERT hint not recognized: " + hint);
+        analyzer.addWarning("INSERT hint not recognized: " + hint);
       }
-    }
-    if (table_ instanceof HBaseTable && isRepartition_) {
-      throw new AnalysisException("INSERT hints are only supported for inserting into " +
-          "partitioned Hdfs tables.");
     }
   }
 
+  public List<String> getPlanHints() { return planHints_; }
   public TableName getTargetTableName() { return targetTableName_; }
   public Table getTargetTable() { return table_; }
   public void setTargetTable(Table table) { this.table_ = table; }
@@ -595,6 +624,7 @@ public class InsertStmt extends StatementBase {
    * Only valid after analysis
    */
   public QueryStmt getQueryStmt() { return queryStmt_; }
+  public void setQueryStmt(QueryStmt stmt) { queryStmt_ = stmt; }
   public List<Expr> getPartitionKeyExprs() { return partitionKeyExprs_; }
   public Boolean isRepartition() { return isRepartition_; }
   public ArrayList<Expr> getResultExprs() { return resultExprs_; }
@@ -632,16 +662,11 @@ public class InsertStmt extends StatementBase {
       strBuilder.append(" PARTITION (" + Joiner.on(", ").join(values) + ")");
     }
     if (planHints_ != null) {
-      strBuilder.append(" [" + Joiner.on(", ").join(planHints_) + "]");
+      strBuilder.append(" " + ToSqlUtils.getPlanHintsSql(planHints_));
     }
     if (!needsGeneratedQueryStatement_) {
       strBuilder.append(" " + queryStmt_.toSql());
     }
     return strBuilder.toString();
   }
-
-  @Override
-  public void setIsExplain(boolean isExplain) { isExplain_ = isExplain; }
-  @Override
-  public boolean isExplain() { return isExplain_; }
 }

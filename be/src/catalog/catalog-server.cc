@@ -29,17 +29,24 @@ using namespace std;
 using namespace boost;
 using namespace apache::thrift;
 using namespace strings;
+using namespace rapidjson;
 
 DEFINE_int32(catalog_service_port, 26000, "port where the CatalogService is running");
 DECLARE_string(state_store_host);
 DECLARE_int32(state_store_subscriber_port);
 DECLARE_int32(state_store_port);
 DECLARE_string(hostname);
+DECLARE_bool(compact_catalog_topic);
 
 string CatalogServer::IMPALA_CATALOG_TOPIC = "catalog-update";
 
 const string CATALOG_SERVER_TOPIC_PROCESSING_TIMES =
     "catalog-server.topic-processing-time-s";
+
+const string CATALOG_WEB_PAGE = "/catalog";
+const string CATALOG_TEMPLATE = "catalog.tmpl";
+const string CATALOG_OBJECT_WEB_PAGE = "/catalog_object";
+const string CATALOG_OBJECT_TEMPLATE = "catalog_object.tmpl";
 
 // Implementation for the CatalogService thrift interface.
 class CatalogServiceThriftIf : public CatalogServiceIf {
@@ -121,13 +128,25 @@ class CatalogServiceThriftIf : public CatalogServiceIf {
     VLOG_RPC << "PrioritizeLoad(): response=" << ThriftDebugString(resp);
   }
 
+  virtual void SentryAdminCheck(TSentryAdminCheckResponse& resp,
+      const TSentryAdminCheckRequest& req) {
+    VLOG_RPC << "SentryAdminCheck(): request=" << ThriftDebugString(req);
+    Status status = catalog_server_->catalog()->SentryAdminCheck(req);
+    if (!status.ok()) LOG(ERROR) << status.GetErrorMsg();
+    TStatus thrift_status;
+    status.ToThrift(&thrift_status);
+    resp.__set_status(thrift_status);
+    VLOG_RPC << "SentryAdminCheck(): response=" << ThriftDebugString(resp);
+  }
+
  private:
   CatalogServer* catalog_server_;
 };
 
 CatalogServer::CatalogServer(Metrics* metrics)
-  : thrift_iface_(new CatalogServiceThriftIf(this)), thrift_serializer_(false),
-    metrics_(metrics), topic_updates_ready_(false), last_sent_catalog_version_(0L),
+  : thrift_iface_(new CatalogServiceThriftIf(this)),
+    thrift_serializer_(FLAGS_compact_catalog_topic), metrics_(metrics),
+    topic_updates_ready_(false), last_sent_catalog_version_(0L),
     catalog_objects_min_version_(0L), catalog_objects_max_version_(0L) {
   topic_processing_time_metric_ = metrics_->RegisterMetric(
       new StatsMetric<double>(CATALOG_SERVER_TOPIC_PROCESSING_TIMES));
@@ -170,14 +189,15 @@ Status CatalogServer::Start() {
 }
 
 void CatalogServer::RegisterWebpages(Webserver* webserver) {
-  Webserver::PathHandlerCallback catalog_callback =
-      bind<void>(mem_fn(&CatalogServer::CatalogPathHandler), this, _1, _2);
-  webserver->RegisterPathHandler("/catalog", catalog_callback);
+  Webserver::UrlCallback catalog_callback =
+      bind<void>(mem_fn(&CatalogServer::CatalogUrlCallback), this, _1, _2);
+  webserver->RegisterUrlCallback(CATALOG_WEB_PAGE, CATALOG_TEMPLATE,
+      catalog_callback);
 
-  Webserver::PathHandlerCallback catalog_objects_callback =
-      bind<void>(mem_fn(&CatalogServer::CatalogObjectsPathHandler), this, _1, _2);
-  webserver->RegisterPathHandler("/catalog_objects",
-      catalog_objects_callback, false, false);
+  Webserver::UrlCallback catalog_objects_callback =
+      bind<void>(mem_fn(&CatalogServer::CatalogObjectsUrlCallback), this, _1, _2);
+  webserver->RegisterUrlCallback(CATALOG_OBJECT_WEB_PAGE, CATALOG_OBJECT_TEMPLATE,
+      catalog_objects_callback, false);
 }
 
 void CatalogServer::UpdateCatalogTopicCallback(
@@ -314,78 +334,48 @@ void CatalogServer::BuildTopicUpdates(const vector<TCatalogObject>& catalog_obje
   catalog_topic_entry_keys_.swap(current_entry_keys);
 }
 
-// TODO: Create utility function for rendering the Catalog handler so it can
-// be shared between CatalogServer and ImpalaServer
-void CatalogServer::CatalogPathHandler(const Webserver::ArgumentMap& args,
-    stringstream* output) {
+void CatalogServer::CatalogUrlCallback(const Webserver::ArgumentMap& args,
+    Document* document) {
   TGetDbsResult get_dbs_result;
   Status status = catalog_->GetDbNames(NULL, &get_dbs_result);
   if (!status.ok()) {
-    (*output) << "Error: " << status.GetErrorMsg();
+    Value error(status.GetErrorMsg().c_str(), document->GetAllocator());
+      document->AddMember("error", error, document->GetAllocator());
     return;
   }
-  vector<string>& db_names = get_dbs_result.dbs;
+  Value databases(kArrayType);
+  BOOST_FOREACH(const string& db, get_dbs_result.dbs) {
+    Value database(kObjectType);
+    Value str(db.c_str(), document->GetAllocator());
+    database.AddMember("name", str, document->GetAllocator());
 
-  if (args.find("raw") == args.end()) {
-    (*output) << "<h2>Catalog</h2>" << endl;
-
-    // Build a navigation string like [ default | tpch | ... ]
-    vector<string> links;
-    BOOST_FOREACH(const string& db, db_names) {
-      stringstream ss;
-      ss << "<a href='#" << db << "'>" << db << "</a>";
-      links.push_back(ss.str());
+    TGetTablesResult get_table_results;
+    Status status = catalog_->GetTableNames(db, NULL, &get_table_results);
+    if (!status.ok()) {
+      Value error(status.GetErrorMsg().c_str(), document->GetAllocator());
+      database.AddMember("error", error, document->GetAllocator());
+      continue;
     }
-    (*output) << "[ " <<  join(links, " | ") << " ] ";
 
-    BOOST_FOREACH(const string& db, db_names) {
-      (*output) << Substitute(
-          "<a href='catalog_objects?object_type=DATABASE&object_name=$0' id='$0'>"
-          "<h3>$0</h3></a>", db);
-      TGetTablesResult get_table_results;
-      Status status = catalog_->GetTableNames(db, NULL, &get_table_results);
-      if (!status.ok()) {
-        (*output) << "Error: " << status.GetErrorMsg();
-        continue;
-      }
-      vector<string>& table_names = get_table_results.tables;
-      (*output) << "<p>" << db << " contains <b>" << table_names.size()
-                << "</b> tables</p>";
-
-      (*output) << "<ul>" << endl;
-      BOOST_FOREACH(const string& table, table_names) {
-        const string& link_text = Substitute(
-            "<a href='catalog_objects?object_type=TABLE&object_name=$0.$1'>$1</a>",
-            db, table);
-        (*output) << "<li>" << link_text << "</li>" << endl;
-      }
-      (*output) << "</ul>" << endl;
+    Value table_array(kArrayType);
+    BOOST_FOREACH(const string& table, get_table_results.tables) {
+      Value table_obj(kObjectType);
+      Value fq_name(Substitute("$0.$1", db, table).c_str(), document->GetAllocator());
+      table_obj.AddMember("fqtn", fq_name, document->GetAllocator());
+      Value table_name(table.c_str(), document->GetAllocator());
+      table_obj.AddMember("name", table_name, document->GetAllocator());
+      table_array.PushBack(table_obj, document->GetAllocator());
     }
-  } else {
-    (*output) << "Catalog" << endl << endl;
-    (*output) << "List of databases:" << endl;
-    (*output) << join(db_names, "\n") << endl << endl;
-
-    BOOST_FOREACH(const string& db, db_names) {
-      TGetTablesResult get_table_results;
-      Status status = catalog_->GetTableNames(db, NULL, &get_table_results);
-      if (!status.ok()) {
-        (*output) << "Error: " << status.GetErrorMsg();
-        continue;
-      }
-      vector<string>& table_names = get_table_results.tables;
-      (*output) << db << " contains " << table_names.size()
-                << " tables" << endl;
-      BOOST_FOREACH(const string& table, table_names) {
-        (*output) << "- " << table << endl;
-      }
-      (*output) << endl << endl;
-    }
+    database.AddMember("num_tables", table_array.Size(), document->GetAllocator());
+    database.AddMember("tables", table_array, document->GetAllocator());
+    databases.PushBack(database, document->GetAllocator());
   }
+  document->AddMember("databases", databases, document->GetAllocator());
 }
 
-void CatalogServer::CatalogObjectsPathHandler(const Webserver::ArgumentMap& args,
-    stringstream* output) {
+
+void CatalogServer::CatalogObjectsUrlCallback(const Webserver::ArgumentMap& args,
+    Document* document) {
   Webserver::ArgumentMap::const_iterator object_type_arg = args.find("object_type");
   Webserver::ArgumentMap::const_iterator object_name_arg = args.find("object_name");
   if (object_type_arg != args.end() && object_name_arg != args.end()) {
@@ -400,15 +390,15 @@ void CatalogServer::CatalogObjectsPathHandler(const Webserver::ArgumentMap& args
     TCatalogObject result;
     Status status = catalog_->GetCatalogObject(request, &result);
     if (status.ok()) {
-      if (args.find("raw") == args.end()) {
-        (*output) << "<pre>" << ThriftDebugString(result) << "</pre>";
-      } else {
-        (*output) << ThriftDebugString(result);
-      }
+      Value debug_string(ThriftDebugString(result).c_str(), document->GetAllocator());
+      document->AddMember("thrift_string", debug_string, document->GetAllocator());
     } else {
-      (*output) << status.GetErrorMsg();
+      Value error(status.GetErrorMsg().c_str(), document->GetAllocator());
+      document->AddMember("error", error, document->GetAllocator());
     }
   } else {
-    (*output) << "Please specify values for the object_type and object_name parameters.";
+    Value error("Please specify values for the object_type and object_name parameters.",
+        document->GetAllocator());
+    document->AddMember("error", error, document->GetAllocator());
   }
 }

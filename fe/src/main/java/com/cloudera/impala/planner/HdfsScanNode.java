@@ -14,7 +14,6 @@
 
 package com.cloudera.impala.planner;
 
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -23,7 +22,6 @@ import java.util.List;
 import java.util.NavigableMap;
 import java.util.TreeMap;
 
-import org.apache.hadoop.fs.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,15 +29,16 @@ import com.cloudera.impala.analysis.Analyzer;
 import com.cloudera.impala.analysis.BinaryPredicate;
 import com.cloudera.impala.analysis.BinaryPredicate.Operator;
 import com.cloudera.impala.analysis.CompoundPredicate;
+import com.cloudera.impala.analysis.DescriptorTable;
 import com.cloudera.impala.analysis.Expr;
 import com.cloudera.impala.analysis.InPredicate;
 import com.cloudera.impala.analysis.IsNullPredicate;
 import com.cloudera.impala.analysis.LiteralExpr;
+import com.cloudera.impala.analysis.NullLiteral;
 import com.cloudera.impala.analysis.SlotDescriptor;
 import com.cloudera.impala.analysis.SlotId;
 import com.cloudera.impala.analysis.SlotRef;
 import com.cloudera.impala.analysis.TupleDescriptor;
-import com.cloudera.impala.catalog.AuthorizationException;
 import com.cloudera.impala.catalog.Column;
 import com.cloudera.impala.catalog.HdfsFileFormat;
 import com.cloudera.impala.catalog.HdfsPartition;
@@ -63,6 +62,7 @@ import com.cloudera.impala.thrift.TScanRangeLocations;
 import com.google.common.base.Objects;
 import com.google.common.base.Objects.ToStringHelper;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Predicates;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 
@@ -90,16 +90,13 @@ public class HdfsScanNode extends ScanNode {
   // Partition batch size used during partition pruning
   private final static int PARTITION_PRUNING_BATCH_SIZE = 1024;
 
-  // Name of the function used to negate an Expr.
-  private final static String NEGATE_FN = "negate";
-
   private final HdfsTable tbl_;
 
   // Partitions that are filtered in for scanning by the key ranges
   private final ArrayList<HdfsPartition> partitions_ = Lists.newArrayList();
 
-  // List of scan-range locations. Populated in getScanRangeLocations().
-  private List<TScanRangeLocations> scanRanges_;
+  // Total number of files from partitions_
+  private long totalFiles_ = 0;
 
   // Total number of bytes from partitions_
   private long totalBytes_ = 0;
@@ -122,18 +119,17 @@ public class HdfsScanNode extends ScanNode {
   }
 
   /**
-   * Populate conjuncts_ and partitions_.
+   * Populate conjuncts_, partitions_, and scanRanges_.
    */
   @Override
-  public void init(Analyzer analyzer)
-      throws InternalException, AuthorizationException {
+  public void init(Analyzer analyzer) throws InternalException {
     ArrayList<Expr> bindingPredicates = analyzer.getBoundPredicates(tupleIds_.get(0));
     conjuncts_.addAll(bindingPredicates);
 
     // also add remaining unassigned conjuncts
     assignConjuncts(analyzer);
 
-    analyzer.enforceSlotEquivalences(tupleIds_.get(0), conjuncts_);
+    analyzer.createEquivConjuncts(tupleIds_.get(0), conjuncts_);
 
     // do partition pruning before deciding which slots to materialize,
     // we might end up removing some predicates
@@ -146,8 +142,69 @@ public class HdfsScanNode extends ScanNode {
     // do this at the end so it can take all conjuncts into account
     computeStats(analyzer);
 
+    // compute scan range locations
+    computeScanRangeLocations(analyzer);
+
     // TODO: do we need this?
     assignedConjuncts_ = analyzer.getAssignedConjuncts();
+  }
+
+  /**
+   * Computes scan ranges (hdfs splits) plus their storage locations, including volume
+   * ids, based on the given maximum number of bytes each scan range should scan.
+   */
+  private void computeScanRangeLocations(Analyzer analyzer) {
+    long maxScanRangeLength = analyzer.getQueryCtx().getRequest().getQuery_options()
+        .getMax_scan_range_length();
+    scanRanges_ = Lists.newArrayList();
+    for (HdfsPartition partition: partitions_) {
+      Preconditions.checkState(partition.getId() >= 0);
+      for (HdfsPartition.FileDescriptor fileDesc: partition.getFileDescriptors()) {
+        for (THdfsFileBlock thriftBlock: fileDesc.getFileBlocks()) {
+          HdfsPartition.FileBlock block = FileBlock.fromThrift(thriftBlock);
+          List<Integer> replicaHostIdxs = block.getReplicaHostIdxs();
+          if (replicaHostIdxs.size() == 0) {
+            // we didn't get locations for this block; for now, just ignore the block
+            // TODO: do something meaningful with that
+            continue;
+          }
+          // Collect the network address and volume ID of all replicas of this block.
+          List<TScanRangeLocation> locations = Lists.newArrayList();
+          for (int i = 0; i < replicaHostIdxs.size(); ++i) {
+            TScanRangeLocation location = new TScanRangeLocation();
+            // Translate from the host index (local to the HdfsTable) to network address.
+            Integer tableHostIdx = replicaHostIdxs.get(i);
+            TNetworkAddress networkAddress =
+                partition.getTable().getHostIndex().getEntry(tableHostIdx);
+            Preconditions.checkNotNull(networkAddress);
+            // Translate from network address to the global (to this request) host index.
+            Integer globalHostIdx = analyzer.getHostIndex().getIndex(networkAddress);
+            location.setHost_idx(globalHostIdx);
+            location.setVolume_id(block.getDiskId(i));
+            locations.add(location);
+          }
+          // create scan ranges, taking into account maxScanRangeLength
+          long currentOffset = block.getOffset();
+          long remainingLength = block.getLength();
+          while (remainingLength > 0) {
+            long currentLength = remainingLength;
+            if (maxScanRangeLength > 0 && remainingLength > maxScanRangeLength) {
+              currentLength = maxScanRangeLength;
+            }
+            TScanRange scanRange = new TScanRange();
+            scanRange.setHdfs_file_split(new THdfsFileSplit(
+                fileDesc.getFileName(), currentOffset, currentLength, partition.getId(),
+                fileDesc.getFileLength(), fileDesc.getFileCompression()));
+            TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
+            scanRangeLocations.scan_range = scanRange;
+            scanRangeLocations.locations = locations;
+            scanRanges_.add(scanRangeLocations);
+            remainingLength -= currentLength;
+            currentOffset += currentLength;
+          }
+        }
+      }
+    }
   }
 
   /**
@@ -220,7 +277,6 @@ public class HdfsScanNode extends ScanNode {
   private HashSet<Long> evalBinaryPredicate(Expr expr) {
     Preconditions.checkNotNull(expr);
     Preconditions.checkState(expr instanceof BinaryPredicate);
-    HashSet<Long> matchingIds = Sets.newHashSet();
     boolean isSlotOnLeft = true;
     if (expr.getChild(0).isLiteral()) isSlotOnLeft = false;
 
@@ -232,13 +288,16 @@ public class HdfsScanNode extends ScanNode {
     Preconditions.checkNotNull(bindingExpr);
     Preconditions.checkState(bindingExpr.isLiteral());
     LiteralExpr literal = (LiteralExpr)bindingExpr;
+    if (literal instanceof NullLiteral) return Sets.newHashSet();
 
     // Get the partition column position and retrieve the associated partition
     // value metadata.
     int partitionPos = slot.getDesc().getColumn().getPosition();
     TreeMap<LiteralExpr, HashSet<Long>> partitionValueMap =
         tbl_.getPartitionValueMap(partitionPos);
+    if (partitionValueMap.isEmpty()) return Sets.newHashSet();
 
+    HashSet<Long> matchingIds = Sets.newHashSet();
     // Compute the matching partition ids
     Operator op = bp.getOp();
     if (op == Operator.EQ) {
@@ -323,6 +382,10 @@ public class HdfsScanNode extends ScanNode {
 
     if (inPredicate.isNotIn()) {
       // Case: SlotRef NOT IN (Literal, ..., Literal)
+      // If there is a NullLiteral, return an empty set.
+      List<Expr> nullLiterals = Lists.newArrayList();
+      inPredicate.collectAll(Predicates.instanceOf(NullLiteral.class), nullLiterals);
+      if (!nullLiterals.isEmpty()) return matchingIds;
       matchingIds.addAll(tbl_.getPartitionIds());
       // Exclude partitions with null partition column values
       HashSet<Long> nullIds = tbl_.getNullPartitionIds(partitionPos);
@@ -402,20 +465,18 @@ public class HdfsScanNode extends ScanNode {
    * Populate partitions_ based on all applicable conjuncts and remove
    * conjuncts used for filtering from conjuncts_.
    */
-  private void prunePartitions(Analyzer analyzer)
-      throws InternalException, AuthorizationException {
+  private void prunePartitions(Analyzer analyzer) throws InternalException {
+    DescriptorTable descTbl = analyzer.getDescTbl();
     // loop through all partitions and prune based on applicable conjuncts;
     // start with creating a collection of partition filters for the applicable conjuncts
     List<SlotId> partitionSlots = Lists.newArrayList();
-    for (SlotDescriptor slotDesc:
-        analyzer.getDescTbl().getTupleDesc(tupleIds_.get(0)).getSlots()) {
+    for (SlotDescriptor slotDesc: descTbl.getTupleDesc(tupleIds_.get(0)).getSlots()) {
       Preconditions.checkState(slotDesc.getColumn() != null);
       if (slotDesc.getColumn().getPosition() < tbl_.getNumClusteringCols()) {
         partitionSlots.add(slotDesc.getId());
       }
     }
     List<HdfsPartitionFilter> partitionFilters = Lists.newArrayList();
-    List<Expr> filterConjuncts = Lists.newArrayList();
     // Conjuncts that can be evaluated from the partition key values.
     List<Expr> simpleFilterConjuncts = Lists.newArrayList();
 
@@ -429,7 +490,7 @@ public class HdfsScanNode extends ScanNode {
       Expr conjunct = it.next();
       if (conjunct.isBoundBySlotIds(partitionSlots)) {
         if (canEvalUsingPartitionMd(conjunct)) {
-          simpleFilterConjuncts.add(pushNegationToOperands(conjunct));
+          simpleFilterConjuncts.add(Expr.pushNegationToOperands(conjunct));
         } else {
           partitionFilters.add(new HdfsPartitionFilter(conjunct, tbl_, analyzer));
         }
@@ -461,37 +522,16 @@ public class HdfsScanNode extends ScanNode {
     // Evaluate the 'complex' partition filters in the BE.
     evalPartitionFiltersInBe(partitionFilters, matchingPartitionIds, analyzer);
 
-    // Populate the list of valid partitions to process
+    // Populate the list of valid, non-empty partitions to process
     HashMap<Long, HdfsPartition> partitionMap = tbl_.getPartitionMap();
     for (Long id: matchingPartitionIds) {
-      partitions_.add(partitionMap.get(id));
-    }
-  }
-
-  /**
-   * Pushes negation to the individual operands of a predicate
-   * tree rooted at 'root'.
-   */
-  private static Expr pushNegationToOperands(Expr root) {
-    Preconditions.checkNotNull(root);
-    if (root instanceof CompoundPredicate) {
-      if (((CompoundPredicate)root).getOp() == CompoundPredicate.Operator.NOT) {
-        try {
-          // Make sure we call function 'negate' only on classes that support it,
-          // otherwise we may recurse infinitely.
-          Method m = root.getChild(0).getClass().getMethod(NEGATE_FN);
-          return pushNegationToOperands(root.getChild(0).negate());
-        } catch (NoSuchMethodException e) {
-          // The 'negate' function is not implemented. Break the recursion.
-          return root;
-        }
-      } else {
-        Expr left = pushNegationToOperands(root.getChild(0));
-        Expr right = pushNegationToOperands(root.getChild(1));
-        return new CompoundPredicate(((CompoundPredicate)root).getOp(), left, right);
+      HdfsPartition partition = partitionMap.get(id);
+      Preconditions.checkNotNull(partition);
+      if (partition.hasFileDescriptors()) {
+        partitions_.add(partition);
+        descTbl.addReferencedPartition(tbl_, partition.getId());
       }
     }
-    return root;
   }
 
   /**
@@ -499,8 +539,7 @@ public class HdfsScanNode extends ScanNode {
    * filters that could not be evaluated from the partition key values.
    */
   private void evalPartitionFiltersInBe(List<HdfsPartitionFilter> filters,
-      HashSet<Long> matchingPartitionIds, Analyzer analyzer)
-      throws InternalException, AuthorizationException {
+      HashSet<Long> matchingPartitionIds, Analyzer analyzer) throws InternalException {
     HashMap<Long, HdfsPartition> partitionMap = tbl_.getPartitionMap();
     // Set of partition ids that pass a filter
     HashSet<Long> matchingIds = Sets.newHashSet();
@@ -538,21 +577,24 @@ public class HdfsScanNode extends ScanNode {
   @Override
   public void computeStats(Analyzer analyzer) {
     super.computeStats(analyzer);
-
     LOG.debug("collecting partitions for table " + tbl_.getName());
     if (tbl_.getPartitions().isEmpty()) {
       cardinality_ = tbl_.getNumRows();
     } else {
       cardinality_ = 0;
+      totalFiles_ = 0;
       totalBytes_ = 0;
       boolean hasValidPartitionCardinality = false;
       for (HdfsPartition p: partitions_) {
         // ignore partitions with missing stats in the hope they don't matter
         // enough to change the planning outcome
         if (p.getNumRows() > 0) {
-          cardinality_ += p.getNumRows();
+          cardinality_ = addCardinalities(cardinality_, p.getNumRows());
           hasValidPartitionCardinality = true;
+        } else {
+          ++numPartitionsMissingStats_;
         }
+        totalFiles_ += p.getFileDescriptors().size();
         totalBytes_ += p.getSize();
       }
 
@@ -562,8 +604,9 @@ public class HdfsScanNode extends ScanNode {
         cardinality_ = tbl_.getNumRows();
       }
     }
-
-    Preconditions.checkState(cardinality_ >= 0 || cardinality_ == -1);
+    inputCardinality_ = cardinality_;
+    Preconditions.checkState(cardinality_ >= 0 || cardinality_ == -1,
+        "Internal error: invalid scan node cardinality: " + cardinality_);
     if (cardinality_ > 0) {
       LOG.debug("cardinality_=" + Long.toString(cardinality_) +
                 " sel=" + Double.toString(computeSelectivity()));
@@ -582,72 +625,6 @@ public class HdfsScanNode extends ScanNode {
     // TODO: retire this once the migration to the new plan is complete
     msg.hdfs_scan_node = new THdfsScanNode(desc_.getId().asInt());
     msg.node_type = TPlanNodeType.HDFS_SCAN_NODE;
-  }
-
-  /**
-   * Return scan ranges (hdfs splits) plus their storage locations, including volume
-   * ids.
-   */
-  @Override
-  public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
-    scanRanges_ = Lists.newArrayList();
-    for (HdfsPartition partition: partitions_) {
-      Preconditions.checkState(partition.getId() >= 0);
-      for (HdfsPartition.FileDescriptor fileDesc: partition.getFileDescriptors()) {
-        for (THdfsFileBlock thriftBlock: fileDesc.getFileBlocks()) {
-          HdfsPartition.FileBlock block = FileBlock.fromThrift(thriftBlock);
-          List<Integer> replicaHostIdxs = block.getReplicaHostIdxs();
-          if (replicaHostIdxs.size() == 0) {
-            // we didn't get locations for this block; for now, just ignore the block
-            // TODO: do something meaningful with that
-            continue;
-          }
-
-          // Look up the network addresses of all hosts (datanodes) that contain
-          // replicas of this block.
-          List<TNetworkAddress> blockNetworkAddresses =
-              new ArrayList<TNetworkAddress>(replicaHostIdxs.size());
-          for (Integer replicaHostId: replicaHostIdxs) {
-            TNetworkAddress blockNetworkAddress =
-                partition.getTable().getNetworkAddressByIdx(replicaHostId);
-            Preconditions.checkNotNull(blockNetworkAddress);
-            blockNetworkAddresses.add(blockNetworkAddress);
-          }
-
-          // record host/ports and volume ids
-          Preconditions.checkState(blockNetworkAddresses.size() > 0);
-          List<TScanRangeLocation> locations = Lists.newArrayList();
-          for (int i = 0; i < blockNetworkAddresses.size(); ++i) {
-            TScanRangeLocation location = new TScanRangeLocation();
-            location.setServer(blockNetworkAddresses.get(i));
-            location.setVolume_id(block.getDiskId(i));
-            locations.add(location);
-          }
-
-          // create scan ranges, taking into account maxScanRangeLength
-          long currentOffset = block.getOffset();
-          long remainingLength = block.getLength();
-          while (remainingLength > 0) {
-            long currentLength = remainingLength;
-            if (maxScanRangeLength > 0 && remainingLength > maxScanRangeLength) {
-              currentLength = maxScanRangeLength;
-            }
-            TScanRange scanRange = new TScanRange();
-            scanRange.setHdfs_file_split(new THdfsFileSplit(
-                new Path(partition.getLocation(), fileDesc.getFileName()).toString(),
-                currentOffset, currentLength, partition.getId(),
-                fileDesc.getFileLength()));
-            TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
-            scanRangeLocations.scan_range = scanRange;
-            scanRangeLocations.locations = locations;
-            scanRanges_.add(scanRangeLocations);
-            remainingLength -= currentLength;
-            currentOffset += currentLength;
-          }
-        }
-      }
-    }
-    return scanRanges_;
   }
 
   @Override
@@ -676,14 +653,10 @@ public class HdfsScanNode extends ScanNode {
     if (detailLevel.ordinal() >= TExplainLevel.STANDARD.ordinal()) {
       int numPartitions = partitions_.size();
       if (tbl_.getNumClusteringCols() == 0) numPartitions = 1;
-      output.append(String.format("%spartitions=%s/%s size=%s", detailPrefix,
-          numPartitions, table.getPartitions().size() - 1,
+      output.append(String.format("%spartitions=%s/%s files=%s size=%s", detailPrefix,
+          numPartitions, table.getPartitions().size() - 1, totalFiles_,
           PrintUtils.printBytes(totalBytes_)));
-      if (compactData_) {
-        output.append(" compact\n");
-      } else {
-        output.append("\n");
-      }
+      output.append("\n");
       if (!conjuncts_.isEmpty()) {
         output.append(
             detailPrefix + "predicates: " + getExplainString(conjuncts_) + "\n");

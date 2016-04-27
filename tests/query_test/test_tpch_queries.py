@@ -19,9 +19,10 @@ class TestTpchQuery(ImpalaTestSuite):
 
     # The tpch tests take a long time to execute so restrict the combinations they
     # execute over
+    # TODO: the planner tests are based on text and need this.
     if cls.exploration_strategy() == 'core':
       cls.TestMatrix.add_constraint(lambda v:\
-          v.get_value('table_format').file_format in ['parquet', 'text'])
+          v.get_value('table_format').file_format in ['text'])
 
   def test_tpch_q1(self, vector):
     self.run_test_case('tpch-q1', vector)
@@ -40,6 +41,9 @@ class TestTpchQuery(ImpalaTestSuite):
 
   def test_tpch_q6(self, vector):
     self.run_test_case('tpch-q6', vector)
+
+  def test_tpch_q7(self, vector):
+    self.run_test_case('tpch-q7', vector)
 
   def test_tpch_q8(self, vector):
     self.run_test_case('tpch-q8', vector)
@@ -80,8 +84,6 @@ class TestTpchQuery(ImpalaTestSuite):
   def test_tpch_q20(self, vector):
     self.run_test_case('tpch-q20', vector)
 
-  @pytest.mark.xfail(run=False, reason='IMP-658')
-  # This query fails due to IMP-658
   def test_tpch_q21(self, vector):
     self.run_test_case('tpch-q21', vector)
 

@@ -17,12 +17,15 @@
 #include "codegen/llvm-codegen.h"
 #include "exec/delimited-text-parser.h"
 #include "exec/delimited-text-parser.inline.h"
+#include "exec/hdfs-lzo-text-scanner.h"
 #include "exec/hdfs-scan-node.h"
 #include "exec/scanner-context.inline.h"
 #include "exec/text-converter.h"
 #include "exec/text-converter.inline.h"
 #include "runtime/row-batch.h"
 #include "runtime/runtime-state.h"
+#include "util/codec.h"
+#include "util/decompress.h"
 #include "util/cpu-info.h"
 #include "util/debug-util.h"
 
@@ -31,16 +34,28 @@ using namespace impala;
 using namespace llvm;
 using namespace std;
 
+
+DEFINE_bool(debug_disable_streaming_gzip, false, "Debug flag, will be removed. Disables "
+    "streaming gzip decompression.");
+
 const char* HdfsTextScanner::LLVM_CLASS_NAME = "class.impala::HdfsTextScanner";
+
+// Suffix for lzo index file: hdfs-filename.index
+const string HdfsTextScanner::LZO_INDEX_SUFFIX = ".index";
+
+// Number of bytes to read when the previous attempt to streaming decompress did not make
+// progress.
+const int64_t GZIP_FIXED_READ_SIZE = 1 * 1024 * 1024;
 
 HdfsTextScanner::HdfsTextScanner(HdfsScanNode* scan_node, RuntimeState* state)
     : HdfsScanner(scan_node, state),
       byte_buffer_ptr_(NULL),
       byte_buffer_end_(NULL),
       byte_buffer_read_size_(0),
-      boundary_mem_pool_(new MemPool(scan_node->mem_tracker())),
-      boundary_row_(boundary_mem_pool_.get()),
-      boundary_column_(boundary_mem_pool_.get()),
+      only_parsing_header_(false),
+      boundary_pool_(new MemPool(scan_node->mem_tracker())),
+      boundary_row_(boundary_pool_.get()),
+      boundary_column_(boundary_pool_.get()),
       slot_idx_(0),
       error_in_row_(false) {
 }
@@ -50,29 +65,115 @@ HdfsTextScanner::~HdfsTextScanner() {
 
 Status HdfsTextScanner::IssueInitialRanges(HdfsScanNode* scan_node,
     const vector<HdfsFileDesc*>& files) {
-  // Text just issues all ranges at once
+  vector<DiskIoMgr::ScanRange*> compressed_text_scan_ranges;
+  vector<HdfsFileDesc*> lzo_text_files;
+  bool warning_written = false;
   for (int i = 0; i < files.size(); ++i) {
-    RETURN_IF_ERROR(scan_node->AddDiskIoRanges(files[i]));
+    warning_written = false;
+    THdfsCompression::type compression = files[i]->file_compression;
+    switch (compression) {
+      case THdfsCompression::NONE:
+        // For uncompressed text we just issue all ranges at once.
+        // TODO: Lz4 is splittable, should be treated similarly.
+        RETURN_IF_ERROR(scan_node->AddDiskIoRanges(files[i]));
+        break;
+
+      case THdfsCompression::GZIP:
+      case THdfsCompression::SNAPPY:
+      case THdfsCompression::SNAPPY_BLOCKED:
+      case THdfsCompression::BZIP2:
+        for (int j = 0; j < files[i]->splits.size(); ++j) {
+          // In order to decompress gzip-, snappy- and bzip2-compressed text files, we
+          // need to read entire files. Only read a file if we're assigned the first split
+          // to avoid reading multi-block files with multiple scanners.
+          DiskIoMgr::ScanRange* split = files[i]->splits[j];
+
+          // We only process the split that starts at offset 0.
+          if (split->offset() != 0) {
+            if (!warning_written) {
+              // We are expecting each file to be one hdfs block (so all the scan range
+              // offsets should be 0).  This is not incorrect but we will issue a warning.
+              // We write a single warning per file per impalad to reduce the number of
+              // log warnings.
+              stringstream ss;
+              ss << "For better performance, snappy, gzip and bzip-compressed files "
+                 << "should not be split into multiple hdfs-blocks. file="
+                 << files[i]->filename << " offset " << split->offset();
+              scan_node->runtime_state()->LogError(ss.str());
+              warning_written = true;
+            }
+            // We assign the entire file to one scan range, so mark all but one split
+            // (i.e. the first split) as complete.
+            scan_node->RangeComplete(THdfsFileFormat::TEXT, compression);
+            continue;
+          }
+
+          // Populate the list of compressed text scan ranges.
+          DCHECK_GT(files[i]->file_length, 0);
+          ScanRangeMetadata* metadata =
+              reinterpret_cast<ScanRangeMetadata*>(split->meta_data());
+          DiskIoMgr::ScanRange* file_range = scan_node->AllocateScanRange(
+              files[i]->filename.c_str(), files[i]->file_length, 0,
+              metadata->partition_id, split->disk_id(), split->try_cache(),
+              split->expected_local());
+          compressed_text_scan_ranges.push_back(file_range);
+          scan_node->max_compressed_text_file_length()->Set(files[i]->file_length);
+        }
+        break;
+
+      case THdfsCompression::LZO:
+        // lzo-compressed text need to be processed by the specialized HdfsLzoTextScanner.
+        // Note that any LZO_INDEX files (no matter what the case of their suffix) will be
+        // filtered by the planner.
+        {
+        #ifndef NDEBUG
+          // No straightforward way to do this in one line inside a DCHECK, so for once
+          // we'll explicitly use NDEBUG to avoid executing debug-only code.
+          string lower_filename = files[i]->filename;
+          to_lower(lower_filename);
+          DCHECK(!ends_with(lower_filename, LZO_INDEX_SUFFIX));
+        #endif
+          lzo_text_files.push_back(files[i]);
+        }
+        break;
+
+      default:
+        DCHECK(false);
+    }
+  }
+
+  if (compressed_text_scan_ranges.size() > 0) {
+    RETURN_IF_ERROR(scan_node->AddDiskIoRanges(compressed_text_scan_ranges));
+  }
+  if (lzo_text_files.size() > 0) {
+    // This will dlopen the lzo binary and can fail if the lzo binary is not present.
+    RETURN_IF_ERROR(HdfsLzoTextScanner::IssueInitialRanges(scan_node, lzo_text_files));
   }
   return Status::OK;
 }
 
 Status HdfsTextScanner::ProcessSplit() {
   // Reset state for new scan range
-  InitNewRange();
+  RETURN_IF_ERROR(InitNewRange());
 
   // Find the first tuple.  If tuple_found is false, it means we went through the entire
-  // scan range without finding a single tuple.  The bytes will be picked up
-  // by the scan range before.
+  // scan range without finding a single tuple.  The bytes will be picked up by the scan
+  // range before.
   bool tuple_found;
   RETURN_IF_ERROR(FindFirstTuple(&tuple_found));
 
   if (tuple_found) {
-    // Process the scan range
+    // Update the decompressor depending on the compression type of the file in the
+    // context.
+    DCHECK(stream_->file_desc()->file_compression != THdfsCompression::SNAPPY)
+        << "FE should have generated SNAPPY_BLOCKED instead.";
+    RETURN_IF_ERROR(UpdateDecompressor(stream_->file_desc()->file_compression));
+
+    // Process the scan range.
     int dummy_num_tuples;
     RETURN_IF_ERROR(ProcessRange(&dummy_num_tuples, false));
 
-    // Finish up reading past the scan range
+    // Finish up reading past the scan range.
     RETURN_IF_ERROR(FinishScanRange());
   }
 
@@ -81,20 +182,30 @@ Status HdfsTextScanner::ProcessSplit() {
 }
 
 void HdfsTextScanner::Close() {
-  AttachPool(boundary_mem_pool_.get(), false);
+  // Need to close the decompressor before releasing the resources at AddFinalRowBatch(),
+  // because in some cases there is memory allocated in decompressor_'s temp_memory_pool_.
+  if (decompressor_.get() != NULL) {
+    decompressor_->Close();
+    decompressor_.reset(NULL);
+  }
+  AttachPool(data_buffer_pool_.get(), false);
+  AttachPool(boundary_pool_.get(), false);
   AddFinalRowBatch();
-  scan_node_->RangeComplete(THdfsFileFormat::TEXT, THdfsCompression::NONE);
-
-  scan_node_->ReleaseCodegenFn(
-      THdfsFileFormat::TEXT, reinterpret_cast<void*>(write_tuples_fn_));
-  write_tuples_fn_ = NULL;
-
+  if (!only_parsing_header_) {
+    scan_node_->RangeComplete(
+        THdfsFileFormat::TEXT, stream_->file_desc()->file_compression);
+  }
   HdfsScanner::Close();
 }
 
-void HdfsTextScanner::InitNewRange() {
-  HdfsPartitionDescriptor* hdfs_partition = context_->partition_descriptor();
+Status HdfsTextScanner::InitNewRange() {
+  // Compressed text does not reference data in the io buffers directly. In such case, we
+  // can recycle the buffers in the stream_ more promptly.
+  if (stream_->file_desc()->file_compression != THdfsCompression::NONE) {
+    stream_->set_contains_tuple_data(false);
+  }
 
+  HdfsPartitionDescriptor* hdfs_partition = context_->partition_descriptor();
   char field_delim = hdfs_partition->field_delim();
   char collection_delim = hdfs_partition->collection_delim();
   if (scan_node_->materialized_slots().size() == 0) {
@@ -109,10 +220,11 @@ void HdfsTextScanner::InitNewRange() {
   text_converter_.reset(new TextConverter(hdfs_partition->escape_char(),
       scan_node_->hdfs_table()->null_column_value()));
 
-  ResetScanner();
+  RETURN_IF_ERROR(ResetScanner());
+  return Status::OK;
 }
 
-void HdfsTextScanner::ResetScanner() {
+Status HdfsTextScanner::ResetScanner() {
   error_in_row_ = false;
 
   // Note - this initialisation relies on the assumption that N partition keys will occupy
@@ -129,11 +241,12 @@ void HdfsTextScanner::ResetScanner() {
   byte_buffer_ptr_ = byte_buffer_end_ = NULL;
 
   partial_tuple_ =
-      Tuple::Create(scan_node_->tuple_desc()->byte_size(), boundary_mem_pool_.get());
+      Tuple::Create(scan_node_->tuple_desc()->byte_size(), boundary_pool_.get());
 
   // Initialize codegen fn
-  InitializeWriteTuplesFn(
-      context_->partition_descriptor(), THdfsFileFormat::TEXT, "HdfsTextScanner");
+  RETURN_IF_ERROR(InitializeWriteTuplesFn(
+    context_->partition_descriptor(), THdfsFileFormat::TEXT, "HdfsTextScanner"));
+  return Status::OK;
 }
 
 Status HdfsTextScanner::FinishScanRange() {
@@ -141,14 +254,20 @@ Status HdfsTextScanner::FinishScanRange() {
 
   // For text we always need to scan past the scan range to find the next delimiter
   while (true) {
-    bool eosr;
-    Status status = FillByteBuffer(&eosr, NEXT_BLOCK_READ_SIZE);
+    bool eosr = true;
+    Status status = Status::OK;
+    byte_buffer_read_size_ = 0;
+
+    // If compressed text, then there is nothing more to be read.
+    if (decompressor_.get() == NULL) {
+      status = FillByteBuffer(&eosr, NEXT_BLOCK_READ_SIZE);
+    }
 
     if (!status.ok() || byte_buffer_read_size_ == 0) {
-      stringstream ss;
       if (status.IsCancelled()) return status;
 
       if (!status.ok()) {
+        stringstream ss;
         ss << "Read failed while trying to finish scan range: " << stream_->filename()
            << ":" << stream_->file_offset() << endl << status.GetErrorMsg();
         if (state_->LogHasSpace()) state_->LogError(ss.str());
@@ -171,7 +290,7 @@ Status HdfsTextScanner::FinishScanRange() {
         int num_tuples = WriteFields(pool, tuple_row_mem, num_fields, 1);
         DCHECK_LE(num_tuples, 1);
         DCHECK_GE(num_tuples, 0);
-        COUNTER_UPDATE(scan_node_->rows_read_counter(), num_tuples);
+        COUNTER_ADD(scan_node_->rows_read_counter(), num_tuples);
         RETURN_IF_ERROR(CommitRows(num_tuples));
       }
       break;
@@ -258,8 +377,7 @@ Status HdfsTextScanner::ProcessRange(int* num_tuples, bool past_scan_range) {
       }
       boundary_row_.Append(last_row, byte_buffer_ptr_ - last_row);
     }
-
-    COUNTER_UPDATE(scan_node_->rows_read_counter(), *num_tuples);
+    COUNTER_ADD(scan_node_->rows_read_counter(), *num_tuples);
 
     // Commit the rows to the row batch and scan node
     RETURN_IF_ERROR(CommitRows(num_tuples_materialized));
@@ -271,24 +389,172 @@ Status HdfsTextScanner::ProcessRange(int* num_tuples, bool past_scan_range) {
 
     if (scan_node_->ReachedLimit()) return Status::OK;
   }
-
   return Status::OK;
 }
 
 Status HdfsTextScanner::FillByteBuffer(bool* eosr, int num_bytes) {
   *eosr = false;
   Status status;
-  if (num_bytes > 0) {
-    stream_->GetBytes(num_bytes, reinterpret_cast<uint8_t**>(&byte_buffer_ptr_),
-                      &byte_buffer_read_size_, &status);
+
+  if (decompressor_.get() == NULL) {
+    if (num_bytes > 0) {
+      stream_->GetBytes(num_bytes, reinterpret_cast<uint8_t**>(&byte_buffer_ptr_),
+                        &byte_buffer_read_size_, &status);
+    } else {
+      DCHECK_EQ(num_bytes, 0);
+      status = stream_->GetBuffer(false, reinterpret_cast<uint8_t**>(&byte_buffer_ptr_),
+                                  &byte_buffer_read_size_);
+    }
+    *eosr = stream_->eosr();
+  } else if (!FLAGS_debug_disable_streaming_gzip &&
+      decompression_type_ == THdfsCompression::GZIP) {
+    DCHECK_EQ(num_bytes, 0);
+    RETURN_IF_ERROR(FillByteBufferGzip(eosr));
   } else {
     DCHECK_EQ(num_bytes, 0);
-    status = stream_->GetBuffer(false, reinterpret_cast<uint8_t**>(&byte_buffer_ptr_),
-                                &byte_buffer_read_size_);
+    RETURN_IF_ERROR(FillByteBufferCompressedFile(eosr));
   }
+
   byte_buffer_end_ = byte_buffer_ptr_ + byte_buffer_read_size_;
-  *eosr = stream_->eosr();
   return status;
+}
+
+Status HdfsTextScanner::FillByteBufferGzip(bool* eosr) {
+  // Attach any previously decompressed buffers to the row batch before decompressing
+  // any more data.
+  if (!decompressor_->reuse_output_buffer()) {
+    AttachPool(data_buffer_pool_.get(), false);
+  }
+
+  // Gzip compressed text is decompressed as buffers are read from stream_ (unlike
+  // other codecs which decompress the entire file in a single call). A compressed
+  // buffer is passed to ProcessBlockStreaming but it may not consume all of the input.
+  // In the unlikely case that decompressed output is not produced, we attempt to try
+  // again with a reasonably large fixed size input buffer (explicitly calling
+  // GetBytes()) before failing.
+  bool try_read_fixed_size = false;
+  uint8_t* decompressed_buffer = NULL;
+  int64_t decompressed_len = 0;
+  do {
+    uint8_t* gzip_buffer_ptr = NULL;
+    int64_t gzip_buffer_size = 0;
+    // We don't know how many bytes ProcessBlockStreaming() will consume so we set
+    // peak=true and then later advance the stream using SkipBytes().
+    if (!try_read_fixed_size) {
+      RETURN_IF_ERROR(stream_->GetBuffer(true, &gzip_buffer_ptr, &gzip_buffer_size));
+    } else {
+      Status status;
+      stream_->GetBytes(GZIP_FIXED_READ_SIZE, &gzip_buffer_ptr, &gzip_buffer_size,
+          &status, true);
+      RETURN_IF_ERROR(status);
+      try_read_fixed_size = false;
+    }
+    if (gzip_buffer_size == 0) {
+      // If the compressed file was not properly ended, the decoder will not know that
+      // the last buffer should have been eos.
+      stringstream ss;
+      ss << "Unexpected end of file decompressing gzip. File may be malformed. ";
+      ss << "file: " << stream_->filename();
+      return Status(ss.str());
+    }
+
+    int64_t gzip_buffer_bytes_read = 0;
+    {
+      SCOPED_TIMER(decompress_timer_);
+      RETURN_IF_ERROR(decompressor_->ProcessBlockStreaming(gzip_buffer_size,
+            gzip_buffer_ptr, &gzip_buffer_bytes_read, &decompressed_len,
+            &decompressed_buffer, eosr));
+      DCHECK_GE(gzip_buffer_size, gzip_buffer_bytes_read);
+      DCHECK_GE(decompressed_len, 0);
+    }
+
+    // Skip the bytes in stream_ that were decompressed.
+    Status status;
+    stream_->SkipBytes(gzip_buffer_bytes_read, &status);
+    RETURN_IF_ERROR(status);
+
+    if (!*eosr && decompressed_len == 0) {
+      // It's possible (but very unlikely) that ProcessBlockStreaming() wasn't able to
+      // make progress if the compressed buffer returned by GetBytes() is too small.
+      // (Note that this did not even occur in simple experiments where the input buffer
+      // is always 1 byte, but we need to handle this case to be defensive.) In this
+      // case, try again with a reasonably large fixed size buffer. If we still did not
+      // make progress, then return an error.
+      if (try_read_fixed_size) {
+        stringstream ss;
+        ss << "Unable to make progress decoding gzip text. ";
+        ss << "file: " << stream_->filename();
+        return Status(ss.str());
+      }
+      VLOG_FILE << "Unable to make progress decompressing gzip, trying again";
+      try_read_fixed_size = true;
+    }
+  } while (try_read_fixed_size);
+
+  byte_buffer_ptr_ = reinterpret_cast<char*>(decompressed_buffer);
+  byte_buffer_read_size_ = decompressed_len;
+
+  if (*eosr) {
+    if (!stream_->eosr()) {
+      // TODO: Add a test case that exercises this path.
+      stringstream ss;
+      ss << "Unexpected end of gzip stream before end of file: ";
+      ss << stream_->filename();
+      if (state_->LogHasSpace()) state_->LogError(ss.str());
+      if (state_->abort_on_error()) parse_status_ = Status(ss.str());
+      RETURN_IF_ERROR(parse_status_);
+    }
+
+    context_->ReleaseCompletedResources(NULL, true);
+  }
+  return Status::OK;
+}
+
+Status HdfsTextScanner::FillByteBufferCompressedFile(bool* eosr) {
+  // For other compressed text: attempt to read and decompress the entire file, point
+  // to the decompressed buffer, and then continue normal processing.
+  DCHECK(decompression_type_ != THdfsCompression::SNAPPY);
+  HdfsFileDesc* desc = scan_node_->GetFileDesc(stream_->filename());
+  int64_t file_size = desc->file_length;
+  DCHECK_GT(file_size, 0);
+  Status status;
+  stream_->GetBytes(file_size, reinterpret_cast<uint8_t**>(&byte_buffer_ptr_),
+      &byte_buffer_read_size_, &status);
+  RETURN_IF_ERROR(status);
+
+  // If didn't read anything, return.
+  if (byte_buffer_read_size_ == 0) {
+    *eosr = true;
+    return Status::OK;
+  }
+
+  // Need to read the entire file.
+  if (file_size < byte_buffer_read_size_) {
+    stringstream ss;
+    ss << "Expected to read a compressed text file of size " << file_size << " bytes. "
+       << "But only read " << byte_buffer_read_size_ << " bytes. This may indicate "
+       << "data file corruption. (file: " << stream_->filename() << ").";
+    return Status(ss.str());
+  }
+
+  // Decompress and adjust the byte_buffer_ptr_ and byte_buffer_read_size_ accordingly.
+  int64_t decompressed_len = 0;
+  uint8_t* decompressed_buffer = NULL;
+  SCOPED_TIMER(decompress_timer_);
+  // TODO: Once the writers are in, add tests with very large compressed files (4GB)
+  // that could overflow.
+  RETURN_IF_ERROR(decompressor_->ProcessBlock(false, byte_buffer_read_size_,
+      reinterpret_cast<uint8_t*>(byte_buffer_ptr_), &decompressed_len,
+      &decompressed_buffer));
+
+  // Inform stream_ that the buffer with the compressed text can be released.
+  context_->ReleaseCompletedResources(NULL, true);
+
+  VLOG_FILE << "Decompressed " << byte_buffer_read_size_ << " to " << decompressed_len;
+  byte_buffer_ptr_ = reinterpret_cast<char*>(decompressed_buffer);
+  byte_buffer_read_size_ = decompressed_len;
+  *eosr = stream_->eosr();
+  return Status::OK;
 }
 
 Status HdfsTextScanner::FindFirstTuple(bool* tuple_found) {
@@ -323,10 +589,13 @@ Status HdfsTextScanner::FindFirstTuple(bool* tuple_found) {
 // Codegen for materializing parsed data into tuples.  The function WriteCompleteTuple is
 // codegen'd using the IRBuilder for the specific tuple description.  This function
 // is then injected into the cross-compiled driving function, WriteAlignedTuples().
-Function* HdfsTextScanner::Codegen(HdfsScanNode* node, const vector<Expr*>& conjuncts) {
+Function* HdfsTextScanner::Codegen(HdfsScanNode* node,
+                                   const vector<ExprContext*>& conjunct_ctxs) {
   if (!node->runtime_state()->codegen_enabled()) return NULL;
-  LlvmCodeGen* codegen = node->runtime_state()->codegen();
-  Function* write_complete_tuple_fn = CodegenWriteCompleteTuple(node, codegen, conjuncts);
+  LlvmCodeGen* codegen;
+  if (!node->runtime_state()->GetCodegen(&codegen).ok()) return NULL;
+  Function* write_complete_tuple_fn =
+      CodegenWriteCompleteTuple(node, codegen, conjunct_ctxs);
   if (write_complete_tuple_fn == NULL) return NULL;
   return CodegenWriteAlignedTuples(node, codegen, write_complete_tuple_fn);
 }
@@ -364,7 +633,6 @@ void HdfsTextScanner::LogRowParseError(int row_idx, stringstream* ss) {
   // Log the erroneous line (or the suffix of a line if !boundary_line.empty()).
   *ss << string(row_start, row_end - row_start);
 }
-
 
 // This function writes fields in 'field_locations_' to the row_batch.  This function
 // deals with tuples that straddle batches.  There are two cases:
@@ -418,7 +686,7 @@ int HdfsTextScanner::WriteFields(MemPool* pool, TupleRow* tuple_row,
       ++num_tuples_processed;
       --num_tuples;
 
-      if (ExecNode::EvalConjuncts(&(*conjuncts_)[0], num_conjuncts_, tuple_row)) {
+      if (EvalConjuncts(tuple_row)) {
         ++num_tuples_materialized;
         tuple_ = next_tuple(tuple_);
         tuple_row = next_row(tuple_row);
@@ -482,7 +750,6 @@ void HdfsTextScanner::CopyBoundaryField(FieldLocation* data, MemPool* pool) {
 
 int HdfsTextScanner::WritePartialTuple(FieldLocation* fields,
     int num_fields, bool copy_strings) {
-  copy_strings |= scan_node_->requires_compaction();
   int next_line_offset = 0;
   for (int i = 0; i < num_fields; ++i) {
     int need_escape = false;
@@ -495,7 +762,7 @@ int HdfsTextScanner::WritePartialTuple(FieldLocation* fields,
 
     const SlotDescriptor* desc = scan_node_->materialized_slots()[slot_idx_];
     if (!text_converter_->WriteSlot(desc, partial_tuple_,
-        fields[i].start, len, true, need_escape, boundary_mem_pool_.get())) {
+        fields[i].start, len, true, need_escape, data_buffer_pool_.get())) {
       ReportColumnParseError(desc, fields[i].start, len);
       error_in_row_ = true;
     }

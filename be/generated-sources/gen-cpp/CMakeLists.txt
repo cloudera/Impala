@@ -42,8 +42,8 @@ set(SRC_FILES
   beeswax_types.cpp
   BeeswaxService.cpp
   TCLIService.cpp
-  cli_service_constants.cpp
-  cli_service_types.cpp
+  TCLIService_constants.cpp
+  TCLIService_types.cpp
   Data_constants.cpp
   Data_types.cpp
   DataSinks_constants.cpp
@@ -72,6 +72,8 @@ set(SRC_FILES
   ResourceBrokerService_constants.cpp
   ResourceBrokerService_types.cpp
   ResourceBrokerService.cpp
+  Results_constants.cpp
+  Results_types.cpp
   Partitions_constants.cpp
   Partitions_types.cpp
   Planner_constants.cpp
@@ -90,13 +92,12 @@ set(SRC_FILES
   Types_types.cpp
 )
 
-# keep everything in one library, the object files reference 
+# keep everything in one library, the object files reference
 # each other
-add_library(ImpalaThrift STATIC ${SRC_FILES})
+add_library(ImpalaThrift ${SRC_FILES})
 
 # Setting these files as code-generated lets make clean and incremental builds work
 # correctly
 set_source_files_properties(${SRC_FILES} PROPERTIES GENERATED TRUE)
 
 add_dependencies(ImpalaThrift thrift-cpp)
-

@@ -24,6 +24,7 @@
 #include "common/status.h"
 #include "exec/catalog-op-executor.h"
 #include "exprs/expr.h"
+#include "exprs/expr-context.h"
 #include "runtime/exec-env.h"
 #include "runtime/runtime-state.h"
 #include "runtime/hdfs-fs-cache.h"
@@ -55,8 +56,8 @@ Java_com_cloudera_impala_service_FeSupport_NativeFeTestInit(
     JNIEnv* env, jclass caller_class) {
   DCHECK(ExecEnv::GetInstance() == NULL) << "This should only be called once from the FE";
   char* name = const_cast<char*>("FeSupport");
-  InitCommonRuntime(1, &name, false, true);
-  LlvmCodeGen::InitializeLlvm();
+  InitCommonRuntime(1, &name, false, TestInfo::FE_TEST);
+  LlvmCodeGen::InitializeLlvm(true);
   ExecEnv* exec_env = new ExecEnv(); // This also caches it from the process.
   exec_env->InitForFeTests();
 }
@@ -79,39 +80,44 @@ Java_com_cloudera_impala_service_FeSupport_NativeEvalConstExprs(
 
   DeserializeThriftMsg(env, thrift_expr_batch, &expr_batch);
   DeserializeThriftMsg(env, thrift_query_ctx_bytes, &query_ctx);
+  query_ctx.request.query_options.disable_codegen = true;
   RuntimeState state(query_ctx);
 
   THROW_IF_ERROR_RET(jni_frame.push(env), env, JniUtil::internal_exc_class(),
                      result_bytes);
   // Exprs can allocate memory so we need to set up the mem trackers before
   // preparing/running the exprs.
-  THROW_IF_ERROR_RET(state.InitMemTrackers(TUniqueId(), NULL, -1), env,
-                     JniUtil::internal_exc_class(), result_bytes);
+  state.InitMemTrackers(TUniqueId(), NULL, -1);
 
-  vector<TExpr>& exprs = expr_batch.exprs;
-  // Prepate the exprs
-  vector<Expr*> prepared_exprs;
-  for (vector<TExpr>::iterator it = exprs.begin(); it != exprs.end(); it++) {
-    Expr* e;
-    THROW_IF_ERROR_RET(Expr::CreateExprTree(&obj_pool, *it, &e), env,
+  vector<TExpr>& texprs = expr_batch.exprs;
+  // Prepare the exprs
+  vector<ExprContext*> expr_ctxs;
+  for (vector<TExpr>::iterator it = texprs.begin(); it != texprs.end(); it++) {
+    ExprContext* ctx;
+    THROW_IF_ERROR_RET(Expr::CreateExprTree(&obj_pool, *it, &ctx), env,
                        JniUtil::internal_exc_class(), result_bytes);
-    THROW_IF_ERROR_RET(Expr::Prepare(e, &state, RowDescriptor()), env,
-                       JniUtil::internal_exc_class(), result_bytes);
-    prepared_exprs.push_back(e);
+    THROW_IF_ERROR_RET(ctx->Prepare(&state, RowDescriptor(), state.query_mem_tracker()),
+                       env, JniUtil::internal_exc_class(), result_bytes);
+    expr_ctxs.push_back(ctx);
   }
 
-  // Optimize the module so any UDF functions are jit'd
-  if (state.codegen() != NULL) state.codegen()->FinalizeModule();
+  if (state.codegen_created()) {
+    // Finalize the module so any UDF functions are jit'd
+    LlvmCodeGen* codegen = NULL;
+    state.GetCodegen(&codegen, /* initialize */ false);
+    DCHECK_NOTNULL(codegen);
+    codegen->EnableOptimizations(false);
+    codegen->FinalizeModule();
+  }
 
   vector<TColumnValue> results;
-  // Evaluate the exprs
-  for (vector<Expr*>::iterator it = prepared_exprs.begin();
-       it != prepared_exprs.end(); it++) {
+  // Open and evaluate the exprs
+  for (int i = 0; i < expr_ctxs.size(); ++i) {
     TColumnValue val;
-    THROW_IF_ERROR_RET((*it)->Open(&state), env,
+    THROW_IF_ERROR_RET(expr_ctxs[i]->Open(&state), env,
                        JniUtil::internal_exc_class(), result_bytes);
-    (*it)->GetValue(NULL, false, &val);
-    (*it)->Close(&state);
+    expr_ctxs[i]->GetValue(NULL, false, &val);
+    expr_ctxs[i]->Close(&state);
     results.push_back(val);
   }
   expr_results.__set_colVals(results);
@@ -152,32 +158,37 @@ static void ResolveSymbolLookup(const TSymbolLookupParams params,
     }
   }
 
+  // Check if the FE-specified symbol exists as-is.
+  // Set 'quiet' to true so we don't flood the log with unfound builtin symbols on
+  // startup.
   Status status =
-      LibCache::instance()->CheckSymbolExists(params.location, type, params.symbol);
+      LibCache::instance()->CheckSymbolExists(params.location, type, params.symbol, true);
   if (status.ok()) {
-    // The FE specified symbol exists, just use that.
     result->__set_result_code(TSymbolLookupResultCode::SYMBOL_FOUND);
     result->__set_symbol(params.symbol);
-    // TODO: we can demangle the user symbol here and validate it against
-    // params.arg_types. This would prevent someone from typing the wrong symbol
-    // by accident. This requires more string parsing of the symbol.
     return;
   }
 
-  // The input was already mangled and we couldn't find it, return the error.
-  if (SymbolsUtil::IsMangled(params.symbol)) {
+  if (params.fn_binary_type == TFunctionBinaryType::HIVE ||
+      SymbolsUtil::IsMangled(params.symbol)) {
+    // No use trying to mangle Hive or already mangled symbols, return the error.
+    // TODO: we can demangle the user symbol here and validate it against
+    // params.arg_types. This would prevent someone from typing the wrong symbol
+    // by accident. This requires more string parsing of the symbol.
     result->__set_result_code(TSymbolLookupResultCode::SYMBOL_NOT_FOUND);
     stringstream ss;
     ss << "Could not find symbol '" << params.symbol << "' in: " << params.location;
     result->__set_error_msg(ss.str());
+    VLOG(1) << ss.str() << endl << status.GetErrorMsg();
     return;
   }
 
-  // Mangle the user input and do another lookup.
-  string symbol;
+  string symbol = params.symbol;
   ColumnType ret_type(INVALID_TYPE);
   if (params.__isset.ret_arg_type) ret_type = ColumnType(params.ret_arg_type);
 
+  // Mangle the user input
+  DCHECK_NE(params.fn_binary_type, TFunctionBinaryType::HIVE);
   if (params.symbol_type == TSymbolType::UDF_EVALUATE) {
     symbol = SymbolsUtil::MangleUserFunction(params.symbol,
         arg_types, params.has_var_args, params.__isset.ret_arg_type ? &ret_type : NULL);
@@ -187,6 +198,7 @@ static void ResolveSymbolLookup(const TSymbolLookupParams params,
     symbol = SymbolsUtil::ManglePrepareOrCloseFunction(params.symbol);
   }
 
+  // Look up the mangled symbol
   status = LibCache::instance()->CheckSymbolExists(params.location, type, symbol);
   if (!status.ok()) {
     result->__set_result_code(TSymbolLookupResultCode::SYMBOL_NOT_FOUND);
@@ -270,7 +282,7 @@ Java_com_cloudera_impala_service_FeSupport_NativePrioritizeLoad(
   TPrioritizeLoadRequest request;
   DeserializeThriftMsg(env, thrift_struct, &request);
 
-  CatalogOpExecutor catalog_op_executor(ExecEnv::GetInstance(), NULL);
+  CatalogOpExecutor catalog_op_executor(ExecEnv::GetInstance(), NULL, NULL);
   TPrioritizeLoadResponse result;
   Status status = catalog_op_executor.PrioritizeLoad(request, &result);
   if (!status.ok()) {

@@ -33,11 +33,13 @@ enum TPlanNodeType {
   HASH_JOIN_NODE,
   AGGREGATION_NODE,
   SORT_NODE,
+  EMPTY_SET_NODE,
   EXCHANGE_NODE,
   UNION_NODE,
   SELECT_NODE,
   CROSS_JOIN_NODE,
-  DATA_SOURCE_NODE
+  DATA_SOURCE_NODE,
+  ANALYTIC_EVAL_NODE
 }
 
 // phases of an execution node
@@ -64,8 +66,9 @@ enum TDebugAction {
 
 // Specification of subsection of a single hdfs file.
 struct THdfsFileSplit {
-  // file path
-  1: required string path
+  // File name (not the full path).  The path is assumed to be the
+  // 'location' of the THdfsPartition referenced by partition_id.
+  1: required string file_name
 
   // starting offset
   2: required i64 offset
@@ -73,12 +76,14 @@ struct THdfsFileSplit {
   // length of split
   3: required i64 length
 
-  // ID of partition in parent THdfsScanNode. Meaningful only
-  // in the context of a single THdfsScanNode, may not be unique elsewhere.
+  // ID of partition within the THdfsTable associated with this scan node.
   4: required i64 partition_id
 
   // total size of the hdfs file
   5: required i64 file_length
+
+  // compression type of the hdfs file
+  6: required CatalogObjects.THdfsCompression file_compression
 }
 
 // key range for single THBaseScanNode
@@ -150,7 +155,17 @@ enum TJoinOp {
   INNER_JOIN,
   LEFT_OUTER_JOIN,
   LEFT_SEMI_JOIN,
+  LEFT_ANTI_JOIN,
+
+  // Similar to LEFT_ANTI_JOIN with special handling for NULLs for the join conjuncts
+  // on the build side. Those NULLs are considered candidate matches, and therefore could
+  // be rejected (ANTI-join), based on the other join conjuncts. This is in contrast
+  // to LEFT_ANTI_JOIN where NULLs are not matches and therefore always returned.
+  NULL_AWARE_LEFT_ANTI_JOIN,
+
   RIGHT_OUTER_JOIN,
+  RIGHT_SEMI_JOIN,
+  RIGHT_ANTI_JOIN,
   FULL_OUTER_JOIN,
   CROSS_JOIN
 }
@@ -175,14 +190,17 @@ struct TAggregationNode {
   // aggregate exprs. The root of each expr is the aggregate function. The
   // other exprs are the inputs to the aggregate function.
   2: required list<Exprs.TExpr> aggregate_functions
-  3: required Types.TTupleId agg_tuple_id
+
+  // Tuple id used for intermediate aggregations (with slots of agg intermediate types)
+  3: required Types.TTupleId intermediate_tuple_id
+
+  // Tupld id used for the aggregation output (with slots of agg output types)
+  // Equal to intermediate_tuple_id if intermediate type == output type for all
+  // aggregate functions.
+  4: required Types.TTupleId output_tuple_id
 
   // Set to true if this aggregation node needs to run the finalization step.
-  4: required bool need_finalize
-
-  // If true, this node is doing the merge phase of the aggregation (as opposed to the
-  // update phase).
-  5: optional bool is_merge
+  5: required bool need_finalize
 }
 
 struct TSortInfo {
@@ -202,6 +220,94 @@ struct TSortNode {
   2: required bool use_top_n;
   // This is the number of rows to skip before returning results
   3: optional i64 offset
+}
+
+enum TAnalyticWindowType {
+  // Specifies the window as a logical offset
+  RANGE,
+
+  // Specifies the window in physical units
+  ROWS
+}
+
+enum TAnalyticWindowBoundaryType {
+  // The window starts/ends at the current row.
+  CURRENT_ROW,
+
+  // The window starts/ends at an offset preceding current row.
+  PRECEDING,
+
+  // The window starts/ends at an offset following current row.
+  FOLLOWING
+}
+
+struct TAnalyticWindowBoundary {
+  1: required TAnalyticWindowBoundaryType type
+
+  // Predicate that checks: child tuple '<=' buffered tuple + offset for the orderby expr
+  2: optional Exprs.TExpr range_offset_predicate
+
+  // Offset from the current row for ROWS windows.
+  3: optional i64 rows_offset_value
+}
+
+struct TAnalyticWindow {
+  // Specifies the window type for the start and end bounds.
+  1: required TAnalyticWindowType type
+
+  // Absence indicates window start is UNBOUNDED PRECEDING.
+  2: optional TAnalyticWindowBoundary window_start
+
+  // Absence indicates window end is UNBOUNDED FOLLOWING.
+  3: optional TAnalyticWindowBoundary window_end
+}
+
+// Defines a group of one or more analytic functions that share the same window,
+// partitioning expressions and order-by expressions and are evaluated by a single
+// ExecNode.
+struct TAnalyticNode {
+  // Exprs on which the analytic function input is partitioned. Input is already sorted
+  // on partitions and order by clauses, partition_exprs is used to identify partition
+  // boundaries. Empty if no partition clause is specified.
+  1: required list<Exprs.TExpr> partition_exprs
+
+  // Exprs specified by an order-by clause for RANGE windows. Used to evaluate RANGE
+  // window boundaries. Empty if no order-by clause is specified or for windows
+  // specifying ROWS.
+  2: required list<Exprs.TExpr> order_by_exprs
+
+  // Functions evaluated over the window for each input row. The root of each expr is
+  // the aggregate function. Child exprs are the inputs to the function.
+  3: required list<Exprs.TExpr> analytic_functions
+
+  // Window specification
+  4: optional TAnalyticWindow window
+
+  // Tuple used for intermediate results of analytic function evaluations
+  // (with slots of analytic intermediate types)
+  5: required Types.TTupleId intermediate_tuple_id
+
+  // Tupld used for the analytic function output (with slots of analytic output types)
+  // Equal to intermediate_tuple_id if intermediate type == output type for all
+  // analytic functions.
+  6: required Types.TTupleId output_tuple_id
+
+  // id of the buffered tuple (identical to the input tuple, which is assumed
+  // to come from a single SortNode); not set if both partition_exprs and
+  // order_by_exprs are empty
+  7: optional Types.TTupleId buffered_tuple_id
+
+  // predicate that checks: child tuple is in the same partition as the buffered tuple,
+  // i.e. each partition expr is equal or both are not null. Only set if
+  // buffered_tuple_id is set; should be evaluated over a row that is composed of the
+  // child tuple and the buffered tuple
+  8: optional Exprs.TExpr partition_by_eq
+
+  // predicate that checks: the order_by_exprs are equal or both NULL when evaluated
+  // over the child tuple and the buffered tuple. only set if buffered_tuple_id is set;
+  // should be evaluated over a row that is composed of the child tuple and the buffered
+  // tuple
+  9: optional Exprs.TExpr order_by_eq
 }
 
 struct TUnionNode {
@@ -238,18 +344,16 @@ struct TPlanNode {
   6: required list<bool> nullable_tuples
   7: optional list<Exprs.TExpr> conjuncts
 
-  // Produce data in compact format.
-  8: required bool compact_data
-
   // one field per PlanNode subclass
-  9: optional THdfsScanNode hdfs_scan_node
-  10: optional THBaseScanNode hbase_scan_node
-  16: optional TDataSourceScanNode data_source_node
+  8: optional THdfsScanNode hdfs_scan_node
+  9: optional THBaseScanNode hbase_scan_node
+  10: optional TDataSourceScanNode data_source_node
   11: optional THashJoinNode hash_join_node
   12: optional TAggregationNode agg_node
   13: optional TSortNode sort_node
   14: optional TUnionNode union_node
   15: optional TExchangeNode exchange_node
+  16: optional TAnalyticNode analytic_node
 
   // Label that should be used to print this node to the user.
   17: optional string label

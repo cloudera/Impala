@@ -14,14 +14,13 @@
 
 package com.cloudera.impala.analysis;
 
-import com.cloudera.impala.catalog.AuthorizationException;
 import com.cloudera.impala.common.AnalysisException;
 
 /**
  * Base class for all Impala SQL statements.
  */
 abstract class StatementBase implements ParseNode {
-  // True if this Stmt is top level of an explain stmt.
+  // True if this Stmt is the top level of an explain stmt.
   protected boolean isExplain_ = false;
 
   /**
@@ -31,9 +30,8 @@ abstract class StatementBase implements ParseNode {
    * It is up to the analysis() implementation to ensure the maximum number of missing
    * tables/views get collected in the Analyzer before failing analyze().
    */
-  public void analyze(Analyzer analyzer) throws AnalysisException,
-      AuthorizationException {
-    analyzer.setIsExplain(isExplain_);
+  public void analyze(Analyzer analyzer) throws AnalysisException {
+    if (isExplain_) analyzer.setIsExplain();
   }
 
   /**
@@ -41,6 +39,6 @@ abstract class StatementBase implements ParseNode {
    * @see com.cloudera.impala.parser.ParseNode#toSql()
    */
   public String toSql() { return ""; }
-  public void setIsExplain(boolean isExplain) { this.isExplain_ = isExplain; }
+  public void setIsExplain() { isExplain_ = true; }
   public boolean isExplain() { return isExplain_; }
 }

@@ -25,6 +25,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.commons.codec.binary.Base64;
 import org.apache.hadoop.hive.metastore.TableType;
 import org.apache.hadoop.hive.metastore.api.AlreadyExistsException;
 import org.apache.hadoop.hive.metastore.api.BooleanColumnStatsData;
@@ -37,6 +38,7 @@ import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.LongColumnStatsData;
 import org.apache.hadoop.hive.metastore.api.MetaException;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
+import org.apache.hadoop.hive.metastore.api.Partition;
 import org.apache.hadoop.hive.metastore.api.SerDeInfo;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.StringColumnStatsData;
@@ -46,12 +48,12 @@ import org.apache.thrift.TException;
 
 import com.cloudera.impala.analysis.FunctionName;
 import com.cloudera.impala.analysis.TableName;
+import com.cloudera.impala.authorization.User;
 import com.cloudera.impala.catalog.Catalog;
 import com.cloudera.impala.catalog.CatalogException;
 import com.cloudera.impala.catalog.CatalogServiceCatalog;
 import com.cloudera.impala.catalog.Column;
 import com.cloudera.impala.catalog.ColumnNotFoundException;
-import com.cloudera.impala.catalog.ColumnType;
 import com.cloudera.impala.catalog.DataSource;
 import com.cloudera.impala.catalog.Db;
 import com.cloudera.impala.catalog.Function;
@@ -61,12 +63,15 @@ import com.cloudera.impala.catalog.HdfsTable;
 import com.cloudera.impala.catalog.HiveStorageDescriptorFactory;
 import com.cloudera.impala.catalog.IncompleteTable;
 import com.cloudera.impala.catalog.MetaStoreClientPool.MetaStoreClient;
+import com.cloudera.impala.catalog.PartitionStatsUtil;
+import com.cloudera.impala.catalog.Role;
+import com.cloudera.impala.catalog.RolePrivilege;
 import com.cloudera.impala.catalog.RowFormat;
 import com.cloudera.impala.catalog.Table;
-import com.cloudera.impala.catalog.InlineView;
-import com.cloudera.impala.catalog.View;
 import com.cloudera.impala.catalog.TableLoadingException;
 import com.cloudera.impala.catalog.TableNotFoundException;
+import com.cloudera.impala.catalog.Type;
+import com.cloudera.impala.catalog.View;
 import com.cloudera.impala.common.ImpalaException;
 import com.cloudera.impala.common.ImpalaRuntimeException;
 import com.cloudera.impala.common.InternalException;
@@ -93,6 +98,7 @@ import com.cloudera.impala.thrift.TColumnType;
 import com.cloudera.impala.thrift.TColumnValue;
 import com.cloudera.impala.thrift.TCreateDataSourceParams;
 import com.cloudera.impala.thrift.TCreateDbParams;
+import com.cloudera.impala.thrift.TCreateDropRoleParams;
 import com.cloudera.impala.thrift.TCreateFunctionParams;
 import com.cloudera.impala.thrift.TCreateOrAlterViewParams;
 import com.cloudera.impala.thrift.TCreateTableLikeParams;
@@ -103,10 +109,15 @@ import com.cloudera.impala.thrift.TDdlExecResponse;
 import com.cloudera.impala.thrift.TDropDataSourceParams;
 import com.cloudera.impala.thrift.TDropDbParams;
 import com.cloudera.impala.thrift.TDropFunctionParams;
+import com.cloudera.impala.thrift.TDropStatsParams;
 import com.cloudera.impala.thrift.TDropTableOrViewParams;
+import com.cloudera.impala.thrift.TGrantRevokePrivParams;
+import com.cloudera.impala.thrift.TGrantRevokeRoleParams;
 import com.cloudera.impala.thrift.THdfsCachingOp;
 import com.cloudera.impala.thrift.THdfsFileFormat;
 import com.cloudera.impala.thrift.TPartitionKeyValue;
+import com.cloudera.impala.thrift.TPrivilege;
+import com.cloudera.impala.thrift.TPartitionStats;
 import com.cloudera.impala.thrift.TResetMetadataRequest;
 import com.cloudera.impala.thrift.TResetMetadataResponse;
 import com.cloudera.impala.thrift.TResultRow;
@@ -120,9 +131,11 @@ import com.cloudera.impala.thrift.TTableStats;
 import com.cloudera.impala.thrift.TUpdateCatalogRequest;
 import com.cloudera.impala.thrift.TUpdateCatalogResponse;
 import com.cloudera.impala.util.HdfsCachingUtil;
+
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.SettableFuture;
 
@@ -165,6 +178,11 @@ public class CatalogOpExecutor {
     TDdlExecResponse response = new TDdlExecResponse();
     response.setResult(new TCatalogUpdateResult());
     response.getResult().setCatalog_service_id(JniCatalog.getServiceId());
+    User requestingUser = null;
+    if (ddlRequest.isSetHeader()) {
+      requestingUser = new User(ddlRequest.getHeader().getRequesting_user());
+    }
+
     switch (ddlRequest.ddl_type) {
       case ALTER_TABLE:
         alterTable(ddlRequest.getAlter_table_params(), response);
@@ -197,6 +215,9 @@ public class CatalogOpExecutor {
       case COMPUTE_STATS:
         Preconditions.checkState(false, "Compute stats should trigger an ALTER TABLE.");
         break;
+      case DROP_STATS:
+        dropStats(ddlRequest.getDrop_stats_params(), response);
+        break;
       case DROP_DATABASE:
         dropDatabase(ddlRequest.getDrop_db_params(), response);
         break;
@@ -210,6 +231,21 @@ public class CatalogOpExecutor {
       case DROP_DATA_SOURCE:
         dropDataSource(ddlRequest.getDrop_data_source_params(), response);
         break;
+      case CREATE_ROLE:
+      case DROP_ROLE:
+        createDropRole(requestingUser, ddlRequest.getCreate_drop_role_params(),
+            response);
+        break;
+      case GRANT_ROLE:
+      case REVOKE_ROLE:
+        grantRevokeRoleGroup(requestingUser, ddlRequest.getGrant_revoke_role_params(),
+            response);
+        break;
+      case GRANT_PRIVILEGE:
+      case REVOKE_PRIVILEGE:
+        grantRevokeRolePrivilege(requestingUser,
+            ddlRequest.getGrant_revoke_priv_params(), response);
+        break;
       default: throw new IllegalStateException("Unexpected DDL exec request type: " +
           ddlRequest.ddl_type);
     }
@@ -222,7 +258,7 @@ public class CatalogOpExecutor {
 
   /**
    * Execute the ALTER TABLE command according to the TAlterTableParams and refresh the
-   * table metadata (except RENAME).
+   * table metadata, except for RENAME, ADD PARTITION and DROP PARTITION.
    */
   private void alterTable(TAlterTableParams params, TDdlExecResponse response)
       throws ImpalaException {
@@ -236,10 +272,18 @@ public class CatalogOpExecutor {
         break;
       case ADD_PARTITION:
         TAlterTableAddPartitionParams addPartParams = params.getAdd_partition_params();
-        alterTableAddPartition(TableName.fromThrift(params.getTable_name()),
-            addPartParams.getPartition_spec(), addPartParams.getLocation(),
-            addPartParams.isIf_not_exists(), addPartParams.getCache_op());
-        break;
+        // Create and add HdfsPartition object to the corresponding HdfsTable and load
+        // its block metadata. Get the new table object with an updated catalog version.
+        // If the partition already exists in Hive and "IfNotExists" is true, then null
+        // is returned.
+        Table refreshedTable = alterTableAddPartition(TableName.fromThrift(
+            params.getTable_name()), addPartParams.getPartition_spec(),
+            addPartParams.isIf_not_exists(), addPartParams.getLocation(),
+            addPartParams.getCache_op());
+        response.result.setUpdated_catalog_object(TableToTCatalogObject(refreshedTable));
+        response.result.setVersion(
+            response.result.getUpdated_catalog_object().getCatalog_version());
+        return;
       case DROP_COLUMN:
         TAlterTableDropColParams dropColParams = params.getDrop_col_params();
         alterTableDropCol(TableName.fromThrift(params.getTable_name()),
@@ -252,9 +296,16 @@ public class CatalogOpExecutor {
         break;
       case DROP_PARTITION:
         TAlterTableDropPartitionParams dropPartParams = params.getDrop_partition_params();
-        alterTableDropPartition(TableName.fromThrift(params.getTable_name()),
-            dropPartParams.getPartition_spec(), dropPartParams.isIf_exists());
-        break;
+        // Drop the partition from the corresponding HdfsTable. Get the table object
+        // with an updated catalog version. If the partition does not exist and
+        // "IfExists" is true, null is returned.
+        refreshedTable = alterTableDropPartition(TableName.fromThrift(
+            params.getTable_name()), dropPartParams.getPartition_spec(),
+            dropPartParams.isIf_exists());
+        response.result.setUpdated_catalog_object(TableToTCatalogObject(refreshedTable));
+        response.result.setVersion(
+            response.result.getUpdated_catalog_object().getCatalog_version());
+        return;
       case RENAME_TABLE:
       case RENAME_VIEW:
         TAlterTableOrViewRenameParams renameParams = params.getRename_params();
@@ -309,6 +360,22 @@ public class CatalogOpExecutor {
     response.result.setUpdated_catalog_object(TableToTCatalogObject(refreshedTable));
     response.result.setVersion(
         response.result.getUpdated_catalog_object().getCatalog_version());
+  }
+
+  /**
+   * Creates a new HdfsPartition object and adds it to the corresponding HdfsTable.
+   * Does not create the object in the Hive metastore.
+   */
+  private Table addHdfsPartition(TableName tableName, Partition partition)
+      throws CatalogException {
+    Preconditions.checkNotNull(partition);
+    Table tbl = getExistingTable(tableName.getDb(), tableName.getTbl());
+    if (!(tbl instanceof HdfsTable)) {
+      throw new CatalogException("Table " + tbl.getFullName() + " is not an HDFS table");
+    }
+    HdfsTable hdfsTable = (HdfsTable) tbl;
+    HdfsPartition hdfsPartition = hdfsTable.createPartition(partition.getSd(), partition);
+    return catalog_.addPartition(hdfsPartition);
   }
 
   /**
@@ -391,28 +458,12 @@ public class CatalogOpExecutor {
           numUpdatedColumns = colStats.getStatsObjSize();
         }
 
-        // Update partitions in batches of size 'MAX_PARTITION_UPDATES_PER_RPC'. This
-        // reduces the time spent in a single update and helps avoid metastore client
-        // timeouts.
-        for (int i = 0; i < modifiedParts.size(); i += MAX_PARTITION_UPDATES_PER_RPC) {
-          int numPartitionsToUpdate =
-              Math.min(i + MAX_PARTITION_UPDATES_PER_RPC, modifiedParts.size());
-          List<org.apache.hadoop.hive.metastore.api.Partition> partsToUpdate =
-              modifiedParts.subList(i, numPartitionsToUpdate);
-          synchronized (metastoreDdlLock_) {
-            // Alter partitions in bulk.
-            try {
-              msClient.getHiveClient().alter_partitions(tableName.getDb(),
-                  tableName.getTbl(), partsToUpdate);
-            } catch (TException e) {
-              throw new ImpalaRuntimeException(
-                  String.format(HMS_RPC_ERROR_FORMAT_STR, "alter_partitions"), e);
-            }
-          }
-        }
+        // Update all partitions.
+        bulkAlterPartitions(table.getDb().getName(), table.getName(), modifiedParts);
 
         synchronized (metastoreDdlLock_) {
-          if (colStats != null) {
+          if (numUpdatedColumns > 0) {
+            Preconditions.checkNotNull(colStats);
             // Update column stats.
             try {
               msClient.getHiveClient().updateTableColumnStatistics(colStats);
@@ -432,7 +483,7 @@ public class CatalogOpExecutor {
     // Set the results to be reported to the client.
     TResultSet resultSet = new TResultSet();
     resultSet.setSchema(new TResultSetMetadata(Lists.newArrayList(
-        new TColumn("summary", ColumnType.STRING.toThrift()))));
+        new TColumn("summary", Type.STRING.toThrift()))));
     TColumnValue resultColVal = new TColumnValue();
     resultColVal.setString_val("Updated " + numTargetedPartitions + " partition(s) and " +
         numUpdatedColumns + " column(s).");
@@ -447,34 +498,83 @@ public class CatalogOpExecutor {
    * given Hive table based on the given update stats parameters. The partitions whose
    * row counts have not changed are skipped. The modified partitions are returned
    * in the modifiedParts parameter.
-   * Missing or new partitions as a result of concurrent table alterations are ignored.
+   * Row counts for missing or new partitions as a result of concurrent table
+   * alterations are set to 0.
    * Returns the number of partitions that were targeted for update (includes partitions
    * whose row counts have not changed).
    */
   private int updateTableStats(Table table, TAlterTableUpdateStatsParams params,
       org.apache.hadoop.hive.metastore.api.Table msTbl,
       List<org.apache.hadoop.hive.metastore.api.Partition> msPartitions,
-      List<org.apache.hadoop.hive.metastore.api.Partition> modifiedParts) {
+      List<org.apache.hadoop.hive.metastore.api.Partition> modifiedParts)
+      throws ImpalaException {
     Preconditions.checkState(params.isSetPartition_stats());
     Preconditions.checkState(params.isSetTable_stats());
-
     // Update the partitions' ROW_COUNT parameter.
     int numTargetedPartitions = 0;
-    for(org.apache.hadoop.hive.metastore.api.Partition msPartition: msPartitions) {
-      TTableStats partitionStats = params.partition_stats.get(msPartition.getValues());
-      if (partitionStats == null) continue;
-      LOG.trace(String.format("Updating stats for partition %s: numRows=%s",
-          Joiner.on(",").join(msPartition.getValues()), partitionStats.num_rows));
+    for (org.apache.hadoop.hive.metastore.api.Partition msPartition: msPartitions) {
+      List<String> partitionValues = Lists.newArrayList(msPartition.getValues());
 
-      String newRowCount = String.valueOf(partitionStats.num_rows);
+      // The backend will return NULL literals as the string "NULL". Hive's partition
+      // object will store them as an arbitrary string (usually
+      // "__HIVE_NULL_PARTITION_KEY__"). To make sure we can get the right partition, we
+      // need to rewrite the list of partition values.
+      if (table instanceof HdfsTable) {
+        String nullValue = ((HdfsTable)table).getNullPartitionKeyValue();
+        partitionValues.clear();
+        for (String s: msPartition.getValues()) {
+          if (s.equals(nullValue)) {
+            partitionValues.add("NULL");
+          } else {
+            partitionValues.add(s);
+          }
+        }
+      }
+      TPartitionStats partitionStats = params.partition_stats.get(partitionValues);
+      TPartitionStats existingPartStats = PartitionStatsUtil.partStatsFromParameters(
+          msPartition.getParameters());
+
+      if (partitionStats == null) {
+        // No stats were collected for this partition. This means that it was not included
+        // in the original computation statements. If the backend does not find any rows
+        // for a partition that should be included, it will generate an empty
+        // TPartitionStats object.
+        if (params.expect_all_partitions == false) continue;
+
+        // If all partitions are expected, fill in any missing stats with an empty entry.
+        partitionStats = new TPartitionStats();
+        if (params.is_incremental) {
+          partitionStats.intermediate_col_stats = Maps.newHashMap();
+        }
+        partitionStats.stats = new TTableStats();
+        partitionStats.stats.setNum_rows(0L);
+      }
+
+      long numRows = partitionStats.stats.num_rows;
+      LOG.debug(String.format("Updating stats for partition %s: numRows=%s",
+          Joiner.on(",").join(msPartition.getValues()), numRows));
+
+      boolean updatedPartition = false;
+      // Update the partition stats if: either there are no existing stats for this
+      // partition, or they're different.
+      if (existingPartStats == null || !existingPartStats.equals(partitionStats)) {
+        PartitionStatsUtil.partStatsToParameters(partitionStats, msPartition);
+        updatedPartition = true;
+      }
+
       String existingRowCount =
           msPartition.getParameters().get(StatsSetupConst.ROW_COUNT);
+      String newRowCount = String.valueOf(numRows);
+      // Update table stats
       if (existingRowCount == null || !existingRowCount.equals(newRowCount)) {
         // The existing row count value wasn't set or has changed.
         msPartition.putToParameters(StatsSetupConst.ROW_COUNT, newRowCount);
+        updatedPartition = true;
+      }
+      if (updatedPartition) {
+        ++numTargetedPartitions;
         modifiedParts.add(msPartition);
       }
-      ++numTargetedPartitions;
     }
 
     // For unpartitioned tables and HBase tables report a single updated partition.
@@ -520,7 +620,7 @@ public class CatalogOpExecutor {
   }
 
   private static ColumnStatisticsData createHiveColStatsData(TColumnStats colStats,
-      ColumnType colType) {
+      Type colType) {
     ColumnStatisticsData colStatsData = new ColumnStatisticsData();
     long ndvs = colStats.getNum_distinct_values();
     long numNulls = colStats.getNum_nulls();
@@ -680,6 +780,148 @@ public class CatalogOpExecutor {
   }
 
   /**
+   * Drops all table and column stats from the target table in the HMS and
+   * updates the Impala catalog. Throws an ImpalaException if any errors are
+   * encountered as part of this operation.
+   */
+  private void dropStats(TDropStatsParams params, TDdlExecResponse resp)
+      throws ImpalaException {
+    Table table = getExistingTable(params.getTable_name().getDb_name(),
+        params.getTable_name().getTable_name());
+    Preconditions.checkNotNull(table);
+
+    if (params.getPartition_spec() == null) {
+      // TODO: Report the number of updated partitions/columns to the user?
+      dropColumnStats(table);
+      dropTableStats(table);
+    } else {
+      HdfsPartition partition =
+          ((HdfsTable)table).getPartitionFromThriftPartitionSpec(
+              params.getPartition_spec());
+      if (partition == null) {
+        List<String> partitionDescription = Lists.newArrayList();
+        for (TPartitionKeyValue v: params.getPartition_spec()) {
+          partitionDescription.add(v.name + " = " + v.value);
+        }
+        throw new ImpalaRuntimeException("Could not find partition: " +
+            Joiner.on("/").join(partitionDescription));
+      }
+
+      if (partition.getPartitionStats() != null)  {
+        synchronized (metastoreDdlLock_) {
+          org.apache.hadoop.hive.metastore.api.Partition msPartition =
+              partition.getMetaStorePartition();
+          Preconditions.checkNotNull(msPartition);
+          PartitionStatsUtil.deletePartStats(msPartition);
+          // Remove the ROW_COUNT parameter if it has been set.
+          msPartition.getParameters().remove(StatsSetupConst.ROW_COUNT);
+          try {
+            applyAlterPartition(table.getTableName(), msPartition);
+          } finally {
+            partition.markDirty();
+          }
+        }
+      }
+    }
+
+    Table refreshedTable = catalog_.reloadTable(params.getTable_name());
+    resp.result.setUpdated_catalog_object(TableToTCatalogObject(refreshedTable));
+    resp.result.setVersion(
+        resp.result.getUpdated_catalog_object().getCatalog_version());
+  }
+
+  /**
+   * Drops all column stats from the table in the HMS. Returns the number of columns
+   * that were updated as part of this operation.
+   */
+  private int dropColumnStats(Table table) throws ImpalaRuntimeException {
+    MetaStoreClient msClient = null;
+    int numColsUpdated = 0;
+    try {
+      msClient = catalog_.getMetaStoreClient();
+
+      for (Column col: table.getColumns()) {
+        // Skip columns that don't have stats.
+        if (!col.getStats().hasStats()) continue;
+
+        try {
+          synchronized (metastoreDdlLock_) {
+            msClient.getHiveClient().deleteTableColumnStatistics(
+                table.getDb().getName(), table.getName(), col.getName());
+            ++numColsUpdated;
+          }
+        } catch (NoSuchObjectException e) {
+          // We don't care if the column stats do not exist, just ignore the exception.
+          // We would only expect to make it here if the Impala and HMS metadata
+          // diverged.
+        } catch (TException e) {
+          throw new ImpalaRuntimeException(
+              String.format(HMS_RPC_ERROR_FORMAT_STR,
+                  "delete_table_column_statistics"), e);
+        }
+      }
+    } finally {
+      if (msClient != null) msClient.release();
+    }
+    return numColsUpdated;
+  }
+
+  /**
+   * Drops all table and partition stats from this table in the HMS.
+   * Partitions are updated in batches of MAX_PARTITION_UPDATES_PER_RPC. Returns
+   * the number of partitions updated as part of this operation, or 1 if the table
+   * is unpartitioned.
+   */
+  private int dropTableStats(Table table) throws ImpalaRuntimeException {
+    // Delete the ROW_COUNT from the table (if it was set).
+    org.apache.hadoop.hive.metastore.api.Table msTbl = table.getMetaStoreTable();
+    int numTargetedPartitions = 0;
+    if (msTbl.getParameters().remove(StatsSetupConst.ROW_COUNT) != null) {
+      applyAlterTable(msTbl);
+      ++numTargetedPartitions;
+    }
+
+    if (!(table instanceof HdfsTable) || table.getNumClusteringCols() == 0) {
+      // If this is not an HdfsTable or if the table is not partitioned, there
+      // is no more work to be done so just return.
+      return numTargetedPartitions;
+    }
+
+    // Now clear the stats for all partitions in the table.
+    HdfsTable hdfsTable = (HdfsTable) table;
+    Preconditions.checkNotNull(hdfsTable);
+
+    // List of partitions that were modified as part of this operation.
+    List<org.apache.hadoop.hive.metastore.api.Partition> modifiedParts =
+        Lists.newArrayList();
+    for (HdfsPartition part: hdfsTable.getPartitions()) {
+      boolean isModified = false;
+      // The default partition is an Impala-internal abstraction and is not
+      // represented in the Hive Metastore.
+      if (part.getId() == ImpalaInternalServiceConstants.DEFAULT_PARTITION_ID) {
+        continue;
+      }
+      org.apache.hadoop.hive.metastore.api.Partition msPart =
+          part.getMetaStorePartition();
+      Preconditions.checkNotNull(msPart);
+      if (part.getPartitionStats() != null) {
+        PartitionStatsUtil.deletePartStats(msPart);
+        isModified = true;
+      }
+
+      // Remove the ROW_COUNT parameter if it has been set.
+      if (msPart.getParameters().remove(StatsSetupConst.ROW_COUNT) != null) {
+        isModified = true;
+      }
+
+      if (isModified) modifiedParts.add(msPart);
+    }
+
+    bulkAlterPartitions(table.getDb().getName(), table.getName(), modifiedParts);
+    return modifiedParts.size();
+  }
+
+  /**
    * Drops a database from the metastore and removes the database's metadata from the
    * internal cache. The database must be empty (contain no tables) for the drop
    * operation to succeed. Re-throws any Hive Meta Store exceptions encountered during
@@ -788,12 +1030,12 @@ public class CatalogOpExecutor {
 
   private void dropFunction(TDropFunctionParams params, TDdlExecResponse resp)
       throws ImpalaException {
-    ArrayList<ColumnType> argTypes = Lists.newArrayList();
+    ArrayList<Type> argTypes = Lists.newArrayList();
     for (TColumnType t: params.arg_types) {
-      argTypes.add(ColumnType.fromThrift(t));
+      argTypes.add(Type.fromThrift(t));
     }
-    Function desc = new Function(new FunctionName(params.fn_name),
-        argTypes, ColumnType.INVALID, false);
+    Function desc = new Function(FunctionName.fromThrift(params.fn_name),
+        argTypes, Type.INVALID, false);
     LOG.debug(String.format("Dropping Function %s", desc.signatureString()));
     Function fn = catalog_.removeFunction(desc);
     if (fn == null) {
@@ -1047,7 +1289,7 @@ public class CatalogOpExecutor {
         FieldSchema fs = iterator.next();
         if (fs.getName().toLowerCase().equals(colName.toLowerCase())) {
           fs.setName(newCol.getColumnName());
-          ColumnType type = ColumnType.fromThrift(newCol.getColumnType());
+          Type type = Type.fromThrift(newCol.getColumnType());
           fs.setType(type.toString().toLowerCase());
           // Don't overwrite the existing comment unless a new comment is given
           if (newCol.getComment() != null) {
@@ -1065,13 +1307,16 @@ public class CatalogOpExecutor {
   }
 
   /**
-   * Adds a new partition to the given table.
-   * If cacheOp != null, the partition's location will be cached according
+   * Adds a new partition to the given table in Hive. Also creates and adds
+   * a new HdfsPartition to the corresponding HdfsTable.
+   * If cacheOp is not null, the partition's location will be cached according
    * to the cacheOp. If cacheOp is null, the new partition will inherit the
    * the caching properties of the parent table.
+   * Returns null if the partition already exists in Hive and "IfNotExists"
+   * is true. Otherwise, returns the table object with an updated catalog version.
    */
-  private void alterTableAddPartition(TableName tableName,
-      List<TPartitionKeyValue> partitionSpec, String location, boolean ifNotExists,
+  private Table alterTableAddPartition(TableName tableName,
+      List<TPartitionKeyValue> partitionSpec, boolean ifNotExists, String location,
       THdfsCachingOp cacheOp) throws ImpalaException {
     org.apache.hadoop.hive.metastore.api.Partition partition =
         new org.apache.hadoop.hive.metastore.api.Partition();
@@ -1079,9 +1324,8 @@ public class CatalogOpExecutor {
         tableName.getTbl(), partitionSpec)) {
       LOG.debug(String.format("Skipping partition creation because (%s) already exists" +
           " and ifNotExists is true.", Joiner.on(", ").join(partitionSpec)));
-      return;
+      return null;
     }
-
     synchronized (metastoreDdlLock_) {
       org.apache.hadoop.hive.metastore.api.Table msTbl = getMetaStoreTable(tableName);
       partition.setDbName(tableName.getDb());
@@ -1142,22 +1386,30 @@ public class CatalogOpExecutor {
         msClient.release();
       }
     }
+    // Create and add the HdfsPartition. Return the table object with an updated catalog
+    // version.
+    return addHdfsPartition(tableName, partition);
   }
 
   /**
-   * Drops an existing partition from the given table. If the partition is cached,
+   * Drops an existing partition from the given table in Hive. If the partition is cached,
    * the associated cache directive will also be removed.
+   * Also drops the partition from its Hdfs table.
+   * Returns the table object with an updated catalog version. If the partition does not
+   * exist and "IfExists" is true, null is returned.
    */
-  private void alterTableDropPartition(TableName tableName,
-      List<TPartitionKeyValue> partitionSpec, boolean ifExists) throws ImpalaException {
-
+  private Table alterTableDropPartition(TableName tableName,
+      List<TPartitionKeyValue> partitionSpec, boolean ifExists)
+      throws ImpalaException {
     if (ifExists && !catalog_.containsHdfsPartition(tableName.getDb(), tableName.getTbl(),
         partitionSpec)) {
       LOG.debug(String.format("Skipping partition drop because (%s) does not exist " +
           "and ifExists is true.", Joiner.on(", ").join(partitionSpec)));
-      return;
+      return null;
     }
 
+    HdfsPartition part = catalog_.getHdfsPartition(tableName.getDb(),
+        tableName.getTbl(), partitionSpec);
     synchronized (metastoreDdlLock_) {
       org.apache.hadoop.hive.metastore.api.Table msTbl = getMetaStoreTable(tableName);
       List<String> values = Lists.newArrayList();
@@ -1174,8 +1426,6 @@ public class CatalogOpExecutor {
         msClient.getHiveClient().dropPartition(tableName.getDb(),
             tableName.getTbl(), values);
         updateLastDdlTime(msTbl, msClient);
-        HdfsPartition part = catalog_.getHdfsPartition(tableName.getDb(),
-            tableName.getTbl(), partitionSpec);
         if (part.isMarkedCached()) {
           HdfsCachingUtil.uncachePartition(part.getMetaStorePartition());
         }
@@ -1192,8 +1442,8 @@ public class CatalogOpExecutor {
       } finally {
         msClient.release();
       }
-
     }
+    return catalog_.dropPartition(tableName, partitionSpec);
   }
 
   /**
@@ -1544,7 +1794,7 @@ public class CatalogOpExecutor {
   /**
    * Applies an ALTER TABLE command to the metastore table. The caller should take the
    * metastoreDdlLock before calling this method.
-   * Note: The metastore interface is not very safe because it only accepts a
+   * Note: The metastore interface is not very safe because it only accepts
    * an entire metastore.api.Table object rather than a delta of what to change. This
    * means an external modification to the table could be overwritten by an ALTER TABLE
    * command if the metadata is not completely in-sync. This affects both Hive and
@@ -1588,6 +1838,166 @@ public class CatalogOpExecutor {
   }
 
   /**
+   * Creates or drops a Sentry role on behalf of the requestingUser.
+   */
+  private void createDropRole(User requestingUser,
+      TCreateDropRoleParams createDropRoleParams, TDdlExecResponse resp)
+      throws ImpalaException {
+    Preconditions.checkNotNull(requestingUser);
+    verifySentryServiceEnabled();
+
+    Role role;
+    if (createDropRoleParams.isIs_drop()) {
+      role = catalog_.getSentryProxy().dropRole(requestingUser,
+          createDropRoleParams.getRole_name());
+      if (role == null) {
+        role = new Role(createDropRoleParams.getRole_name(), Sets.<String>newHashSet());
+        role.setCatalogVersion(catalog_.getCatalogVersion());
+      }
+    } else {
+      role = catalog_.getSentryProxy().createRole(requestingUser,
+          createDropRoleParams.getRole_name());
+    }
+    Preconditions.checkNotNull(role);
+
+    TCatalogObject catalogObject = new TCatalogObject();
+    catalogObject.setType(role.getCatalogObjectType());
+    catalogObject.setRole(role.toThrift());
+    catalogObject.setCatalog_version(role.getCatalogVersion());
+    if (createDropRoleParams.isIs_drop()) {
+      resp.result.setRemoved_catalog_object(catalogObject);
+    } else {
+      resp.result.setUpdated_catalog_object(catalogObject);
+    }
+    resp.result.setVersion(role.getCatalogVersion());
+  }
+
+  /**
+   * Grants or revokes a Sentry role to/from the given group on behalf of the
+   * requestingUser.
+   */
+  private void grantRevokeRoleGroup(User requestingUser,
+      TGrantRevokeRoleParams grantRevokeRoleParams, TDdlExecResponse resp)
+      throws ImpalaException {
+    Preconditions.checkNotNull(requestingUser);
+    verifySentryServiceEnabled();
+
+    String roleName = grantRevokeRoleParams.getRole_names().get(0);
+    String groupName = grantRevokeRoleParams.getGroup_names().get(0);
+    Role role = null;
+    if (grantRevokeRoleParams.isIs_grant()) {
+      role = catalog_.getSentryProxy().grantRoleGroup(requestingUser, roleName,
+          groupName);
+    } else {
+      role = catalog_.getSentryProxy().revokeRoleGroup(requestingUser, roleName,
+          groupName);
+    }
+    Preconditions.checkNotNull(role);
+    TCatalogObject catalogObject = new TCatalogObject();
+    catalogObject.setType(role.getCatalogObjectType());
+    catalogObject.setRole(role.toThrift());
+    catalogObject.setCatalog_version(role.getCatalogVersion());
+    resp.result.setUpdated_catalog_object(catalogObject);
+    resp.result.setVersion(role.getCatalogVersion());
+  }
+
+  /**
+   * Grants or revokes one or more privileges to/from a Sentry role on behalf of the
+   * requestingUser.
+   */
+  private void grantRevokeRolePrivilege(User requestingUser,
+      TGrantRevokePrivParams grantRevokePrivParams, TDdlExecResponse resp)
+      throws ImpalaException {
+    Preconditions.checkNotNull(requestingUser);
+    verifySentryServiceEnabled();
+    String roleName = grantRevokePrivParams.getRole_name();
+    List<TCatalogObject> updatedPrivs = Lists.newArrayList();
+    for (TPrivilege privilege: grantRevokePrivParams.getPrivileges()) {
+      RolePrivilege rolePriv;
+      if (grantRevokePrivParams.isIs_grant()) {
+          rolePriv = catalog_.getSentryProxy().grantRolePrivilege(requestingUser,
+              roleName, privilege);
+      } else {
+        rolePriv = catalog_.getSentryProxy().revokeRolePrivilege(requestingUser,
+            roleName, privilege);
+        if (rolePriv == null) {
+          rolePriv = RolePrivilege.fromThrift(privilege);
+          rolePriv.setCatalogVersion(catalog_.getCatalogVersion());
+        }
+      }
+      Preconditions.checkNotNull(rolePriv);
+      TCatalogObject catalogObject = new TCatalogObject();
+      catalogObject.setType(rolePriv.getCatalogObjectType());
+      catalogObject.setPrivilege(rolePriv.toThrift());
+      catalogObject.setCatalog_version(rolePriv.getCatalogVersion());
+      updatedPrivs.add(catalogObject);
+    }
+
+    // TODO: Currently we only support sending back 1 catalog object in a "direct DDL"
+    // response. If multiple privileges have been updated, just send back the
+    // catalog version so subscribers can wait for the statestore heartbeat that contains
+    // all updates.
+    if (updatedPrivs.size() == 1) {
+      // If this is a REVOKE statement with hasGrantOpt, only the GRANT OPTION is revoked
+      // from the privilege.
+      if (grantRevokePrivParams.isIs_grant() ||
+          grantRevokePrivParams.getPrivileges().get(0).isHas_grant_opt()) {
+        resp.result.setUpdated_catalog_object(updatedPrivs.get(0));
+      } else {
+        resp.result.setRemoved_catalog_object(updatedPrivs.get(0));
+      }
+      resp.result.setVersion(updatedPrivs.get(0).getCatalog_version());
+    } else if (updatedPrivs.size() > 1) {
+      resp.result.setVersion(
+          updatedPrivs.get(updatedPrivs.size() - 1).getCatalog_version());
+    }
+  }
+
+  /**
+   * Throws a CatalogException if the Sentry Service is not enabled.
+   */
+  private void verifySentryServiceEnabled() throws CatalogException {
+    if (catalog_.getSentryProxy() == null) {
+      throw new CatalogException("Sentry Service is not enabled on the " +
+          "CatalogServer.");
+    }
+  }
+
+  /**
+   * Alters partitions in batches of size 'MAX_PARTITION_UPDATES_PER_RPC'. This
+   * reduces the time spent in a single update and helps avoid metastore client
+   * timeouts.
+   */
+  private void bulkAlterPartitions(String dbName, String tableName,
+      List<org.apache.hadoop.hive.metastore.api.Partition> modifiedParts)
+      throws ImpalaRuntimeException {
+    MetaStoreClient msClient = null;
+    try {
+      msClient = catalog_.getMetaStoreClient();
+
+      // Apply the updates in batches of 'MAX_PARTITION_UPDATES_PER_RPC'.
+      for (int i = 0; i < modifiedParts.size(); i += MAX_PARTITION_UPDATES_PER_RPC) {
+        int numPartitionsToUpdate =
+            Math.min(i + MAX_PARTITION_UPDATES_PER_RPC, modifiedParts.size());
+        List<org.apache.hadoop.hive.metastore.api.Partition> partsToUpdate =
+            modifiedParts.subList(i, numPartitionsToUpdate);
+
+        synchronized (metastoreDdlLock_) {
+          try {
+            // Alter partitions in bulk.
+            msClient.getHiveClient().alter_partitions(dbName, tableName, partsToUpdate);
+          } catch (TException e) {
+            throw new ImpalaRuntimeException(
+                String.format(HMS_RPC_ERROR_FORMAT_STR, "alter_partitions"), e);
+          }
+        }
+      }
+    } finally {
+      if (msClient != null) msClient.release();
+    }
+  }
+
+  /**
    * Returns a deep copy of the metastore.api.Table object for the given TableName.
    */
   private org.apache.hadoop.hive.metastore.api.Table getMetaStoreTable(
@@ -1601,9 +2011,10 @@ public class CatalogOpExecutor {
     List<FieldSchema> fsList = Lists.newArrayList();
     // Add in all the columns
     for (TColumn col: columns) {
-      ColumnType type = ColumnType.fromThrift(col.getColumnType());
-      FieldSchema fs = new FieldSchema(col.getColumnName(),
-          type.toString().toLowerCase(), col.getComment());
+      Type type = Type.fromThrift(col.getColumnType());
+      // The type string must be lowercase for Hive to read the column metadata properly.
+      String typeSql = type.toSql().toLowerCase();
+      FieldSchema fs = new FieldSchema(col.getColumnName(), typeSql, col.getComment());
       fsList.add(fs);
     }
     return fsList;

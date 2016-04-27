@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -29,11 +30,11 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.hfile.Compression;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.FSUtils;
@@ -53,6 +54,7 @@ import com.cloudera.impala.thrift.TResultSetMetadata;
 import com.cloudera.impala.thrift.TTable;
 import com.cloudera.impala.thrift.TTableDescriptor;
 import com.cloudera.impala.thrift.TTableType;
+import com.cloudera.impala.util.StatsHelper;
 import com.cloudera.impala.util.TResultRowBuilder;
 import com.google.common.base.Preconditions;
 
@@ -70,14 +72,25 @@ import com.google.common.base.Preconditions;
  *
  */
 public class HBaseTable extends Table {
+  // Maximum deviation from the average to stop querying more regions
+  // to estimate the row count
+  private static final double DELTA_FROM_AVERAGE = 0.15;
+
   private static final Logger LOG = Logger.getLogger(HBaseTable.class);
+
   // Copied from Hive's HBaseStorageHandler.java.
   public static final String DEFAULT_PREFIX = "default.";
+
+  // Number of rows fetched during the row count estimation per region
   public static final int ROW_COUNT_ESTIMATE_BATCH_SIZE = 10;
+
+  // Minimum number of regions that are checked to estimate the row count
+  private static final int MIN_NUM_REGIONS_TO_CHECK = 5;
 
   // Column referring to HBase row key.
   // Hive (including metastore) currently doesn't support composite HBase keys.
   protected HBaseColumn rowKey_;
+
   // Name of table in HBase.
   // 'this.name' is the alias of the HBase table in Hive.
   protected String hbaseTableName_;
@@ -96,7 +109,6 @@ public class HBaseTable extends Table {
   private final static Configuration hbaseConf_ = HBaseConfiguration.create();
 
   private HTable hTable_ = null;
-
   // Cached column families. Used primarily for speeding up row stats estimation
   // (see CDH-19292).
   private HColumnDescriptor[] columnFamilies_ = null;
@@ -145,7 +157,7 @@ public class HBaseTable extends Table {
           columnSpecs.length, fieldSchemas.size()));
     }
 
-    for (int i = 0; i < columnSpecs.length; i++) {
+    for (int i = 0; i < columnSpecs.length; ++i) {
       String mappingSpec = columnSpecs[i];
       String[] mapInfo = mappingSpec.split("#");
       // Trim column info so that serdeproperties with new lines still parse correctly.
@@ -228,7 +240,7 @@ public class HBaseTable extends Table {
 
   private boolean supportsBinaryEncoding(FieldSchema fs) {
     try {
-      ColumnType colType = parseColumnType(fs);
+      Type colType = parseColumnType(fs);
       // Only boolean, integer and floating point types can use binary storage.
       return colType.isBoolean() || colType.isIntegerType()
           || colType.isFloatingPointType();
@@ -293,7 +305,7 @@ public class HBaseTable extends Table {
       HBaseColumn keyCol = null;
       for (int i = 0; i < fieldSchemas.size(); ++i) {
         FieldSchema s = fieldSchemas.get(i);
-        ColumnType t = ColumnType.INVALID;
+        Type t = Type.INVALID;
         try {
           t = parseColumnType(s);
         } catch (TableLoadingException e) {
@@ -319,18 +331,15 @@ public class HBaseTable extends Table {
       // so the final position depends on the other mapped HBase columns.
       // Sort columns and update positions.
       Collections.sort(tmpCols);
-      colsByPos_.clear();
-      colsByName_.clear();
+      clearColumns();
 
       keyCol.setPosition(0);
-      colsByPos_.add(keyCol);
-      colsByName_.put(keyCol.getName(), keyCol);
+      addColumn(keyCol);
       // Update the positions of the remaining columns
       for (int i = 0; i < tmpCols.size(); ++i) {
         HBaseColumn col = tmpCols.get(i);
         col.setPosition(i + 1);
-        colsByPos_.add(col);
-        colsByName_.put(col.getName(), col);
+        addColumn(col);
       }
 
       // Set table stats.
@@ -378,9 +387,73 @@ public class HBaseTable extends Table {
   }
 
   /**
+   * Estimates the number of rows for a single region and returns a pair with
+   * the estimated row count and the estimated size in bytes per row.
+   */
+  private Pair<Long, Long> getEstimatedRowStatsForRegion(HRegionLocation location,
+      boolean isCompressed) throws IOException {
+    HRegionInfo info = location.getRegionInfo();
+    Scan s = new Scan(info.getStartKey());
+    // Get a small sample of rows
+    s.setBatch(ROW_COUNT_ESTIMATE_BATCH_SIZE);
+    // Try and get every version so the row's size can be used to estimate.
+    s.setMaxVersions(Short.MAX_VALUE);
+    // Don't cache the blocks as we don't think these are
+    // necessarily important blocks.
+    s.setCacheBlocks(false);
+    // Try and get deletes too so their size can be counted.
+    s.setRaw(false);
+    ResultScanner rs = hTable_.getScanner(s);
+
+    long currentRowSize = 0;
+    long currentRowCount = 0;
+    try {
+      // Get the the ROW_COUNT_ESTIMATE_BATCH_SIZE fetched rows
+      // for a representative sample
+      for (int i = 0; i < ROW_COUNT_ESTIMATE_BATCH_SIZE; ++i) {
+        Result r = rs.next();
+        if (r == null) break;
+        // Check for empty rows, see IMPALA-1451
+        if (r.isEmpty()) continue;
+        ++currentRowCount;
+        // To estimate the number of rows we simply use the amount of bytes
+        // returned from the underlying buffer. Since HBase internally works
+        // with these structures as well this gives us ok estimates.
+        ImmutableBytesWritable bts = r.getBytes();
+        currentRowSize += bts.getSize();
+      }
+    } finally {
+      rs.close();
+    }
+
+    // If there are no rows then no need to estimate.
+    if (currentRowCount == 0) return new Pair<Long, Long>(0L, 0L);
+    // Get the size on hdfs
+    long currentHdfsSize = getHdfsSize(info);
+    // estimate the number of rows.
+    double bytesPerRow = currentRowSize / (double) currentRowCount;
+    // Compression factor two is only a best effort guess
+    long estimatedRowCount =
+        (long) ((isCompressed ? 2 : 1) * (currentHdfsSize / bytesPerRow));
+    return new Pair<Long, Long>(estimatedRowCount, (long) bytesPerRow);
+  }
+
+  /**
    * Get an estimate of the number of rows and bytes per row in regions between
-   * startRowKey and endRowKey. The more store files there are the more this will be off.
-   * Also, this does not take into account any rows that are in the memstore.
+   * startRowKey and endRowKey.
+   *
+   * This number is calculated by incrementally checking as many region servers as
+   * necessary until we observe a relatively constant row size per region on average.
+   * Depending on the skew of data in the regions this can either mean that we need
+   * to check only a minimal number of regions or that we will scan all regions.
+   *
+   * The accuracy of this number is determined by the number of rows that are written
+   * and kept in the memstore and have not been flushed until now. A large number
+   * of key-value pairs in the memstore will lead to bad estimates as this number
+   * is not reflected in the file size on HDFS that is used to estimate this number.
+   *
+   * Currently, the algorithm does not consider the case that the key range used as a
+   * parameter might be generally of different size than the rest of the region.
    *
    * The values computed here should be cached so that in high qps workloads
    * the nn is not overwhelmed.  Could be done in load(); Synchronized to make
@@ -396,10 +469,9 @@ public class HBaseTable extends Table {
     Preconditions.checkNotNull(startRowKey);
     Preconditions.checkNotNull(endRowKey);
 
-    long rowSize  = 0;
-    long rowCount = 0;
-    long hdfsSize = 0;
     boolean isCompressed = false;
+    long rowCount = 0;
+    long rowSize = 0;
 
     try {
       // Check to see if things are compressed.
@@ -412,100 +484,65 @@ public class HBaseTable extends Table {
         isCompressed |= desc.getCompression() != Compression.Algorithm.NONE;
       }
 
-      // For every region in the range.
+      // Fetch all regions for the key range
       List<HRegionLocation> locations =
           getRegionsInRange(hTable_, startRowKey, endRowKey);
-      for(HRegionLocation location: locations) {
-        long currentHdfsSize = 0;
-        long currentRowSize  = 0;
-        long currentRowCount = 0;
+      Collections.shuffle(locations);
+      // The following variables track the number and size of 'rows' in
+      // HBase and allow incremental calculation of the average and standard
+      // deviation.
+      StatsHelper<Long> statsCount = new StatsHelper<Long>();
+      StatsHelper<Long> statsSize = new StatsHelper<Long>();
 
-        HRegionInfo info = location.getRegionInfo();
-        // Get the size on hdfs
-        currentHdfsSize += getHdfsSize(info);
-
-        Scan s = new Scan(info.getStartKey());
-        // Get a small sample of rows
-        s.setBatch(ROW_COUNT_ESTIMATE_BATCH_SIZE);
-        // Try and get every version so the row's size can be used to estimate.
-        s.setMaxVersions(Short.MAX_VALUE);
-        // Don't cache the blocks as we don't think these are
-        // necessarily important blocks.
-        s.setCacheBlocks(false);
-        // Try and get deletes too so their size can be counted.
-        s.setRaw(true);
-        ResultScanner rs = hTable_.getScanner(s);
-        try {
-          // And get the the ROW_COUNT_ESTIMATE_BATCH_SIZE fetched rows
-          // for a representative sample
-          for (int i = 0; i < ROW_COUNT_ESTIMATE_BATCH_SIZE; i++) {
-            Result r = rs.next();
-            if (r == null) break;
-            currentRowCount += 1;
-            for (KeyValue kv : r.list()) {
-              // some extra row size added to make up for shared overhead
-              currentRowSize += kv.getRowLength() // row key
-                  + 4 // row key length field
-                  + kv.getFamilyLength() // Column family bytes
-                  + 4  // family length field
-                  + kv.getQualifierLength() // qualifier bytes
-                  + 4 // qualifier length field
-                  + kv.getValueLength() // length of the value
-                  + 4 // value length field
-                  + 10; // extra overhead for hfile index, checksums, metadata, etc
-            }
-          }
-          // add these values to the cumulative totals in one shot just
-          // in case there was an error in between getting the hdfs
-          // size and the row/column sizes.
-          hdfsSize += currentHdfsSize;
-          rowCount += currentRowCount;
-          rowSize  += currentRowSize;
-        } finally {
-          rs.close();
-        }
+      // Collects stats samples from at least MIN_NUM_REGIONS_TO_CHECK
+      // and at most all regions until the delta is small enough.
+      while ((statsSize.count() < MIN_NUM_REGIONS_TO_CHECK ||
+          statsSize.stddev() > statsSize.mean() * DELTA_FROM_AVERAGE) &&
+          statsSize.count() < locations.size()) {
+        Pair<Long, Long> tmp = getEstimatedRowStatsForRegion(
+            locations.get((int)statsCount.count()), isCompressed);
+        statsCount.addSample(tmp.first);
+        statsSize.addSample(tmp.second);
       }
+
+      rowCount = (long) (getHdfsSize(null) / statsSize.mean());
+      rowSize = (long) statsSize.mean();
     } catch (IOException ioe) {
       // Print the stack trace, but we'll ignore it
       // as this is just an estimate.
       // TODO: Put this into the per query log.
       LOG.error("Error computing HBase row count estimate", ioe);
+      return new Pair<Long, Long>(-1l, -1l);
     }
-
-    // If there are no rows then no need to estimate.
-    if (rowCount == 0) return new Pair<Long, Long>(0L, 0L);
-
-    // if something went wrong then set a signal value.
-    if (rowSize <= 0 || hdfsSize <= 0) return new Pair<Long, Long>(-1L, -1L);
-
-    // estimate the number of rows.
-    double bytesPerRow = rowSize / (double) rowCount;
-    long estimatedRowCount = (long) ((isCompressed ? 2 : 1) * (hdfsSize / bytesPerRow));
-
-    return new Pair<Long, Long>(estimatedRowCount, (long) bytesPerRow);
+    return new Pair<Long, Long>(rowCount, rowSize);
   }
 
   /**
-   * Returns the Hdfs size of the given region in bytes.
+   * Returns the Hdfs size of the given region in bytes. NULL can be
+   * passed as a parameter to retrieve the size of the complete table.
    */
   public long getHdfsSize(HRegionInfo info) throws IOException {
     Path tableDir = HTableDescriptor.getTableDir(
         FSUtils.getRootDir(hbaseConf_), Bytes.toBytes(hbaseTableName_));
     FileSystem fs = tableDir.getFileSystem(hbaseConf_);
-    Path regionDir = tableDir.suffix("/" + info.getEncodedName());
-    return fs.getContentSummary(regionDir).getLength();
+    if (info != null ) {
+      Path regionDir = tableDir.suffix("/" + info.getEncodedName());
+      return fs.getContentSummary(regionDir).getLength();
+    } else {
+      return fs.getContentSummary(tableDir).getLength();
+    }
   }
 
   /**
    * Hive returns the columns in order of their declaration for HBase tables.
    */
   @Override
-  public ArrayList<Column> getColumnsInHiveOrder() { return colsByPos_; }
+  public ArrayList<Column> getColumnsInHiveOrder() { return getColumns(); }
 
   @Override
-  public TTableDescriptor toThriftDescriptor() {
+  public TTableDescriptor toThriftDescriptor(Set<Long> referencedPartitions) {
     TTableDescriptor tableDescriptor =
-        new TTableDescriptor(id_.asInt(), TTableType.HBASE_TABLE, colsByPos_.size(),
+        new TTableDescriptor(id_.asInt(), TTableType.HBASE_TABLE, getColumns().size(),
             numClusteringCols_, hbaseTableName_, db_.getName());
     tableDescriptor.setHbaseTable(getTHBaseTable());
     tableDescriptor.setColNames(getColumnNames());
@@ -536,7 +573,7 @@ public class HBaseTable extends Table {
   private THBaseTable getTHBaseTable() {
     THBaseTable tHbaseTable = new THBaseTable();
     tHbaseTable.setTableName(hbaseTableName_);
-    for (Column c : colsByPos_) {
+    for (Column c : getColumns()) {
       HBaseColumn hbaseCol = (HBaseColumn) c;
       tHbaseTable.addToFamilies(hbaseCol.getColumnFamily());
       if (hbaseCol.getColumnQualifier() != null) {
@@ -605,11 +642,11 @@ public class HBaseTable extends Table {
     TResultSetMetadata resultSchema = new TResultSetMetadata();
     result.setSchema(resultSchema);
     resultSchema.addToColumns(
-        new TColumn("Region Location", ColumnType.STRING.toThrift()));
+        new TColumn("Region Location", Type.STRING.toThrift()));
     resultSchema.addToColumns(new TColumn("Start RowKey",
-        ColumnType.STRING.toThrift()));
-    resultSchema.addToColumns(new TColumn("Est. #Rows", ColumnType.BIGINT.toThrift()));
-    resultSchema.addToColumns(new TColumn("Size", ColumnType.STRING.toThrift()));
+        Type.STRING.toThrift()));
+    resultSchema.addToColumns(new TColumn("Est. #Rows", Type.BIGINT.toThrift()));
+    resultSchema.addToColumns(new TColumn("Size", Type.STRING.toThrift()));
 
     // TODO: Consider fancier stats maintenance techniques for speeding up this process.
     // Currently, we list all regions and perform a mini-scan of each of them to
@@ -622,8 +659,7 @@ public class HBaseTable extends Table {
       for (HRegionLocation region: regions) {
         TResultRowBuilder rowBuilder = new TResultRowBuilder();
         HRegionInfo regionInfo = region.getRegionInfo();
-        Pair<Long, Long> estRowStats = getEstimatedRowStats(regionInfo.getStartKey(),
-            regionInfo.getEndKey());
+        Pair<Long, Long> estRowStats = getEstimatedRowStatsForRegion(region, false);
 
         long numRows = estRowStats.first.longValue();
         long hdfsSize = getHdfsSize(regionInfo);

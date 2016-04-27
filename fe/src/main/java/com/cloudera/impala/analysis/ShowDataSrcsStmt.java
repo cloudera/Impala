@@ -14,16 +14,15 @@
 
 package com.cloudera.impala.analysis;
 
-import com.cloudera.impala.catalog.AuthorizationException;
 import com.cloudera.impala.common.AnalysisException;
 import com.cloudera.impala.thrift.TShowDataSrcsParams;
 
 /**
- * Representation of a SHOW DATASOURCES [pattern] statement.
+ * Representation of a SHOW DATA SOURCES [pattern] statement.
  * Acceptable syntax:
  *
- * SHOW DATASOURCES
- * SHOW DATASOURCES LIKE 'pattern'
+ * SHOW DATA SOURCES
+ * SHOW DATA SOURCES LIKE 'pattern'
  * TODO: Refactor Show*Stmt to remove code duplication
  */
 public class ShowDataSrcsStmt extends StatementBase {
@@ -51,15 +50,14 @@ public class ShowDataSrcsStmt extends StatementBase {
   @Override
   public String toSql() {
     if (pattern_ == null) {
-      return "SHOW DATASOURCES";
+      return "SHOW DATA SOURCES";
     } else {
-      return "SHOW DATASOURCES LIKE '" + pattern_ + "'";
+      return "SHOW DATA SOURCES LIKE '" + pattern_ + "'";
     }
   }
 
   @Override
-  public void analyze(Analyzer analyzer) throws AnalysisException,
-      AuthorizationException {
+  public void analyze(Analyzer analyzer) throws AnalysisException {
     // Nothing to do here
   }
 

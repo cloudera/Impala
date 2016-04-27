@@ -22,6 +22,7 @@
 #include <boost/regex.hpp>
 #include <boost/scoped_ptr.hpp>
 
+#include "codegen/impala-ir.h"
 #include "exec/hdfs-scan-node.h"
 #include "exec/scan-node.h"
 #include "exec/scanner-context.h"
@@ -42,6 +43,7 @@ class Tuple;
 class TupleDescriptor;
 class TPlanNode;
 class TScanRange;
+class Codec;
 
 // Intermediate structure used for two pass parsing approach. In the first pass,
 // the FieldLocation structs are filled out and contain where all the fields start and
@@ -69,6 +71,9 @@ struct FieldLocation {
 // The HdfsScanner works in tandem with the ScannerContext to interleave IO
 // and parsing.
 //
+// If a split is compressed, then a decompressor will be created, either during Prepare()
+// or at the beginning of ProcessSplit(), and used for decompressing and reading the split.
+//
 // For codegen, the implementation is split into two parts.
 // 1. During the Prepare() phase of the ScanNode, the scanner subclass's static
 //    Codegen() function will be called to perform codegen for that scanner type
@@ -78,10 +83,10 @@ struct FieldLocation {
 //    function to use.
 // This way, we only codegen once per scanner type, rather than once per scanner object.
 //
-// This class also encapsulates row batch management.  Subclasses should call CommitRows
+// This class also encapsulates row batch management.  Subclasses should call CommitRows()
 // after writing to the current row batch, which handles creating row batches, attaching
-// resources (IO buffers and mempools) to the current row batch, and passing row batches
-// up to the scan node . Subclasses can also use GetMemory to help with per-row memory
+// resources (IO buffers and mem pools) to the current row batch, and passing row batches
+// up to the scan node. Subclasses can also use GetMemory() to help with per-row memory
 // management.
 class HdfsScanner {
  public:
@@ -102,8 +107,7 @@ class HdfsScanner {
   virtual Status ProcessSplit() = 0;
 
   // Release all resources the scanner has allocated.  This is the last chance for the
-  // scanner to attach any resources to the ScannerContext object. Subclasses overriding
-  // this function must call HdfsScanner::Close().
+  // scanner to attach any resources to the ScannerContext object.
   virtual void Close();
 
   // Scanner subclasses must implement these static functions as well.  Unfortunately,
@@ -122,12 +126,13 @@ class HdfsScanner {
   // should be issued to the io mgr.  This is one range for the metadata and one
   // range for each column, for each split.
   // This function is how scanners can pick their strategy.
-  // void IssueInitialRanges(HdfsScanNode*, const std::vector<HdfsFileDesc*>& files);
+  // void IssueInitialRanges(HdfsScanNode* scan_node,
+  //                         const std::vector<HdfsFileDesc*>& files);
 
   // Codegen all functions for this scanner.  The codegen'd function is specific to
   // the scanner subclass but not specific to each scanner object.  We don't want to
   // codegen the functions for each scanner object.
-  // llvm::Function* Codegen(HdfsScanNode*);
+  // llvm::Function* Codegen(HdfsScanNode* scan_node);
 
   static const char* LLVM_CLASS_NAME;
 
@@ -144,12 +149,9 @@ class HdfsScanner {
   // The first stream for context_
   ScannerContext::Stream* stream_;
 
-  // Conjuncts for this scanner.  Multiple scanners from multiple threads can
-  // be scanning and Exprs are currently not thread safe.
-  std::vector<Expr*>* conjuncts_;
-
-  // Cache of conjuncts_->size()
-  int num_conjuncts_;
+  // ExprContext for each conjunct. Each scanner has its own ExprContexts so the
+  // conjuncts can be safely evaluated in parallel.
+  std::vector<ExprContext*> conjunct_ctxs_;
 
   // A partially materialized tuple with only partition key slots set.
   // The non-partition key slots are set to NULL.  The template tuple
@@ -168,9 +170,9 @@ class HdfsScanner {
   Tuple* tuple_;
 
   // The current row batch being populated. Creating new row batches, attaching context
-  // resources, and handing off to the scan node is handled by this class in CommitRows,
-  // but AttachPool must be called by scanner subclasses to attach any memory allocated by
-  // that subclass. All row batches created by this class are transferred to the scan
+  // resources, and handing off to the scan node is handled by this class in CommitRows(),
+  // but AttachPool() must be called by scanner subclasses to attach any memory allocated
+  // by that subclass. All row batches created by this class are transferred to the scan
   // node (i.e., all batches are ultimately owned by the scan node).
   RowBatch* batch_;
 
@@ -192,6 +194,19 @@ class HdfsScanner {
   // cheap to create and destroy.
   Status parse_status_;
 
+  // Decompressor class to use, if any.
+  boost::scoped_ptr<Codec> decompressor_;
+
+  // The most recently used decompression type.
+  THdfsCompression::type decompression_type_;
+
+  // Pool to allocate per data block memory.  This should be used with the
+  // decompressor and any other per data block allocations.
+  boost::scoped_ptr<MemPool> data_buffer_pool_;
+
+  // Time spent decompressing bytes.
+  RuntimeProfile::Counter* decompress_timer_;
+
   // Matching typedef for WriteAlignedTuples for codegen.  Refer to comments for
   // that function.
   typedef int (*WriteTuplesFn)(HdfsScanner*, MemPool*, TupleRow*, int, FieldLocation*,
@@ -209,6 +224,9 @@ class HdfsScanner {
   // Set batch_ to a new row batch and update tuple_mem_ accordingly.
   void StartNewRowBatch();
 
+  // Reset internal state for a new scan range.
+  virtual Status InitNewRange() = 0;
+
   // Gets memory for outputting tuples into batch_.
   //  *pool is the mem pool that should be used for memory allocated for those tuples.
   //  *tuple_mem should be the location to output tuples, and
@@ -219,8 +237,8 @@ class HdfsScanner {
   // call GetMemory again after calling this function.
   int GetMemory(MemPool** pool, Tuple** tuple_mem, TupleRow** tuple_row_mem);
 
-  // Commit num_rows to the current row batch.  If this completes the row batch, the
-  // row batch is enqueued with the scan node and StartNewRowBatch is called.
+  // Commit num_rows to the current row batch.  If this completes, the row batch is
+  // enqueued with the scan node and StartNewRowBatch() is called.
   // Returns Status::OK if the query is not cancelled and hasn't exceeded any mem limits.
   // Scanner can call this with 0 rows to flush any pending resources (attached pools
   // and io buffers) to minimize memory consumption.
@@ -228,8 +246,8 @@ class HdfsScanner {
 
   // Attach all remaining resources from context_ to batch_ and send batch_ to the scan
   // node. This must be called after all rows have been committed and no further resources
-  // are needed from context_ (in practice this will in each scanner subclass's Close()
-  // implementation).
+  // are needed from context_ (in practice this will happen in each scanner subclass's
+  // Close() implementation).
   void AddFinalRowBatch();
 
   // Release all memory in 'pool' to batch_. If commit_batch is true, the row batch
@@ -240,6 +258,13 @@ class HdfsScanner {
     DCHECK(pool != NULL);
     batch_->tuple_data_pool()->AcquireData(pool, false);
     if (commit_batch) CommitRows(0);
+  }
+
+  // Convenience function for evaluating conjuncts using this scanner's ExprContexts.
+  // This must always be inlined so we can correctly replace the call to
+  // ExecNode::EvalConjuncts() during codegen.
+  bool IR_ALWAYS_INLINE EvalConjuncts(TupleRow* row)  {
+    return ExecNode::EvalConjuncts(&conjunct_ctxs_[0], conjunct_ctxs_.size(), row);
   }
 
   // Utility method to write out tuples when there are no materialized
@@ -265,6 +290,12 @@ class HdfsScanner {
   int WriteAlignedTuples(MemPool* pool, TupleRow* tuple_row_mem, int row_size,
       FieldLocation* fields, int num_tuples,
       int max_added_tuples, int slots_per_tuple, int row_start_indx);
+
+  // Update the decompressor_ object given a compression type or codec name. Depending on
+  // the old compression type and the new one, it may close the old decompressor and/or
+  // create a new one of different type.
+  Status UpdateDecompressor(const THdfsCompression::type& compression);
+  Status UpdateDecompressor(const std::string& codec);
 
   // Utility function to report parse errors for each field.
   // If errors[i] is nonzero, fields[i] had a parse error.
@@ -306,7 +337,7 @@ class HdfsScanner {
   // Codegen function to replace WriteCompleteTuple. Should behave identically
   // to WriteCompleteTuple.
   static llvm::Function* CodegenWriteCompleteTuple(HdfsScanNode*, LlvmCodeGen*,
-      const std::vector<Expr*>& conjuncts);
+      const std::vector<ExprContext*>& conjunct_ctxs);
 
   // Codegen function to replace WriteAlignedTuples.  WriteAlignedTuples is cross compiled
   // to IR.  This function loads the precompiled IR function, modifies it and returns the
@@ -338,6 +369,10 @@ class HdfsScanner {
     uint8_t* mem = reinterpret_cast<uint8_t*>(r);
     return reinterpret_cast<TupleRow*>(mem + batch_->row_byte_size());
   }
+
+  // Simple wrapper around conjunct_ctxs_. Used in the codegen'd version of
+  // WriteCompleteTuple() because it's easier than writing IR to access conjunct_ctxs_.
+  ExprContext* GetConjunctCtx(int idx) const;
 };
 
 }

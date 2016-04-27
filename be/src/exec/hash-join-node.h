@@ -17,12 +17,11 @@
 #define IMPALA_EXEC_HASH_JOIN_NODE_H
 
 #include <boost/scoped_ptr.hpp>
-#include <boost/unordered_set.hpp>
 #include <boost/thread.hpp>
 #include <string>
 
 #include "exec/exec-node.h"
-#include "exec/hash-table.h"
+#include "exec/old-hash-table.h"
 #include "exec/blocking-join-node.h"
 #include "util/promise.h"
 
@@ -60,31 +59,33 @@ class HashJoinNode : public BlockingJoinNode {
 
  protected:
   virtual void AddToDebugString(int indentation_level, std::stringstream* out) const;
-  virtual void InitGetNext(TupleRow* first_probe_row);
+  virtual Status InitGetNext(TupleRow* first_probe_row);
   virtual Status ConstructBuildSide(RuntimeState* state);
 
  private:
-  boost::scoped_ptr<HashTable> hash_tbl_;
-  HashTable::Iterator hash_tbl_iterator_;
-
-  // for right outer joins, keep track of what's been joined
-  typedef boost::unordered_set<TupleRow*> BuildTupleRowSet;
-  BuildTupleRowSet joined_build_rows_;
+  boost::scoped_ptr<OldHashTable> hash_tbl_;
+  OldHashTable::Iterator hash_tbl_iterator_;
 
   // our equi-join predicates "<lhs> = <rhs>" are separated into
   // build_exprs_ (over child(1)) and probe_exprs_ (over child(0))
-  std::vector<Expr*> probe_exprs_;
-  std::vector<Expr*> build_exprs_;
+    std::vector<ExprContext*> probe_expr_ctxs_;
+    std::vector<ExprContext*> build_expr_ctxs_;
 
   // non-equi-join conjuncts from the JOIN clause
-  std::vector<Expr*> other_join_conjuncts_;
+  std::vector<ExprContext*> other_join_conjunct_ctxs_;
 
-  // derived from join_op_
-  bool match_all_probe_;  // output all rows coming from the probe input
-  bool match_one_build_;  // match at most one build row to each probe row
-  bool match_all_build_;  // output all rows coming from the build input
+  // Derived from join_op_
+  // Output all rows coming from the probe input. Used in LEFT_OUTER_JOIN and
+  // FULL_OUTER_JOIN.
+  bool match_all_probe_;
 
-  bool matched_probe_;  // if true, we have matched the current probe row
+  // Match at most one build row to each probe row. Used in LEFT_SEMI_JOIN.
+  bool match_one_build_;
+
+  // Output all rows coming from the build input. Used in RIGHT_OUTER_JOIN and
+  // FULL_OUTER_JOIN.
+  bool match_all_build_;
+
   // llvm function for build batch
   llvm::Function* codegen_process_build_batch_fn_;
 
@@ -92,9 +93,6 @@ class HashJoinNode : public BlockingJoinNode {
   // HashJoinNode::ProcessBuildBatch
   typedef void (*ProcessBuildBatchFn)(HashJoinNode*, RowBatch*);
   ProcessBuildBatchFn process_build_batch_fn_;
-
-  // llvm function object for probe batch
-  llvm::Function* codegen_process_probe_batch_fn_;
 
   // HashJoinNode::ProcessProbeBatch() exactly
   typedef int (*ProcessProbeBatchFn)(HashJoinNode*, RowBatch*, RowBatch*, int);
@@ -126,13 +124,13 @@ class HashJoinNode : public BlockingJoinNode {
   // hash_fn is the codegen'd function for computing hashes over tuple rows in the
   // hash table.
   // Returns NULL if codegen was not possible.
-  llvm::Function* CodegenProcessBuildBatch(LlvmCodeGen*, llvm::Function* hash_fn);
+  llvm::Function* CodegenProcessBuildBatch(RuntimeState* state, llvm::Function* hash_fn);
 
   // Codegen processing probe batches.  Identical signature to ProcessProbeBatch.
   // hash_fn is the codegen'd function for computing hashes over tuple rows in the
   // hash table.
   // Returns NULL if codegen was not possible.
-  llvm::Function* CodegenProcessProbeBatch(LlvmCodeGen*, llvm::Function* hash_fn);
+  llvm::Function* CodegenProcessProbeBatch(RuntimeState* state, llvm::Function* hash_fn);
 };
 
 }

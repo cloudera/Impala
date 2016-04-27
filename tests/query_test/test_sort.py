@@ -70,7 +70,7 @@ class TestQueryFullSort(ImpalaTestSuite):
 
     exec_option = vector.get_value('exec_option')
     exec_option['disable_outermost_topn'] = 1
-    exec_option['mem_limit'] = "200m"
+    exec_option['mem_limit'] = "1200m"
     table_format = vector.get_value('table_format')
 
     result = transpose_results(self.execute_query(
@@ -78,14 +78,14 @@ class TestQueryFullSort(ImpalaTestSuite):
     assert(result[0] == sorted(result[0]))
 
   def test_sort_union(self, vector):
-
+    pytest.xfail(reason="IMPALA-1346")
     query = """select o_orderdate, o_custkey, o_comment from (select * from orders union
     select * from orders union all select * from orders) as i
     order by o_orderdate limit 100000"""
 
     exec_option = vector.get_value('exec_option')
     exec_option['disable_outermost_topn'] = 1
-    exec_option['mem_limit'] = "800m"
+    exec_option['mem_limit'] = "3000m"
     table_format = vector.get_value('table_format')
 
     result = transpose_results(self.execute_query(

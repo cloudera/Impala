@@ -15,18 +15,16 @@
 package com.cloudera.impala.analysis;
 
 import java.util.ArrayList;
+import java.util.List;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.cloudera.impala.catalog.AuthorizationException;
-import com.cloudera.impala.catalog.ColumnType;
 import com.cloudera.impala.catalog.Db;
 import com.cloudera.impala.catalog.Function.CompareMode;
 import com.cloudera.impala.catalog.ScalarFunction;
+import com.cloudera.impala.catalog.Type;
 import com.cloudera.impala.common.AnalysisException;
 import com.cloudera.impala.thrift.TExprNode;
 import com.cloudera.impala.thrift.TExprNodeType;
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 
@@ -35,8 +33,6 @@ import com.google.common.collect.Lists;
  *
  */
 public class CompoundPredicate extends Predicate {
-  private final static Logger LOG = LoggerFactory.getLogger(CompoundPredicate.class);
-
   public enum Operator {
     AND("AND"),
     OR("OR"),
@@ -56,15 +52,16 @@ public class CompoundPredicate extends Predicate {
   private final Operator op_;
 
   public static void initBuiltins(Db db) {
+    // AND and OR are implemented as custom exprs, so they do not have a function symbol.
     db.addBuiltin(ScalarFunction.createBuiltinOperator(
-        Operator.AND.name(), "CompoundPredicate", "AndComputeFn",
-        Lists.newArrayList(ColumnType.BOOLEAN, ColumnType.BOOLEAN), ColumnType.BOOLEAN));
+        Operator.AND.name(), "",
+        Lists.<Type>newArrayList(Type.BOOLEAN, Type.BOOLEAN), Type.BOOLEAN));
     db.addBuiltin(ScalarFunction.createBuiltinOperator(
-        Operator.OR.name(), "CompoundPredicate", "OrComputeFn",
-        Lists.newArrayList(ColumnType.BOOLEAN, ColumnType.BOOLEAN), ColumnType.BOOLEAN));
+        Operator.OR.name(), "",
+        Lists.<Type>newArrayList(Type.BOOLEAN, Type.BOOLEAN), Type.BOOLEAN));
     db.addBuiltin(ScalarFunction.createBuiltinOperator(
-        Operator.NOT.name(), "CompoundPredicate", "NotComputeFn",
-        Lists.newArrayList(ColumnType.BOOLEAN), ColumnType.BOOLEAN));
+        Operator.NOT.name(), "impala::CompoundPredicate::Not",
+        Lists.<Type>newArrayList(Type.BOOLEAN), Type.BOOLEAN));
   }
 
   public CompoundPredicate(Operator op, Expr e1, Expr e2) {
@@ -77,12 +74,28 @@ public class CompoundPredicate extends Predicate {
     if (e2 != null) children_.add(e2);
   }
 
+  /**
+   * Copy c'tor used in clone().
+   */
+  protected CompoundPredicate(CompoundPredicate other) {
+    super(other);
+    op_ = other.op_;
+  }
+
   public Operator getOp() { return op_; }
 
   @Override
   public boolean equals(Object obj) {
     if (!super.equals(obj)) return false;
     return ((CompoundPredicate) obj).op_ == op_;
+  }
+
+  @Override
+  public String debugString() {
+    return Objects.toStringHelper(this)
+        .add("op", op_)
+        .addValue(super.debugString())
+        .toString();
   }
 
   @Override
@@ -101,17 +114,16 @@ public class CompoundPredicate extends Predicate {
   }
 
   @Override
-  public void analyze(Analyzer analyzer) throws AnalysisException,
-      AuthorizationException {
+  public void analyze(Analyzer analyzer) throws AnalysisException {
     if (isAnalyzed_) return;
     super.analyze(analyzer);
 
     // Check that children are predicates.
-    for (Expr e : children_) {
+    for (Expr e: children_) {
       if (!e.getType().isBoolean() && !e.getType().isNull()) {
         throw new AnalysisException(String.format("Operand '%s' part of predicate " +
             "'%s' should return type 'BOOLEAN' but returns type '%s'.",
-            e.toSql(), toSql(), e.getType()));
+            e.toSql(), toSql(), e.getType().toSql()));
       }
     }
 
@@ -119,6 +131,7 @@ public class CompoundPredicate extends Predicate {
         CompareMode.IS_SUPERTYPE_OF);
     Preconditions.checkState(fn_ != null);
     Preconditions.checkState(fn_.getReturnType().isBoolean());
+    castForFunctionCall(false);
 
     if (getChild(0).selectivity_ == -1
         || children_.size() == 2 && getChild(1).selectivity_ == -1) {
@@ -162,11 +175,38 @@ public class CompoundPredicate extends Predicate {
   /**
    * Negates a CompoundPredicate.
    */
+  @Override
   public Expr negate() {
     if (op_ == Operator.NOT) return getChild(0);
     Expr negatedLeft = getChild(0).negate();
     Expr negatedRight = getChild(1).negate();
     Operator newOp = (op_ == Operator.OR) ? Operator.AND : Operator.OR;
     return new CompoundPredicate(newOp, negatedLeft, negatedRight);
+  }
+
+  /**
+   * Creates a conjunctive predicate from a list of exprs.
+   */
+  public static Expr createConjunctivePredicate(List<Expr> conjuncts) {
+    Expr conjunctivePred = null;
+    for (Expr expr: conjuncts) {
+      if (conjunctivePred == null) {
+        conjunctivePred = expr;
+        continue;
+      }
+      conjunctivePred = new CompoundPredicate(CompoundPredicate.Operator.AND,
+          expr, conjunctivePred);
+    }
+    return conjunctivePred;
+  }
+
+  @Override
+  public Expr clone() { return new CompoundPredicate(this); }
+
+  // Create an AND predicate between two exprs, 'lhs' and 'rhs'. If
+  // 'rhs' is null, simply return 'lhs'.
+  public static Expr createConjunction(Expr lhs, Expr rhs) {
+    if (rhs == null) return lhs;
+    return new CompoundPredicate(Operator.AND, rhs, lhs);
   }
 }

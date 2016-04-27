@@ -20,6 +20,7 @@
 #include "common/object-pool.h"
 
 #include <boost/scoped_ptr.hpp>
+#include <boost/shared_ptr.hpp>
 #include <boost/thread/locks.hpp>
 #include <boost/thread/mutex.hpp>
 #include <vector>
@@ -31,7 +32,6 @@
 #include "runtime/exec-env.h"
 #include "runtime/descriptors.h"  // for PlanNodeId
 #include "runtime/disk-io-mgr.h"  // for DiskIoMgr::RequestContext
-#include "runtime/mem-pool.h"
 #include "runtime/mem-tracker.h"
 #include "runtime/thread-resource-mgr.h"
 #include "gen-cpp/PlanNodes_types.h"
@@ -42,6 +42,7 @@
 namespace impala {
 
 class Bitmap;
+class BufferedBlockMgr;
 class DescriptorTbl;
 class ObjectPool;
 class Status;
@@ -84,8 +85,11 @@ class RuntimeState {
   // when they are initialized. This function also initializes a user function mem
   // tracker (in the fifth level). If 'request_pool' is null, no request pool mem
   // tracker is set up, i.e. query pools will have the process mem pool as the parent.
-  Status InitMemTrackers(const TUniqueId& query_id, const std::string* request_pool,
-      int64_t query_bytes_limit);
+  void InitMemTrackers(const TUniqueId& query_id, const std::string* request_pool,
+      int64_t query_bytes_limit, int64_t query_rm_reservation_limit_bytes = -1);
+
+  // Gets/Creates the query wide block mgr.
+  Status CreateBlockMgr();
 
   ObjectPool* obj_pool() const { return obj_pool_.get(); }
   const DescriptorTbl& desc_tbl() const { return *desc_tbl_; }
@@ -104,13 +108,13 @@ class RuntimeState {
   const TQueryCtx& query_ctx() const { return fragment_instance_ctx_.query_ctx; }
   const TPlanFragmentInstanceCtx& fragment_ctx() const { return fragment_instance_ctx_; }
   const std::string& effective_user() const {
-    if (query_ctx().session.__isset.impersonated_user &&
-        !query_ctx().session.impersonated_user.empty()) {
+    if (query_ctx().session.__isset.delegated_user &&
+        !query_ctx().session.delegated_user.empty()) {
       return do_as_user();
     }
     return connected_user();
   }
-  const std::string& do_as_user() const { return query_ctx().session.impersonated_user; }
+  const std::string& do_as_user() const { return query_ctx().session.delegated_user; }
   const std::string& connected_user() const {
     return query_ctx().session.connected_user;
   }
@@ -147,8 +151,8 @@ class RuntimeState {
   }
 
   // The seed value to use when hashing tuples.
-  // See comment on root_node_id_.
-  uint32_t fragment_hash_seed() const { return root_node_id_; }
+  // See comment on root_node_id_. We add one to prevent having a hash seed of 0.
+  uint32_t fragment_hash_seed() const { return root_node_id_ + 1; }
 
   // Size to use when building bitmap filters. This is a prime number which reduces
   // collisions and the resulting bitmap is just under 4Kb.
@@ -157,8 +161,10 @@ class RuntimeState {
 
   // Adds a bitmap filter on slot 'slot'. If hash(slot) % bitmap.Size() is false, this
   // value can be filtered out. Multiple bitmap filters can be added to a single slot.
+  // If it is the first call to add a bitmap filter for the specific slot, indicated by
+  // 'acquired_ownership', then the passed bitmap should not be deleted by the caller.
   // Thread safe.
-  void AddBitmapFilter(SlotId slot, const Bitmap* bitmap);
+  void AddBitmapFilter(SlotId slot, Bitmap* bitmap, bool* acquired_ownership);
 
   // Returns bitmap filter on 'slot'. Returns NULL if there are no bitmap filters on this
   // slot.
@@ -177,24 +183,24 @@ class RuntimeState {
   // Returns true if codegen is enabled for this query.
   bool codegen_enabled() const { return !query_options().disable_codegen; }
 
-  // Returns CodeGen object.  Returns NULL if the codegen object has not been
-  // created. If codegen is enabled for the query, the codegen object will be
-  // created as part of the RuntimeState's initialization.
-  // Otherwise, it can be created by calling CreateCodegen().
-  LlvmCodeGen* codegen() { return codegen_.get(); }
+  // Returns true if the codegen object has been created. Note that this may return false
+  // even when codegen is enabled if nothing has been codegen'd.
+  bool codegen_created() const { return codegen_.get() != NULL; }
 
-  // Create a codegen object in codegen_. No-op if it has already been called.
-  // If codegen is enabled for the query, this is created when the runtime
-  // state is created. If codegen is disabled for the query, this is created
-  // on first use.
-  Status CreateCodegen();
+  // Returns codegen_ in 'codegen'. If 'initialize' is true, codegen_ will be created if
+  // it has not been initialized by a previous call already. If 'initialize' is false,
+  // 'codegen' will be set to NULL if codegen_ has not been initialized.
+  Status GetCodegen(LlvmCodeGen** codegen, bool initialize = true);
+
+  BufferedBlockMgr* block_mgr() {
+    DCHECK(block_mgr_.get() != NULL);
+    return block_mgr_.get();
+  }
 
   Status query_status() {
     boost::lock_guard<boost::mutex> l(query_status_lock_);
     return query_status_;
   };
-
-  MemPool* udf_pool() { return udf_pool_.get(); };
 
   // Appends error to the error_log_ if there is space. Returns true if there was space
   // and the error was logged.
@@ -268,6 +274,10 @@ class RuntimeState {
  private:
   // Set per-fragment state.
   Status Init(ExecEnv* exec_env);
+
+  // Create a codegen object in codegen_. No-op if it has already been called. This is
+  // created on first use.
+  Status CreateCodegen();
 
   static const int DEFAULT_BATCH_SIZE = 1024;
 
@@ -344,17 +354,17 @@ class RuntimeState {
   boost::mutex query_status_lock_;
   Status query_status_;
 
-  // Memory tracker and pool for UDFs
-  // TODO: this is a stopgap until we implement ExprContext
-  boost::scoped_ptr<MemTracker> udf_mem_tracker_;
-  boost::scoped_ptr<MemPool> udf_pool_;
-
   // Query-wide resource manager for resource expansion etc. Not owned by us; owned by the
   // ResourceBroker instead.
   QueryResourceMgr* query_resource_mgr_;
 
   // Reader contexts that need to be closed when the fragment is closed.
   std::vector<DiskIoMgr::RequestContext*> reader_contexts_;
+
+  // BufferedBlockMgr object used to allocate and manage blocks of input data in memory
+  // with a fixed memory budget.
+  // The block mgr is shared by all fragments for this query.
+  boost::shared_ptr<BufferedBlockMgr> block_mgr_;
 
   // This is the node id of the root node for this plan fragment. This is used as the
   // hash seed and has two useful properties:
@@ -366,7 +376,7 @@ class RuntimeState {
   PlanNodeId root_node_id_;
 
   // Lock protecting slot_bitmap_filters_
-  boost::mutex bitmap_lock_;
+  SpinLock bitmap_lock_;
 
   // Bitmap filter on the hash for 'SlotId'. If bitmap[hash(slot]] is unset, this
   // value can be filtered out. These filters are generated during the query execution.

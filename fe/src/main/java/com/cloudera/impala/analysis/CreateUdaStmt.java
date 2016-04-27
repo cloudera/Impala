@@ -17,8 +17,8 @@ package com.cloudera.impala.analysis;
 import java.util.HashMap;
 
 import com.cloudera.impala.catalog.AggregateFunction;
-import com.cloudera.impala.catalog.AuthorizationException;
-import com.cloudera.impala.catalog.ColumnType;
+import com.cloudera.impala.catalog.PrimitiveType;
+import com.cloudera.impala.catalog.Type;
 import com.cloudera.impala.common.AnalysisException;
 import com.cloudera.impala.thrift.TFunctionBinaryType;
 import com.cloudera.impala.thrift.TSymbolType;
@@ -30,7 +30,7 @@ import com.google.common.base.Preconditions;
 public class CreateUdaStmt extends CreateFunctionStmtBase {
   // Same as super.fn_. Typed here for convenience.
   private final AggregateFunction uda_;
-  private ColumnType intermediateType_;
+  private Type intermediateType_;
 
   /**
    * Builds a CREATE AGGREGATE FUNCTION statement
@@ -44,7 +44,7 @@ public class CreateUdaStmt extends CreateFunctionStmtBase {
    *        validated in analyze()
    */
   public CreateUdaStmt(FunctionName fnSymbol, FunctionArgs args,
-      ColumnType retType, ColumnType intermediateType,
+      Type retType, Type intermediateType,
       HdfsUri location, boolean ifNotExists,
       HashMap<CreateFunctionStmtBase.OptArg, String> optArgs) {
     super(new AggregateFunction(fnSymbol, args, retType), location, ifNotExists, optArgs);
@@ -83,8 +83,7 @@ public class CreateUdaStmt extends CreateFunctionStmtBase {
   }
 
   @Override
-  public void analyze(Analyzer analyzer) throws AnalysisException,
-      AuthorizationException {
+  public void analyze(Analyzer analyzer) throws AnalysisException {
     super.analyze(analyzer);
 
     if (uda_.getNumArgs() == 0) {
@@ -106,6 +105,21 @@ public class CreateUdaStmt extends CreateFunctionStmtBase {
     if (fn_.getNumArgs() > 8) {
       throw new AnalysisException(
           "UDAs with more than 8 arguments are not yet supported.");
+    }
+
+    if (uda_.getReturnType().getPrimitiveType() == PrimitiveType.CHAR) {
+      throw new AnalysisException("UDAs with CHAR return type are not yet supported.");
+    }
+    if (uda_.getReturnType().getPrimitiveType() == PrimitiveType.VARCHAR) {
+      throw new AnalysisException("UDAs with VARCHAR return type are not yet supported.");
+    }
+    for (int i = 0; i < uda_.getNumArgs(); ++i) {
+      if (uda_.getArgs()[i].getPrimitiveType() == PrimitiveType.CHAR) {
+        throw new AnalysisException("UDAs with CHAR arguments are not yet supported.");
+      }
+      if (uda_.getArgs()[i].getPrimitiveType() == PrimitiveType.VARCHAR) {
+        throw new AnalysisException("UDAs with VARCHAR arguments are not yet supported.");
+      }
     }
 
     if (intermediateType_ == null) {

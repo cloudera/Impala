@@ -81,8 +81,8 @@ select udf_test.hive_lower(n_name) from tpch.nation order by 1 limit 5
 ---- TYPES
 STRING
 ====
-# Test identity functions
 ---- QUERY
+# Test identity functions
 select udf_test.identity(true);
 ---- TYPES
 boolean
@@ -132,16 +132,53 @@ double
 10
 ====
 ---- QUERY
-select udf_test.identity("why hello there");
+# IMPALA-1456. Each "identity" call below tests a different type (BytesWritable, Text,
+# and String).
+select udf_test.identity("why hello there"),
+       udf_test.identity("why", " hello there"),
+       udf_test.identity("why", " hello", " there");
 ---- TYPES
-string
+string, string, string
 ---- RESULTS
-'why hello there'
+'why hello there','why hello there','why hello there'
 ====
 ---- QUERY
 select udf_test.identity(NULL);
 ---- TYPES
 boolean
 ---- RESULTS
+NULL
+====
+---- QUERY
+# IMPALA-1134. Each "identity" call below tests a different type (BytesWritable, Text,
+# and String). The different types are handled slightly differently.
+select length(udf_test.identity("0123456789")),
+       length(udf_test.identity("0123456789", "0123456789")),
+       length(udf_test.identity("0123456789", "0123456789", "0123456789"));
+---- TYPES
+int, int, int
+---- RESULTS
+10,20,30
+====
+---- QUERY
+# IMPALA-1392: Hive UDFs that throw exceptions should return NULL
+select udf_test.throws_exception();
+---- TYPES
+boolean
+---- RESULTS
+NULL
+====
+---- QUERY
+select udf_test.throws_exception() from functional.alltypestiny;
+---- TYPES
+boolean
+---- RESULTS
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
 NULL
 ====

@@ -4,8 +4,6 @@
 select a.timestamp_col from alltypessmall a inner join alltypessmall b on
 (a.timestamp_col = b.timestamp_col)
 where a.year=2009 and a.month=1 and b.year=2009 and b.month=1
----- TYPES
-timestamp
 ---- RESULTS
 2009-01-01 00:00:00
 2009-01-01 00:01:00
@@ -32,25 +30,27 @@ timestamp
 2009-01-03 00:22:00.910000000
 2009-01-03 00:23:00.930000000
 2009-01-03 00:24:00.960000000
+---- TYPES
+timestamp
 ====
 ---- QUERY
 # Joins with multiple exprs
-select j.*, d.* from JoinTbl j inner join DimTbl d on 
-(j.test_name = d.name AND j.test_zip = d.zip) 
----- TYPES
-bigint, string, int, int, bigint, string, int
+select j.*, d.* from JoinTbl j inner join DimTbl d on
+(j.test_name = d.name AND j.test_zip = d.zip)
 ---- RESULTS
 1001,'Name1',94611,5000,1001,'Name1',94611
 1002,'Name2',94611,5000,1002,'Name2',94611
+---- TYPES
+bigint, string, int, int, bigint, string, int
 ====
 ---- QUERY
-select j.*, d.* from JoinTbl j inner join DimTbl d on 
-(j.test_zip = d.zip AND j.test_name = d.name) 
----- TYPES
-bigint, string, int, int, bigint, string, int
+select j.*, d.* from JoinTbl j inner join DimTbl d on
+(j.test_zip = d.zip AND j.test_name = d.name)
 ---- RESULTS
 1001,'Name1',94611,5000,1001,'Name1',94611
 1002,'Name2',94611,5000,1002,'Name2',94611
+---- TYPES
+bigint, string, int, int, bigint, string, int
 ====
 ---- QUERY
 # join between hdfs and hbase, extra join predicate, extra scan predicates, nulls in
@@ -64,8 +64,6 @@ where a.month=1
 and a.day=1
 and a.string_col > '88'
 and b.bool_col = false
----- TYPES
-tinyint, int, string, smallint
 ---- RESULTS
 1,1,'881',2
 1,1,'891',2
@@ -80,6 +78,8 @@ tinyint, int, string, smallint
 1,1,'971',2
 1,1,'981',2
 1,1,'991',2
+---- TYPES
+tinyint, int, string, smallint
 ====
 ---- QUERY
 # join between hdfs and hbase, extra join predicate, extra scan predicates, nulls in joins cols
@@ -92,8 +92,6 @@ and a.day=1
 and a.tinyint_col + b.tinyint_col < 5
 and a.string_col > '88'
 and b.bool_col = false
----- TYPES
-tinyint, int, string
 ---- RESULTS
 1,1,'881'
 1,1,'891'
@@ -108,6 +106,8 @@ tinyint, int, string
 1,1,'971'
 1,1,'981'
 1,1,'991'
+---- TYPES
+tinyint, int, string
 ====
 ---- QUERY
 # join between two tables, extra join predicate, extra scan predicates, nulls in joins cols
@@ -119,8 +119,6 @@ and a.day=1
 and a.tinyint_col + b.tinyint_col < 5
 and a.string_col > '88'
 and b.bool_col = false
----- TYPES
-tinyint, int, string
 ---- RESULTS
 1,1,'881'
 1,1,'891'
@@ -135,6 +133,8 @@ tinyint, int, string
 1,1,'971'
 1,1,'981'
 1,1,'991'
+---- TYPES
+tinyint, int, string
 ====
 ---- QUERY
 # reversing the order of the tables produces the same result
@@ -145,8 +145,6 @@ and a.day=1
 and a.tinyint_col + b.tinyint_col < 5
 and a.string_col > '88'
 and b.bool_col = false
----- TYPES
-tinyint, int, string
 ---- RESULTS
 1,1,'881'
 1,1,'891'
@@ -161,6 +159,8 @@ tinyint, int, string
 1,1,'971'
 1,1,'981'
 1,1,'991'
+---- TYPES
+tinyint, int, string
 ====
 ---- QUERY
 # join between three tables, extra join predicates, extra scan predicates, nulls in joins cols
@@ -175,8 +175,6 @@ and a.int_col > 899
 and b.float_col > 4.5
 and c.string_col < '7'
 and a.int_col + b.float_col + cast(c.string_col as float) < 1000
----- TYPES
-smallint, int, tinyint, int, int, float, string
 ---- RESULTS
 15,15,5,5,915,5.5,'5'
 16,16,6,6,916,6.599999904632568,'6'
@@ -199,6 +197,8 @@ smallint, int, tinyint, int, int, float, string
 83,83,3,3,983,8.800000190734863,'3'
 84,84,4,4,984,9.899999618530273,'4'
 91,91,1,1,991,6.599999904632568,'1'
+---- TYPES
+smallint, int, tinyint, int, int, float, string
 ====
 ---- QUERY
 # reversing the order produces the same results
@@ -212,8 +212,6 @@ and a.int_col > 899
 and b.float_col > 4.5
 and c.string_col < '7'
 and a.int_col + b.float_col + cast(c.string_col as float) < 1000
----- TYPES
-smallint, int, tinyint, int, int, float, string
 ---- RESULTS
 15,15,5,5,915,5.5,'5'
 16,16,6,6,916,6.599999904632568,'6'
@@ -236,33 +234,33 @@ smallint, int, tinyint, int, int, float, string
 83,83,3,3,983,8.800000190734863,'3'
 84,84,4,4,984,9.899999618530273,'4'
 91,91,1,1,991,6.599999904632568,'1'
+---- TYPES
+smallint, int, tinyint, int, int, float, string
 ====
 ---- QUERY
 # joins on empty tables
 select * from emptytable t1 join emptytable t2 on (t1.field=t2.field)
+---- RESULTS
 ---- TYPES
 string, int, string, int
----- RESULTS
 ====
 ---- QUERY
 select * from emptytable t1 join greptiny t2 on (t1.field=t2.field)
+---- RESULTS
 ---- TYPES
 string, int, string
----- RESULTS
 ====
 ---- QUERY
 select * from greptiny t1 join emptytable t2 on (t1.field=t2.field)
+---- RESULTS
 ---- TYPES
 string, string, int
----- RESULTS
 ====
 ---- QUERY
 # cross join
 select t1.id, t2.id from alltypestiny t1 cross join alltypestiny t2
 where (t1.id < 3 and t2.id < 3)
 order by t1.id, t2.id limit 100
----- TYPES
-int, int
 ---- RESULTS
 0,0
 0,1
@@ -273,21 +271,23 @@ int, int
 2,0
 2,1
 2,2
+---- TYPES
+int, int
 ====
 ---- QUERY
 # cross join with an empty table
 select t1.id, e.field from alltypestiny t1 cross join emptytable e
+---- RESULTS
 ---- TYPES
 int, string
----- RESULTS
 ====
 ---- QUERY
 # check a larger cross join produces the expected number of rows
 select count(*) from functional.AllTypesSmall t1 cross join functional.AllTypesSmall t2
----- TYPES
-bigint
 ---- RESULTS
 10000
+---- TYPES
+bigint
 ====
 ---- QUERY
 # cross join with nulls and constant table
@@ -297,11 +297,11 @@ order by tinyint_col nulls first, id, t1.c
 limit 6
 ---- RESULTS
 0,NULL,NULL
+0,NULL,NULL
+10,NULL,NULL
 10,NULL,NULL
 20,NULL,NULL
-30,NULL,NULL
-40,NULL,NULL
-50,NULL,NULL
+20,NULL,NULL
 ---- TYPES
 int, tinyint, null
 ====
@@ -426,10 +426,202 @@ tinyint, int, string, smallint
 ====
 ---- QUERY
 # FULL OUTER JOIN between two inline views followed by a GROUP BY (IMPALA-964)
+select a.x FROM (VALUES(1 x, 1 y)) a FULL OUTER JOIN (VALUES(1 x, 1 y)) b
+ON (a.x = b.y) GROUP BY a.x
+---- RESULTS
+1
+---- TYPES
+TINYINT
+====
+---- QUERY
 select 1 FROM (VALUES(1 x, 1 y)) a RIGHT OUTER JOIN (VALUES(1 x, 1 y)) b
 ON (a.x = b.y) GROUP BY a.x
 ---- RESULTS
 1
 ---- TYPES
 TINYINT
+====
+---- QUERY
+# Test joins with union inputs. One input is a union.
+select a.id, b.id, a.string_col, b.string_col
+from
+  (select id, string_col from functional.alltypessmall
+   where year = 2009 and month = 1
+   union all
+   select id, string_col from functional.alltypessmall
+   where year = 2009 and month = 2
+   union all
+   select 0, '1234') a
+inner join
+functional.alltypestiny b
+on a.id = b.id
+where b.id < 5
+---- RESULTS
+0,0,'0','0'
+0,0,'1234','0'
+1,1,'1','1'
+2,2,'2','0'
+3,3,'3','1'
+4,4,'4','0'
+---- TYPES
+INT, INT, STRING, STRING
+====
+---- QUERY
+# Test joins with union inputs. One input is a union.
+select a.id, b.id, a.string_col, b.string_col
+from
+functional.alltypestiny b
+left outer join
+  (select id, string_col from functional.alltypessmall
+   where year = 2009 and month = 1
+   union all
+   select id, string_col from functional.alltypessmall
+   where year = 2009 and month = 2
+   union all
+   select 0, '1234') a
+on a.id = b.id
+where b.id < 5
+---- RESULTS
+0,0,'0','0'
+0,0,'1234','0'
+1,1,'1','1'
+2,2,'2','0'
+3,3,'3','1'
+4,4,'4','0'
+---- TYPES
+INT, INT, STRING, STRING
+====
+---- QUERY
+# Test joins with union inputs. Both inputs are a union.
+select a.id, b.id, a.string_col, b.string_col
+from
+  (select id, string_col from functional.alltypessmall
+   where year = 2009 and month = 1
+   union all
+   select id, string_col from functional.alltypessmall
+   where year = 2009 and month = 2
+   union all
+   select 0, '1234') a
+full outer join
+  (select id, string_col from functional.alltypessmall
+   where year = 2009 and month = 1
+   union all
+   select id, string_col from functional.alltypessmall
+   where year = 2009 and month = 2
+   union all
+   select 0, '5678') b
+on a.id = b.id
+where b.id < 5
+---- RESULTS
+0,0,'0','0'
+0,0,'0','5678'
+0,0,'1234','0'
+0,0,'1234','5678'
+1,1,'1','1'
+2,2,'2','2'
+3,3,'3','3'
+4,4,'4','4'
+---- TYPES
+INT, INT, STRING, STRING
+====
+---- QUERY
+# Regression test for IMPALA-1123. Tests that hash exchanges feeding the same
+# hash-partitioned fragment use type-identical partition exprs.
+select straight_join count(*) from
+(select tinyint_col from functional.alltypessmall
+ union distinct
+ select tinyint_col from functional.alltypessmall) a
+inner join [shuffle]
+(select smallint_col from functional.alltypessmall
+ union distinct
+ select smallint_col from functional.alltypessmall) b
+on a.tinyint_col = b.smallint_col
+---- RESULTS
+10
+---- TYPES
+BIGINT
+====
+---- QUERY
+# Regression test for IMPALA-1123. The plan below has one big hash-partitioned
+# fragment with two joins and a merge agg since their partition exprs are all
+# compatible. The single fragment is fed by multiple hash-partitioning senders,
+# and we need to ensure that the partition exprs used by the senders are cast
+# to identical types because the same value will have different hashes for
+# different types. Minimal explain plan:
+#
+# 15:AGGREGATE [MERGE FINALIZE]
+# 14:EXCHANGE [UNPARTITIONED]
+# 08:AGGREGATE
+# 07:HASH JOIN [INNER JOIN, PARTITIONED]
+# |--13:AGGREGATE [MERGE FINALIZE]
+# |  12:EXCHANGE [HASH(tinyint_col)]
+# |  05:AGGREGATE
+# |  04:SCAN HDFS [functional.alltypessmall]
+# 06:HASH JOIN [INNER JOIN, PARTITIONED]
+# |--03:HASH JOIN [INNER JOIN, PARTITIONED]
+# |  |--10:EXCHANGE [HASH(t2.smallint_col)]
+# |  |  02:SCAN HDFS [functional.alltypessmall t2]
+# |  09:EXCHANGE [HASH(t1.tinyint_col)]
+# |  01:SCAN HDFS [functional.alltypessmall t1]
+# 11:EXCHANGE [HASH(a.int_col)]
+# 00:SCAN HDFS [functional.alltypessmall a]
+#
+select straight_join count(*) from
+functional.alltypessmall a
+inner join [shuffle]
+  (select straight_join t2.* from
+   functional.alltypessmall t1
+   inner join [shuffle]
+   functional.alltypessmall t2
+   on t1.tinyint_col = t2.smallint_col) b
+on a.int_col = b.smallint_col
+inner join [shuffle]
+  (select distinct tinyint_col
+   from functional.alltypessmall) c
+on a.int_col = c.tinyint_col
+---- RESULTS
+11200
+---- TYPES
+BIGINT
+====
+---- QUERY
+# Same query as above with broadcast joins. Results should be identical.
+select straight_join count(*) from
+functional.alltypessmall a
+inner join [broadcast]
+  (select straight_join t2.* from
+   functional.alltypessmall t1
+   inner join [broadcast]
+   functional.alltypessmall t2
+   on t1.tinyint_col = t2.smallint_col) b
+on a.int_col = b.smallint_col
+inner join [broadcast]
+  (select distinct tinyint_col
+   from functional.alltypessmall) c
+on a.int_col = c.tinyint_col
+---- RESULTS
+11200
+---- TYPES
+BIGINT
+====
+---- QUERY
+# Regression test for IMPALA-1329
+select COUNT(t1.string_col) AS int_col_1 FROM alltypestiny t1
+LEFT JOIN alltypestiny t2 ON t2.date_string_col = t1.string_col
+LEFT JOIN alltypesagg t3 ON t3.id = t2.tinyint_col
+---- RESULTS
+8
+---- TYPES
+BIGINT
+====
+---- QUERY
+# Regression test for IMPALA-1332
+select a.int_col from alltypesagg a
+RIGHT OUTER JOIN alltypesagg b
+using(int_col)
+where a.int_col is NULL limit 1
+---- RESULTS
+NULL
+---- TYPES
+INT
 ====

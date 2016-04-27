@@ -16,6 +16,7 @@
 
 #include <boost/algorithm/string.hpp>
 #include <gutil/strings/substitute.h>
+#include <limits> // for std::numeric_limits
 
 #include "common/object-pool.h"
 #include "exec/hdfs-scan-node.h"
@@ -44,6 +45,15 @@ using namespace boost;
 using namespace boost::algorithm;
 using namespace impala;
 using namespace strings;
+
+// Max data page header size in bytes. This is an estimate and only needs to be an upper
+// bound. It is theoretically possible to have a page header of any size due to string
+// value statistics, but in practice we'll have trouble reading string values this large.
+const int MAX_PAGE_HEADER_SIZE = 8 * 1024 * 1024;
+
+// Max dictionary page header size in bytes. This is an estimate and only needs to be an
+// upper bound.
+const int MAX_DICT_HEADER_SIZE = 100;
 
 Status HdfsParquetScanner::IssueInitialRanges(HdfsScanNode* scan_node,
     const std::vector<HdfsFileDesc*>& files) {
@@ -78,7 +88,8 @@ Status HdfsParquetScanner::IssueInitialRanges(HdfsScanNode* scan_node,
           reinterpret_cast<ScanRangeMetadata*>(split->meta_data());
       DiskIoMgr::ScanRange* footer_range = scan_node->AllocateScanRange(
           files[i]->filename.c_str(), footer_size,
-          footer_start, metadata->partition_id, split->disk_id(), split->try_cache());
+          footer_start, metadata->partition_id, split->disk_id(), split->try_cache(),
+          split->expected_local());
       footer_ranges.push_back(footer_range);
     }
   }
@@ -260,9 +271,12 @@ class HdfsParquetScanner::ColumnReader : public HdfsParquetScanner::BaseColumnRe
     DCHECK_NE(desc->type().type, TYPE_BOOLEAN);
     if (desc->type().type == TYPE_DECIMAL) {
       fixed_len_size_ = ParquetPlainEncoder::DecimalSize(desc->type());
+    } else if (desc->type().type == TYPE_VARCHAR) {
+      fixed_len_size_ = desc->type().len;
     } else {
       fixed_len_size_ = -1;
     }
+    needs_conversion_ = desc_->type().type == TYPE_CHAR;
   }
 
  protected:
@@ -294,16 +308,15 @@ class HdfsParquetScanner::ColumnReader : public HdfsParquetScanner::BaseColumnRe
     parquet::Encoding::type page_encoding =
         current_page_header_.data_page_header.encoding;
     bool result = true;
+    T val;
+    T* val_ptr = needs_conversion_ ? &val : reinterpret_cast<T*>(slot);
     if (page_encoding == parquet::Encoding::PLAIN_DICTIONARY) {
-      result = dict_decoder_->GetValue(reinterpret_cast<T*>(slot));
+      result = dict_decoder_->GetValue(val_ptr);
     } else {
       DCHECK(page_encoding == parquet::Encoding::PLAIN);
-      data_ += ParquetPlainEncoder::Decode<T>(data_, fixed_len_size_,
-          reinterpret_cast<T*>(slot));
-      if (parent_->scan_node_->requires_compaction()) {
-        CopySlot(reinterpret_cast<T*>(slot), pool);
-      }
+      data_ += ParquetPlainEncoder::Decode<T>(data_, fixed_len_size_, val_ptr);
     }
+    if (needs_conversion_) ConvertSlot(&val, reinterpret_cast<T*>(slot), pool);
     ++rows_returned_;
     if (!*conjuncts_failed && bitmap_filter_ != NULL) {
       uint32_t h = RawValue::GetHashValue(slot, desc_->type(), hash_seed_);
@@ -318,10 +331,18 @@ class HdfsParquetScanner::ColumnReader : public HdfsParquetScanner::BaseColumnRe
     // no-op for non-string columns.
   }
 
+  // Converts and writes src into dst based on desc_->type()
+  void ConvertSlot(const T* src, void* dst, MemPool* pool) {
+    DCHECK(false);
+  }
+
   scoped_ptr<DictDecoder<T> > dict_decoder_;
 
-  // The size of this column with plain encoding for FIXED_LEN_BYTE_ARRAY. Unused
-  // otherwise.
+  // true decoded values must be converted before being written to an output tuple
+  bool needs_conversion_;
+
+  // The size of this column with plain encoding for FIXED_LEN_BYTE_ARRAY, or
+  // the max length for VARCHAR columns. Unused otherwise.
   int fixed_len_size_;
 };
 
@@ -333,6 +354,26 @@ void HdfsParquetScanner::ColumnReader<StringValue>::CopySlot(
   memcpy(buffer, slot->ptr, slot->len);
   slot->ptr = reinterpret_cast<char*>(buffer);
 }
+
+template<>
+void HdfsParquetScanner::ColumnReader<StringValue>::ConvertSlot(
+    const StringValue* src, void* dst, MemPool* pool) {
+  DCHECK(desc_->type().type == TYPE_CHAR);
+  int len = desc_->type().len;
+  StringValue sv;
+  sv.len = len;
+  if (desc_->type().IsVarLen()) {
+    sv.ptr = reinterpret_cast<char*>(pool->Allocate(len));
+  } else {
+    sv.ptr = reinterpret_cast<char*>(dst);
+  }
+  int unpadded_len = min(len, src->len);
+  memcpy(sv.ptr, src->ptr, unpadded_len);
+  StringValue::PadWithSpaces(sv.ptr, len, unpadded_len);
+
+  if (desc_->type().IsVarLen()) *reinterpret_cast<StringValue*>(dst) = sv;
+}
+
 
 class HdfsParquetScanner::BoolColumnReader : public HdfsParquetScanner::BaseColumnReader {
  public:
@@ -367,7 +408,6 @@ class HdfsParquetScanner::BoolColumnReader : public HdfsParquetScanner::BaseColu
 
 Status HdfsParquetScanner::Prepare(ScannerContext* context) {
   RETURN_IF_ERROR(HdfsScanner::Prepare(context));
-  decompress_timer_ = ADD_TIMER(scan_node_->runtime_profile(), "DecompressionTime");
   num_cols_counter_ =
       ADD_COUNTER(scan_node_->runtime_profile(), "NumColumns", TCounterType::UNIT);
 
@@ -427,6 +467,8 @@ HdfsParquetScanner::BaseColumnReader* HdfsParquetScanner::CreateReader(
       reader = new ColumnReader<TimestampValue>(this, desc, file_idx);
       break;
     case TYPE_STRING:
+    case TYPE_VARCHAR:
+    case TYPE_CHAR:
       reader = new ColumnReader<StringValue>(this, desc, file_idx);
       break;
     case TYPE_DECIMAL:
@@ -458,9 +500,7 @@ static bool RequiresSkippedDictionaryHeaderCheck(
 
 Status HdfsParquetScanner::BaseColumnReader::ReadDataPage() {
   Status status;
-
   uint8_t* buffer;
-  int num_bytes;
 
   // We're about to move to the next data page.  The previous data page is
   // now complete, pass along the memory allocated for it.
@@ -477,8 +517,9 @@ Status HdfsParquetScanner::BaseColumnReader::ReadDataPage() {
       break;
     }
 
-    RETURN_IF_ERROR(stream_->GetBuffer(true, &buffer, &num_bytes));
-    if (num_bytes == 0) {
+    int64_t buffer_size;
+    RETURN_IF_ERROR(stream_->GetBuffer(true, &buffer, &buffer_size));
+    if (buffer_size == 0) {
       DCHECK(stream_->eosr());
       stringstream ss;
       ss << "Column metadata states there are " << metadata_->num_values
@@ -488,41 +529,54 @@ Status HdfsParquetScanner::BaseColumnReader::ReadDataPage() {
         return Status(ss.str());
       } else {
         parent_->scan_node_->runtime_state()->LogError(ss.str());
+        return Status::OK;
       }
     }
 
     // We don't know the actual header size until the thrift object is deserialized.
-    uint32_t header_size = num_bytes;
-    status = DeserializeThriftMsg(
-        buffer, &header_size, true, &current_page_header_, true);
-    if (!status.ok()) {
-      if (header_size >= MAX_PAGE_HEADER_SIZE) {
-        status.AddErrorMsg("ParquetScanner: Could not deserialize page header.");
+    // Loop until we successfully deserialize the header or exceed the maximum header size.
+    uint32_t header_size;
+    while (true) {
+      header_size = buffer_size;
+      status = DeserializeThriftMsg(
+          buffer, &header_size, true, &current_page_header_, true);
+      if (status.ok()) break;
+
+      if (buffer_size >= MAX_PAGE_HEADER_SIZE) {
+        stringstream ss;
+        ss << "ParquetScanner: could not read data page because page header exceeded "
+           << "maximum size of "
+           << PrettyPrinter::Print(MAX_PAGE_HEADER_SIZE, TCounterType::BYTES);
+        status.AddErrorMsg(ss.str());
         return status;
       }
-      // Stitch the header bytes that are split across buffers.
-      uint8_t header_buffer[MAX_PAGE_HEADER_SIZE];
-      int header_first_part = header_size;
-      memcpy(header_buffer, buffer, header_first_part);
 
-      if (!stream_->SkipBytes(header_first_part, &status)) return status;
-      RETURN_IF_ERROR(stream_->GetBuffer(true, &buffer, &num_bytes));
-      if (num_bytes == 0) return status;
-
-      uint32_t header_second_part =
-          ::min(num_bytes, MAX_PAGE_HEADER_SIZE - header_first_part);
-      memcpy(header_buffer + header_first_part, buffer, header_second_part);
-      header_size = MAX_PAGE_HEADER_SIZE;
-      status =
-          DeserializeThriftMsg(header_buffer, &header_size, true, &current_page_header_);
-
-      if (!status.ok()) {
-        status.AddErrorMsg("ParquetScanner: Could not deserialize page header");
+      // Didn't read entire header, increase buffer size and try again
+      Status status;
+      int64_t new_buffer_size = max(buffer_size * 2, 1024L);
+      bool success = stream_->GetBytes(
+          new_buffer_size, &buffer, &new_buffer_size, &status, /* peek */ true);
+      if (!success) {
+        DCHECK(!status.ok());
         return status;
       }
-      DCHECK_GT(header_size, header_first_part);
-      header_size = header_size - header_first_part;
+      DCHECK(status.ok());
+
+      if (buffer_size == new_buffer_size) {
+        DCHECK(new_buffer_size != 0);
+        string msg = "ParquetScanner: reached EOF while deserializing data page header.";
+        if (parent_->scan_node_->runtime_state()->abort_on_error()) {
+          return Status(msg);
+        } else {
+          parent_->scan_node_->runtime_state()->LogError(msg);
+          return Status::OK;
+        }
+      }
+      DCHECK_GT(new_buffer_size, buffer_size);
+      buffer_size = new_buffer_size;
     }
+
+    // Successfully deserialized current_page_header_
     if (!stream_->SkipBytes(header_size, &status)) return status;
 
     int data_size = current_page_header_.compressed_page_size;
@@ -556,7 +610,7 @@ Status HdfsParquetScanner::BaseColumnReader::ReadDataPage() {
       uint8_t* dict_values = NULL;
       if (decompressor_.get() != NULL) {
         dict_values = parent_->dictionary_pool_->Allocate(uncompressed_size);
-        RETURN_IF_ERROR(decompressor_->ProcessBlock(true, data_size, data_,
+        RETURN_IF_ERROR(decompressor_->ProcessBlock32(true, data_size, data_,
             &uncompressed_size, &dict_values));
         VLOG_FILE << "Decompressed " << data_size << " to " << uncompressed_size;
         data_size = uncompressed_size;
@@ -593,9 +647,9 @@ Status HdfsParquetScanner::BaseColumnReader::ReadDataPage() {
     if (decompressor_.get() != NULL) {
       SCOPED_TIMER(parent_->decompress_timer_);
       uint8_t* decompressed_buffer = decompressed_data_pool_->Allocate(uncompressed_size);
-      RETURN_IF_ERROR(decompressor_->ProcessBlock(
-          true, current_page_header_.compressed_page_size, data_,
-          &uncompressed_size, &decompressed_buffer));
+      RETURN_IF_ERROR(decompressor_->ProcessBlock32(true,
+          current_page_header_.compressed_page_size, data_, &uncompressed_size,
+          &decompressed_buffer));
       VLOG_FILE << "Decompressed " << current_page_header_.compressed_page_size
                 << " to " << uncompressed_size;
       DCHECK_EQ(current_page_header_.uncompressed_page_size, uncompressed_size);
@@ -715,7 +769,7 @@ Status HdfsParquetScanner::ProcessSplit() {
     // Attach any resources and clear the streams before starting a new row group. These
     // streams could either be just the footer stream or streams for the previous row
     // group.
-    context_->AttachCompletedResources(batch_, /* done */ true);
+    context_->ReleaseCompletedResources(batch_, /* done */ true);
     // Commit the rows to flush the row batch from the previous row group
     CommitRows(0);
 
@@ -759,7 +813,7 @@ Status HdfsParquetScanner::AssembleRows(int row_group_idx) {
             // are reading.
             DCHECK(c == 0 || !parse_status_.ok())
               << "c=" << c << " " << parse_status_.GetErrorMsg();;
-            COUNTER_UPDATE(scan_node_->rows_read_counter(), i);
+            COUNTER_ADD(scan_node_->rows_read_counter(), i);
             RETURN_IF_ERROR(CommitRows(num_to_commit));
 
             // If we reach this point, it means that we reached the end of file for
@@ -784,7 +838,7 @@ Status HdfsParquetScanner::AssembleRows(int row_group_idx) {
         }
         if (conjuncts_failed) continue;
         row->SetTuple(scan_node_->tuple_idx(), tuple);
-        if (ExecNode::EvalConjuncts(&(*conjuncts_)[0], num_conjuncts_, row)) {
+        if (EvalConjuncts(row)) {
           row = next_row(row);
           tuple = next_tuple(tuple);
           ++num_to_commit;
@@ -797,7 +851,7 @@ Status HdfsParquetScanner::AssembleRows(int row_group_idx) {
       DCHECK_GT(num_rows, 0);
       InitTuple(template_tuple_, tuple);
       row->SetTuple(scan_node_->tuple_idx(), tuple);
-      if (ExecNode::EvalConjuncts(&(*conjuncts_)[0], num_conjuncts_, row)) {
+      if (EvalConjuncts(row)) {
         row = next_row(row);
         tuple = next_tuple(tuple);
 
@@ -811,7 +865,7 @@ Status HdfsParquetScanner::AssembleRows(int row_group_idx) {
       }
     }
     rows_read += num_rows;
-    COUNTER_UPDATE(scan_node_->rows_read_counter(), num_rows);
+    COUNTER_ADD(scan_node_->rows_read_counter(), num_rows);
     RETURN_IF_ERROR(CommitRows(num_to_commit));
 
     reached_limit = scan_node_->ReachedLimit();
@@ -852,7 +906,7 @@ Status HdfsParquetScanner::ProcessFooter(bool* eosr) {
   *eosr = false;
 
   uint8_t* buffer;
-  int len;
+  int64_t len;
 
   RETURN_IF_ERROR(stream_->GetBuffer(false, &buffer, &len));
   DCHECK(stream_->eosr());
@@ -912,7 +966,8 @@ Status HdfsParquetScanner::ProcessFooter(bool* eosr) {
       int to_read = ::min(io_mgr->max_read_buffer_size(), metadata_bytes_to_read);
       DiskIoMgr::ScanRange* range = scan_node_->AllocateScanRange(
           metadata_range_->file(), to_read, metadata_start + copy_offset, -1,
-          metadata_range_->disk_id(), metadata_range_->try_cache());
+          metadata_range_->disk_id(), metadata_range_->try_cache(),
+          metadata_range_->expected_local());
 
       DiskIoMgr::BufferDescriptor* io_buffer = NULL;
       RETURN_IF_ERROR(io_mgr->Read(scan_node_->reader_context(), range, &io_buffer));
@@ -945,7 +1000,7 @@ Status HdfsParquetScanner::ProcessFooter(bool* eosr) {
     // No materialized columns.  We can serve this query from just the metadata.  We
     // don't need to read the column data.
     int64_t num_tuples = file_metadata_.num_rows;
-    COUNTER_UPDATE(scan_node_->rows_read_counter(), num_tuples);
+    COUNTER_ADD(scan_node_->rows_read_counter(), num_tuples);
 
     while (num_tuples > 0) {
       MemPool* pool;
@@ -1032,7 +1087,7 @@ Status HdfsParquetScanner::InitColumns(int row_group_idx) {
       // The Parquet MR writer had a bug in 1.2.8 and below where it didn't include the
       // dictionary page header size in total_compressed_size and total_uncompressed_size
       // (see IMPALA-694). We pad col_len to compensate.
-      col_len += MAX_PAGE_HEADER_SIZE;
+      col_len += MAX_DICT_HEADER_SIZE;
     }
 
     // TODO: this will need to change when we have co-located files and the columns
@@ -1043,7 +1098,8 @@ Status HdfsParquetScanner::InitColumns(int row_group_idx) {
 
     DiskIoMgr::ScanRange* col_range = scan_node_->AllocateScanRange(
         metadata_range_->file(), col_len, col_start, file_col_idx,
-        metadata_range_->disk_id(), metadata_range_->try_cache());
+        metadata_range_->disk_id(), metadata_range_->try_cache(),
+        metadata_range_->expected_local());
     col_ranges.push_back(col_range);
 
     // Get the stream that will be used for this column
@@ -1053,7 +1109,7 @@ Status HdfsParquetScanner::InitColumns(int row_group_idx) {
     RETURN_IF_ERROR(column_readers_[i]->Reset(&schema_element,
         &col_chunk.meta_data, stream));
 
-    if (scan_node_->materialized_slots()[i]->type().type != TYPE_STRING ||
+    if (!scan_node_->materialized_slots()[i]->type().IsStringType() ||
         col_chunk.meta_data.codec != parquet::CompressionCodec::UNCOMPRESSED) {
       // Non-string types are always compact.  Compressed columns don't reference data
       // in the io buffers after tuple materialization.  In both cases, we can set compact

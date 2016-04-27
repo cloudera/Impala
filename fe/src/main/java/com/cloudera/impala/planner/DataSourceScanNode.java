@@ -23,10 +23,9 @@ import com.cloudera.impala.analysis.Analyzer;
 import com.cloudera.impala.analysis.BinaryPredicate;
 import com.cloudera.impala.analysis.BoolLiteral;
 import com.cloudera.impala.analysis.CompoundPredicate;
-import com.cloudera.impala.analysis.DecimalLiteral;
 import com.cloudera.impala.analysis.Expr;
-import com.cloudera.impala.analysis.IntLiteral;
 import com.cloudera.impala.analysis.LiteralExpr;
+import com.cloudera.impala.analysis.NumericLiteral;
 import com.cloudera.impala.analysis.SlotRef;
 import com.cloudera.impala.analysis.StringLiteral;
 import com.cloudera.impala.analysis.TupleDescriptor;
@@ -44,9 +43,9 @@ import com.cloudera.impala.thrift.TCacheJarResult;
 import com.cloudera.impala.thrift.TColumnValue;
 import com.cloudera.impala.thrift.TDataSourceScanNode;
 import com.cloudera.impala.thrift.TExplainLevel;
+import com.cloudera.impala.thrift.TNetworkAddress;
 import com.cloudera.impala.thrift.TPlanNode;
 import com.cloudera.impala.thrift.TPlanNodeType;
-import com.cloudera.impala.thrift.TPrimitiveType;
 import com.cloudera.impala.thrift.TQueryOptions;
 import com.cloudera.impala.thrift.TScanRange;
 import com.cloudera.impala.thrift.TScanRangeLocation;
@@ -91,14 +90,13 @@ public class DataSourceScanNode extends ScanNode {
   @Override
   public void init(Analyzer analyzer) throws InternalException {
     assignConjuncts(analyzer);
-    analyzer.enforceSlotEquivalences(tupleIds_.get(0), conjuncts_);
+    analyzer.createEquivConjuncts(tupleIds_.get(0), conjuncts_);
     prepareDataSource();
     computeStats(analyzer);
-
     // materialize slots in remaining conjuncts_
     analyzer.materializeSlots(conjuncts_);
-
     computeMemLayout(analyzer);
+    computeScanRangeLocations(analyzer);
   }
 
   /**
@@ -106,32 +104,35 @@ public class DataSourceScanNode extends ScanNode {
    * predicate, or null if the type cannot be represented.
    */
   public static TColumnValue literalToColumnValue(LiteralExpr expr) {
-    TPrimitiveType colType = expr.getType().toThrift().getType();
-    switch (colType) {
-    case BOOLEAN:
-      return new TColumnValue().setBool_val(((BoolLiteral) expr).getValue());
-    case TINYINT:
-      return new TColumnValue().setByte_val((byte) ((IntLiteral) expr).getValue());
-    case SMALLINT:
-      return new TColumnValue().setShort_val((short) ((IntLiteral) expr).getValue());
-    case INT:
-      return new TColumnValue().setInt_val((int) ((IntLiteral) expr).getValue());
-    case BIGINT:
-      return new TColumnValue().setLong_val(((IntLiteral) expr).getValue());
-    case FLOAT:
-    case DOUBLE:
-      return new TColumnValue().setDouble_val(((DecimalLiteral) expr).getDoubleValue());
-    case STRING:
-      return new TColumnValue().setString_val(((StringLiteral) expr).getValue());
-    case DECIMAL:
-    case DATE:
-    case DATETIME:
-    case TIMESTAMP:
-      // TODO: we support DECIMAL and TIMESTAMP but no way to specify it in SQL.
-      return null;
-    default:
-      Preconditions.checkState(false);
-      return null;
+    switch (expr.getType().getPrimitiveType()) {
+      case BOOLEAN:
+        return new TColumnValue().setBool_val(((BoolLiteral) expr).getValue());
+      case TINYINT:
+        return new TColumnValue().setByte_val(
+            (byte) ((NumericLiteral) expr).getLongValue());
+      case SMALLINT:
+        return new TColumnValue().setShort_val(
+            (short) ((NumericLiteral) expr).getLongValue());
+      case INT:
+        return new TColumnValue().setInt_val(
+            (int) ((NumericLiteral) expr).getLongValue());
+      case BIGINT:
+        return new TColumnValue().setLong_val(((NumericLiteral) expr).getLongValue());
+      case FLOAT:
+      case DOUBLE:
+        return new TColumnValue().setDouble_val(
+            ((NumericLiteral) expr).getDoubleValue());
+      case STRING:
+        return new TColumnValue().setString_val(((StringLiteral) expr).getValue());
+      case DECIMAL:
+      case DATE:
+      case DATETIME:
+      case TIMESTAMP:
+        // TODO: we support DECIMAL and TIMESTAMP but no way to specify it in SQL.
+        return null;
+      default:
+        Preconditions.checkState(false);
+        return null;
     }
   }
 
@@ -255,6 +256,7 @@ public class DataSourceScanNode extends ScanNode {
   @Override
   public void computeStats(Analyzer analyzer) {
     super.computeStats(analyzer);
+    inputCardinality_ = numRowsEstimate_;
     cardinality_ = numRowsEstimate_;
     cardinality_ *= computeSelectivity();
     cardinality_ = Math.max(0, cardinality_);
@@ -305,14 +307,16 @@ public class DataSourceScanNode extends ScanNode {
         table_.getDataSource(), table_.getInitString(), acceptedPredicates_);
   }
 
-  @Override
-  public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
-    // Always returns a single scan range for the localhost
+  /**
+   * Create a single scan range for the localhost.
+   */
+  private void computeScanRangeLocations(Analyzer analyzer) {
     // TODO: Does the port matter?
-    return Lists.newArrayList(
-        new TScanRangeLocations(new TScanRange(),
-        Lists.newArrayList(
-            new TScanRangeLocation(addressToTNetworkAddress("localhost:12345")))));
+    TNetworkAddress networkAddress = addressToTNetworkAddress("localhost:12345");
+    Integer hostIndex = analyzer.getHostIndex().getIndex(networkAddress);
+    scanRanges_ = Lists.newArrayList(
+        new TScanRangeLocations(
+            new TScanRange(), Lists.newArrayList(new TScanRangeLocation(hostIndex))));
   }
 
   @Override

@@ -24,11 +24,13 @@ import org.apache.hadoop.fs.Path;
 import org.junit.Test;
 
 import com.cloudera.impala.catalog.CatalogException;
-import com.cloudera.impala.catalog.ColumnType;
 import com.cloudera.impala.catalog.DataSource;
 import com.cloudera.impala.catalog.DataSourceTable;
 import com.cloudera.impala.catalog.PrimitiveType;
+import com.cloudera.impala.catalog.ScalarType;
+import com.cloudera.impala.catalog.Type;
 import com.cloudera.impala.common.AnalysisException;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 
 public class AnalyzeDDLTest extends AnalyzerTest {
@@ -156,8 +158,10 @@ public class AnalyzeDDLTest extends AnalyzerTest {
   public void TestAlterTableAddReplaceColumns() throws AnalysisException {
     AnalyzesOk("alter table functional.alltypes add columns (new_col int)");
     AnalyzesOk("alter table functional.alltypes add columns (c1 string comment 'hi')");
+    AnalyzesOk("alter table functional.alltypes add columns (c struct<f1:int>)");
     AnalyzesOk(
         "alter table functional.alltypes replace columns (c1 int comment 'c', c2 int)");
+    AnalyzesOk("alter table functional.alltypes replace columns (c array<string>)");
 
     // Column name must be unique for add
     AnalysisError("alter table functional.alltypes add columns (int_col int)",
@@ -167,9 +171,9 @@ public class AnalyzeDDLTest extends AnalyzerTest {
         "Column name conflicts with existing partition column: year");
     // Invalid column name.
     AnalysisError("alter table functional.alltypes add columns (`???` int)",
-        "Invalid column name: ???");
+        "Invalid column/field name: ???");
     AnalysisError("alter table functional.alltypes replace columns (`???` int)",
-        "Invalid column name: ???");
+        "Invalid column/field name: ???");
 
     // Replace should not throw an error if the column already exists
     AnalyzesOk("alter table functional.alltypes replace columns (int_col int)");
@@ -244,6 +248,8 @@ public class AnalyzeDDLTest extends AnalyzerTest {
     AnalyzesOk("alter table functional.alltypes change column int_col int_col2 int");
     // Rename and change the datatype
     AnalyzesOk("alter table functional.alltypes change column int_col c2 string");
+    AnalyzesOk(
+        "alter table functional.alltypes change column int_col c2 map<int, string>");
     // Change only the datatype
     AnalyzesOk("alter table functional.alltypes change column int_col int_col tinyint");
     // Add a comment to a column.
@@ -261,7 +267,7 @@ public class AnalyzeDDLTest extends AnalyzerTest {
 
     // Invalid column name.
     AnalysisError("alter table functional.alltypes change column int_col `???` int",
-        "Invalid column name: ???");
+        "Invalid column/field name: ???");
 
     // Table/Db does not exist
     AnalysisError("alter table db_does_not_exist.alltypes change c1 c2 int",
@@ -517,7 +523,7 @@ public class AnalyzeDDLTest extends AnalyzerTest {
         "Duplicate column name: id");
     // Invalid column name.
     AnalysisError("alter view functional.alltypes_view as select 'abc' as `???`",
-        "Invalid column name: ???");
+        "Invalid column/field name: ???");
   }
 
   @Test
@@ -549,27 +555,30 @@ public class AnalyzeDDLTest extends AnalyzerTest {
         "ALTER VIEW not allowed on a table: functional.alltypes");
   }
 
+  void checkComputeStatsStmt(String stmt) throws AnalysisException {
+    ParseNode parseNode = AnalyzesOk(stmt);
+    assertTrue(parseNode instanceof ComputeStatsStmt);
+    ComputeStatsStmt parsedStmt = (ComputeStatsStmt)parseNode;
+    AnalyzesOk(parsedStmt.getTblStatsQuery());
+    AnalyzesOk(parsedStmt.getColStatsQuery());
+  }
+
   @Test
   public void TestComputeStats() throws AnalysisException {
     // Analyze the stmt itself as well as the generated child queries.
-    ParseNode parseNode = AnalyzesOk("compute stats functional.alltypes");
-    assertTrue(parseNode instanceof ComputeStatsStmt);
-    ComputeStatsStmt stmt = (ComputeStatsStmt) parseNode;
-    AnalyzesOk(stmt.getTblStatsQuery());
-    AnalyzesOk(stmt.getColStatsQuery());
+    checkComputeStatsStmt("compute stats functional.alltypes");
 
-    parseNode = AnalyzesOk("compute stats functional_hbase.alltypes");
-    assertTrue(parseNode instanceof ComputeStatsStmt);
-    stmt = (ComputeStatsStmt) parseNode;
-    AnalyzesOk(stmt.getTblStatsQuery());
-    AnalyzesOk(stmt.getColStatsQuery());
+    checkComputeStatsStmt("compute stats functional_hbase.alltypes");
+
+    // Test that complex-typed columns are ignored.
+    checkComputeStatsStmt("compute stats functional.allcomplextypes");
 
     // Cannot compute stats on a database.
     AnalysisError("compute stats tbl_does_not_exist",
         "Table does not exist: default.tbl_does_not_exist");
     // Cannot compute stats on a view.
     AnalysisError("compute stats functional.alltypes_view",
-        "COMPUTE STATS not allowed on a view: functional.alltypes_view");
+        "COMPUTE STATS not supported for view functional.alltypes_view");
 
     AnalyzesOk("compute stats functional_avro_snap.alltypes");
     // Test mismatched column definitions and Avro schema (HIVE-6308, IMPALA-867).
@@ -583,20 +592,78 @@ public class AnalyzeDDLTest extends AnalyzerTest {
     // Extra column definition is ok because the schema mismatch is resolved
     // in the CREATE TABLE.
     AnalyzesOk("compute stats functional_avro_snap.alltypes_extra_coldef");
-    // Mismatched column name.
+    // Mismatched column name (tables were created by Hive).
     AnalysisError("compute stats functional_avro_snap.schema_resolution_test",
         "Cannot COMPUTE STATS on Avro table 'schema_resolution_test' because its " +
             "column definitions do not match those in the Avro schema.\nDefinition of " +
             "column 'col1' of type 'string' does not match the Avro-schema column " +
             "'boolean1' of type 'BOOLEAN' at position '0'.\nPlease re-create the table " +
             "with column definitions, e.g., using the result of 'SHOW CREATE TABLE'");
-    // No column definitions were given at all. This case is broken in Hive (HIVE-6308).
+    // No column definitions were given at all. This case is broken in Hive (HIVE-6308),
+    // but works when such a table is created through Impala.
     AnalysisError("compute stats functional_avro_snap.alltypes_no_coldef",
         "Cannot COMPUTE STATS on Avro table 'alltypes_no_coldef' because its column " +
             "definitions do not match those in the Avro schema.\nMissing column " +
             "definition corresponding to Avro-schema column 'id' of type 'INT' at " +
             "position '0'.\nPlease re-create the table with column definitions, e.g., " +
             "using the result of 'SHOW CREATE TABLE'");
+  }
+
+  @Test
+  public void TestComputeIncrementalStats() throws AnalysisException {
+    checkComputeStatsStmt("compute incremental stats functional.alltypes");
+    checkComputeStatsStmt(
+        "compute incremental stats functional.alltypes partition(year=2010, month=10)");
+
+    AnalysisError(
+        "compute incremental stats functional.alltypes partition(year=9999, month=10)",
+        "Partition spec does not exist: (year=9999, month=10)");
+    AnalysisError(
+        "compute incremental stats functional.alltypes partition(year=2010)",
+        "Items in partition spec must exactly match the partition columns in the table " +
+        "definition: functional.alltypes (1 vs 2)");
+    AnalysisError(
+        "compute incremental stats functional.alltypes partition(year=2010, month)",
+        "Syntax error");
+
+    // Test that NULL partitions generates a valid query
+    checkComputeStatsStmt("compute incremental stats functional.alltypesagg " +
+        "partition(year=2010, month=1, day=NULL)");
+
+    AnalysisError("compute incremental stats functional_hbase.alltypes " +
+        "partition(year=2010, month=1)", "COMPUTE INCREMENTAL ... PARTITION not " +
+        "supported for non-HDFS table functional_hbase.alltypes");
+
+    AnalysisError("compute incremental stats functional.view_view",
+        "COMPUTE STATS not supported for view functional.view_view");
+  }
+
+
+  @Test
+  public void TestDropIncrementalStats() throws AnalysisException {
+    AnalyzesOk(
+        "drop incremental stats functional.alltypes partition(year=2010, month=10)");
+    AnalysisError(
+        "drop incremental stats functional.alltypes partition(year=9999, month=10)",
+        "Partition spec does not exist: (year=9999, month=10)");
+  }
+
+
+  @Test
+  public void TestDropStats() throws AnalysisException {
+    AnalyzesOk("drop stats functional.alltypes");
+
+    // Table does not exist
+    AnalysisError("drop stats tbl_does_not_exist",
+        "Table does not exist: default.tbl_does_not_exist");
+    // Database does not exist
+    AnalysisError("drop stats no_db.no_tbl",
+        "Database does not exist: no_db");
+
+    AnalysisError("drop stats functional.alltypes partition(year=2010, month=10)",
+        "Syntax error");
+    AnalysisError("drop stats functional.alltypes partition(year, month)",
+        "Syntax error");
   }
 
   @Test
@@ -650,27 +717,31 @@ public class AnalyzeDDLTest extends AnalyzerTest {
   @Test
   public void TestCreateDataSource() {
     final String DATA_SOURCE_NAME = "TestDataSource1";
-    final DataSource DATA_SOURCE = new DataSource(DATA_SOURCE_NAME, new Path("/foo.jar"),
+    final DataSource DATA_SOURCE = new DataSource(DATA_SOURCE_NAME, "/foo.jar",
         "foo.Bar", "V1");
     catalog_.addDataSource(DATA_SOURCE);
-    AnalyzesOk("CREATE DATASOURCE IF NOT EXISTS " + DATA_SOURCE_NAME +
+    AnalyzesOk("CREATE DATA SOURCE IF NOT EXISTS " + DATA_SOURCE_NAME +
         " LOCATION '/foo.jar' CLASS 'foo.Bar' API_VERSION 'V1'");
-    AnalyzesOk("CREATE DATASOURCE IF NOT EXISTS " + DATA_SOURCE_NAME.toLowerCase() +
+    AnalyzesOk("CREATE DATA SOURCE IF NOT EXISTS " + DATA_SOURCE_NAME.toLowerCase() +
         " LOCATION '/foo.jar' CLASS 'foo.Bar' API_VERSION 'V1'");
-    AnalyzesOk("CREATE DATASOURCE foo LOCATION '/' CLASS '' API_VERSION 'v1'");
-    AnalyzesOk("CREATE DATASOURCE foo LOCATION '/foo.jar' CLASS 'com.bar.Foo' " +
+    AnalyzesOk("CREATE DATA SOURCE IF NOT EXISTS " + DATA_SOURCE_NAME +
+        " LOCATION 'hdfs://localhost:20500/foo.jar' CLASS 'foo.Bar' API_VERSION 'V1'");
+    AnalyzesOk("CREATE DATA SOURCE foo LOCATION '/' CLASS '' API_VERSION 'v1'");
+    AnalyzesOk("CREATE DATA SOURCE foo LOCATION '/foo.jar' CLASS 'com.bar.Foo' " +
         "API_VERSION 'V1'");
-    AnalyzesOk("CREATE DATASOURCE foo LOCATION '/FOO.jar' CLASS 'COM.BAR.FOO' " +
+    AnalyzesOk("CREATE DATA SOURCE foo LOCATION '/FOO.jar' CLASS 'COM.BAR.FOO' " +
         "API_VERSION 'v1'");
-    AnalyzesOk("CREATE DATASOURCE foo LOCATION \"/foo.jar\" CLASS \"com.bar.Foo\" " +
+    AnalyzesOk("CREATE DATA SOURCE foo LOCATION \"/foo.jar\" CLASS \"com.bar.Foo\" " +
         "API_VERSION \"V1\"");
-    AnalyzesOk("CREATE DATASOURCE foo LOCATION '/x/foo@hi_^!#.jar' " +
+    AnalyzesOk("CREATE DATA SOURCE foo LOCATION '/x/foo@hi_^!#.jar' " +
+        "CLASS 'com.bar.Foo' API_VERSION 'V1'");
+    AnalyzesOk("CREATE DATA SOURCE foo LOCATION 'hdfs://localhost:20500/a/b/foo.jar' " +
         "CLASS 'com.bar.Foo' API_VERSION 'V1'");
 
-    AnalysisError("CREATE DATASOURCE " + DATA_SOURCE_NAME + " LOCATION '/foo.jar' " +
+    AnalysisError("CREATE DATA SOURCE " + DATA_SOURCE_NAME + " LOCATION '/foo.jar' " +
         "CLASS 'foo.Bar' API_VERSION 'V1'",
         "Data source already exists: " + DATA_SOURCE_NAME.toLowerCase());
-    AnalysisError("CREATE DATASOURCE foo LOCATION '/foo.jar' " +
+    AnalysisError("CREATE DATA SOURCE foo LOCATION '/foo.jar' " +
         "CLASS 'foo.Bar' API_VERSION 'V2'", "Invalid API version: 'V2'");
   }
 
@@ -800,12 +871,16 @@ public class AnalyzeDDLTest extends AnalyzerTest {
     AnalysisError("create table foo stored as RCFILE as select 1",
         "CREATE TABLE AS SELECT does not support (RCFILE) file format. " +
          "Supported formats are: (PARQUET, TEXTFILE)");
+
+    // CTAS with a WITH clause and inline view (IMPALA-1100)
+    AnalyzesOk("create table test_with as with with_1 as (select 1 as int_col from " +
+        "functional.alltypes as t1 right join (select 1 as int_col from " +
+        "functional.alltypestiny as t1) as t2 on t2.int_col = t1.int_col) " +
+        "select * from with_1 limit 10");
   }
 
   @Test
-  public void TestCreateTable() throws AnalysisException {
-    AnalyzesOk("create table functional.new_table (i int)");
-    AnalyzesOk("create table if not exists functional.alltypes (i int)");
+  public void TestCreateTableLike() throws AnalysisException {
     AnalyzesOk("create table if not exists functional.new_tbl like functional.alltypes");
     AnalyzesOk("create table functional.like_view like functional.view_view");
     AnalyzesOk(
@@ -816,6 +891,31 @@ public class AnalyzeDDLTest extends AnalyzerTest {
         "Table does not exist: functional.tbl_does_not_exist");
     AnalysisError("create table functional.new_table like db_does_not_exist.alltypes",
         "Database does not exist: db_does_not_exist");
+    // Invalid database name.
+    AnalysisError("create table `???`.new_table like functional.alltypes",
+        "Invalid database name: ???");
+    // Invalid table/view name.
+    AnalysisError("create table functional.`^&*` like functional.alltypes",
+        "Invalid table/view name: ^&*");
+    // Invalid source database/table name reports non-existence instead of invalidity.
+    AnalysisError("create table functional.foo like `???`.alltypes",
+        "Database does not exist: ???");
+    AnalysisError("create table functional.foo like functional.`%^&`",
+        "Table does not exist: functional.%^&");
+    // Invalid URI values.
+    AnalysisError("create table functional.bar like functional.alltypes location " +
+        "'file://test-warehouse/new_table'", "URI location " +
+        "'file://test-warehouse/new_table' must point to an HDFS file system.");
+    AnalysisError("create table functional.baz like functional.alltypes location '  '",
+        "URI path cannot be empty.");
+  }
+
+  @Test
+  public void TestCreateTable() throws AnalysisException {
+    AnalyzesOk("create table functional.new_table (i int)");
+    AnalyzesOk("create table if not exists functional.alltypes (i int)");
+    AnalysisError("create table functional.alltypes",
+        "Table already exists: functional.alltypes");
     AnalysisError("create table functional.alltypes (i int)",
         "Table already exists: functional.alltypes");
     AnalyzesOk("create table functional.new_table (i int) row format delimited fields " +
@@ -824,14 +924,33 @@ public class AnalyzeDDLTest extends AnalyzerTest {
     AnalyzesOk("create table new_table (i int) PARTITIONED BY (d decimal)");
     AnalyzesOk("create table new_table (i int) PARTITIONED BY (d decimal(3,1))");
     AnalyzesOk("create table new_table(d1 decimal, d2 decimal(10), d3 decimal(5, 2))");
-    AnalysisError("create table new_table(d1 decimal(1,10))",
-        "Decimal scale (10) must be <= precision (1).");
-    AnalysisError("create table new_table(d1 decimal(0,0))",
-        "Decimal precision must be greater than 0.");
-    AnalysisError("create table new_table(d1 decimal(49,0))",
-        "Decimal precision must be <= 38.");
     AnalysisError("create table new_table (i int) PARTITIONED BY (d decimal(40,1))",
         "Decimal precision must be <= 38.");
+
+    AnalyzesOk("create table new_table(s1 varchar(1), s2 varchar(32672))");
+    AnalysisError("create table new_table(s1 varchar(0))",
+        "Varchar size must be > 0. Size is too small: 0.");
+    AnalysisError("create table new_table(s1 varchar(65356))",
+        "Varchar size must be <= 65355. Size is too large: 65356.");
+    AnalysisError("create table new_table(s1 char(0))",
+        "Char size must be > 0. Size is too small: 0.");
+    AnalysisError("create table new_table(s1 Char(256))",
+        "Char size must be <= 255. Size is too large: 256.");
+    AnalyzesOk("create table new_table (i int) PARTITIONED BY (s varchar(3))");
+    AnalyzesOk("create table functional.new_table (c char(250))");
+    AnalyzesOk("create table new_table (i int) PARTITIONED BY (c char(3))");
+
+    // Supported file formats. Exclude Avro since it is tested separately.
+    String [] fileFormats =
+        {"TEXTFILE", "SEQUENCEFILE", "PARQUET", "PARQUETFILE", "RCFILE"};
+    for (String format: fileFormats) {
+      AnalyzesOk(String.format("create table new_table (i int) " +
+          "partitioned by (d decimal) comment 'c' stored as %s", format));
+      // No column definitions.
+      AnalysisError(String.format("create table new_table " +
+          "partitioned by (d decimal) comment 'c' stored as %s", format),
+          "Table requires at least 1 column");
+    }
 
     // Note: Backslashes need to be escaped twice - once for Java and once for Impala.
     // For example, if this were a real query the value '\' would be stored in the
@@ -881,6 +1000,9 @@ public class AnalyzeDDLTest extends AnalyzerTest {
     AnalysisError("create table new_table (i int) PARTITIONED BY (d datetime)",
         "Type 'DATETIME' is not supported as partition-column type in column: d");
 
+    AnalysisError("create table cached_tbl(i int) partitioned by(j int) " +
+        "cached in 'testPool'", "HDFS caching is not supported on CDH4");
+
     // Caching ops
     AnalysisError("create table cached_tbl(i int) partitioned by(j int) " +
         "cached in 'testPool'", "HDFS caching is not supported on CDH4");
@@ -901,46 +1023,47 @@ public class AnalyzeDDLTest extends AnalyzerTest {
         "Invalid table/view name: ^&*");
     // Invalid column names.
     AnalysisError("create table new_table (`???` int) PARTITIONED BY (i int)",
-        "Invalid column name: ???");
+        "Invalid column/field name: ???");
     AnalysisError("create table new_table (i int) PARTITIONED BY (`^&*` int)",
-        "Invalid column name: ^&*");
-    // Invalid source database/table name reports non-existence instead of invalidity.
-    AnalysisError("create table functional.foo like `???`.alltypes",
-        "Database does not exist: ???");
-    AnalysisError("create table functional.foo like functional.`%^&`",
-        "Table does not exist: functional.%^&");
+        "Invalid column/field name: ^&*");
 
     // Invalid URI values.
+    AnalysisError("create table functional.foo (x int) location " +
+        "'file://test-warehouse/new_table'", "URI location " +
+        "'file://test-warehouse/new_table' must point to an HDFS file system.");
+    AnalysisError("create table functional.foo (x int) location " +
+        "'  '", "URI path cannot be empty.");
     AnalysisError("ALTER TABLE functional_seq_snap.alltypes SET LOCATION " +
         "'file://test-warehouse/new_table'", "URI location " +
         "'file://test-warehouse/new_table' must point to an HDFS file system.");
     AnalysisError("ALTER TABLE functional_seq_snap.alltypes SET LOCATION " +
         "'  '", "URI path cannot be empty.");
 
-    // Create table PRODUCED BY DATASOURCE
+    // Create table PRODUCED BY DATA SOURCE
     final String DATA_SOURCE_NAME = "TestDataSource1";
-    catalog_.addDataSource(new DataSource(DATA_SOURCE_NAME, new Path("/foo.jar"),
+    catalog_.addDataSource(new DataSource(DATA_SOURCE_NAME, "/foo.jar",
         "foo.Bar", "V1"));
-    AnalyzesOk("CREATE TABLE DataSrcTable1 (x int) PRODUCED BY DATASOURCE " +
+    AnalyzesOk("CREATE TABLE DataSrcTable1 (x int) PRODUCED BY DATA SOURCE " +
         DATA_SOURCE_NAME);
-    AnalyzesOk("CREATE TABLE DataSrcTable1 (x int) PRODUCED BY DATASOURCE " +
+    AnalyzesOk("CREATE TABLE DataSrcTable1 (x int) PRODUCED BY DATA SOURCE " +
         DATA_SOURCE_NAME.toLowerCase());
-    AnalyzesOk("CREATE TABLE DataSrcTable1 (x int) PRODUCED BY DATASOURCE " +
+    AnalyzesOk("CREATE TABLE DataSrcTable1 (x int) PRODUCED BY DATA SOURCE " +
         DATA_SOURCE_NAME + "(\"\")");
     AnalyzesOk("CREATE TABLE DataSrcTable1 (a tinyint, b smallint, c int, d bigint, " +
-        "e float, f double, g boolean, h string) PRODUCED BY DATASOURCE " +
+        "e float, f double, g boolean, h string) PRODUCED BY DATA SOURCE " +
         DATA_SOURCE_NAME);
-    AnalysisError("CREATE TABLE DataSrcTable1 (x int) PRODUCED BY DATASOURCE " +
+    AnalysisError("CREATE TABLE DataSrcTable1 (x int) PRODUCED BY DATA SOURCE " +
         "not_a_data_src(\"\")", "Data source does not exist");
-    for (ColumnType columnType: ColumnType.getSupportedTypes()) {
-      PrimitiveType type = columnType.getPrimitiveType();
-      if (DataSourceTable.isSupportedPrimitiveType(type) || columnType.isNull()) continue;
+    for (Type t: Type.getSupportedTypes()) {
+      PrimitiveType type = t.getPrimitiveType();
+      if (DataSourceTable.isSupportedPrimitiveType(type) || t.isNull()) continue;
       String typeSpec = type.name();
-      if (type == PrimitiveType.CHAR || type == PrimitiveType.DECIMAL) {
+      if (type == PrimitiveType.CHAR || type == PrimitiveType.DECIMAL ||
+          type == PrimitiveType.VARCHAR) {
         typeSpec += "(10)";
       }
       AnalysisError("CREATE TABLE DataSrcTable1 (x " + typeSpec + ") PRODUCED " +
-          "BY DATASOURCE " + DATA_SOURCE_NAME,
+          "BY DATA SOURCE " + DATA_SOURCE_NAME,
           "Tables produced by an external data source do not support the column type: " +
           type.name());
     }
@@ -948,22 +1071,87 @@ public class AnalyzeDDLTest extends AnalyzerTest {
 
   @Test
   public void TestCreateAvroTest() {
-    // Analysis of Avro schemas
-    AnalyzesOk("create table foo_avro (i int) with serdeproperties ('avro.schema.url'=" +
-        "'hdfs://localhost:20500/test-warehouse/avro_schemas/functional/" +
-        "alltypes.json') stored as avro");
-    AnalyzesOk("create table foo_avro (i int) stored as avro tblproperties " +
-        "('avro.schema.url'='hdfs://localhost:20500/test-warehouse/avro_schemas/" +
-        "functional/alltypes.json')");
-    AnalyzesOk("create table foo_avro (i int) stored as avro tblproperties " +
+    String alltypesSchemaLoc =
+        "hdfs:///test-warehouse/avro_schemas/functional/alltypes.json";
+
+    // Analysis of Avro schemas. Column definitions match the Avro schema exactly.
+    // Note: Avro does not have a tinyint and smallint type.
+    AnalyzesOk(String.format(
+        "create table foo_avro (id int, bool_col boolean, tinyint_col int, " +
+        "smallint_col int, int_col int, bigint_col bigint, float_col float," +
+        "double_col double, date_string_col string, string_col string, " +
+        "timestamp_col timestamp) with serdeproperties ('avro.schema.url'='%s')" +
+        "stored as avro", alltypesSchemaLoc));
+    AnalyzesOk(String.format(
+        "create table foo_avro (id int, bool_col boolean, tinyint_col int, " +
+        "smallint_col int, int_col int, bigint_col bigint, float_col float," +
+        "double_col double, date_string_col string, string_col string, " +
+        "timestamp_col timestamp) stored as avro tblproperties ('avro.schema.url'='%s')",
+        alltypesSchemaLoc));
+    AnalyzesOk("create table foo_avro (string1 string) stored as avro tblproperties " +
         "('avro.schema.literal'='{\"name\": \"my_record\", \"type\": \"record\", " +
         "\"fields\": [{\"name\": \"string1\", \"type\": \"string\"}]}')");
+
+    // No column definitions.
+    AnalyzesOk(String.format(
+        "create table foo_avro with serdeproperties ('avro.schema.url'='%s')" +
+        "stored as avro", alltypesSchemaLoc));
+    AnalyzesOk(String.format(
+        "create table foo_avro stored as avro tblproperties ('avro.schema.url'='%s')",
+        alltypesSchemaLoc));
+    AnalyzesOk("create table foo_avro stored as avro tblproperties " +
+        "('avro.schema.literal'='{\"name\": \"my_record\", \"type\": \"record\", " +
+        "\"fields\": [{\"name\": \"string1\", \"type\": \"string\"}]}')");
+
+    // Analysis of Avro schemas. Column definitions do not match Avro schema.
+    AnalyzesOk(String.format(
+        "create table foo_avro (id int) with serdeproperties ('avro.schema.url'='%s')" +
+        "stored as avro", alltypesSchemaLoc),
+        "Ignoring column definitions in favor of Avro schema.\n" +
+        "The Avro schema has 11 column(s) but 1 column definition(s) were given.");
+    AnalyzesOk(String.format(
+        "create table foo_avro (bool_col boolean, string_col string) " +
+        "stored as avro tblproperties ('avro.schema.url'='%s')",
+        alltypesSchemaLoc),
+        "Ignoring column definitions in favor of Avro schema.\n" +
+        "The Avro schema has 11 column(s) but 2 column definition(s) were given.");
+    AnalyzesOk("create table foo_avro (string1 string) stored as avro tblproperties " +
+        "('avro.schema.literal'='{\"name\": \"my_record\", \"type\": \"record\", " +
+        "\"fields\": [{\"name\": \"string1\", \"type\": \"string\"}," +
+        "{\"name\": \"string2\", \"type\": \"string\"}]}')",
+        "Ignoring column definitions in favor of Avro schema.\n" +
+        "The Avro schema has 2 column(s) but 1 column definition(s) were given.");
+    // Mismatched name.
+    AnalyzesOk(String.format(
+        "create table foo_avro (id int, bool_col boolean, tinyint_col int, " +
+        "smallint_col int, bad_int_col int, bigint_col bigint, float_col float," +
+        "double_col double, date_string_col string, string_col string, " +
+        "timestamp_col timestamp) with serdeproperties ('avro.schema.url'='%s')" +
+        "stored as avro", alltypesSchemaLoc),
+        "Ignoring column definitions in favor of Avro schema due to a mismatched " +
+        "column name at position 5.\n" +
+        "Column definition: bad_int_col INT\n" +
+        "Avro schema column: int_col INT");
+    // Mismatched type.
+    AnalyzesOk(String.format(
+        "create table foo_avro (id int, bool_col boolean, tinyint_col int, " +
+        "smallint_col int, int_col int, bigint_col bigint, float_col float," +
+        "double_col bigint, date_string_col string, string_col string, " +
+        "timestamp_col timestamp) stored as avro tblproperties ('avro.schema.url'='%s')",
+        alltypesSchemaLoc),
+        "Ignoring column definitions in favor of Avro schema due to a mismatched " +
+        "column type at position 8.\n" +
+        "Column definition: double_col BIGINT\n" +
+        "Avro schema column: double_col DOUBLE");
 
     // No Avro schema specified for Avro format table.
     AnalysisError("create table foo_avro (i int) stored as avro",
         "Error loading Avro schema: No Avro schema provided in SERDEPROPERTIES or " +
         "TBLPROPERTIES for table: default.foo_avro");
     AnalysisError("create table foo_avro (i int) stored as avro tblproperties ('a'='b')",
+        "Error loading Avro schema: No Avro schema provided in SERDEPROPERTIES or " +
+        "TBLPROPERTIES for table: default.foo_avro");
+    AnalysisError("create table foo_avro stored as avro tblproperties ('a'='b')",
         "Error loading Avro schema: No Avro schema provided in SERDEPROPERTIES or " +
         "TBLPROPERTIES for table: default.foo_avro");
     // Invalid schema URL
@@ -1034,6 +1222,36 @@ public class AnalyzeDDLTest extends AnalyzerTest {
         "{\"name\": \"union1\", \"type\": [\"float\", \"boolean\"]}]}')",
         "Error parsing Avro schema for table 'default.foo_avro': " +
         "Unsupported type 'union' of column 'union1'");
+
+    // TODO: Add COLLECTION ITEMS TERMINATED BY and MAP KEYS TERMINATED BY clauses.
+    // Test struct complex type.
+    AnalyzesOk("create table functional.new_table (" +
+        "a struct<f1: int, f2: string, f3: timestamp, f4: boolean>, " +
+        "b struct<f1: struct<f11: int>, f2: struct<f21: struct<f22: string>>>, " +
+        "c struct<f1: map<int, string>, f2: array<bigint>>," +
+        "d struct<f1: struct<f11: map<int, string>, f12: array<bigint>>>)");
+    // Test array complex type.
+    AnalyzesOk("create table functional.new_table (" +
+        "a array<int>, b array<timestamp>, c array<string>, d array<boolean>, " +
+        "e array<array<int>>, f array<array<array<string>>>, " +
+        "g array<struct<f1: int, f2: string>>, " +
+        "h array<map<string,int>>)");
+    // Test map complex type.
+    AnalyzesOk("create table functional.new_table (" +
+        "a map<string, int>, b map<timestamp, boolean>, c map<bigint, float>, " +
+        "d array<array<int>>, e array<array<array<string>>>, " +
+        "f array<struct<f1: int, f2: string>>," +
+        "g array<map<string,int>>)");
+    // Cannot partition by a complex column.
+    AnalysisError("create table functional.new_table (i int) " +
+        "partitioned by (x array<int>)",
+        "Type 'ARRAY<INT>' is not supported as partition-column type in column: x");
+    AnalysisError("create table functional.new_table (i int) " +
+        "partitioned by (x map<int,int>)",
+        "Type 'MAP<INT,INT>' is not supported as partition-column type in column: x");
+    AnalysisError("create table functional.new_table (i int) " +
+        "partitioned by (x struct<f1:int>)",
+        "Type 'STRUCT<f1:INT>' is not supported as partition-column type in column: x");
   }
 
   @Test
@@ -1046,6 +1264,10 @@ public class AnalyzeDDLTest extends AnalyzerTest {
         "from functional.alltypes");
     AnalyzesOk("create view functional.foo (a, b) as select int_col x, double_col y " +
         "from functional.alltypes");
+    // View can have complex-typed columns.
+    AnalyzesOk("create view functional.foo (a, b, c) as " +
+        "select int_array_col, int_map_col, int_struct_col " +
+        "from functional.allcomplextypes");
 
     // Creating a view on a view is ok (alltypes_view is a view on alltypes).
     AnalyzesOk("create view foo as select * from functional.alltypes_view");
@@ -1090,9 +1312,9 @@ public class AnalyzeDDLTest extends AnalyzerTest {
     AnalysisError("create view `^%&` as select 1, 2, 3",
         "Invalid table/view name: ^%&");
     AnalysisError("create view foo as select 1 as `???`",
-        "Invalid column name: ???");
+        "Invalid column/field name: ???");
     AnalysisError("create view foo(`%^&`) as select 1",
-        "Invalid column name: %^&");
+        "Invalid column/field name: %^&");
 
     // Table/view already exists.
     AnalysisError("create view functional.alltypes as " +
@@ -1116,6 +1338,10 @@ public class AnalyzeDDLTest extends AnalyzerTest {
         "select string_col from functional.alltypes",
         "Incompatible return types 'INT' and 'STRING' of exprs " +
         "'int_col' and 'string_col'.");
+    // View with a subquery
+    AnalyzesOk("create view test_view_with_subquery as " +
+        "select * from functional.alltypestiny t where exists " +
+        "(select * from functional.alltypessmall s where s.id = t.id)");
   }
 
   @Test
@@ -1168,6 +1394,22 @@ public class AnalyzeDDLTest extends AnalyzerTest {
         "Hive UDFs that use DECIMAL are not yet supported.");
     AnalysisError("create function foo(Decimal) RETURNS int LOCATION '/a.jar'",
         "Hive UDFs that use DECIMAL are not yet supported.");
+    AnalysisError("create function foo(char(5)) RETURNS int LOCATION '/a.jar'",
+        "UDFs that use CHAR are not yet supported.");
+    AnalysisError("create function foo(varchar(5)) RETURNS int LOCATION '/a.jar'",
+        "UDFs that use VARCHAR are not yet supported.");
+    AnalysisError("create function foo() RETURNS CHAR(5) LOCATION '/a.jar'",
+        "UDFs that use CHAR are not yet supported.");
+    AnalysisError("create function foo() RETURNS VARCHAR(5) LOCATION '/a.jar'",
+        "UDFs that use VARCHAR are not yet supported.");
+    AnalysisError("create function foo() RETURNS CHAR(5)" + udfSuffix,
+        "UDFs that use CHAR are not yet supported.");
+    AnalysisError("create function foo() RETURNS VARCHAR(5)" + udfSuffix,
+        "UDFs that use VARCHAR are not yet supported.");
+    AnalysisError("create function foo(CHAR(5)) RETURNS int" + udfSuffix,
+        "UDFs that use CHAR are not yet supported.");
+    AnalysisError("create function foo(VARCHAR(5)) RETURNS int" + udfSuffix,
+        "UDFs that use VARCHAR are not yet supported.");
 
     AnalyzesOk("create function foo() RETURNS decimal" + udfSuffix);
     AnalyzesOk("create function foo() RETURNS decimal(38,10)" + udfSuffix);
@@ -1281,6 +1523,14 @@ public class AnalyzeDDLTest extends AnalyzerTest {
     AnalysisError("create function baddb.f() RETURNS int" + udfSuffix,
         "Database does not exist: baddb");
 
+    // Try creating functions with unsupported return/arg types.
+    AnalysisError("create function f() RETURNS array<int>" + udfSuffix,
+        "Type 'ARRAY<INT>' is not supported in UDFs/UDAs.");
+    AnalysisError("create function f(map<string,int>) RETURNS int" + udfSuffix,
+        "Type 'MAP<STRING,INT>' is not supported in UDFs/UDAs.");
+    AnalysisError("create function f() RETURNS struct<f:int>" + udfSuffix,
+        "Type 'STRUCT<f:INT>' is not supported in UDFs/UDAs.");
+
     // Try dropping functions.
     AnalyzesOk("drop function if exists foo()");
     AnalysisError("drop function foo()", "Function does not exist: foo()");
@@ -1291,9 +1541,9 @@ public class AnalyzeDDLTest extends AnalyzerTest {
     AnalyzesOk("drop function if exists foo(double, int...)");
 
     // Add functions default.TestFn(), default.TestFn(double), default.TestFn(String...),
-    addTestFunction("TestFn", new ArrayList<ColumnType>(), false);
-    addTestFunction("TestFn", Lists.newArrayList(ColumnType.DOUBLE), false);
-    addTestFunction("TestFn", Lists.newArrayList(ColumnType.STRING), true);
+    addTestFunction("TestFn", new ArrayList<ScalarType>(), false);
+    addTestFunction("TestFn", Lists.newArrayList(Type.DOUBLE), false);
+    addTestFunction("TestFn", Lists.newArrayList(Type.STRING), true);
 
     AnalysisError("create function TestFn() RETURNS INT " + udfSuffix,
         "Function already exists: testfn()");
@@ -1307,8 +1557,7 @@ public class AnalyzeDDLTest extends AnalyzerTest {
         "Function already exists: testfn(DOUBLE)");
 
     // Add default.TestFn(int, int)
-    addTestFunction("TestFn",
-        Lists.newArrayList(ColumnType.INT, ColumnType.INT), false);
+    addTestFunction("TestFn", Lists.newArrayList(Type.INT, Type.INT), false);
     AnalyzesOk("drop function TestFn(int, int)");
     AnalysisError("drop function TestFn(int, int, int)",
         "Function does not exist: testfn(INT, INT, INT)");
@@ -1373,6 +1622,20 @@ public class AnalyzeDDLTest extends AnalyzerTest {
         + "RETURNS int" + loc,
       "UDAs with more than 8 arguments are not yet supported.");
 
+    // Check that CHAR and VARCHAR are not valid UDA argument or return types
+    String symbols =
+        " UPDATE_FN='_Z9AggUpdatePN10impala_udf15FunctionContextERKNS_6IntValEPS2_' " +
+        "INIT_FN='_Z7AggInitPN10impala_udf15FunctionContextEPNS_6IntValE' " +
+        "MERGE_FN='_Z8AggMergePN10impala_udf15FunctionContextERKNS_6IntValEPS2_'";
+    AnalysisError("create aggregate function foo(CHAR(5)) RETURNS int" + loc + symbols,
+        "UDAs with CHAR arguments are not yet supported.");
+    AnalysisError("create aggregate function foo(VARCHAR(5)) RETURNS int" + loc + symbols,
+        "UDAs with VARCHAR arguments are not yet supported.");
+    AnalysisError("create aggregate function foo(int) RETURNS CHAR(5)" + loc + symbols,
+        "UDAs with CHAR return type are not yet supported.");
+    AnalysisError("create aggregate function foo(int) RETURNS VARCHAR(5)" + loc + symbols,
+        "UDAs with VARCHAR return type are not yet supported.");
+
     // Specify the complete symbol. If the user does this, we can't guess the
     // other function names.
     // TODO: think about these error messages more. Perhaps they can be made
@@ -1426,11 +1689,22 @@ public class AnalyzeDDLTest extends AnalyzerTest {
     // Invalid char(0) type.
     AnalysisError("create aggregate function foo(int) RETURNS int " +
         "INTERMEDIATE CHAR(0) LOCATION '/foo.so' UPDATE_FN='b'",
-        "Char size must be > 0. Size was set to: 0.");
+        "Char size must be > 0. Size is too small: 0.");
     AnalysisError("create aggregate function foo() RETURNS int" + loc,
         "UDAs must take at least one argument.");
     AnalysisError("create aggregate function foo(int) RETURNS int LOCATION " +
         "'/foo.jar' UPDATE_FN='b'", "Java UDAs are not supported.");
+
+    // Try creating functions with unsupported return/arg types.
+    AnalysisError("create aggregate function foo(string, double) RETURNS array<int> " +
+        loc + "UPDATE_FN='AggUpdate'",
+        "Type 'ARRAY<INT>' is not supported in UDFs/UDAs.");
+    AnalysisError("create aggregate function foo(map<string,int>) RETURNS int " +
+        loc + "UPDATE_FN='AggUpdate'",
+        "Type 'MAP<STRING,INT>' is not supported in UDFs/UDAs.");
+    AnalysisError("create aggregate function foo(int) RETURNS struct<f:int> " +
+        loc + "UPDATE_FN='AggUpdate'",
+        "Type 'STRUCT<f:INT>' is not supported in UDFs/UDAs.");
 
     // Test missing .ll file. TODO: reenable when we can run IR UDAs
     AnalysisError("create aggregate function foo(int) RETURNS int LOCATION " +
@@ -1495,6 +1769,87 @@ public class AnalyzeDDLTest extends AnalyzerTest {
         "Could not find function not there(STRING) in: " + hdfsLoc);
   }
 
+  /**
+   * Wraps the given typeDefs in a CREATE TABLE stmt and runs AnalyzesOk().
+   * Also tests that the type is analyzes correctly in ARRAY, MAP, and STRUCT types.
+   */
+  private void TypeDefsAnalyzeOk(String... typeDefs) {
+    for (String typeDefStr: typeDefs) {
+      ParseNode stmt = AnalyzesOk(String.format("CREATE TABLE t (i %s)", typeDefStr));
+      AnalyzesOk(String.format("CREATE TABLE t (i ARRAY<%s>)", typeDefStr));
+      AnalyzesOk(String.format("CREATE TABLE t (i STRUCT<f:%s>)", typeDefStr));
+
+      Preconditions.checkState(stmt instanceof CreateTableStmt);
+      CreateTableStmt createTableStmt = (CreateTableStmt) stmt;
+      Type t = createTableStmt.getColumnDefs().get(0).getType();
+      // If the given type is complex, don't use it as a map key.
+      if (t.isComplexType()) {
+        AnalyzesOk(String.format(
+            "CREATE TABLE t (i MAP<int, %s>)", typeDefStr, typeDefStr));
+      } else {
+        AnalyzesOk(String.format(
+            "CREATE TABLE t (i MAP<%s, %s>)", typeDefStr, typeDefStr));
+      }
+    }
+  }
+
+  /**
+   * Wraps the given typeDefs in a CREATE TABLE stmt and asserts that the type def
+   * failed to analyze with the given error message.
+   */
+  private void TypeDefAnalysisError(String typeDef, String expectedError) {
+    AnalysisError(String.format("CREATE TABLE t (i %s)", typeDef), expectedError);
+  }
+
+  @Test
+  public void TestTypes() {
+    // Test primitive types.
+    TypeDefsAnalyzeOk("BOOLEAN");
+    TypeDefsAnalyzeOk("TINYINT");
+    TypeDefsAnalyzeOk("SMALLINT");
+    TypeDefsAnalyzeOk("INT", "INTEGER");
+    TypeDefsAnalyzeOk("BIGINT");
+    TypeDefsAnalyzeOk("FLOAT");
+    TypeDefsAnalyzeOk("DOUBLE", "REAL");
+    TypeDefsAnalyzeOk("STRING");
+    TypeDefsAnalyzeOk("CHAR(1)", "CHAR(20)");
+    TypeDefsAnalyzeOk("BINARY");
+    TypeDefsAnalyzeOk("DECIMAL");
+    TypeDefsAnalyzeOk("TIMESTAMP");
+
+    // Test decimal.
+    TypeDefsAnalyzeOk("DECIMAL");
+    TypeDefsAnalyzeOk("DECIMAL(1)");
+    TypeDefsAnalyzeOk("DECIMAL(12, 7)");
+    TypeDefsAnalyzeOk("DECIMAL(38)");
+    TypeDefsAnalyzeOk("DECIMAL(38, 1)");
+    TypeDefsAnalyzeOk("DECIMAL(38, 38)");
+
+    TypeDefAnalysisError("DECIMAL(1, 10)",
+        "Decimal scale (10) must be <= precision (1).");
+    TypeDefAnalysisError("DECIMAL(0, 0)",
+        "Decimal precision must be greater than 0.");
+    TypeDefAnalysisError("DECIMAL(39, 0)",
+        "Decimal precision must be <= 38.");
+
+    // Test complex types.
+    TypeDefsAnalyzeOk("ARRAY<BIGINT>");
+    TypeDefsAnalyzeOk("MAP<TINYINT, DOUBLE>");
+    TypeDefsAnalyzeOk("STRUCT<f:TINYINT>");
+    TypeDefsAnalyzeOk("STRUCT<a:TINYINT, b:BIGINT, c:DOUBLE>");
+    TypeDefsAnalyzeOk("STRUCT<a:TINYINT COMMENT 'x', b:BIGINT, c:DOUBLE COMMENT 'y'>");
+
+    // Map keys can't be complex types.
+    TypeDefAnalysisError("map<array<int>, int>",
+        "Map type cannot have a complex-typed key: MAP<ARRAY<INT>,INT>");
+    // Duplicate struct-field name.
+    TypeDefAnalysisError("STRUCT<f1: int, f2: string, f1: float>",
+        "Duplicate field name 'f1' in struct 'STRUCT<f1:INT,f2:STRING,f1:FLOAT>'");
+    // Invalid struct-field name.
+    TypeDefAnalysisError("STRUCT<`???`: int>",
+        "Invalid struct field name: ???");
+  }
+
   @Test
   public void TestUseDb() throws AnalysisException {
     AnalyzesOk("use functional");
@@ -1521,16 +1876,19 @@ public class AnalyzeDDLTest extends AnalyzerTest {
     AnalyzesOk("show databases");
     AnalyzesOk("show databases like '*pattern'");
 
-    AnalyzesOk("show datasources");
-    AnalyzesOk("show datasources like '*pattern'");
+    AnalyzesOk("show data sources");
+    AnalyzesOk("show data sources like '*pattern'");
 
     AnalyzesOk("show tables");
     AnalyzesOk("show tables like '*pattern'");
 
-    AnalyzesOk("show functions");
-    AnalyzesOk("show functions like '*pattern'");
-    AnalyzesOk("show functions in functional");
-    AnalyzesOk("show functions in functional like '*pattern'");
+    for (String fnType: new String[]{"", "aggregate", "analytic"}) {
+      AnalyzesOk(String.format("show %s functions", fnType));
+      AnalyzesOk(String.format("show %s functions like '*pattern'", fnType));
+      AnalyzesOk(String.format("show %s functions in functional", fnType));
+      AnalyzesOk(String.format(
+          "show %s functions in functional like '*pattern'", fnType));
+    }
     // Database doesn't exist.
     AnalysisError("show functions in baddb", "Database does not exist: baddb");
     AnalysisError("show functions in baddb like '*pattern'",

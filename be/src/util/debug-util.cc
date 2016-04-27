@@ -29,7 +29,10 @@
 #include "util/cpu-info.h"
 #include "util/string-parser.h"
 
-// For DumpStackTraceToString
+// For DumpStackTraceToString(). Silence warnings for repeated definitions of preprocessor
+// variables (these are also defined in gutil/port.h)
+#undef HAVE_ATTRIBUTE_NOINLINE
+#undef _XOPEN_SOURCE
 #include <glog/../utilities.h>
 
 #define PRECISION 2
@@ -101,7 +104,16 @@ ostream& operator<<(ostream& os, const TUniqueId& id) {
 
 string PrintId(const TUniqueId& id, const string& separator) {
   stringstream out;
-  out << std::hex << id.hi << separator << id.lo;
+  out << hex << id.hi << separator << id.lo;
+  return out.str();
+}
+
+string PrintAsHex(const char* bytes, int64_t len) {
+  stringstream out;
+  out << hex << std::setfill('0');
+  for (int i = 0; i < len; ++i) {
+    out << setw(2) << static_cast<uint16_t>(bytes[i]);
+  }
   return out.str();
 }
 

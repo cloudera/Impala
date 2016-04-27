@@ -55,8 +55,7 @@ class QueryExecStateCleaner;
 class ImpalaServer::QueryExecState {
  public:
   QueryExecState(const TQueryCtx& query_ctx, ExecEnv* exec_env, Frontend* frontend,
-                 ImpalaServer* server,
-                 boost::shared_ptr<ImpalaServer::SessionState> session);
+      ImpalaServer* server, boost::shared_ptr<ImpalaServer::SessionState> session);
 
   ~QueryExecState();
 
@@ -114,9 +113,11 @@ class ImpalaServer::QueryExecState {
   // is taken before calling UpdateQueryStatus
   Status UpdateQueryStatus(const Status& status);
 
-  // Sets state to EXCEPTION and cancels coordinator with the given cause.
+  // Cancels the child queries and the coordinator with the given cause.
+  // If cause is NULL, assume this was deliberately cancelled by the user.
+  // Otherwise, sets state to EXCEPTION.
   // Caller needs to hold lock_.
-  // Does nothing if the query has reached EOS.
+  // Does nothing if the query has reached EOS or already cancelled.
   void Cancel(const Status* cause = NULL);
 
   // This is called when the query is done (finished, cancelled, or failed).
@@ -164,9 +165,11 @@ class ImpalaServer::QueryExecState {
   const Status& query_status() const { return query_status_; }
   void set_result_metadata(const TResultSetMetadata& md) { result_metadata_ = md; }
   const RuntimeProfile& profile() const { return profile_; }
+  const RuntimeProfile& summary_profile() const { return summary_profile_; }
   const TimestampValue& start_time() const { return start_time_; }
   const TimestampValue& end_time() const { return end_time_; }
   const std::string& sql_stmt() const { return query_ctx_.request.stmt; }
+  const TQueryOptions& query_options() const { return query_ctx_.request.query_options; }
 
   const std::vector<std::string>& GetAnalysisWarnings() const {
     return exec_request_.analysis_warnings;
@@ -265,7 +268,7 @@ class ImpalaServer::QueryExecState {
   MonotonicStopWatch client_wait_sw_;
 
   RuntimeProfile::EventSequence* query_events_;
-  std::vector<Expr*> output_exprs_;
+  std::vector<ExprContext*> output_expr_ctxs_;
   bool eos_;  // if true, there are no more rows to return
   beeswax::QueryState::type query_state_;
   Status query_status_;
@@ -336,7 +339,7 @@ class ImpalaServer::QueryExecState {
   // released.
   Status FetchNextBatch();
 
-  // Evaluates 'output_exprs_' against 'row' and output the evaluated row in
+  // Evaluates 'output_expr_ctxs_' against 'row' and output the evaluated row in
   // 'result'. The values' scales (# of digits after decimal) are stored in 'scales'.
   // result and scales must have been resized to the number of columns before call.
   Status GetRowValue(TupleRow* row, std::vector<void*>* result, std::vector<int>* scales);

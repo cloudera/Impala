@@ -48,7 +48,7 @@ class TupleRow;
 // are interacting with the context.
 //   1. IoMgr threads that read io buffers from the disk and enqueue them to the
 //      stream's underlying ScanRange object. This is the producer.
-//   2. Scanner thread that calls GetBytes (which can block), materializing tuples
+//   2. Scanner thread that calls GetBytes() (which can block), materializing tuples
 //      from processing the bytes. This is the consumer.
 //   3. The scan node/main thread which calls into the context to trigger cancellation
 //      or other end of stream conditions.
@@ -81,17 +81,17 @@ class ScannerContext {
     // This should only be called from the scanner thread.
     // Note that this will return bytes past the end of the scan range until the end of
     // the file.
-    bool GetBytes(int requested_len, uint8_t** buffer, int* out_len,
+    bool GetBytes(int64_t requested_len, uint8_t** buffer, int64_t* out_len,
         Status* status, bool peek = false);
 
     // Gets the bytes from the first available buffer within the scan range. This may be
     // the boundary buffer used to stitch IO buffers together.
     // If we are past the end of the scan range, no bytes are returned.
-    Status GetBuffer(bool peek, uint8_t** buffer, int* out_len);
+    Status GetBuffer(bool peek, uint8_t** buffer, int64_t* out_len);
 
     // Sets whether of not the resulting tuples contain ptrs into memory owned by
     // the scanner context. This by default, is inferred from the scan_node tuple
-    // descriptor (i.e. contains string slots)  but can be overridden. If possible,
+    // descriptor (i.e. contains string slots) but can be overridden.  If possible,
     // this should be set to false to reduce memory usage as resources can be reused
     // and recycled more quickly.
     void set_contains_tuple_data(bool v) { contains_tuple_data_ = v; }
@@ -116,6 +116,7 @@ class ScannerContext {
 
     const char* filename() { return scan_range_->file(); }
     const DiskIoMgr::ScanRange* scan_range() { return scan_range_; }
+    const HdfsFileDesc* file_desc() { return file_desc_; }
 
     // Returns the buffer's current offset in the file.
     int64_t file_offset() const { return scan_range_->offset() + total_bytes_returned_; }
@@ -143,16 +144,16 @@ class ScannerContext {
     bool ReadZLong(int64_t* val, Status*);
 
     // Skip over the next length bytes in the specified HDFS file.
-    bool SkipBytes(int length, Status*);
+    bool SkipBytes(int64_t length, Status*);
 
     // Read length bytes into the supplied buffer.  The returned buffer is owned
     // by this object.
-    bool ReadBytes(int length, uint8_t** buf, Status*, bool peek = false);
+    bool ReadBytes(int64_t length, uint8_t** buf, Status*, bool peek = false);
 
     // Read a Writable Text value from the supplied file.
     // Ref: org.apache.hadoop.io.WritableUtils.readString()
     // The returned buffer is owned by this object.
-    bool ReadText(uint8_t** buf, int* length, Status*);
+    bool ReadText(uint8_t** buf, int64_t* length, Status*);
 
     // Skip this text object.
     bool SkipText(Status*);
@@ -179,7 +180,7 @@ class ScannerContext {
     uint8_t* io_buffer_pos_;
 
     // Bytes left in io_buffer_
-    int io_buffer_bytes_left_;
+    int64_t io_buffer_bytes_left_;
 
     // The boundary buffer is used to copy multiple IO buffers from the scan range into a
     // single buffer to return to the scanner.  After copying all or part of an IO buffer
@@ -191,7 +192,7 @@ class ScannerContext {
     boost::scoped_ptr<MemPool> boundary_pool_;
     boost::scoped_ptr<StringBuffer> boundary_buffer_;
     uint8_t* boundary_buffer_pos_;
-    int boundary_buffer_bytes_left_;
+    int64_t boundary_buffer_bytes_left_;
 
     // Points to either io_buffer_pos_ or boundary_buffer_pos_
     // (initialized to NULL before calling GetBytes())
@@ -199,7 +200,7 @@ class ScannerContext {
 
     // Points to either io_buffer_bytes_left_ or boundary_buffer_bytes_left_
     // (initialized to a static zero-value int before calling GetBytes())
-    int* output_buffer_bytes_left_;
+    int64_t* output_buffer_bytes_left_;
 
     // List of buffers that are completed but still have bytes referenced by the caller.
     // On the next GetBytes() call, these buffers are released (the caller by calling
@@ -211,7 +212,8 @@ class ScannerContext {
 
     // GetBytes helper to handle the slow path.
     // If peek is set then return the data but do not move the current offset.
-    Status GetBytesInternal(int requested_len, uint8_t** buffer, bool peek, int* out_len);
+    Status GetBytesInternal(int64_t requested_len, uint8_t** buffer, bool peek,
+                            int64_t* out_len);
 
     // Gets (and blocks) for the next io buffer. After fetching all buffers in the scan
     // range, performs synchronous reads past the scan range until EOF.
@@ -224,14 +226,16 @@ class ScannerContext {
     // is called after all bytes in the file have been returned, io_buffer_bytes_left_
     // will be set to 0. In the non-error case, io_buffer_ is never set to NULL, even if
     // it contains 0 bytes.
-    Status GetNextBuffer(int read_past_size = 0);
+    Status GetNextBuffer(int64_t read_past_size = 0);
 
-    // Attach all completed io buffers and the boundary mem pool to batch.
-    void AttachCompletedResources(RowBatch* batch, bool done);
+    // If 'batch' is not NULL, attaches all completed io buffers and the boundary mem
+    // pool to batch.  If 'done' is set, releases the completed resources.
+    // If 'batch' is NULL then contains_tuple_data_ should be false.
+    void ReleaseCompletedResources(RowBatch* batch, bool done);
 
     // Error-reporting functions.
-    Status ReportIncompleteRead(int length, int bytes_read);
-    Status ReportInvalidRead(int length);
+    Status ReportIncompleteRead(int64_t length, int64_t bytes_read);
+    Status ReportInvalidRead(int64_t length);
   };
 
   Stream* GetStream(int idx = 0) {
@@ -240,10 +244,13 @@ class ScannerContext {
     return streams_[idx];
   }
 
-  // Attach completed io buffers and boundary mem pools from all streams to 'batch'.
-  // Attaching only completed resources ensures that buffers (and their cleanup) trail the
-  // rows that reference them (row batches are consumed and cleaned up in order by the
-  // rest of the query).
+  // If a non-NULL 'batch' is passed, attaches completed io buffers and boundary mem pools
+  // from all streams to 'batch'. Attaching only completed resources ensures that buffers
+  // (and their cleanup) trail the rows that reference them (row batches are consumed and
+  // cleaned up in order by the rest of the query).
+  // If a NULL 'batch' is passed, then it tries to release whatever resource can be
+  // released, ie. completed io buffers if 'done' is not set, and the mem pool if 'done'
+  // is set. In that case, contains_tuple_data_ should be false.
   //
   // If 'done' is true, this is the final call for the current streams and any pending
   // resources in each stream are also passed to the row batch, and the streams are
@@ -253,7 +260,7 @@ class ScannerContext {
   // any resources (e.g. tuple memory, io buffers) returned from the current
   // streams. After calling with 'done' set, this should be called again if new streams
   // are created via AddStream().
-  void AttachCompletedResources(RowBatch* batch, bool done);
+  void ReleaseCompletedResources(RowBatch* batch, bool done);
 
   // Add a stream to this ScannerContext for 'range'. Returns the added stream.
   // The stream is created in the runtime state's object pool

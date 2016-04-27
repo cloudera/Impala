@@ -46,18 +46,6 @@ class SortNode : public ExecNode {
   virtual void DebugString(int indentation_level, std::stringstream* out) const;
 
  private:
-  // Fraction of total remaining memory that can be assigned to all sort nodes in a
-  // query. That is, the memory allocated to all sort nodes cannot exceed
-  // available * SORT_MEM_FRACTION, unless that is lower than the minimum required for
-  // the sort.
-  const static float SORT_MEM_FRACTION = 0.80f;
-
-  // Minimum number of bytes of memory that must be available after a sort node has
-  // acquired memory for itself. That is, the memory allocated cannot exceed
-  // (available - SORT_MEM_UNUSED), unless that is lower than the minimum required for
-  // the sort.
-  const static int SORT_MEM_UNUSED = 100 * 1024 * 1024;
-
   // Fetch input rows and feed them to the sorter until the input is exhausted.
   Status SortInput(RuntimeState* state);
 
@@ -69,10 +57,6 @@ class SortNode : public ExecNode {
   // Number of rows to skip.
   int64_t offset_;
   int64_t num_rows_skipped_;
-
-  // BufferedBlockMgr object used to allocate and manage blocks of input data in memory
-  // with a fixed memory budget.
-  boost::scoped_ptr<BufferedBlockMgr> block_mgr_;
 
   // Object used for external sorting.
   boost::scoped_ptr<Sorter> sorter_;

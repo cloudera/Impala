@@ -18,7 +18,6 @@ import java.util.List;
 
 import junit.framework.Assert;
 
-import org.apache.sentry.provider.file.HadoopGroupResourceAuthorizationProvider;
 import org.junit.Test;
 
 import com.cloudera.impala.authorization.AuthorizationConfig;
@@ -26,6 +25,7 @@ import com.cloudera.impala.catalog.AuthorizationException;
 import com.cloudera.impala.catalog.Catalog;
 import com.cloudera.impala.catalog.ImpaladCatalog;
 import com.cloudera.impala.common.AnalysisException;
+import com.cloudera.impala.service.Frontend;
 import com.cloudera.impala.testutil.ImpaladTestCatalog;
 import com.cloudera.impala.testutil.TestUtils;
 import com.cloudera.impala.thrift.TAccessEvent;
@@ -47,15 +47,15 @@ public class AuditingTest extends AnalyzerTest {
 
     // Select from a view. Expect to get 3 events back - one for the view and two
     // for the underlying objects that the view accesses.
-    accessEvents =  AnalyzeAccessEvents("select * from functional.view_view");
+    accessEvents = AnalyzeAccessEvents("select * from functional.view_view");
     Assert.assertEquals(accessEvents, Lists.newArrayList(
-        new TAccessEvent("functional.alltypes", TCatalogObjectType.TABLE, "SELECT"),
+        new TAccessEvent("functional.view_view", TCatalogObjectType.VIEW, "SELECT"),
         new TAccessEvent("functional.alltypes_view", TCatalogObjectType.VIEW, "SELECT"),
-        new TAccessEvent("functional.view_view", TCatalogObjectType.VIEW, "SELECT")
+        new TAccessEvent("functional.alltypes", TCatalogObjectType.TABLE, "SELECT")
         ));
 
     // Select from an inline-view.
-    accessEvents =  AnalyzeAccessEvents(
+    accessEvents = AnalyzeAccessEvents(
         "select a.* from (select * from functional.alltypesagg) a");
     Assert.assertEquals(accessEvents, Lists.newArrayList(
         new TAccessEvent("functional.alltypesagg", TCatalogObjectType.TABLE, "SELECT")));
@@ -99,19 +99,29 @@ public class AuditingTest extends AnalyzerTest {
     Assert.assertEquals(accessEvents, Lists.newArrayList(new TAccessEvent(
         "functional.alltypesagg", TCatalogObjectType.TABLE, "SELECT")));
 
+    // With clause view referencing a catalog view.
+    accessEvents = AnalyzeAccessEvents(
+        "with t as (select * from functional.alltypes_view) select * from t");
+    Assert.assertEquals(accessEvents, Lists.newArrayList(
+        new TAccessEvent(
+            "functional.alltypes_view", TCatalogObjectType.VIEW, "SELECT"),
+        new TAccessEvent("functional.alltypes", TCatalogObjectType.TABLE, "SELECT")));
+
     accessEvents =
         AnalyzeAccessEvents("with t as (select 1 + 2) select * from t");
     Assert.assertEquals(0, accessEvents.size());
 
-    // The with-clause view isn't selected so no access event should be logged.
-    accessEvents =
-        AnalyzeAccessEvents("with t as (select functional.alltypes) select 'abc'");
-    Assert.assertEquals(0, accessEvents.size());
-
-    accessEvents = AnalyzeAccessEvents("with t as (select functional.alltypes) " +
-        "select * from functional_seq.alltypes");
+    // Even though the with-clause view isn't selected an access event is generated.
+    accessEvents = AnalyzeAccessEvents(
+        "with t as (select * from functional.alltypes) select 'abc'");
     Assert.assertEquals(accessEvents, Lists.newArrayList(new TAccessEvent(
-        "functional_seq.alltypes", TCatalogObjectType.TABLE, "SELECT")));
+        "functional.alltypes", TCatalogObjectType.TABLE, "SELECT")));
+    accessEvents = AnalyzeAccessEvents("with t as (select * from functional.alltypes) " +
+        "select * from functional_seq.alltypes");
+    Assert.assertEquals(accessEvents, Lists.newArrayList(
+        new TAccessEvent("functional.alltypes", TCatalogObjectType.TABLE, "SELECT"),
+        new TAccessEvent(
+            "functional_seq.alltypes", TCatalogObjectType.TABLE, "SELECT")));
   }
 
   @Test
@@ -235,6 +245,15 @@ public class AuditingTest extends AnalyzerTest {
   }
 
   @Test
+  public void TestDropStats() throws AnalysisException, AuthorizationException {
+    List<TAccessEvent> accessEvents = AnalyzeAccessEvents(
+        "DROP STATS functional_seq_snap.alltypes");
+    Assert.assertEquals(accessEvents, Lists.newArrayList(
+        new TAccessEvent(
+            "functional_seq_snap.alltypes", TCatalogObjectType.TABLE, "ALTER")));
+  }
+
+  @Test
   public void TestDescribe() throws AuthorizationException, AnalysisException {
     List<TAccessEvent> accessEvents =
         AnalyzeAccessEvents("describe functional.alltypesagg");
@@ -280,19 +299,20 @@ public class AuditingTest extends AnalyzerTest {
       AnalysisException {
     // The policy file doesn't exist so all operations will result in
     // an AuthorizationError
-    AuthorizationConfig config = new AuthorizationConfig("server1", "/does/not/exist",
-        HadoopGroupResourceAuthorizationProvider.class.getName());
+    AuthorizationConfig config = AuthorizationConfig.createHadoopGroupAuthConfig(
+        "server1", "/does/not/exist", "");
     ImpaladCatalog catalog = new ImpaladTestCatalog(config);
-    Analyzer analyzer = new Analyzer(catalog, TestUtils.createQueryContext());
+    Frontend fe = new Frontend(config, catalog);
+    Analyzer analyzer = new Analyzer(catalog, TestUtils.createQueryContext(), config);
 
-    // Authorization of an object is performed immediately before auditing so
-    // the access events will not include the item that failed authorization.
+    // We should get an audit event even when an authorization failure occurs.
     try {
-      ParseNode node = ParsesOk("create table foo(i int)");
+      ParseNode node = ParsesOk("create table foo_does_not_exist(i int)");
       node.analyze(analyzer);
+      analyzer.authorize(fe.getAuthzChecker());
       Assert.fail("Expected AuthorizationException");
     } catch (AuthorizationException e) {
-      Assert.assertEquals(0, analyzer.getAccessEvents().size());
+      Assert.assertEquals(1, analyzer.getAccessEvents().size());
     }
   }
 

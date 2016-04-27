@@ -19,15 +19,20 @@ using namespace std;
 namespace impala {
 
 Status SortExecExprs::Init(const TSortInfo& sort_info, ObjectPool* pool) {
-  RETURN_IF_ERROR(
-      Expr::CreateExprTrees(pool, sort_info.ordering_exprs, &lhs_ordering_exprs_));
-  RETURN_IF_ERROR(
-      Expr::CreateExprTrees(pool, sort_info.ordering_exprs, &rhs_ordering_exprs_));
+  return Init(sort_info.ordering_exprs,
+      sort_info.__isset.sort_tuple_slot_exprs ? &sort_info.sort_tuple_slot_exprs : NULL,
+      pool);
+}
 
-  if (sort_info.__isset.sort_tuple_slot_exprs) {
+Status SortExecExprs::Init(const vector<TExpr>& ordering_exprs,
+    const vector<TExpr>* sort_tuple_slot_exprs, ObjectPool* pool) {
+  RETURN_IF_ERROR(
+      Expr::CreateExprTrees(pool, ordering_exprs, &lhs_ordering_expr_ctxs_));
+
+  if (sort_tuple_slot_exprs != NULL) {
     materialize_tuple_ = true;
-    RETURN_IF_ERROR(Expr::CreateExprTrees(pool, sort_info.sort_tuple_slot_exprs,
-        &sort_tuple_slot_exprs_));
+    RETURN_IF_ERROR(Expr::CreateExprTrees(pool, *sort_tuple_slot_exprs,
+        &sort_tuple_slot_expr_ctxs_));
   } else {
     materialize_tuple_ = false;
   }
@@ -35,31 +40,31 @@ Status SortExecExprs::Init(const TSortInfo& sort_info, ObjectPool* pool) {
 }
 
 Status SortExecExprs::Prepare(RuntimeState* state, const RowDescriptor& child_row_desc,
-    const RowDescriptor& output_row_desc) {
+    const RowDescriptor& output_row_desc, MemTracker* expr_mem_tracker) {
   if (materialize_tuple_) {
-    RETURN_IF_ERROR(
-        Expr::Prepare(sort_tuple_slot_exprs_, state, child_row_desc));
+    RETURN_IF_ERROR(Expr::Prepare(
+        sort_tuple_slot_expr_ctxs_, state, child_row_desc, expr_mem_tracker));
   }
-  RETURN_IF_ERROR(Expr::Prepare(lhs_ordering_exprs_, state, output_row_desc));
-  RETURN_IF_ERROR(Expr::Prepare(rhs_ordering_exprs_, state, output_row_desc));
+  RETURN_IF_ERROR(Expr::Prepare(
+      lhs_ordering_expr_ctxs_, state, output_row_desc, expr_mem_tracker));
   return Status::OK;
 }
 
 Status SortExecExprs::Open(RuntimeState* state) {
   if (materialize_tuple_) {
-    RETURN_IF_ERROR(Expr::Open(sort_tuple_slot_exprs_, state));
+    RETURN_IF_ERROR(Expr::Open(sort_tuple_slot_expr_ctxs_, state));
   }
-  RETURN_IF_ERROR(Expr::Open(lhs_ordering_exprs_, state));
-  RETURN_IF_ERROR(Expr::Open(rhs_ordering_exprs_, state));
+  RETURN_IF_ERROR(Expr::Open(lhs_ordering_expr_ctxs_, state));
+  RETURN_IF_ERROR(Expr::Clone(lhs_ordering_expr_ctxs_, state, &rhs_ordering_expr_ctxs_));
   return Status::OK;
 }
 
 void SortExecExprs::Close(RuntimeState* state) {
   if (materialize_tuple_) {
-    Expr::Close(sort_tuple_slot_exprs_, state);
+    Expr::Close(sort_tuple_slot_expr_ctxs_, state);
   }
-  Expr::Close(lhs_ordering_exprs_, state);
-  Expr::Close(rhs_ordering_exprs_, state);
+  Expr::Close(rhs_ordering_expr_ctxs_, state);
+  Expr::Close(lhs_ordering_expr_ctxs_, state);
 }
 
 } //namespace impala

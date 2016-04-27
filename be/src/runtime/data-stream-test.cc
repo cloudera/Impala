@@ -19,6 +19,7 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "codegen/llvm-codegen.h"
+#include "exprs/slot-ref.h"
 #include "rpc/auth-provider.h"
 #include "rpc/thrift-server.h"
 #include "runtime/row-batch.h"
@@ -29,17 +30,20 @@
 #include "runtime/descriptors.h"
 #include "runtime/client-cache.h"
 #include "runtime/raw-value.h"
+#include "service/fe-support.h"
 #include "util/cpu-info.h"
 #include "util/disk-info.h"
 #include "util/debug-util.h"
 #include "util/thread.h"
 #include "util/time.h"
 #include "util/mem-info.h"
+#include "util/test-info.h"
 #include "util/tuple-row-compare.h"
 #include "gen-cpp/ImpalaInternalService.h"
 #include "gen-cpp/ImpalaInternalService_types.h"
 #include "gen-cpp/Types_types.h"
 #include "gen-cpp/Descriptors_types.h"
+#include "service/fe-support.h"
 
 #include <iostream>
 
@@ -90,7 +94,7 @@ class DataStreamTest : public testing::Test {
   DataStreamTest()
     : runtime_state_(TPlanFragmentInstanceCtx(), "", &exec_env_),
       next_val_(0) {
-    // Intiialize Mem trackers for use by the data stream receiver.
+    // Initialize Mem trackers for use by the data stream receiver.
     exec_env_.InitForFeTests();
     runtime_state_.InitMemTrackers(TUniqueId(), NULL, -1);
   }
@@ -115,7 +119,9 @@ class DataStreamTest : public testing::Test {
     // there's only one column to partition on
     TExprNode expr_node;
     expr_node.node_type = TExprNodeType::SLOT_REF;
-    expr_node.type.type = TPrimitiveType::BIGINT;
+    expr_node.type.types.push_back(TTypeNode());
+    expr_node.type.types.back().__isset.scalar_type = true;
+    expr_node.type.types.back().scalar_type.type = TPrimitiveType::BIGINT;
     expr_node.num_children = 0;
     TSlotRef slot_ref;
     slot_ref.slot_id = 0;
@@ -143,6 +149,8 @@ class DataStreamTest : public testing::Test {
   }
 
   virtual void TearDown() {
+    lhs_slot_ctx_->Close(NULL);
+    rhs_slot_ctx_->Close(NULL);
     exec_env_.impalad_client_cache()->TestShutdown();
     StopBackend();
   }
@@ -269,9 +277,17 @@ class DataStreamTest : public testing::Test {
   // Create a tuple comparator to sort in ascending order on the single bigint column.
   void CreateTupleComparator() {
     SlotRef* lhs_slot = obj_pool_.Add(new SlotRef(TYPE_BIGINT, 0));
+    lhs_slot_ctx_ = obj_pool_.Add(new ExprContext(lhs_slot));
     SlotRef* rhs_slot = obj_pool_.Add(new SlotRef(TYPE_BIGINT, 0));
-    less_than_ = obj_pool_.Add(new TupleRowComparator(vector<Expr*>(1, lhs_slot),
-        vector<Expr*>(1, rhs_slot), vector<bool>(1, true), vector<bool>(1, false)));
+    rhs_slot_ctx_ = obj_pool_.Add(new ExprContext(rhs_slot));
+
+    lhs_slot_ctx_->Prepare(NULL, *row_desc_, &tracker_);
+    rhs_slot_ctx_->Prepare(NULL, *row_desc_, &tracker_);
+    lhs_slot_ctx_->Open(NULL);
+    rhs_slot_ctx_->Open(NULL);
+    less_than_ = obj_pool_.Add(new TupleRowComparator(
+        vector<ExprContext*>(1, lhs_slot_ctx_), vector<ExprContext*>(1, rhs_slot_ctx_),
+        vector<bool>(1, true), vector<bool>(1, false)));
   }
 
   // Create batch_, but don't fill it with data yet. Assumes we created row_desc_.
@@ -455,6 +471,7 @@ class DataStreamTest : public testing::Test {
               TPartitionType::type partition_type) {
     RuntimeState state(TPlanFragmentInstanceCtx(), "", &exec_env_);
     state.set_desc_tbl(desc_tbl_);
+    state.InitMemTrackers(TUniqueId(), NULL, -1);
     VLOG_QUERY << "create sender " << sender_num;
     const TDataStreamSink& sink = GetSink(partition_type);
     DataStreamSender sender(
@@ -494,6 +511,10 @@ class DataStreamTest : public testing::Test {
     JoinReceivers();
     CheckReceivers(stream_type, num_senders);
   }
+
+ private:
+  ExprContext* lhs_slot_ctx_;
+  ExprContext* rhs_slot_ctx_;
 };
 
 TEST_F(DataStreamTest, UnknownSenderSmallResult) {
@@ -560,8 +581,9 @@ TEST_F(DataStreamTest, BasicTest) {
 }
 
 int main(int argc, char **argv) {
-  InitCommonRuntime(argc, argv, true);
-  impala::LlvmCodeGen::InitializeLlvm();
   ::testing::InitGoogleTest(&argc, argv);
+  InitCommonRuntime(argc, argv, true, TestInfo::BE_TEST);
+  InitFeSupport();
+  impala::LlvmCodeGen::InitializeLlvm();
   return RUN_ALL_TESTS();
 }

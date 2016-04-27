@@ -1,36 +1,36 @@
 ====
 ---- QUERY
-# Test show datasources
-show datasources
+# Test show data sources
+show data sources
 ---- RESULTS: VERIFY_IS_SUBSET
-'show_test_ds1','/test-warehouse/data-sources/test-data-source.jar','com.cloudera.impala.extdatasource.AllTypesDataSource','V1'
-'show_test_ds2','/test-warehouse/data-sources/test-data-source.jar','com.cloudera.impala.extdatasource.AllTypesDataSource','V1'
+'show_test_ds1','hdfs://localhost:20500/test-warehouse/data-sources/test-data-source.jar','com.cloudera.impala.extdatasource.AllTypesDataSource','V1'
+'show_test_ds2','hdfs://localhost:20500/test-warehouse/data-sources/test-data-source.jar','com.cloudera.impala.extdatasource.AllTypesDataSource','V1'
 ---- LABELS
 NAME, LOCATION, CLASS NAME, API VERSION
 ---- TYPES
 STRING, STRING, STRING, STRING
 ====
 ---- QUERY
-show datasources like 'show_test_ds*'
+show data sources like 'show_test_ds*'
 ---- RESULTS
-'show_test_ds1','/test-warehouse/data-sources/test-data-source.jar','com.cloudera.impala.extdatasource.AllTypesDataSource','V1'
-'show_test_ds2','/test-warehouse/data-sources/test-data-source.jar','com.cloudera.impala.extdatasource.AllTypesDataSource','V1'
+'show_test_ds1','hdfs://localhost:20500/test-warehouse/data-sources/test-data-source.jar','com.cloudera.impala.extdatasource.AllTypesDataSource','V1'
+'show_test_ds2','hdfs://localhost:20500/test-warehouse/data-sources/test-data-source.jar','com.cloudera.impala.extdatasource.AllTypesDataSource','V1'
 ---- LABELS
 NAME, LOCATION, CLASS NAME, API VERSION
 ---- TYPES
 STRING, STRING, STRING, STRING
 ====
 ---- QUERY
-show datasources like 'show_test_ds1'
+show data sources like 'show_test_ds1'
 ---- RESULTS
-'show_test_ds1','/test-warehouse/data-sources/test-data-source.jar','com.cloudera.impala.extdatasource.AllTypesDataSource','V1'
+'show_test_ds1','hdfs://localhost:20500/test-warehouse/data-sources/test-data-source.jar','com.cloudera.impala.extdatasource.AllTypesDataSource','V1'
 ---- LABELS
 NAME, LOCATION, CLASS NAME, API VERSION
 ---- TYPES
 STRING, STRING, STRING, STRING
 ====
 ---- QUERY
-show datasources like 'not_a_data_src'
+show data sources like 'not_a_data_src'
 ---- RESULTS
 ---- LABELS
 NAME, LOCATION, CLASS NAME, API VERSION

@@ -81,7 +81,10 @@ class Frontend {
   // Call FE to get the table/column stats.
   Status GetStats(const TShowStatsParams& params, TResultSet* result);
 
-  // Return all functions of 'type' that match the optional argument 'pattern'.
+  // Call FE to get the privileges granted to a role.
+  Status GetRolePrivileges(const TShowGrantRoleParams& params, TResultSet* result);
+
+  // Return all functions of 'category' that match the optional argument 'pattern'.
   // If pattern is NULL match all functions, otherwise match only those functions that
   // match the pattern string.
   // The TSessionState parameter is used to filter results of metadata operations when
@@ -89,7 +92,7 @@ class Frontend {
   // be set to the user's current session. If this is an Impala internal request,
   // the session should be set to NULL which will skip privilege checks returning all
   // results.
-  Status GetFunctions(TFunctionType::type fn_type, const std::string& db,
+  Status GetFunctions(TFunctionCategory::type fn_category, const std::string& db,
       const std::string* pattern, const TSessionState* session,
       TGetFunctionsResult* functions);
 
@@ -98,6 +101,9 @@ class Frontend {
   // Returns OK if the operation was successful, otherwise a Status object with
   // information on the error will be returned.
   Status GetCatalogObject(const TCatalogObject& request, TCatalogObject* response);
+
+  // Call FE to get the roles.
+  Status ShowRoles(const TShowRolesParams& params, TShowRolesResult* result);
 
   // Returns (in the output parameter) the result of a DESCRIBE table command. This
   // command retrieves table metadata, such as the column definitions. The metadata
@@ -120,9 +126,8 @@ class Frontend {
   Status ExecHiveServer2MetadataOp(const TMetadataOpRequest& request,
       TResultSet* result);
 
-  // Writes a table of all Hadoop configurations, either in text or as HTML per the
-  // as_text parameter, to the output stringstream.
-  Status RenderHadoopConfigs(bool as_text, std::stringstream* output);
+  // Returns all Hadoop configurations in key, value form in result.
+  Status GetAllHadoopConfigs(TGetAllHadoopConfigsResponse* result);
 
   // Returns (in the output parameter) the value for the given config. The returned Thrift
   // struct will indicate if the value was null or not found by not setting its 'value'
@@ -152,7 +157,7 @@ class Frontend {
   jmethodID create_exec_request_id_;  // JniFrontend.createExecRequest()
   jmethodID get_explain_plan_id_;  // JniFrontend.getExplainPlan()
   jmethodID get_hadoop_config_id_;  // JniFrontend.getHadoopConfig(byte[])
-  jmethodID get_hadoop_configs_id_;  // JniFrontend.getHadoopConfig(bool)
+  jmethodID get_hadoop_configs_id_;  // JniFrontend.getAllHadoopConfigs()
   jmethodID check_config_id_; // JniFrontend.checkConfiguration()
   jmethodID update_catalog_cache_id_; // JniFrontend.updateCatalogCache()
   jmethodID get_table_names_id_; // JniFrontend.getTableNames
@@ -163,6 +168,8 @@ class Frontend {
   jmethodID get_stats_id_; // JniFrontend.getTableStats
   jmethodID get_functions_id_; // JniFrontend.getFunctions
   jmethodID get_catalog_object_id_; // JniFrontend.getCatalogObject
+  jmethodID show_roles_id_; // JniFrontend.getRoles
+  jmethodID get_role_privileges_id_; // JniFrontend.getRolePrivileges
   jmethodID exec_hs2_metadata_op_id_; // JniFrontend.execHiveServer2MetadataOp
   jmethodID load_table_data_id_; // JniFrontend.loadTableData
   jmethodID set_catalog_initialized_id_; // JniFrontend.setCatalogInitialized

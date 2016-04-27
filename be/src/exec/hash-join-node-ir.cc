@@ -14,29 +14,29 @@
 
 #include "codegen/impala-ir.h"
 #include "exec/hash-join-node.h"
-#include "exec/hash-table.inline.h"
+#include "exec/old-hash-table.inline.h"
 #include "runtime/row-batch.h"
 
 using namespace std;
 using namespace impala;
 
-// Functions in this file are cross compiled to IR with clang.  
+// Functions in this file are cross compiled to IR with clang.
 
 // Wrapper around ExecNode's eval conjuncts with a different function name.
 // This lets us distinguish between the join conjuncts vs. non-join conjuncts
 // for codegen.
 // Note: don't declare this static.  LLVM will pick the fastcc calling convention and
-// we will not be able to replace the funcitons with codegen'd versions.
+// we will not be able to replace the functions with codegen'd versions.
 // TODO: explicitly set the calling convention?
 // TODO: investigate using fastcc for all codegen internal functions?
-bool IR_NO_INLINE EvalOtherJoinConjuncts(Expr* const* exprs, int num_exprs,
-    TupleRow* row) {
-  return ExecNode::EvalConjuncts(exprs, num_exprs, row);
+bool IR_NO_INLINE EvalOtherJoinConjuncts2(
+    ExprContext* const* ctxs, int num_ctxs, TupleRow* row) {
+  return ExecNode::EvalConjuncts(ctxs, num_ctxs, row);
 }
 
 // CreateOutputRow, EvalOtherJoinConjuncts, and EvalConjuncts are replaced by
 // codegen.
-int HashJoinNode::ProcessProbeBatch(RowBatch* out_batch, RowBatch* probe_batch, 
+int HashJoinNode::ProcessProbeBatch(RowBatch* out_batch, RowBatch* probe_batch,
     int max_added_rows) {
   // This path does not handle full outer or right outer joins
   DCHECK(!match_all_build_);
@@ -49,26 +49,27 @@ int HashJoinNode::ProcessProbeBatch(RowBatch* out_batch, RowBatch* probe_batch,
   int rows_returned = 0;
   int probe_rows = probe_batch->num_rows();
 
-  Expr* const* other_conjuncts = &other_join_conjuncts_[0];
-  int num_other_conjuncts = other_join_conjuncts_.size();
+  ExprContext* const* other_conjunct_ctxs = &other_join_conjunct_ctxs_[0];
+  int num_other_conjunct_ctxs = other_join_conjunct_ctxs_.size();
 
-  Expr* const* conjuncts = &conjuncts_[0];
-  int num_conjuncts = conjuncts_.size();
+  ExprContext* const* conjunct_ctxs = &conjunct_ctxs_[0];
+  int num_conjunct_ctxs = conjunct_ctxs_.size();
 
   while (true) {
     // Create output row for each matching build row
     while (!hash_tbl_iterator_.AtEnd()) {
       TupleRow* matched_build_row = hash_tbl_iterator_.GetRow();
       hash_tbl_iterator_.Next<true>();
-      CreateOutputRow(out_row, current_left_child_row_, matched_build_row);
+      CreateOutputRow(out_row, current_probe_row_, matched_build_row);
 
-      if (!EvalOtherJoinConjuncts(other_conjuncts, num_other_conjuncts, out_row)) {
+      if (!EvalOtherJoinConjuncts2(
+              other_conjunct_ctxs, num_other_conjunct_ctxs, out_row)) {
         continue;
       }
 
       matched_probe_ = true;
 
-      if (EvalConjuncts(conjuncts, num_conjuncts, out_row)) {
+      if (EvalConjuncts(conjunct_ctxs, num_conjunct_ctxs, out_row)) {
         ++rows_returned;
         // Filled up out batch or hit limit
         if (UNLIKELY(rows_returned == max_added_rows)) goto end;
@@ -86,9 +87,9 @@ int HashJoinNode::ProcessProbeBatch(RowBatch* out_batch, RowBatch* probe_batch,
 
     // Handle left outer-join
     if (!matched_probe_ && match_all_probe_) {
-      CreateOutputRow(out_row, current_left_child_row_, NULL);
+      CreateOutputRow(out_row, current_probe_row_, NULL);
       matched_probe_ = true;
-      if (EvalConjuncts(conjuncts, num_conjuncts, out_row)) {
+      if (EvalConjuncts(conjunct_ctxs, num_conjunct_ctxs, out_row)) {
         ++rows_returned;
         if (UNLIKELY(rows_returned == max_added_rows)) goto end;
         // Advance to next out row
@@ -99,9 +100,9 @@ int HashJoinNode::ProcessProbeBatch(RowBatch* out_batch, RowBatch* probe_batch,
 
     if (hash_tbl_iterator_.AtEnd()) {
       // Advance to the next probe row
-      if (UNLIKELY(left_batch_pos_ == probe_rows)) goto end;
-      current_left_child_row_ = probe_batch->GetRow(left_batch_pos_++);
-      hash_tbl_iterator_ = hash_tbl_->Find(current_left_child_row_);
+      if (UNLIKELY(probe_batch_pos_ == probe_rows)) goto end;
+      current_probe_row_ = probe_batch->GetRow(probe_batch_pos_++);
+      hash_tbl_iterator_ = hash_tbl_->Find(current_probe_row_);
       matched_probe_ = false;
     }
   }
@@ -118,4 +119,3 @@ void HashJoinNode::ProcessBuildBatch(RowBatch* build_batch) {
     hash_tbl_->Insert(build_batch->GetRow(i));
   }
 }
-

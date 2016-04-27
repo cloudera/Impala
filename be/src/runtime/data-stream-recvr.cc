@@ -15,7 +15,6 @@
 #include <boost/thread/locks.hpp>
 #include <boost/thread/mutex.hpp>
 
-#include "gen-cpp/Data_types.h"
 #include "runtime/data-stream-recvr.h"
 #include "runtime/data-stream-mgr.h"
 #include "runtime/row-batch.h"
@@ -146,7 +145,7 @@ void DataStreamRecvr::SenderQueue::AddBatch(const TRowBatch& thrift_batch) {
   if (is_cancelled_) return;
 
   int batch_size = RowBatch::GetBatchSize(thrift_batch);
-  COUNTER_UPDATE(recvr_->bytes_received_counter_, batch_size);
+  COUNTER_ADD(recvr_->bytes_received_counter_, batch_size);
   DCHECK_GT(num_remaining_senders_, 0);
 
   // if there's something in the queue and this batch will push us over the
@@ -286,7 +285,7 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, MemTracker* parent_t
     is_merging_(is_merging),
     num_buffered_bytes_(0),
     profile_(profile) {
-  mem_tracker_.reset(new MemTracker(-1, "DataStreamRecvr", parent_tracker));
+  mem_tracker_.reset(new MemTracker(-1, -1, "DataStreamRecvr", parent_tracker));
   // Create one queue per sender if is_merging is true.
   int num_queues = is_merging ? num_senders : 1;
   sender_queues_.reserve(num_queues);

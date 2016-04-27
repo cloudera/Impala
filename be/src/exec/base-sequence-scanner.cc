@@ -51,7 +51,8 @@ Status BaseSequenceScanner::IssueInitialRanges(HdfsScanNode* scan_node,
     // TODO: add remote disk id and plumb that through to the io mgr.  It should have
     // 1 queue for each NIC as well?
     DiskIoMgr::ScanRange* header_range = scan_node->AllocateScanRange(
-        files[i]->filename.c_str(), HEADER_SIZE, 0, metadata->partition_id, -1, false);
+        files[i]->filename.c_str(), HEADER_SIZE, 0, metadata->partition_id, -1, false,
+        false);
     header_ranges.push_back(header_range);
   }
   RETURN_IF_ERROR(scan_node->AddDiskIoRanges(header_ranges));
@@ -61,7 +62,6 @@ Status BaseSequenceScanner::IssueInitialRanges(HdfsScanNode* scan_node,
 BaseSequenceScanner::BaseSequenceScanner(HdfsScanNode* node, RuntimeState* state)
   : HdfsScanner(node, state),
     header_(NULL),
-    data_buffer_pool_(new MemPool(node->mem_tracker())),
     block_start_(0),
     total_block_size_(0),
     num_syncs_(0) {
@@ -73,7 +73,6 @@ BaseSequenceScanner::~BaseSequenceScanner() {
 Status BaseSequenceScanner::Prepare(ScannerContext* context) {
   RETURN_IF_ERROR(HdfsScanner::Prepare(context));
   stream_->set_read_past_size_cb(bind(&BaseSequenceScanner::ReadPastSize, this, _1));
-  decompress_timer_ = ADD_TIMER(scan_node_->runtime_profile(), "DecompressionTime");
   bytes_skipped_counter_ = ADD_COUNTER(
       scan_node_->runtime_profile(), "BytesSkipped", TCounterType::BYTES);
   return Status::OK;
@@ -83,14 +82,17 @@ void BaseSequenceScanner::Close() {
   VLOG_FILE << "Bytes read past scan range: " << -stream_->bytes_left();
   VLOG_FILE << "Average block size: "
             << (num_syncs_ > 1 ? total_block_size_ / (num_syncs_ - 1) : 0);
-  if (decompressor_.get() != NULL) decompressor_->Close();
+  // Need to close the decompressor before releasing the resources at AddFinalRowBatch(),
+  // because in some cases there is memory allocated in decompressor_'s temp_memory_pool_.
+  if (decompressor_.get() != NULL) {
+    decompressor_->Close();
+    decompressor_.reset(NULL);
+  }
   AttachPool(data_buffer_pool_.get(), false);
   AddFinalRowBatch();
   if (!only_parsing_header_) {
     scan_node_->RangeComplete(file_format(), header_->compression_type);
   }
-  scan_node_->ReleaseCodegenFn(file_format(), reinterpret_cast<void*>(write_tuples_fn_));
-  write_tuples_fn_ = NULL;
   HdfsScanner::Close();
 }
 
@@ -100,12 +102,6 @@ Status BaseSequenceScanner::ProcessSplit() {
   if (header_ == NULL) {
     // This is the initial scan range just to parse the header
     only_parsing_header_ = true;
-
-    // Release our conjuncts so threads responsible for actually processing a split can
-    // use them.
-    scan_node_->ReleaseConjuncts(conjuncts_);
-    conjuncts_ = NULL;
-
     header_ = state_->obj_pool()->Add(AllocateFileHeader());
     Status status = ReadFileHeader();
     if (!status.ok()) {
@@ -164,7 +160,7 @@ Status BaseSequenceScanner::ProcessSplit() {
     parse_status_ = Status::OK;
     int64_t error_offset = stream_->file_offset();
     status = SkipToSync(header_->sync, SYNC_HASH_SIZE);
-    COUNTER_UPDATE(bytes_skipped_counter_, stream_->file_offset() - error_offset);
+    COUNTER_ADD(bytes_skipped_counter_, stream_->file_offset() - error_offset);
     RETURN_IF_ERROR(status);
     DCHECK(parse_status_.ok());
   }
@@ -179,9 +175,8 @@ Status BaseSequenceScanner::ReadSync() {
   finished_ = stream_->eosr();
 
   uint8_t* hash;
-  int out_len;
-  RETURN_IF_FALSE(
-      stream_->GetBytes(SYNC_HASH_SIZE, &hash, &out_len, &parse_status_));
+  int64_t out_len;
+  RETURN_IF_FALSE(stream_->GetBytes(SYNC_HASH_SIZE, &hash, &out_len, &parse_status_));
   if (out_len != SYNC_HASH_SIZE || memcmp(hash, header_->sync, SYNC_HASH_SIZE)) {
     stringstream ss;
     ss  << "Bad synchronization marker" << endl
@@ -220,7 +215,7 @@ Status BaseSequenceScanner::SkipToSync(const uint8_t* sync, int sync_size) {
   // offset into current buffer of end of sync (once found, -1 until then)
   int offset = -1;
   uint8_t* buffer;
-  int buffer_len;
+  int64_t buffer_len;
   Status status;
 
   // Read buffers until we find a sync or reach the end of the scan range. If we read all
@@ -239,7 +234,7 @@ Status BaseSequenceScanner::SkipToSync(const uint8_t* sync, int sync_size) {
     // then we read these bytes plus the first sync_size - 1 bytes of the next buffer.
     // This guarantees that we find any syncs that start in the current buffer and end in
     // the next buffer.
-    int to_skip = max(0, buffer_len - (sync_size - 1));
+    int64_t to_skip = max(static_cast<int64_t>(0), buffer_len - (sync_size - 1));
     RETURN_IF_FALSE(stream_->SkipBytes(to_skip, &parse_status_));
     // Peek so we don't advance stream_ into the next buffer. If we don't find a sync here
     // then we'll need to check all of the next buffer, including the first sync_size -1
@@ -283,7 +278,7 @@ void BaseSequenceScanner::CloseFileRanges(const char* filename) {
   HdfsFileDesc* desc = scan_node_->GetFileDesc(filename);
   const vector<DiskIoMgr::ScanRange*>& splits = desc->splits;
   for (int i = 0; i < splits.size(); ++i) {
-    COUNTER_UPDATE(bytes_skipped_counter_, splits[i]->len());
+    COUNTER_ADD(bytes_skipped_counter_, splits[i]->len());
     scan_node_->RangeComplete(file_format(), THdfsCompression::NONE);
   }
 }

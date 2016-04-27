@@ -26,6 +26,7 @@
 #include "gen-cpp/Descriptors_types.h"
 #include "gen-cpp/PlanNodes_types.h"
 #include "exprs/expr.h"
+#include "runtime/runtime-state.h"
 
 using namespace llvm;
 using namespace std;
@@ -97,19 +98,20 @@ HdfsPartitionDescriptor::HdfsPartitionDescriptor(const THdfsPartition& thrift_pa
     escape_char_(thrift_partition.escapeChar),
     block_size_(thrift_partition.blockSize),
     location_(thrift_partition.location),
-    compression_(thrift_partition.compression),
     id_(thrift_partition.id),
     exprs_prepared_(false),
+    exprs_opened_(false),
+    exprs_closed_(false),
     file_format_(thrift_partition.fileFormat),
     object_pool_(pool) {
 
   for (int i = 0; i < thrift_partition.partitionKeyExprs.size(); ++i) {
-    Expr* expr;
+    ExprContext* ctx;
     // TODO: Move to dedicated Init method and treat Status return correctly
     Status status = Expr::CreateExprTree(object_pool_,
-        thrift_partition.partitionKeyExprs[i], &expr);
+        thrift_partition.partitionKeyExprs[i], &ctx);
     DCHECK(status.ok());
-    partition_key_values_.push_back(expr);
+    partition_key_value_ctxs_.push_back(ctx);
   }
 }
 
@@ -118,9 +120,22 @@ Status HdfsPartitionDescriptor::PrepareExprs(RuntimeState* state) {
     // TODO: RowDescriptor should arguably be optional in Prepare for known literals
     exprs_prepared_ = true;
     // Partition exprs are not used in the codegen case.  Don't codegen them.
-    RETURN_IF_ERROR(Expr::Prepare(partition_key_values_, state, RowDescriptor()));
+    RETURN_IF_ERROR(Expr::Prepare(partition_key_value_ctxs_, state, RowDescriptor(),
+                                  state->instance_mem_tracker()));
   }
   return Status::OK;
+}
+
+Status HdfsPartitionDescriptor::OpenExprs(RuntimeState* state) {
+  if (exprs_opened_) return Status::OK;
+  exprs_opened_ = true;
+  return Expr::Open(partition_key_value_ctxs_, state);
+}
+
+void HdfsPartitionDescriptor::CloseExprs(RuntimeState* state) {
+  if (exprs_closed_) return;
+  exprs_closed_ = true;
+  Expr::Close(partition_key_value_ctxs_, state);
 }
 
 string HdfsPartitionDescriptor::DebugString() const {
@@ -210,7 +225,7 @@ TupleDescriptor::TupleDescriptor(const TTupleDescriptor& tdesc)
 
 void TupleDescriptor::AddSlot(SlotDescriptor* slot) {
   slots_.push_back(slot);
-  if (slot->type().type == TYPE_STRING && slot->is_materialized()) {
+  if (slot->type().IsVarLen() && slot->is_materialized()) {
     string_slots_.push_back(slot);
   }
   if (slot->is_materialized()) ++num_materialized_slots_;
@@ -244,11 +259,32 @@ RowDescriptor::RowDescriptor(const DescriptorTbl& desc_tbl,
   InitTupleIdxMap();
 }
 
+RowDescriptor::RowDescriptor(const RowDescriptor& lhs_row_desc,
+    const RowDescriptor& rhs_row_desc) {
+  tuple_desc_map_.insert(tuple_desc_map_.end(), lhs_row_desc.tuple_desc_map_.begin(),
+      lhs_row_desc.tuple_desc_map_.end());
+  tuple_desc_map_.insert(tuple_desc_map_.end(), rhs_row_desc.tuple_desc_map_.begin(),
+      rhs_row_desc.tuple_desc_map_.end());
+  tuple_idx_nullable_map_.insert(tuple_idx_nullable_map_.end(),
+      lhs_row_desc.tuple_idx_nullable_map_.begin(),
+      lhs_row_desc.tuple_idx_nullable_map_.end());
+  tuple_idx_nullable_map_.insert(tuple_idx_nullable_map_.end(),
+      rhs_row_desc.tuple_idx_nullable_map_.begin(),
+      rhs_row_desc.tuple_idx_nullable_map_.end());
+  InitTupleIdxMap();
+}
+
 RowDescriptor::RowDescriptor(const vector<TupleDescriptor*>& tuple_descs,
                              const vector<bool>& nullable_tuples)
   : tuple_desc_map_(tuple_descs),
     tuple_idx_nullable_map_(nullable_tuples) {
   DCHECK_EQ(nullable_tuples.size(), tuple_descs.size());
+  InitTupleIdxMap();
+}
+
+RowDescriptor::RowDescriptor(TupleDescriptor* tuple_desc, bool is_nullable)
+  : tuple_desc_map_(1, tuple_desc),
+    tuple_idx_nullable_map_(1, is_nullable) {
   InitTupleIdxMap();
 }
 
@@ -281,6 +317,13 @@ int RowDescriptor::GetTupleIdx(TupleId id) const {
 bool RowDescriptor::TupleIsNullable(int tuple_idx) const {
   DCHECK_LT(tuple_idx, tuple_idx_nullable_map_.size());
   return tuple_idx_nullable_map_[tuple_idx];
+}
+
+bool RowDescriptor::IsAnyTupleNullable() const {
+  for (int i = 0; i < tuple_idx_nullable_map_.size(); ++i) {
+    if (tuple_idx_nullable_map_[i]) return true;
+  }
+  return false;
 }
 
 void RowDescriptor::ToThrift(vector<TTupleId>* row_tuple_ids) {
@@ -508,6 +551,7 @@ StructType* TupleDescriptor::GenerateLlvmStruct(LlvmCodeGen* codegen) {
   // Add the slot types to the struct description.
   for (int i = 0; i < slots().size(); ++i) {
     SlotDescriptor* slot_desc = slots()[i];
+    if (slot_desc->type().type == TYPE_CHAR) return NULL;
     if (slot_desc->is_materialized()) {
       slot_desc->field_idx_ = slot_desc->slot_idx_ + num_null_bytes_;
       DCHECK_LT(slot_desc->field_idx(), struct_fields.size());

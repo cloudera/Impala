@@ -24,7 +24,7 @@
 #include "common/object-pool.h"
 #include "common/status.h"
 #include "util/runtime-profile.h"
-#include "gen-cpp/Data_types.h"  // for TRowBatch
+#include "gen-cpp/Results_types.h" // for TRowBatch
 
 namespace impala {
 
@@ -79,7 +79,9 @@ class DataStreamSender : public DataSink {
   virtual void Close(RuntimeState* state);
 
   // Serializes the src batch into the dest thrift batch. Maintains metrics.
-  void SerializeBatch(RowBatch* src, TRowBatch* dest);
+  // num_receivers is the number of receivers this batch will be sent to. Only
+  // used to maintain metrics.
+  void SerializeBatch(RowBatch* src, TRowBatch* dest, int num_receivers = 1);
 
   // Return total number of bytes sent in TRowBatch.data. If batches are
   // broadcast to multiple receivers, they are counted once per receiver.
@@ -108,7 +110,7 @@ class DataStreamSender : public DataSink {
   TRowBatch thrift_batch2_;
   TRowBatch* current_thrift_batch_;  // the next one to fill in Send()
 
-  std::vector<Expr*> partition_exprs_;  // compute per-row partition values
+  std::vector<ExprContext*> partition_expr_ctxs_;  // compute per-row partition values
   std::vector<Channel*> channels_;
 
   RuntimeProfile* profile_; // Allocated from pool_

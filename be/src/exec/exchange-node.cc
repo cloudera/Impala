@@ -67,7 +67,9 @@ Status ExchangeNode::Prepare(RuntimeState* state) {
       input_row_desc_, state->fragment_instance_id(), id_, num_senders_,
       FLAGS_exchg_node_buffer_size_bytes, runtime_profile(), is_merging_);
   if (is_merging_) {
-    RETURN_IF_ERROR(sort_exec_exprs_.Prepare(state, row_descriptor_, row_descriptor_));
+    RETURN_IF_ERROR(sort_exec_exprs_.Prepare(
+        state, row_descriptor_, row_descriptor_, expr_mem_tracker()));
+    AddExprCtxsToFree(sort_exec_exprs_);
   }
   return Status::OK;
 }
@@ -77,8 +79,8 @@ Status ExchangeNode::Open(RuntimeState* state) {
   RETURN_IF_ERROR(ExecNode::Open(state));
   if (is_merging_) {
     RETURN_IF_ERROR(sort_exec_exprs_.Open(state));
-    TupleRowComparator less_than(sort_exec_exprs_.lhs_ordering_exprs(),
-        sort_exec_exprs_.rhs_ordering_exprs(), is_asc_order_, nulls_first_);
+    TupleRowComparator less_than(sort_exec_exprs_.lhs_ordering_expr_ctxs(),
+        sort_exec_exprs_.rhs_ordering_expr_ctxs(), is_asc_order_, nulls_first_);
     // CreateMerger() will populate its merging heap with batches from the stream_recvr_,
     // so it is not necessary to call FillInputRowBatch().
     stream_recvr_->CreateMerger(less_than);
@@ -112,8 +114,6 @@ Status ExchangeNode::FillInputRowBatch(RuntimeState* state) {
 
 Status ExchangeNode::GetNext(RuntimeState* state, RowBatch* output_batch, bool* eos) {
   RETURN_IF_ERROR(ExecDebugAction(TExecNodePhase::GETNEXT, state));
-  RETURN_IF_CANCELLED(state);
-  RETURN_IF_ERROR(state->CheckQueryState());
   SCOPED_TIMER(runtime_profile_->total_time_counter());
   if (ReachedLimit()) {
     stream_recvr_->TransferAllResources(output_batch);
@@ -128,6 +128,8 @@ Status ExchangeNode::GetNext(RuntimeState* state, RowBatch* output_batch, bool* 
   while (true) {
     {
       SCOPED_TIMER(convert_row_batch_timer_);
+      RETURN_IF_CANCELLED(state);
+      RETURN_IF_ERROR(QueryMaintenance(state));
       // copy rows until we hit the limit/capacity or until we exhaust input_batch_
       while (!ReachedLimit() && !output_batch->AtCapacity()
           && input_batch_ != NULL && next_row_idx_ < input_batch_->capacity()) {
@@ -179,7 +181,7 @@ Status ExchangeNode::GetNextMerging(RuntimeState* state, RowBatch* output_batch,
     } else {
       output_batch->set_num_rows(0);
     }
-    if (rows_to_keep > 0 || *eos) break;
+    if (rows_to_keep > 0 || *eos || output_batch->AtCapacity()) break;
     RETURN_IF_ERROR(stream_recvr_->GetNext(output_batch, eos));
   }
 

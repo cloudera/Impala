@@ -20,7 +20,7 @@ import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.cloudera.impala.catalog.AuthorizationException;
+import com.cloudera.impala.catalog.Type;
 import com.cloudera.impala.common.AnalysisException;
 import com.cloudera.impala.thrift.TExprNode;
 import com.cloudera.impala.thrift.TExprNodeType;
@@ -76,9 +76,21 @@ public class SlotRef extends Expr {
     this.numDistinctValues_ = desc.getStats().getNumDistinctValues();
   }
 
+  /**
+   * C'tor for cloning.
+   */
+  private SlotRef(SlotRef other) {
+    super(other);
+    tblName_ = other.tblName_;
+    col_ = other.col_;
+    label_ = other.label_;
+    desc_ = other.desc_;
+    type_ = other.type_;
+    isAnalyzed_ = other.isAnalyzed_;
+  }
+
   @Override
-  public void analyze(Analyzer analyzer) throws AnalysisException,
-      AuthorizationException {
+  public void analyze(Analyzer analyzer) throws AnalysisException {
     if (isAnalyzed_) return;
     super.analyze(analyzer);
     desc_ = analyzer.registerColumnRef(tblName_, col_);
@@ -96,6 +108,7 @@ public class SlotRef extends Expr {
     type_.analyze();
     numDistinctValues_ = desc_.getStats().getNumDistinctValues();
     if (type_.isBoolean()) selectivity_ = DEFAULT_SELECTIVITY;
+    isAnalyzed_ = true;
   }
 
   @Override
@@ -114,10 +127,17 @@ public class SlotRef extends Expr {
   protected void toThrift(TExprNode msg) {
     msg.node_type = TExprNodeType.SLOT_REF;
     msg.slot_ref = new TSlotRef(desc_.getId().asInt());
+    Preconditions.checkState(desc_.getParent().isMaterialized(),
+        String.format("Illegal reference to non-materialized tuple: tid=%s",
+            desc_.getParent().getId()));
     // we shouldn't be sending exprs over non-materialized slots
-    Preconditions.checkState(desc_.isMaterialized());
+    Preconditions.checkState(desc_.isMaterialized(),
+        String.format("Illegal reference to non-materialized slot: tid=%s sid=%s",
+            desc_.getParent().getId(), desc_.getId()));
     // we also shouldn't have forgotten to compute the mem layout
-    Preconditions.checkState(desc_.getByteOffset() != -1);
+    Preconditions.checkState(desc_.getByteOffset() != -1,
+        String.format("Missing memory layout for tuple with tid=%s",
+            desc_.getParent().getId()));
   }
 
   @Override
@@ -177,7 +197,26 @@ public class SlotRef extends Expr {
     if (tupleIds != null) tupleIds.add(desc_.getParent().getId());
   }
 
-  public String getColumnName() {
-    return col_;
+  public String getColumnName() { return col_; }
+
+  @Override
+  public Expr clone() { return new SlotRef(this); }
+
+  @Override
+  public String toString() {
+    if (desc_ != null) {
+      return "tid=" + desc_.getParent().getId() + " sid=" + desc_.getId();
+    }
+    return "no desc set";
+  }
+
+  @Override
+  protected Expr uncheckedCastTo(Type targetType) throws AnalysisException {
+    if (type_.isNull()) {
+      // Hack to prevent null SlotRefs in the BE
+      return NullLiteral.create(targetType);
+    } else {
+      return super.uncheckedCastTo(targetType);
+    }
   }
 }

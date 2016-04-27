@@ -25,18 +25,15 @@
 #include "runtime/raw-value.h"
 #include "runtime/string-value.h"
 #include "gen-cpp/Exprs_types.h"
-#include "exprs/bool-literal.h"
-#include "exprs/char-literal.h"
-#include "exprs/float-literal.h"
-#include "exprs/function-call.h"
-#include "exprs/int-literal.h"
+#include "exprs/expr-context.h"
 #include "exprs/is-null-predicate.h"
 #include "exprs/like-predicate.h"
+#include "exprs/literal.h"
 #include "exprs/null-literal.h"
-#include "exprs/string-literal.h"
 #include "codegen/llvm-codegen.h"
 #include "util/debug-util.h"
 #include "util/string-parser.h"
+#include "util/test-info.h"
 #include "rpc/thrift-server.h"
 #include "rpc/thrift-client.h"
 #include "testutil/in-process-servers.h"
@@ -49,6 +46,7 @@ DECLARE_int32(be_port);
 DECLARE_int32(beeswax_port);
 DECLARE_string(impalad);
 DECLARE_bool(abort_on_config_error);
+DECLARE_bool(disable_optimization_passes);
 
 using namespace impala;
 using namespace llvm;
@@ -115,6 +113,7 @@ class ExprTest : public testing::Test {
   string default_bool_str_;
   string default_string_str_;
   string default_timestamp_str_;
+  string default_decimal_str_;
   // Corresponding default values.
   bool default_bool_val_;
   string default_string_val_;
@@ -139,6 +138,7 @@ class ExprTest : public testing::Test {
     default_bool_str_ = "false";
     default_string_str_ = "'abc'";
     default_timestamp_str_ = "cast('2011-01-01 09:01:01' as timestamp)";
+    default_decimal_str_ = "1.23";
     default_bool_val_ = false;
     default_string_val_ = "abc";
     default_timestamp_val_ = TimestampValue(1293872461);
@@ -163,13 +163,18 @@ class ExprTest : public testing::Test {
     default_type_strs_[TYPE_BOOLEAN] = default_bool_str_;
     default_type_strs_[TYPE_STRING] = default_string_str_;
     default_type_strs_[TYPE_TIMESTAMP] = default_timestamp_str_;
+    default_type_strs_[TYPE_DECIMAL] = default_decimal_str_;
   }
 
   void GetValue(const string& expr, const ColumnType& expr_type,
-      void** interpreted_value) {
+      void** interpreted_value, bool expect_error = false) {
     string stmt = "select " + expr;
     vector<FieldSchema> result_types;
     Status status = executor_->Exec(stmt, &result_types);
+    if (expect_error) {
+      ASSERT_FALSE(status.ok()) << "Expected error\nstmt: " << stmt;
+      return;
+    }
     ASSERT_TRUE(status.ok()) << "stmt: " << stmt << "\nerror: " << status.GetErrorMsg();
     string result_row;
     ASSERT_TRUE(executor_->FetchResult(&result_row).ok()) << expr;
@@ -182,12 +187,12 @@ class ExprTest : public testing::Test {
     if (value.compare("NULL") == 0) return NULL;
     switch (type.type) {
       case TYPE_STRING:
+      case TYPE_CHAR:
         // Float and double get conversion errors so leave them as strings.
         // We convert the expected result to string.
       case TYPE_FLOAT:
       case TYPE_DOUBLE:
-        expr_value_.string_data = value;
-        expr_value_.SyncStringVal();
+        expr_value_.string_val = value;
         return &expr_value_.string_val;
       case TYPE_TINYINT:
         expr_value_.tinyint_val =
@@ -237,6 +242,14 @@ class ExprTest : public testing::Test {
   void TestStringValue(const string& expr, const string& expected_result) {
     StringValue* result;
     GetValue(expr, TYPE_STRING, reinterpret_cast<void**>(&result));
+    string tmp(result->ptr, result->len);
+    EXPECT_EQ(tmp, expected_result) << expr;
+  }
+
+  void TestCharValue(const string& expr, const string& expected_result,
+                     const ColumnType& type) {
+    StringValue* result;
+    GetValue(expr, type, reinterpret_cast<void**>(&result));
     string tmp(result->ptr, result->len);
     EXPECT_EQ(tmp, expected_result) << expr;
   }
@@ -312,7 +325,12 @@ class ExprTest : public testing::Test {
   void TestIsNull(const string& expr, const ColumnType& expr_type) {
     void* result;
     GetValue(expr, expr_type, &result);
-    EXPECT_TRUE(result == NULL);
+    EXPECT_TRUE(result == NULL) << expr;
+  }
+
+  void TestError(const string& expr) {
+    void* dummy_result;
+    GetValue(expr, INVALID_TYPE, &dummy_result, /* expect_error */ true);
   }
 
   void TestNonOkStatus(const string& expr) {
@@ -326,8 +344,8 @@ class ExprTest : public testing::Test {
     int64_t t_min = numeric_limits<T>::min();
     int64_t t_max = numeric_limits<T>::max();
     TestComparison(lexical_cast<string>(t_min), lexical_cast<string>(t_max), true);
-    TestEqual(lexical_cast<string>(t_min), true);
-    TestEqual(lexical_cast<string>(t_max), true);
+    TestBinaryPredicates(lexical_cast<string>(t_min), true);
+    TestBinaryPredicates(lexical_cast<string>(t_max), true);
     if (test_boundaries) {
       // this requires a cast of the second operand to a higher-resolution type
       TestComparison(lexical_cast<string>(t_min - 1),
@@ -344,8 +362,8 @@ class ExprTest : public testing::Test {
     T t_max = numeric_limits<T>::max();
     TestComparison(lexical_cast<string>(t_min), lexical_cast<string>(t_max), true);
     TestComparison(lexical_cast<string>(-1.0 * t_max), lexical_cast<string>(t_max), true);
-    TestEqual(lexical_cast<string>(t_min), true);
-    TestEqual(lexical_cast<string>(t_max), true);
+    TestBinaryPredicates(lexical_cast<string>(t_min), true);
+    TestBinaryPredicates(lexical_cast<string>(t_max), true);
     if (test_boundaries) {
       // this requires a cast of the second operand to a higher-resolution type
       TestComparison(lexical_cast<string>(numeric_limits<T>::min() - 1),
@@ -396,6 +414,25 @@ class ExprTest : public testing::Test {
     TestValue<bool>("'abcd' >= ''", TYPE_BOOLEAN, true);
     TestValue<bool>("'' > ''", TYPE_BOOLEAN, false);
     TestValue<bool>("'' = ''", TYPE_BOOLEAN, true);
+  }
+
+  void TestDecimalComparisons() {
+    TestValue("1.23 = 1.23", TYPE_BOOLEAN, true);
+    TestValue("1.23 = 1.230", TYPE_BOOLEAN, true);
+    TestValue("1.23 = 1.234", TYPE_BOOLEAN, false);
+    TestValue("1.23 != 1.234", TYPE_BOOLEAN, true);
+    TestValue("1.23 < 1.234", TYPE_BOOLEAN, true);
+    TestValue("1.23 > 1.234", TYPE_BOOLEAN, false);
+    TestValue("1.23 = 1.230000000000000000000", TYPE_BOOLEAN, true);
+    TestValue("1.2300 != 1.230000000000000000001", TYPE_BOOLEAN, true);
+    TestValue("cast(1 as decimal(38,0)) = cast(1 as decimal(38,37))", TYPE_BOOLEAN, true);
+    TestValue("cast(1 as decimal(38,0)) = cast(0.1 as decimal(38,38))",
+              TYPE_BOOLEAN, false);
+    TestValue("cast(1 as decimal(38,0)) > cast(0.1 as decimal(38,38))",
+              TYPE_BOOLEAN, true);
+    TestBinaryPredicates("cast(1 as decimal(8,0))", false);
+    TestBinaryPredicates("cast(1 as decimal(10,0))", false);
+    TestBinaryPredicates("cast(1 as decimal(38,0))", false);
   }
 
   // Test comparison operators with a left or right NULL operand against op.
@@ -481,7 +518,7 @@ class ExprTest : public testing::Test {
 
   // Generate all possible tests for combinations of <value> <op> <value>
   // Also test conversions from strings.
-  void TestEqual(const string& value, bool compare_strings) {
+  void TestBinaryPredicates(const string& value, bool compare_strings) {
     // disabled for now, because our implicit casts from strings are broken
     // and might return analysis errors when they shouldn't
     // TODO: fix and re-enable tests
@@ -633,41 +670,33 @@ class ExprTest : public testing::Test {
   // Test all binary ops with both operands being NULL.
   // We expect such exprs to return TYPE_INT.
   void TestNullOperandsArithmeticOps() {
-    TestIsNull("NULL + NULL", TYPE_INT);
-    TestIsNull("NULL - NULL", TYPE_INT);
-    TestIsNull("NULL * NULL", TYPE_INT);
-    TestIsNull("NULL / NULL", TYPE_INT);
+    TestIsNull("NULL + NULL", TYPE_DOUBLE);
+    TestIsNull("NULL - NULL", TYPE_DOUBLE);
+    TestIsNull("NULL * NULL", TYPE_DOUBLE);
+    TestIsNull("NULL / NULL", TYPE_DOUBLE);
     TestIsNull("NULL & NULL", TYPE_INT);
     TestIsNull("NULL | NULL", TYPE_INT);
     TestIsNull("NULL ^ NULL", TYPE_INT);
     TestIsNull("NULL DIV NULL", TYPE_INT);
-    TestIsNull("NULL % NULL", TYPE_INT);
+    TestIsNull("NULL % NULL", TYPE_DOUBLE);
     TestIsNull("~NULL", TYPE_INT);
   }
 
   // Test casting stmt to all types.  Expected result is val.
   template<typename T>
   void TestCast(const string& stmt, T val) {
-    TestValue("cast(" + stmt + " as boolean)",
-        TYPE_BOOLEAN, static_cast<bool>(val));
-    TestValue("cast(" + stmt + " as tinyint)",
-        TYPE_TINYINT, static_cast<int8_t>(val));
-    TestValue("cast(" + stmt + " as smallint)",
-        TYPE_SMALLINT, static_cast<int16_t>(val));
-    TestValue("cast(" + stmt + " as int)",
-        TYPE_INT, static_cast<int32_t>(val));
-    TestValue("cast(" + stmt + " as integer)",
-        TYPE_INT, static_cast<int32_t>(val));
-    TestValue("cast(" + stmt + " as bigint)",
-        TYPE_BIGINT, static_cast<int64_t>(val));
-    TestValue("cast(" + stmt + " as float)",
-        TYPE_FLOAT, static_cast<float>(val));
-    TestValue("cast(" + stmt + " as double)",
-        TYPE_DOUBLE, static_cast<double>(val));
-    TestValue("cast(" + stmt + " as real)",
-        TYPE_DOUBLE, static_cast<double>(val));
-    TestStringValue("cast(" + stmt + " as string)",
-        lexical_cast<string>(val));
+    TestValue("cast(" + stmt + " as boolean)", TYPE_BOOLEAN, static_cast<bool>(val));
+    TestValue("cast(" + stmt + " as tinyint)", TYPE_TINYINT, static_cast<int8_t>(val));
+    TestValue("cast(" + stmt + " as smallint)", TYPE_SMALLINT, static_cast<int16_t>(val));
+    TestValue("cast(" + stmt + " as int)", TYPE_INT, static_cast<int32_t>(val));
+    TestValue("cast(" + stmt + " as integer)", TYPE_INT, static_cast<int32_t>(val));
+    TestValue("cast(" + stmt + " as bigint)", TYPE_BIGINT, static_cast<int64_t>(val));
+    TestValue("cast(" + stmt + " as float)", TYPE_FLOAT, static_cast<float>(val));
+    TestValue("cast(" + stmt + " as double)", TYPE_DOUBLE, static_cast<double>(val));
+    TestValue("cast(" + stmt + " as real)", TYPE_DOUBLE, static_cast<double>(val));
+    TestStringValue("cast(" + stmt + " as string)", lexical_cast<string>(val));
+    TestStringValue("cast(cast(" + stmt + " as timestamp) as string)",
+                    lexical_cast<string>(TimestampValue(val)));
   }
 };
 
@@ -682,40 +711,46 @@ void ExprTest::TestCast(const string& stmt, const char* val) {
     TestValue(stmt + " as boolean)", TYPE_BOOLEAN, lexical_cast<bool>(val));
 #endif
     TestValue("cast(" + stmt + " as tinyint)", TYPE_TINYINT, val8);
-    TestValue("cast(" + stmt + " as smallint)", TYPE_SMALLINT,
-        lexical_cast<int16_t>(val));
-    TestValue("cast(" + stmt + " as int)", TYPE_INT,
-        lexical_cast<int32_t>(val));
-    TestValue("cast(" + stmt + " as bigint)", TYPE_BIGINT,
-        lexical_cast<int64_t>(val));
-    TestValue("cast(" + stmt + " as float)", TYPE_FLOAT,
-        lexical_cast<float>(val));
-    TestValue("cast(" + stmt + " as double)", TYPE_DOUBLE,
-        lexical_cast<double>(val));
+    TestValue("cast(" + stmt + " as smallint)", TYPE_SMALLINT, lexical_cast<int16_t>(val));
+    TestValue("cast(" + stmt + " as int)", TYPE_INT, lexical_cast<int32_t>(val));
+    TestValue("cast(" + stmt + " as bigint)", TYPE_BIGINT, lexical_cast<int64_t>(val));
+    TestValue("cast(" + stmt + " as float)", TYPE_FLOAT, lexical_cast<float>(val));
+    TestValue("cast(" + stmt + " as double)", TYPE_DOUBLE, lexical_cast<double>(val));
+    TestStringValue("cast(" + stmt + " as string)", lexical_cast<string>(val));
   } catch (bad_lexical_cast& e) {
     EXPECT_TRUE(false) << e.what();
   }
 }
 
-void TestSingleLiteralConstruction(const ColumnType& type, const void* value,
-    const string& string_val) {
+template <typename T> void TestSingleLiteralConstruction(
+    const ColumnType& type, const T& value, const string& string_val) {
   ObjectPool pool;
   RowDescriptor desc;
   RuntimeState state(TPlanFragmentInstanceCtx(), "", NULL);
+  MemTracker tracker;
 
-  Expr* expr = Expr::CreateLiteral(&pool, type, const_cast<void*>(value));
-  EXPECT_TRUE(expr != NULL);
-  Expr::Prepare(expr, &state, desc, disable_codegen_);
-  EXPECT_EQ(RawValue::Compare(expr->GetValue(NULL), value, type), 0);
+  Expr* expr = pool.Add(new Literal(type, value));
+  ExprContext ctx(expr);
+  ctx.Prepare(&state, desc, &tracker);
+  Status status = ctx.Open(&state);
+  EXPECT_TRUE(status.ok());
+  EXPECT_EQ(RawValue::Compare(ctx.GetValue(NULL), &value, type), 0)
+      << "type: " << type << ", value: " << value;
+  ctx.Close(&state);
 }
 
 TEST_F(ExprTest, NullLiteral) {
   for (int type = TYPE_BOOLEAN; type != TYPE_DATE; ++type) {
     NullLiteral expr(static_cast<PrimitiveType>(type));
+    ExprContext ctx(&expr);
     RuntimeState state(TPlanFragmentInstanceCtx(), "", NULL);
-    Status status = Expr::Prepare(&expr, &state, RowDescriptor(), disable_codegen_);
+    MemTracker tracker;
+    Status status = ctx.Prepare(&state, RowDescriptor(), &tracker);
     EXPECT_TRUE(status.ok());
-    EXPECT_TRUE(expr.GetValue(NULL) == NULL);
+    status = ctx.Open(&state);
+    EXPECT_TRUE(status.ok());
+    EXPECT_TRUE(ctx.GetValue(NULL) == NULL);
+    ctx.Close(&state);
   }
 }
 
@@ -732,25 +767,22 @@ TEST_F(ExprTest, LiteralConstruction) {
   string str_input = "Hello";
   StringValue str_val(const_cast<char*>(str_input.data()), str_input.length());
 
-  TestSingleLiteralConstruction(TYPE_BOOLEAN, &b_val, "1");
-  TestSingleLiteralConstruction(TYPE_TINYINT, &c_val, "f");
-  TestSingleLiteralConstruction(TYPE_SMALLINT, &s_val, "123");
-  TestSingleLiteralConstruction(TYPE_INT, &i_val, "234");
-  TestSingleLiteralConstruction(TYPE_INT, &i_val, "+234");
-  TestSingleLiteralConstruction(TYPE_BIGINT, &l_val, "1234");
-  TestSingleLiteralConstruction(TYPE_BIGINT, &l_val, "+1234");
-  TestSingleLiteralConstruction(TYPE_FLOAT, &f_val, "3.14");
-  TestSingleLiteralConstruction(TYPE_FLOAT, &f_val, "+3.14");
-  TestSingleLiteralConstruction(TYPE_DOUBLE, &d_val_1, "1.23");
-  TestSingleLiteralConstruction(TYPE_DOUBLE, &d_val_1, "+1.23");
-  TestSingleLiteralConstruction(TYPE_DOUBLE, &d_val_2, "7e6");
-  TestSingleLiteralConstruction(TYPE_DOUBLE, &d_val_2, "+7e6");
-  TestSingleLiteralConstruction(TYPE_DOUBLE, &d_val_3, "5.9e-3");
-  TestSingleLiteralConstruction(TYPE_DOUBLE, &d_val_3, "+5.9e-3");
-  TestSingleLiteralConstruction(TYPE_STRING, &str_val, "Hello");
-  TestSingleLiteralConstruction(TYPE_NULL, NULL, "NULL");
-  TestSingleLiteralConstruction(ColumnType::CreateCharType(5), "HelloWorld", "Hello");
-  TestSingleLiteralConstruction(ColumnType::CreateCharType(1), "H", "H");
+  TestSingleLiteralConstruction(TYPE_BOOLEAN, b_val, "1");
+  TestSingleLiteralConstruction(TYPE_TINYINT, c_val, "f");
+  TestSingleLiteralConstruction(TYPE_SMALLINT, s_val, "123");
+  TestSingleLiteralConstruction(TYPE_INT, i_val, "234");
+  TestSingleLiteralConstruction(TYPE_INT, i_val, "+234");
+  TestSingleLiteralConstruction(TYPE_BIGINT, l_val, "1234");
+  TestSingleLiteralConstruction(TYPE_BIGINT, l_val, "+1234");
+  TestSingleLiteralConstruction(TYPE_FLOAT, f_val, "3.14");
+  TestSingleLiteralConstruction(TYPE_FLOAT, f_val, "+3.14");
+  TestSingleLiteralConstruction(TYPE_DOUBLE, d_val_1, "1.23");
+  TestSingleLiteralConstruction(TYPE_DOUBLE, d_val_1, "+1.23");
+  TestSingleLiteralConstruction(TYPE_DOUBLE, d_val_2, "7e6");
+  TestSingleLiteralConstruction(TYPE_DOUBLE, d_val_2, "+7e6");
+  TestSingleLiteralConstruction(TYPE_DOUBLE, d_val_3, "5.9e-3");
+  TestSingleLiteralConstruction(TYPE_DOUBLE, d_val_3, "+5.9e-3");
+  TestSingleLiteralConstruction(TYPE_STRING, str_val, "Hello");
 
   // Min/Max Boundary value test for tiny/small/int/long
   c_val = 127;
@@ -759,10 +791,10 @@ TEST_F(ExprTest, LiteralConstruction) {
   s_val = 32767;
   i_val = 2147483647;
   l_val = 9223372036854775807l;
-  TestSingleLiteralConstruction(TYPE_TINYINT, &c_val, c_input_max);
-  TestSingleLiteralConstruction(TYPE_SMALLINT, &s_val, "32767");
-  TestSingleLiteralConstruction(TYPE_INT, &i_val, "2147483647");
-  TestSingleLiteralConstruction(TYPE_BIGINT, &l_val, "9223372036854775807");
+  TestSingleLiteralConstruction(TYPE_TINYINT, c_val, c_input_max);
+  TestSingleLiteralConstruction(TYPE_SMALLINT, s_val, "32767");
+  TestSingleLiteralConstruction(TYPE_INT, i_val, "2147483647");
+  TestSingleLiteralConstruction(TYPE_BIGINT, l_val, "9223372036854775807");
 
   const char c_array_min[] = {(const char)(-128)}; // avoid implicit casting
   string c_input_min(c_array_min, 1);
@@ -770,10 +802,10 @@ TEST_F(ExprTest, LiteralConstruction) {
   s_val = -32768;
   i_val = -2147483648;
   l_val = -9223372036854775807l-1;
-  TestSingleLiteralConstruction(TYPE_TINYINT, &c_val, c_input_min);
-  TestSingleLiteralConstruction(TYPE_SMALLINT, &s_val, "-32768");
-  TestSingleLiteralConstruction(TYPE_INT, &i_val, "-2147483648");
-  TestSingleLiteralConstruction(TYPE_BIGINT, &l_val, "-9223372036854775808");
+  TestSingleLiteralConstruction(TYPE_TINYINT, c_val, c_input_min);
+  TestSingleLiteralConstruction(TYPE_SMALLINT, s_val, "-32768");
+  TestSingleLiteralConstruction(TYPE_INT, i_val, "-2147483648");
+  TestSingleLiteralConstruction(TYPE_BIGINT, l_val, "-9223372036854775808");
 }
 
 
@@ -929,12 +961,37 @@ TEST_F(ExprTest, ArithmeticExprs) {
   TestNullOperandsArithmeticOps();
 }
 
+TEST_F(ExprTest, DecimalArithmeticExprs) {
+  TestDecimalValue("1.23 + cast(1 as decimal(4,3))",
+                   Decimal4Value(2230), ColumnType::CreateDecimalType(5,3));
+  TestDecimalValue("1.23 - cast(0.23 as decimal(10,3))",
+                   Decimal4Value(1000), ColumnType::CreateDecimalType(11,3));
+  TestDecimalValue("1.23 * cast(1 as decimal(20,3))",
+                   Decimal4Value(123000), ColumnType::CreateDecimalType(23,5));
+  TestDecimalValue("cast(1.23 as decimal(8,2)) / cast(1 as decimal(4,3))",
+                   Decimal4Value(12300000), ColumnType::CreateDecimalType(16,7));
+  TestDecimalValue("cast(1.23 as decimal(8,2)) % cast(1 as decimal(10,3))",
+                   Decimal4Value(230), ColumnType::CreateDecimalType(9,3));
+  TestDecimalValue("cast(1.23 as decimal(8,2)) + cast(1 as decimal(20,3))",
+                   Decimal4Value(2230), ColumnType::CreateDecimalType(21, 3));
+  TestDecimalValue("cast(1.23 as decimal(30,2)) - cast(1 as decimal(4,3))",
+                   Decimal4Value(230), ColumnType::CreateDecimalType(34,3));
+  TestDecimalValue("cast(1.23 as decimal(30,2)) * cast(1 as decimal(10,3))",
+                   Decimal4Value(123000), ColumnType::CreateDecimalType(38,5));
+  TestDecimalValue("cast(1.23 as decimal(30,2)) / cast(1 as decimal(20,3))",
+                   Decimal4Value(1230), ColumnType::CreateDecimalType(38, 3));
+  TestDecimalValue("cast(1 as decimal(38,0)) + cast(.2 as decimal(38,1))",
+                   Decimal4Value(12), ColumnType::CreateDecimalType(38, 1));
+  TestDecimalValue("cast(1 as decimal(38,0)) / cast(.2 as decimal(38,1))",
+                   Decimal4Value(50), ColumnType::CreateDecimalType(38, 1));
+}
+
 // There are two tests of ranges, the second of which requires a cast
 // of the second operand to a higher-resolution type.
 TEST_F(ExprTest, BinaryPredicates) {
   TestComparison("false", "true", false);
-  TestEqual("false", false);
-  TestEqual("true", false);
+  TestBinaryPredicates("false", false);
+  TestBinaryPredicates("true", false);
   TestFixedPointComparisons<int8_t>(true);
   TestFixedPointComparisons<int16_t>(true);
   TestFixedPointComparisons<int32_t>(true);
@@ -942,6 +999,7 @@ TEST_F(ExprTest, BinaryPredicates) {
   TestFloatingPointComparisons<float>(true);
   TestFloatingPointComparisons<double>(false);
   TestStringComparisons();
+  TestDecimalComparisons();
   TestNullComparisons();
 }
 
@@ -1036,14 +1094,22 @@ TEST_F(ExprTest, CompoundPredicates) {
   TestValue("TRUE || (FALSE && TRUE)", TYPE_BOOLEAN, true);
   TestValue("TRUE && TRUE || FALSE", TYPE_BOOLEAN, true);
   TestIsNull("TRUE AND NULL", TYPE_BOOLEAN);
+  TestIsNull("NULL AND TRUE", TYPE_BOOLEAN);
   TestValue("FALSE AND NULL", TYPE_BOOLEAN, false);
+  TestValue("NULL AND FALSE", TYPE_BOOLEAN, false);
+  TestIsNull("NULL AND NULL", TYPE_BOOLEAN);
   TestValue("TRUE OR NULL", TYPE_BOOLEAN, true);
+  TestValue("NULL OR TRUE", TYPE_BOOLEAN, true);
   TestIsNull("FALSE OR NULL", TYPE_BOOLEAN);
+  TestIsNull("NULL OR FALSE", TYPE_BOOLEAN);
+  TestIsNull("NULL OR NULL", TYPE_BOOLEAN);
   TestIsNull("NOT NULL", TYPE_BOOLEAN);
   TestIsNull("TRUE && NULL", TYPE_BOOLEAN);
   TestValue("FALSE && NULL", TYPE_BOOLEAN, false);
+  TestIsNull("NULL && NULL", TYPE_BOOLEAN);
   TestValue("TRUE || NULL", TYPE_BOOLEAN, true);
   TestIsNull("FALSE || NULL", TYPE_BOOLEAN);
+  TestIsNull("NULL || NULL", TYPE_BOOLEAN);
   TestIsNull("!NULL", TYPE_BOOLEAN);
 }
 
@@ -1061,6 +1127,24 @@ TEST_F(ExprTest, LikePredicate) {
   TestValue("'abcde' LIKE 'abcde%'", TYPE_BOOLEAN, true);
   TestValue("'abcde' LIKE '%abcde'", TYPE_BOOLEAN, true);
   TestValue("'abcde' LIKE '%abcde%'", TYPE_BOOLEAN, true);
+  // Test multiple wildcard characters
+  TestValue("'abcde' LIKE '%%bc%%'", TYPE_BOOLEAN, true);
+  TestValue("'abcde' LIKE '%%cb%%'", TYPE_BOOLEAN, false);
+  TestValue("'abcde' LIKE 'abc%%'", TYPE_BOOLEAN, true);
+  TestValue("'abcde' LIKE 'cba%%'", TYPE_BOOLEAN, false);
+  TestValue("'abcde' LIKE '%%bcde'", TYPE_BOOLEAN, true);
+  TestValue("'abcde' LIKE '%%cbde'", TYPE_BOOLEAN, false);
+  TestValue("'abcde' LIKE '%%bc%%'", TYPE_BOOLEAN, true);
+  TestValue("'abcde' LIKE '%%cb%%'", TYPE_BOOLEAN, false);
+  TestValue("'abcde' LIKE '%%abcde%%'", TYPE_BOOLEAN, true);
+  TestValue("'abcde' LIKE '%%edcba%%'", TYPE_BOOLEAN, false);
+  TestValue("'abcde' LIKE '%%'", TYPE_BOOLEAN, true);
+  TestValue("'abcde' NOT LIKE '%%'", TYPE_BOOLEAN, false);
+  TestValue("'abcde' LIKE '%%%'", TYPE_BOOLEAN, true);
+  TestValue("'abcde' NOT LIKE '%%%'", TYPE_BOOLEAN, false);
+  TestValue("'abcde' LIKE '%%cd%%'", TYPE_BOOLEAN, true);
+  TestValue("'abcde' LIKE '%%dc%%'", TYPE_BOOLEAN, false);
+  TestValue("'abcde' LIKE '%%_%%'", TYPE_BOOLEAN, true);
   // IMP-117
   TestValue("'ab' LIKE '%a'", TYPE_BOOLEAN, false);
   TestValue("'ab' NOT LIKE '%a'", TYPE_BOOLEAN, true);
@@ -1095,10 +1179,17 @@ TEST_F(ExprTest, LikePredicate) {
   TestValue("'abxcy1234a' RLIKE 'a.x.y.*a'", TYPE_BOOLEAN, true);
   TestValue("'axcy1234a' REGEXP 'a.x.y.*a'", TYPE_BOOLEAN, false);
   TestValue("'axcy1234a' RLIKE 'a.x.y.*a'", TYPE_BOOLEAN, false);
+  // Regex patterns with constants strings
   TestValue("'english' REGEXP 'en'", TYPE_BOOLEAN, true);
   TestValue("'english' REGEXP 'lis'", TYPE_BOOLEAN, true);
   TestValue("'english' REGEXP 'english'", TYPE_BOOLEAN, true);
   TestValue("'english' REGEXP 'engilsh'", TYPE_BOOLEAN, false);
+  TestValue("'english' REGEXP '^english$'", TYPE_BOOLEAN, true);
+  TestValue("'english' REGEXP '^lish$'", TYPE_BOOLEAN, false);
+  TestValue("'english' REGEXP '^eng'", TYPE_BOOLEAN, true);
+  TestValue("'english' REGEXP '^ng'", TYPE_BOOLEAN, false);
+  TestValue("'english' REGEXP 'lish$'", TYPE_BOOLEAN, true);
+  TestValue("'english' REGEXP 'lis$'", TYPE_BOOLEAN, false);
   // regex escape chars; insert special character in the middle to prevent
   // it from being matched as a substring
   TestValue("'.[]{}()x\\\\*+?|^$' LIKE '.[]{}()_\\\\\\\\*+?|^$'", TYPE_BOOLEAN, true);
@@ -1163,6 +1254,7 @@ TEST_F(ExprTest, BetweenPredicate) {
   TestIsNull("NULL between 0 and 10", TYPE_BOOLEAN);
   TestIsNull("1 between NULL and 10", TYPE_BOOLEAN);
   TestIsNull("1 between 0 and NULL", TYPE_BOOLEAN);
+  TestIsNull("1 between NULL and NULL", TYPE_BOOLEAN);
   TestIsNull("NULL between NULL and NULL", TYPE_BOOLEAN);
 }
 
@@ -1202,6 +1294,10 @@ TEST_F(ExprTest, InPredicate) {
   TestValue("'ab' not in ('ab', 'cd', 'efg')", TYPE_BOOLEAN, false);
   TestValue("'ab' not in ('cd', 'efg', 'h')", TYPE_BOOLEAN, true);
 
+  // test chars
+  TestValue("cast('ab' as char(2)) in (cast('ab' as char(2)), cast('cd' as char(2)))",
+            TYPE_BOOLEAN, true);
+
   // Test timestamps.
   TestValue(default_timestamp_str_ + " "
       "in (cast('2011-11-23 09:10:11' as timestamp), "
@@ -1223,6 +1319,17 @@ TEST_F(ExprTest, InPredicate) {
   // Test operator precedence.
   TestValue("5+1 in (3, 6, 10)", TYPE_BOOLEAN, true);
   TestValue("5+1 not in (3, 6, 10)", TYPE_BOOLEAN, false);
+
+  // Test NULLs
+  TestIsNull("NULL in (1, 2, 3)", TYPE_BOOLEAN);
+  TestIsNull("NULL in (NULL, 1)", TYPE_BOOLEAN);
+  TestIsNull("3 in (NULL)", TYPE_BOOLEAN);
+  TestIsNull("3 in (1, 2, NULL)", TYPE_BOOLEAN);
+  TestValue("3 in (NULL, 3)", TYPE_BOOLEAN, true);
+  TestIsNull("'hello' in (NULL)", TYPE_BOOLEAN);
+  TestValue("'hello' in ('hello', NULL)", TYPE_BOOLEAN, true);
+  TestIsNull("NULL in (NULL)", TYPE_BOOLEAN);
+  TestIsNull("NULL in (NULL, NULL)", TYPE_BOOLEAN);
 }
 
 TEST_F(ExprTest, StringFunctions) {
@@ -1232,6 +1339,7 @@ TEST_F(ExprTest, StringFunctions) {
   TestStringValue("substring('Hello', -5)", "Hello");
   TestStringValue("substring('Hello', cast(-6 as bigint))", "");
   TestStringValue("substring('Hello', 100)", "");
+  TestStringValue("substring('Hello', -100)", "");
   TestIsNull("substring(NULL, 100)", TYPE_STRING);
   TestIsNull("substring('Hello', NULL)", TYPE_STRING);
   TestIsNull("substring(NULL, NULL)", TYPE_STRING);
@@ -1286,13 +1394,19 @@ TEST_F(ExprTest, StringFunctions) {
   TestStringValue("reverse('abcdefg')", "gfedcba");
   TestStringValue("reverse('')", "");
   TestIsNull("reverse(NULL)", TYPE_STRING);
+  TestStringValue("strleft('abcdefg', 0)", "");
   TestStringValue("strleft('abcdefg', 3)", "abc");
   TestStringValue("strleft('abcdefg', cast(10 as bigint))", "abcdefg");
+  TestStringValue("strleft('abcdefg', -1)", "");
+  TestStringValue("strleft('abcdefg', cast(-9 as bigint))", "");
   TestIsNull("strleft(NULL, 3)", TYPE_STRING);
   TestIsNull("strleft('abcdefg', NULL)", TYPE_STRING);
   TestIsNull("strleft(NULL, NULL)", TYPE_STRING);
+  TestStringValue("strright('abcdefg', 0)", "");
   TestStringValue("strright('abcdefg', 3)", "efg");
   TestStringValue("strright('abcdefg', cast(10 as bigint))", "abcdefg");
+  TestStringValue("strright('abcdefg', -1)", "");
+  TestStringValue("strright('abcdefg', cast(-9 as bigint))", "");
   TestIsNull("strright(NULL, 3)", TYPE_STRING);
   TestIsNull("strright('abcdefg', NULL)", TYPE_STRING);
   TestIsNull("strright(NULL, NULL)", TYPE_STRING);
@@ -1345,6 +1459,7 @@ TEST_F(ExprTest, StringFunctions) {
   TestStringValue("repeat('', cast(6 as bigint))", "");
   TestStringValue("repeat('ab', 0)", "");
   TestStringValue("repeat('ab', -1)", "");
+  TestStringValue("repeat('ab', -100)", "");
   TestStringValue("repeat('ab', 1)", "ab");
   TestStringValue("repeat('ab', cast(6 as bigint))", "abababababab");
   TestIsNull("repeat(NULL, 6)", TYPE_STRING);
@@ -1457,6 +1572,71 @@ TEST_F(ExprTest, StringFunctions) {
   TestIsNull("find_in_set(NULL, 'abc,ad,,ade,cde')", TYPE_INT);
   TestIsNull("find_in_set('abc,def', NULL)", TYPE_INT);
   TestIsNull("find_in_set(NULL, NULL)", TYPE_INT);
+
+  TestStringValue("cast('HELLO' as VARCHAR(3))", "HEL");
+  TestStringValue("cast('HELLO' as VARCHAR(15))", "HELLO");
+  TestStringValue("lower(cast('HELLO' as VARCHAR(3)))", "hel");
+  TestStringValue("lower(cast(123456 as VARCHAR(3)))", "123");
+  TestIsNull("cast(NULL as VARCHAR(3))", TYPE_STRING);
+  TestCharValue("cast('12345' as CHAR(130))",
+      "12345                                                                  "
+      "                                                           ",
+      ColumnType::CreateCharType(130));
+
+  TestCharValue("cast(cast('HELLO' as VARCHAR(3)) as CHAR(3))", "HEL",
+                ColumnType::CreateCharType(3));
+  TestStringValue("cast(cast('HELLO' as CHAR(3)) as VARCHAR(3))", "HEL");
+  TestCharValue("cast(cast('HELLO' as VARCHAR(7)) as CHAR(7))", "HELLO  ",
+                ColumnType::CreateCharType(7));
+  TestCharValue("cast(cast('HELLO' as STRING) as CHAR(7))", "HELLO  ",
+                ColumnType::CreateCharType(7));
+  TestStringValue("cast(cast('HELLO' as CHAR(7)) as VARCHAR(7))", "HELLO  ");
+  TestStringValue("cast(cast('HELLO' as CHAR(5)) as VARCHAR(3))", "HEL");
+  TestCharValue("cast(cast('HELLO' as VARCHAR(7)) as CHAR(3))", "HEL",
+                ColumnType::CreateCharType(3));
+
+  TestCharValue("cast(5 as char(5))", "5    ", ColumnType::CreateCharType(5));
+  TestCharValue("cast(5.1 as char(5))", "5.1  ", ColumnType::CreateCharType(5));
+  TestCharValue("cast(cast(1 as decimal(2,1)) as char(5))", "1.0  ",
+                ColumnType::CreateCharType(5));
+  TestCharValue("cast(cast('2014-09-30 10:35:10.632995000' as TIMESTAMP) as char(35))",
+                "2014-09-30 10:35:10.632995000      ",
+                ColumnType::CreateCharType(35));
+
+  TestCharValue("cast('HELLO' as CHAR(3))", "HEL",
+                ColumnType::CreateCharType(3));
+  TestCharValue("cast('HELLO' as CHAR(7))", "HELLO  ",
+                ColumnType::CreateCharType(7));
+  TestCharValue("cast('HELLO' as CHAR(70))",
+      "HELLO                                                                 ",
+      ColumnType::CreateCharType(70));
+  TestValue("cast('HELLO' as CHAR(7)) = 'HELLO  '", TYPE_BOOLEAN, true);
+  TestValue("cast('HELLO' as CHAR(7)) = cast('HELLO' as CHAR(5))", TYPE_BOOLEAN, true);
+  TestStringValue("lower(cast('HELLO' as CHAR(3)))", "hel");
+  TestStringValue("lower(cast(123456 as CHAR(3)))", "123");
+  TestStringValue("cast(cast(123456 as CHAR(3)) as VARCHAR(3))", "123");
+  TestStringValue("cast(cast(123456 as CHAR(3)) as VARCHAR(65355))", "123");
+  TestIsNull("cast(NULL as CHAR(3))", ColumnType::CreateCharType(3));
+
+  TestCharValue("cast('HELLO' as CHAR(255))",
+      "HELLO                                                                        "
+      "                                                                             "
+      "                                                                             "
+      "                        ", ColumnType::CreateCharType(255));
+
+  TestStringValue("CASE cast('1.1' as char(3)) when cast('1.1' as char(3)) then "
+      "cast('1' as char(1)) when cast('2.22' as char(4)) then "
+      "cast('2' as char(1)) else cast('3' as char(1)) end", "1");
+
+  // Test maximum VARCHAR value
+  char query[ColumnType::MAX_VARCHAR_LENGTH + 1024];
+  char big_str[ColumnType::MAX_VARCHAR_LENGTH+1];
+  for (int i = 0 ; i < ColumnType::MAX_VARCHAR_LENGTH; i++) {
+    big_str[i] = 'a';
+  }
+  big_str[ColumnType::MAX_VARCHAR_LENGTH] = '\0';
+  sprintf(query, "cast('%sxxx' as VARCHAR(%d))", big_str, ColumnType::MAX_VARCHAR_LENGTH);
+  TestStringValue(query, big_str);
 }
 
 TEST_F(ExprTest, StringRegexpFunctions) {
@@ -1473,6 +1653,7 @@ TEST_F(ExprTest, StringRegexpFunctions) {
   TestStringValue("regexp_extract('abxcy1234a', 'a.x', cast(2 as bigint))", "");
   TestStringValue("regexp_extract('abxcy1234a', 'a.x.*a', 1)", "");
   TestStringValue("regexp_extract('abxcy1234a', 'a.x.y.*a', 5)", "");
+  TestStringValue("regexp_extract('abxcy1234a', 'a.x', -1)", "");
   // Multiple groups enclosed in ().
   TestStringValue("regexp_extract('abxcy1234a', '(a.x)(.y.*)(3.*a)', 0)", "abxcy1234a");
   TestStringValue("regexp_extract('abxcy1234a', '(a.x)(.y.*)(3.*a)', 1)", "abx");
@@ -1488,13 +1669,24 @@ TEST_F(ExprTest, StringRegexpFunctions) {
   // Test finding of leftmost maximal match.
   TestStringValue("regexp_extract('I001=-200,I003=-210,I007=0', 'I001=-?[0-9]+', 0)",
       "I001=-200");
-  // Invalid regex patter, unmatched parenthesis.
-  TestIsNull("regexp_extract('abxcy1234a', '(/.', 0)", TYPE_STRING);
+  // Invalid regex pattern, unmatched parenthesis.
+  TestError("regexp_extract('abxcy1234a', '(/.', 0)");
   // NULL arguments.
   TestIsNull("regexp_extract(NULL, 'a.x', 2)", TYPE_STRING);
   TestIsNull("regexp_extract('abxcy1234a', NULL, 2)", TYPE_STRING);
   TestIsNull("regexp_extract('abxcy1234a', 'a.x', NULL)", TYPE_STRING);
   TestIsNull("regexp_extract(NULL, NULL, NULL)", TYPE_STRING);
+  // Character classes.
+  TestStringValue("regexp_extract('abxcy1234a', '[[:lower:]]*', 0)", "abxcy");
+  TestStringValue("regexp_extract('abxcy1234a', '[[:digit:]]+', 0)", "1234");
+  TestStringValue("regexp_extract('abxcy1234a', '[[:lower:]][[:digit:]]', 0)", "y1");
+  TestStringValue("regexp_extract('aBcDeF', '[[:upper:]][[:lower:]]', 0)", "Bc");
+  // "Single character" character classes.
+  TestStringValue("regexp_extract('abxcy1234a', '\\\\w*', 0)", "abxcy1234a");
+  TestStringValue("regexp_extract('abxcy1234a', '\\\\d+', 0)", "1234");
+  TestStringValue("regexp_extract('abxcy1234a', '\\\\d\\\\D', 0)", "4a");
+  // Leftmost longest match.
+  TestStringValue("regexp_extract('abcabcd', '(a|ab|abc|abcd)', 0)", "abc");
 
   TestStringValue("regexp_replace('axcaycazc', 'a.c', 'a')", "aaa");
   TestStringValue("regexp_replace('axcaycazc', 'a.c', '')", "");
@@ -1509,8 +1701,8 @@ TEST_F(ExprTest, StringRegexpFunctions) {
   TestStringValue("regexp_replace('', 'err', '')", "");
   TestStringValue("regexp_replace('', '', 'abc')", "abc");
   TestStringValue("regexp_replace('axcaycazc', '', 'r')", "rarxrcraryrcrarzrcr");
-  // Invalid regex patter, unmatched parenthesis.
-  TestIsNull("regexp_replace('abxcy1234a', '(/.', 'x')", TYPE_STRING);
+  // Invalid regex pattern, unmatched parenthesis.
+  TestError("regexp_replace('abxcy1234a', '(/.', 'x')");
   // NULL arguments.
   TestIsNull("regexp_replace(NULL, 'a.*', 'abcde')", TYPE_STRING);
   TestIsNull("regexp_replace('axcaycazc', NULL, 'abcde')", TYPE_STRING);
@@ -1526,7 +1718,8 @@ TEST_F(ExprTest, StringParseUrlFunction) {
 
   // AUTHORITY part.
   TestStringValue("parse_url('http://user:pass@example.com:80/docs/books/tutorial/"
-      "index.html?name=networking#DOWNLOADING', 'AUTHORITY')", "user:pass@example.com:80");
+      "index.html?name=networking#DOWNLOADING', 'AUTHORITY')",
+      "user:pass@example.com:80");
   TestStringValue("parse_url('http://user:pass@example.com/docs/books/tutorial/"
       "index.html?name=networking#DOWNLOADING', 'AUTHORITY')", "user:pass@example.com");
   // Without user and pass.
@@ -1715,31 +1908,31 @@ TEST_F(ExprTest, StringParseUrlFunction) {
       "index.html?name=networking#DOWNLOADING', 'USERINFO')", TYPE_STRING);
 
   // Invalid part parameters.
-  // All characters in the part parameter must be uppercase (conistent with Hive).
-  TestIsNull("parse_url('http://example.com', 'authority')", TYPE_STRING);
-  TestIsNull("parse_url('http://example.com', 'Authority')", TYPE_STRING);
-  TestIsNull("parse_url('http://example.com', 'AUTHORITYXYZ')", TYPE_STRING);
-  TestIsNull("parse_url('http://example.com', 'file')", TYPE_STRING);
-  TestIsNull("parse_url('http://example.com', 'File')", TYPE_STRING);
-  TestIsNull("parse_url('http://example.com', 'FILEXYZ')", TYPE_STRING);
-  TestIsNull("parse_url('http://example.com', 'host')", TYPE_STRING);
-  TestIsNull("parse_url('http://example.com', 'Host')", TYPE_STRING);
-  TestIsNull("parse_url('http://example.com', 'HOSTXYZ')", TYPE_STRING);
-  TestIsNull("parse_url('http://example.com', 'path')", TYPE_STRING);
-  TestIsNull("parse_url('http://example.com', 'Path')", TYPE_STRING);
-  TestIsNull("parse_url('http://example.com', 'PATHXYZ')", TYPE_STRING);
-  TestIsNull("parse_url('http://example.com', 'protocol')", TYPE_STRING);
-  TestIsNull("parse_url('http://example.com', 'Protocol')", TYPE_STRING);
-  TestIsNull("parse_url('http://example.com', 'PROTOCOLXYZ')", TYPE_STRING);
-  TestIsNull("parse_url('http://example.com', 'query')", TYPE_STRING);
-  TestIsNull("parse_url('http://example.com', 'Query')", TYPE_STRING);
-  TestIsNull("parse_url('http://example.com', 'QUERYXYZ')", TYPE_STRING);
-  TestIsNull("parse_url('http://example.com', 'ref')", TYPE_STRING);
-  TestIsNull("parse_url('http://example.com', 'Ref')", TYPE_STRING);
-  TestIsNull("parse_url('http://example.com', 'REFXYZ')", TYPE_STRING);
-  TestIsNull("parse_url('http://example.com', 'userinfo')", TYPE_STRING);
-  TestIsNull("parse_url('http://example.com', 'Userinfo')", TYPE_STRING);
-  TestIsNull("parse_url('http://example.com', 'USERINFOXYZ')", TYPE_STRING);
+  // All characters in the part parameter must be uppercase (consistent with Hive).
+  TestError("parse_url('http://example.com', 'authority')");
+  TestError("parse_url('http://example.com', 'Authority')");
+  TestError("parse_url('http://example.com', 'AUTHORITYXYZ')");
+  TestError("parse_url('http://example.com', 'file')");
+  TestError("parse_url('http://example.com', 'File')");
+  TestError("parse_url('http://example.com', 'FILEXYZ')");
+  TestError("parse_url('http://example.com', 'host')");
+  TestError("parse_url('http://example.com', 'Host')");
+  TestError("parse_url('http://example.com', 'HOSTXYZ')");
+  TestError("parse_url('http://example.com', 'path')");
+  TestError("parse_url('http://example.com', 'Path')");
+  TestError("parse_url('http://example.com', 'PATHXYZ')");
+  TestError("parse_url('http://example.com', 'protocol')");
+  TestError("parse_url('http://example.com', 'Protocol')");
+  TestError("parse_url('http://example.com', 'PROTOCOLXYZ')");
+  TestError("parse_url('http://example.com', 'query')");
+  TestError("parse_url('http://example.com', 'Query')");
+  TestError("parse_url('http://example.com', 'QUERYXYZ')");
+  TestError("parse_url('http://example.com', 'ref')");
+  TestError("parse_url('http://example.com', 'Ref')");
+  TestError("parse_url('http://example.com', 'REFXYZ')");
+  TestError("parse_url('http://example.com', 'userinfo')");
+  TestError("parse_url('http://example.com', 'Userinfo')");
+  TestError("parse_url('http://example.com', 'USERINFOXYZ')");
 
   // NULL arguments.
   TestIsNull("parse_url(NULL, 'AUTHORITY')", TYPE_STRING);
@@ -1764,7 +1957,8 @@ TEST_F(ExprTest, StringParseUrlFunction) {
       "index.html?test=true&name=networking&op=true', 'QUERY', 'name')", "networking");
   // Key string appears in various parts of the url.
   TestStringValue("parse_url('http://name.name:80/name/books/tutorial/"
-      "name.html?name_fake=true&name=networking&op=true#name', 'QUERY', 'name')", "networking");
+      "name.html?name_fake=true&name=networking&op=true#name', 'QUERY', 'name')",
+      "networking");
   // We can still match this even though no '?' was given.
   TestStringValue("parse_url('http://example.com:80/docs/books/tutorial/"
       "index.htmltest=true&name=networking&op=true', 'QUERY', 'name')", "networking");
@@ -1793,8 +1987,8 @@ TEST_F(ExprTest, StringParseUrlFunction) {
       "index.html?test=true&name=networking&op=true', 'PROTOCOL', 'name')", TYPE_STRING);
   TestIsNull("parse_url('http://example.com:80/docs/books/tutorial/"
       "index.html?test=true&name=networking&op=true', 'REF', 'name')", TYPE_STRING);
-  TestIsNull("parse_url('http://example.com:80/docs/books/tutorial/"
-      "index.html?test=true&name=networking&op=true', 'XYZ', 'name')", TYPE_STRING);
+  TestError("parse_url('http://example.com:80/docs/books/tutorial/"
+      "index.html?test=true&name=networking&op=true', 'XYZ', 'name')");
 }
 
 TEST_F(ExprTest, UtilityFunctions) {
@@ -1855,8 +2049,13 @@ TEST_F(ExprTest, NonFiniteFloats) {
   TestValue("is_nan(1/0)", TYPE_BOOLEAN, false);
   TestValue("is_nan(0/0)", TYPE_BOOLEAN, true);
 
-  TestCast("1/0", numeric_limits<double>::infinity());
-  TestCast("CAST(1/0 AS FLOAT)", numeric_limits<float>::infinity());
+  TestValue("CAST(1/0 AS FLOAT)", TYPE_FLOAT, numeric_limits<float>::infinity());
+  TestValue("CAST(1/0 AS DOUBLE)", TYPE_DOUBLE, numeric_limits<double>::infinity());
+  TestValue("CAST(CAST(1/0 as FLOAT) as DOUBLE)", TYPE_DOUBLE,
+            numeric_limits<double>::infinity());
+  TestStringValue("CAST(1/0 AS STRING)", "inf");
+  TestStringValue("CAST(CAST(1/0 AS FLOAT) AS STRING)", "inf");
+
   TestValue("CAST('inf' AS FLOAT)", TYPE_FLOAT, numeric_limits<float>::infinity());
   TestValue("CAST('inf' AS DOUBLE)", TYPE_DOUBLE, numeric_limits<double>::infinity());
   TestValue("CAST('Infinity' AS FLOAT)", TYPE_FLOAT, numeric_limits<float>::infinity());
@@ -2244,7 +2443,7 @@ TEST_F(ExprTest, MathFunctions) {
   TestStringValue("greatest('apples', 'app\rles')", "apples");
 
   // NULL arguments.
-  TestIsNull("abs(NULL)", TYPE_DOUBLE);
+  TestIsNull("abs(NULL)", TYPE_BIGINT);
   TestIsNull("sign(NULL)", TYPE_FLOAT);
   TestIsNull("exp(NULL)", TYPE_DOUBLE);
   TestIsNull("ln(NULL)", TYPE_DOUBLE);
@@ -2273,7 +2472,7 @@ TEST_F(ExprTest, MathFunctions) {
   TestIsNull("NULL % cast(3.2 as double)", TYPE_DOUBLE);
   TestIsNull("cast(10.3 as double) % NULL", TYPE_DOUBLE);
   TestIsNull("fmod(NULL, NULL)", TYPE_FLOAT);
-  TestIsNull("NULL % NULL", TYPE_INT);
+  TestIsNull("NULL % NULL", TYPE_DOUBLE);
   TestIsNull("positive(NULL)", TYPE_TINYINT);
   TestIsNull("negative(NULL)", TYPE_TINYINT);
   TestIsNull("quotient(NULL, 1.0)", TYPE_BIGINT);
@@ -2351,6 +2550,29 @@ TEST_F(ExprTest, UnaryOperators) {
 
 // TODO: I think a lot of these casts are not necessary and we should fix this
 TEST_F(ExprTest, TimestampFunctions) {
+  // Regression test for CDH-19918
+  TestStringValue("cast(from_utc_timestamp(cast(1301180400 as timestamp),"
+      "'Europe/Moscow') as string)", "2011-03-27 03:00:00");
+  TestStringValue("cast(from_utc_timestamp(cast(1301180399 as timestamp),"
+      "'Europe/Moscow') as string)", "2011-03-27 01:59:59");
+  TestStringValue("cast(from_utc_timestamp(cast(1288404000 as timestamp),"
+      "'Europe/Moscow') as string)", "2010-10-30 06:00:00");
+  TestStringValue("cast(from_utc_timestamp(cast(1288584000 as timestamp),"
+      "'Europe/Moscow') as string)", "2010-11-01 07:00:00");
+  TestStringValue("cast(from_utc_timestamp(cast(1301104740 as timestamp),"
+      "'Europe/Moscow') as string)", "2011-03-26 04:59:00");
+  TestStringValue("cast(from_utc_timestamp(cast(1301277600 as timestamp),"
+      "'Europe/Moscow') as string)", "2011-03-28 06:00:00");
+  TestStringValue("cast(from_utc_timestamp(cast(1324947600 as timestamp),"
+      "'Europe/Moscow') as string)", "2011-12-27 05:00:00");
+  TestStringValue("cast(from_utc_timestamp(cast(1325725200 as timestamp),"
+      "'Europe/Moscow') as string)", "2012-01-05 05:00:00");
+  TestStringValue("cast(from_utc_timestamp(cast(1333594800 as timestamp),"
+      "'Europe/Moscow') as string)", "2012-04-05 07:00:00");
+
+  // Regression for IMPALA-1105
+  TestIsNull("cast(cast('NOTATIMESTAMP' as timestamp) as string)", TYPE_STRING);
+
   TestStringValue("cast(cast('2012-01-01 09:10:11.123456789' as timestamp) as string)",
       "2012-01-01 09:10:11.123456789");
   // Add/sub years.
@@ -2366,6 +2588,11 @@ TEST_F(ExprTest, TimestampFunctions) {
   TestStringValue("cast(date_sub(cast('2012-01-01 09:10:11.123456789' "
       "as timestamp), interval cast(10 as bigint) years) as string)",
       "2002-01-01 09:10:11.123456789");
+  // These return NULL because year is out of range (IMPALA-1493)
+  TestIsNull(
+      "CAST('2005-10-11 00:00:00' AS TIMESTAMP) - INTERVAL 718 YEAR", TYPE_TIMESTAMP);
+  TestIsNull(
+      "CAST('2005-10-11 00:00:00' AS TIMESTAMP) + INTERVAL -718 YEAR", TYPE_TIMESTAMP);
   // Add/sub months.
   TestStringValue("cast(date_add(cast('2012-01-01 09:10:11.123456789' "
       "as timestamp), interval 13 months) as string)",
@@ -2538,8 +2765,6 @@ TEST_F(ExprTest, TimestampFunctions) {
   TestIsNull("unix_timestamp('00:00:00')", TYPE_INT);
   TestIsNull("unix_timestamp(NULL, 'yyyy-MM-dd')", TYPE_INT);
   TestIsNull("unix_timestamp('00:00:00', 'yyyy-MM-dd HH:mm:ss')", TYPE_INT);
-  TestIsNull("unix_timestamp('1970-01-01 10:10:10', NULL)", TYPE_INT);
-  TestIsNull("unix_timestamp(NULL, NULL)", TYPE_INT);
   TestStringValue("cast(cast(0 as timestamp) as string)", "1970-01-01 00:00:00");
   TestStringValue("from_unixtime(0)", "1970-01-01 00:00:00");
   TestStringValue("from_unixtime(cast(0 as bigint))", "1970-01-01 00:00:00");
@@ -2549,10 +2774,7 @@ TEST_F(ExprTest, TimestampFunctions) {
       "1970-01-01 00:00:00");
   TestStringValue("from_unixtime(0, 'yyyy-MM-dd')", "1970-01-01");
   TestStringValue("from_unixtime(cast(0 as bigint), 'yyyy-MM-dd')", "1970-01-01");
-  TestIsNull("from_unixtime(0, NULL)", TYPE_STRING);
-  TestIsNull("from_unixtime(cast(0 as bigint), NULL)", TYPE_STRING);
   TestIsNull("from_unixtime(NULL, 'yyyy-MM-dd')", TYPE_STRING);
-  TestIsNull("from_unixtime(NULL, NULL)", TYPE_STRING);
   TestStringValue("from_unixtime(unix_timestamp('1999-01-01 10:10:10'), \
       'yyyy-MM-dd')", "1999-01-01");
   TestStringValue("from_unixtime(unix_timestamp('1999-01-01 10:10:10'), \
@@ -2695,26 +2917,45 @@ TEST_F(ExprTest, TimestampFunctions) {
   TestStringValue("from_unixtime(0, 'yyyy|MM|dd HH|mm|ss')", "1970|01|01 00|00|00");
   TestStringValue("from_unixtime(0, 'dd,MMM,yyyy,HH,mm,ss')", "01,Jan,1970,00,00,00");
 
-  // Test invalid formats returning NULL
-  TestIsNull("unix_timestamp('1970-01-01 00:00:00', 'yyyy-MM-dd hh:mm:ss')", TYPE_INT);
+  // Test invalid formats returns error
+  TestError("unix_timestamp('1970-01-01 00:00:00', 'yyyy-MM-dd hh:mm:ss')");
+  TestError("unix_timestamp('1970-01-01 10:10:10', NULL)");
+  TestError("unix_timestamp(NULL, NULL)");
+  TestError("from_unixtime(0, NULL)");
+  TestError("from_unixtime(cast(0 as bigint), NULL)");
+  TestError("from_unixtime(NULL, NULL)");
+  TestError("unix_timestamp('1970-01-01 00:00:00', ' ')");
+  TestError("unix_timestamp('1970-01-01 00:00:00', ' -===-')");
+  TestError("unix_timestamp('1970-01-01', '\"foo\"')");
+  TestError("from_unixtime(0, 'YY-MM-dd HH:mm:dd')");
+  TestError("from_unixtime(0, 'yyyy-MM-dd hh::dd')");
+  TestError("from_unixtime(cast(0 as bigint), 'YY-MM-dd HH:mm:dd')");
+  TestError("from_unixtime(cast(0 as bigint), 'yyyy-MM-dd hh::dd')");
+  TestError("from_unixtime(0, '')");
+  TestError("from_unixtime(0, NULL)");
+  TestError("from_unixtime(0, ' ')");
+  TestError("from_unixtime(0, ' -=++=- ')");
+
+  // Valid format string, but invalid Timestamp, should return null;
   TestIsNull("unix_timestamp('1970-01-01', 'yyyy-MM-dd HH:mm:ss')", TYPE_INT);
   TestIsNull("unix_timestamp('1970', 'yyyy-MM-dd')", TYPE_INT);
   TestIsNull("unix_timestamp('', 'yyyy-MM-dd')", TYPE_INT);
   TestIsNull("unix_timestamp('|1|1 00|00|00', 'yyyy|M|d HH|MM|ss')", TYPE_INT);
-  TestIsNull("unix_timestamp('1970-01-01 00:00:00', ' ')", TYPE_INT);
-  TestIsNull("unix_timestamp('1970-01-01 00:00:00', ' -===-')", TYPE_INT);
+
   TestIsNull("unix_timestamp('1970-01', 'yyyy-MM-dd')", TYPE_INT);
   TestIsNull("unix_timestamp('1970-20-01', 'yyyy-MM-dd')", TYPE_INT);
-  TestIsNull("unix_timestamp('1970-01-01', '\"foo\"')", TYPE_INT);
 
-  TestIsNull("from_unixtime(0, 'YY-MM-dd HH:mm:dd')", TYPE_STRING);
-  TestIsNull("from_unixtime(0, 'yyyy-MM-dd hh::dd')", TYPE_STRING);
-  TestIsNull("from_unixtime(cast(0 as bigint), 'YY-MM-dd HH:mm:dd')", TYPE_STRING);
-  TestIsNull("from_unixtime(cast(0 as bigint), 'yyyy-MM-dd hh::dd')", TYPE_STRING);
-  TestIsNull("from_unixtime(0, '')", TYPE_STRING);
-  TestIsNull("from_unixtime(0, NULL)", TYPE_STRING);
-  TestIsNull("from_unixtime(0, ' ')", TYPE_STRING);
-  TestIsNull("from_unixtime(0, ' -=++=- ')", TYPE_STRING);
+
+  // regression test for IMPALA-1105
+  TestIsNull("cast(trunc('2014-07-22 01:34:55 +0100', 'year') as STRING)", TYPE_STRING);
+  TestStringValue("cast(trunc(cast('2014-04-01' as timestamp), 'SYYYY') as string)",
+          "2014-01-01 00:00:00");
+  TestIsNull("cast(trunc('01:34:55', 'year') as STRING)", TYPE_STRING);
+  TestStringValue("cast(trunc(cast('07:02:03' as timestamp), 'MI') as string)",
+          "07:02:00");
+  // note: no time value in string defaults to 00:00:00
+  TestStringValue("cast(trunc(cast('2014-01-01' as timestamp), 'MI') as string)",
+          "2014-01-01 00:00:00");
 
   TestStringValue(
         "cast(trunc(cast('2014-04-01 01:01:01' as timestamp), 'SYYYY') as string)",
@@ -2914,8 +3155,10 @@ TEST_F(ExprTest, TimestampFunctions) {
   TestNonOkStatus("cast(trunc(cast('2012-09-10 07:59:59' as timestamp), 'MIN') as string)");
   TestNonOkStatus("cast(trunc(cast('2012-09-10 07:59:59' as timestamp), 'XXYYZZ') as string)");
 
+  // Extract as a regular function
   TestValue("extract(cast('2006-05-12 18:27:28.12345' as timestamp), 'YEAR')",
             TYPE_INT, 2006);
+  TestValue("extract('2006-05-12 18:27:28.12345', 'YEAR')", TYPE_INT, 2006);
   TestValue("extract(cast('2006-05-12 18:27:28.12345' as timestamp), 'MoNTH')",
             TYPE_INT, 5);
   TestValue("extract(cast('2006-05-12 18:27:28.12345' as timestamp), 'DaY')",
@@ -2930,12 +3173,53 @@ TEST_F(ExprTest, TimestampFunctions) {
             TYPE_INT, 123);
   TestValue("extract(cast('2006-05-13 01:27:28.12345' as timestamp), 'EPOCH')",
             TYPE_INT, 1147483648);
-  TestValue("extract(cast('2006-05-13 01:27:28.12345' as timestamp), 'EPOCH')",
-            TYPE_INT, 1147483648);
   TestNonOkStatus("extract(cast('2006-05-13 01:27:28.12345' as timestamp), 'foo')");
   TestNonOkStatus("extract(cast('2006-05-13 01:27:28.12345' as timestamp), NULL)");
   TestIsNull("extract(NULL, 'EPOCH')", TYPE_INT);
   TestNonOkStatus("extract(NULL, NULL)");
+
+  // Extract using FROM keyword
+  TestValue("extract(YEAR from cast('2006-05-12 18:27:28.12345' as timestamp))",
+            TYPE_INT, 2006);
+  TestValue("extract(MoNTH from cast('2006-05-12 18:27:28.12345' as timestamp))",
+            TYPE_INT, 5);
+  TestValue("extract(DaY from cast('2006-05-12 18:27:28.12345' as timestamp))",
+            TYPE_INT, 12);
+  TestValue("extract(hour from cast('2006-05-12 06:27:28.12345' as timestamp))",
+            TYPE_INT, 6);
+  TestValue("extract(MINUTE from cast('2006-05-12 18:27:28.12345' as timestamp))",
+            TYPE_INT, 27);
+  TestValue("extract(SECOND from cast('2006-05-12 18:27:28.12345' as timestamp))",
+            TYPE_INT, 28);
+  TestValue("extract(MILLISECOND from cast('2006-05-12 18:27:28.12345' as timestamp))",
+            TYPE_INT, 123);
+  TestValue("extract(EPOCH from cast('2006-05-13 01:27:28.12345' as timestamp))",
+            TYPE_INT, 1147483648);
+  TestNonOkStatus("extract(foo from cast('2006-05-13 01:27:28.12345' as timestamp))");
+  TestNonOkStatus("extract(NULL from cast('2006-05-13 01:27:28.12345' as timestamp))");
+  TestIsNull("extract(EPOCH from NULL)", TYPE_INT);
+
+  // Date_part, same as extract function but with arguments swapped
+  TestValue("date_part('YEAR', cast('2006-05-12 18:27:28.12345' as timestamp))",
+            TYPE_INT, 2006);
+  TestValue("date_part('MoNTH', cast('2006-05-12 18:27:28.12345' as timestamp))",
+            TYPE_INT, 5);
+  TestValue("date_part('DaY', cast('2006-05-12 18:27:28.12345' as timestamp))",
+            TYPE_INT, 12);
+  TestValue("date_part('hour', cast('2006-05-12 06:27:28.12345' as timestamp))",
+            TYPE_INT, 6);
+  TestValue("date_part('MINUTE', cast('2006-05-12 18:27:28.12345' as timestamp))",
+            TYPE_INT, 27);
+  TestValue("date_part('SECOND', cast('2006-05-12 18:27:28.12345' as timestamp))",
+            TYPE_INT, 28);
+  TestValue("date_part('MILLISECOND', cast('2006-05-12 18:27:28.12345' as timestamp))",
+            TYPE_INT, 123);
+  TestValue("date_part('EPOCH', cast('2006-05-13 01:27:28.12345' as timestamp))",
+            TYPE_INT, 1147483648);
+  TestNonOkStatus("date_part('foo', cast('2006-05-13 01:27:28.12345' as timestamp))");
+  TestNonOkStatus("date_part(NULL, cast('2006-05-13 01:27:28.12345' as timestamp))");
+  TestIsNull("date_part('EPOCH', NULL)", TYPE_INT);
+  TestNonOkStatus("date_part(NULL, NULL)");
 }
 
 TEST_F(ExprTest, ConditionalFunctions) {
@@ -3076,12 +3360,13 @@ TEST_F(ExprTest, ConditionalFunctions) {
   TestValue("case NULL when 1 then 1 else 2 end", TYPE_TINYINT, 2);
   TestValue("case 10 when NULL then 1 else 2 end", TYPE_TINYINT, 2);
   TestValue("case 10 when NULL then 1 when 10 then 2 else 3 end", TYPE_TINYINT, 2);
+  TestValue("case 'abc' when NULL then 1 when NULL then 2 else 3 end", TYPE_TINYINT, 3);
   // Not statically known that it will return NULL.
   TestIsNull("case NULL when NULL then true end", TYPE_BOOLEAN);
   TestIsNull("case NULL when NULL then true else NULL end", TYPE_BOOLEAN);
   // Statically known that it will return NULL.
-  TestIsNull("case NULL when NULL then NULL end", TYPE_NULL);
-  TestIsNull("case NULL when NULL then NULL else NULL end", TYPE_NULL);
+  TestIsNull("case NULL when NULL then NULL end", TYPE_BOOLEAN);
+  TestIsNull("case NULL when NULL then NULL else NULL end", TYPE_BOOLEAN);
 
   // Test all types in case/when exprs, without casts.
   unordered_map<int, string>::iterator def_iter;
@@ -3102,46 +3387,46 @@ TEST_F(ExprTest, ConditionalFunctions) {
     TestValue("case when false then 1 else " + s + " end", t, int_iter->second);
     TestValue("case when true then 1 else " + s + " end", t, 1);
     TestValue("case 0 when " + s + " then true else false end", TYPE_BOOLEAN, false);
-
-    // Test for zeroifnull
-    // zeroifnull(NULL) returns 0, zeroifnull(non-null) returns the argument
-    TestValue("zeroifnull(NULL)", TYPE_TINYINT, 0);
-    TestValue("zeroifnull(cast (NULL as TINYINT))", TYPE_TINYINT, 0);
-    TestValue("zeroifnull(cast (5 as TINYINT))", TYPE_TINYINT, 5);
-    TestValue("zeroifnull(cast (NULL as SMALLINT))", TYPE_SMALLINT, 0);
-    TestValue("zeroifnull(cast (5 as SMALLINT))", TYPE_SMALLINT, 5);
-    TestValue("zeroifnull(cast (NULL as INT))", TYPE_INT, 0);
-    TestValue("zeroifnull(cast (5 as INT))", TYPE_INT, 5);
-    TestValue("zeroifnull(cast (NULL as BIGINT))", TYPE_BIGINT, 0);
-    TestValue("zeroifnull(cast (5 as BIGINT))", TYPE_BIGINT, 5);
-    TestValue<float>("zeroifnull(cast (NULL as FLOAT))", TYPE_FLOAT, 0.0f);
-    TestValue<float>("zeroifnull(cast (5 as FLOAT))", TYPE_FLOAT, 5.0f);
-    TestValue<double>("zeroifnull(cast (NULL as DOUBLE))", TYPE_DOUBLE, 0.0);
-    TestValue<double>("zeroifnull(cast (5 as DOUBLE))", TYPE_DOUBLE, 5.0);
-
-    // Test for NullIfZero
-    // Test that 0 converts to NULL and NULL remains NULL
-    TestIsNull("nullifzero(cast (0 as TINYINT))", TYPE_TINYINT);
-    TestIsNull("nullifzero(cast (NULL as TINYINT))", TYPE_TINYINT);
-    TestIsNull("nullifzero(cast (0 as SMALLINT))", TYPE_SMALLINT);
-    TestIsNull("nullifzero(cast (NULL as SMALLINT))", TYPE_SMALLINT);
-    TestIsNull("nullifzero(cast (0 as INT))", TYPE_INT);
-    TestIsNull("nullifzero(cast (NULL as INT))", TYPE_INT);
-    TestIsNull("nullifzero(cast (0 as BIGINT))", TYPE_BIGINT);
-    TestIsNull("nullifzero(cast (NULL as BIGINT))", TYPE_BIGINT);
-    TestIsNull("nullifzero(cast (0 as FLOAT))", TYPE_FLOAT);
-    TestIsNull("nullifzero(cast (NULL as FLOAT))", TYPE_FLOAT);
-    TestIsNull("nullifzero(cast (0 as DOUBLE))", TYPE_DOUBLE);
-    TestIsNull("nullifzero(cast (NULL as DOUBLE))", TYPE_DOUBLE);
-
-    // test that non-zero args are returned unchanged.
-    TestValue("nullifzero(cast (5 as TINYINT))", TYPE_TINYINT, 5);
-    TestValue("nullifzero(cast (5 as SMALLINT))", TYPE_SMALLINT, 5);
-    TestValue("nullifzero(cast (5 as INT))", TYPE_INT, 5);
-    TestValue("nullifzero(cast (5 as BIGINT))", TYPE_BIGINT, 5);
-    TestValue<float>("nullifzero(cast (5 as FLOAT))", TYPE_FLOAT, 5.0f);
-    TestValue<double>("nullifzero(cast (5 as DOUBLE))", TYPE_DOUBLE, 5.0);
   }
+
+  // Test for zeroifnull
+  // zeroifnull(NULL) returns 0, zeroifnull(non-null) returns the argument
+  TestValue("zeroifnull(NULL)", TYPE_TINYINT, 0);
+  TestValue("zeroifnull(cast (NULL as TINYINT))", TYPE_TINYINT, 0);
+  TestValue("zeroifnull(cast (5 as TINYINT))", TYPE_TINYINT, 5);
+  TestValue("zeroifnull(cast (NULL as SMALLINT))", TYPE_SMALLINT, 0);
+  TestValue("zeroifnull(cast (5 as SMALLINT))", TYPE_SMALLINT, 5);
+  TestValue("zeroifnull(cast (NULL as INT))", TYPE_INT, 0);
+  TestValue("zeroifnull(cast (5 as INT))", TYPE_INT, 5);
+  TestValue("zeroifnull(cast (NULL as BIGINT))", TYPE_BIGINT, 0);
+  TestValue("zeroifnull(cast (5 as BIGINT))", TYPE_BIGINT, 5);
+  TestValue<float>("zeroifnull(cast (NULL as FLOAT))", TYPE_FLOAT, 0.0f);
+  TestValue<float>("zeroifnull(cast (5 as FLOAT))", TYPE_FLOAT, 5.0f);
+  TestValue<double>("zeroifnull(cast (NULL as DOUBLE))", TYPE_DOUBLE, 0.0);
+  TestValue<double>("zeroifnull(cast (5 as DOUBLE))", TYPE_DOUBLE, 5.0);
+
+  // Test for NullIfZero
+  // Test that 0 converts to NULL and NULL remains NULL
+  TestIsNull("nullifzero(cast (0 as TINYINT))", TYPE_TINYINT);
+  TestIsNull("nullifzero(cast (NULL as TINYINT))", TYPE_TINYINT);
+  TestIsNull("nullifzero(cast (0 as SMALLINT))", TYPE_SMALLINT);
+  TestIsNull("nullifzero(cast (NULL as SMALLINT))", TYPE_SMALLINT);
+  TestIsNull("nullifzero(cast (0 as INT))", TYPE_INT);
+  TestIsNull("nullifzero(cast (NULL as INT))", TYPE_INT);
+  TestIsNull("nullifzero(cast (0 as BIGINT))", TYPE_BIGINT);
+  TestIsNull("nullifzero(cast (NULL as BIGINT))", TYPE_BIGINT);
+  TestIsNull("nullifzero(cast (0 as FLOAT))", TYPE_FLOAT);
+  TestIsNull("nullifzero(cast (NULL as FLOAT))", TYPE_FLOAT);
+  TestIsNull("nullifzero(cast (0 as DOUBLE))", TYPE_DOUBLE);
+  TestIsNull("nullifzero(cast (NULL as DOUBLE))", TYPE_DOUBLE);
+
+  // test that non-zero args are returned unchanged.
+  TestValue("nullifzero(cast (5 as TINYINT))", TYPE_TINYINT, 5);
+  TestValue("nullifzero(cast (5 as SMALLINT))", TYPE_SMALLINT, 5);
+  TestValue("nullifzero(cast (5 as INT))", TYPE_INT, 5);
+  TestValue("nullifzero(cast (5 as BIGINT))", TYPE_BIGINT, 5);
+  TestValue<float>("nullifzero(cast (5 as FLOAT))", TYPE_FLOAT, 5.0f);
+  TestValue<double>("nullifzero(cast (5 as DOUBLE))", TYPE_DOUBLE, 5.0);
 
   // Test all float types in then and else exprs.
   // Also tests implicit casting in all exprs.
@@ -3176,6 +3461,15 @@ TEST_F(ExprTest, ConditionalFunctions) {
       default_timestamp_val_);
   TestTimestampValue("case when false then cast('1999-06-14 19:07:25' as timestamp) "
       "else " + default_timestamp_str_ + " end", default_timestamp_val_);
+
+  // Test Decode. This function is internalized as a CaseExpr so no
+  // extra testing should be needed. To be safe, a sanity test will be done.
+  TestValue("decode(1, 2, 3, 4)", TYPE_TINYINT, 4);
+  // In Decode NULLs are equal
+  TestValue("decode(NULL + 1, NULL + 2, 3)", TYPE_TINYINT, 3);
+  TestValue("decode(NULL, NULL, 2)", TYPE_TINYINT, 2);
+  TestIsNull("decode(1, NULL, 2)", TYPE_TINYINT);
+  TestIsNull("decode(NULL, 1, 2)", TYPE_TINYINT);
 }
 
 // Validates that Expr::ComputeResultsLayout() for 'exprs' is correct.
@@ -3229,7 +3523,7 @@ TEST_F(ExprTest, ResultsLayoutTest) {
     expected_offsets.clear();
     // With one expr, all offsets should be 0.
     expected_offsets[t.GetByteSize()] = list_of(0);
-    exprs.push_back(Expr::CreateLiteral(&pool, t, "0"));
+    exprs.push_back(pool.Add(Literal::CreateLiteral(t, "0")));
     if (t.type == TYPE_STRING) {
       ValidateLayout(exprs, 16, 0, expected_offsets);
     } else {
@@ -3244,44 +3538,44 @@ TEST_F(ExprTest, ResultsLayoutTest) {
 
   // Test layout adding a bunch of exprs.  This is designed to trigger padding.
   // The expected result is computed along the way
-  exprs.push_back(Expr::CreateLiteral(&pool, TYPE_BOOLEAN, "0"));
-  exprs.push_back(Expr::CreateLiteral(&pool, TYPE_TINYINT, "0"));
-  exprs.push_back(Expr::CreateLiteral(&pool, TYPE_TINYINT, "0"));
+  exprs.push_back(pool.Add(Literal::CreateLiteral(TYPE_BOOLEAN, "0")));
+  exprs.push_back(pool.Add(Literal::CreateLiteral(TYPE_TINYINT, "0")));
+  exprs.push_back(pool.Add(Literal::CreateLiteral(TYPE_TINYINT, "0")));
   expected_offsets[1].insert(expected_byte_size);
   expected_offsets[1].insert(expected_byte_size + 1);
   expected_offsets[1].insert(expected_byte_size + 2);
   expected_byte_size += 3 * 1 + 1;  // 1 byte of padding
 
-  exprs.push_back(Expr::CreateLiteral(&pool, TYPE_SMALLINT, "0"));
+  exprs.push_back(pool.Add(Literal::CreateLiteral(TYPE_SMALLINT, "0")));
   expected_offsets[2].insert(expected_byte_size);
   expected_byte_size += 1 * 2 + 2;  // 2 bytes of padding
 
-  exprs.push_back(Expr::CreateLiteral(&pool, TYPE_INT, "0"));
-  exprs.push_back(Expr::CreateLiteral(&pool, TYPE_FLOAT, "0"));
-  exprs.push_back(Expr::CreateLiteral(&pool, TYPE_FLOAT, "0"));
+  exprs.push_back(pool.Add(Literal::CreateLiteral(TYPE_INT, "0")));
+  exprs.push_back(pool.Add(Literal::CreateLiteral(TYPE_FLOAT, "0")));
+  exprs.push_back(pool.Add(Literal::CreateLiteral(TYPE_FLOAT, "0")));
   expected_offsets[4].insert(expected_byte_size);
   expected_offsets[4].insert(expected_byte_size + 4);
   expected_offsets[4].insert(expected_byte_size + 8);
   expected_byte_size += 3 * 4 + 4;  // 4 bytes of padding
 
-  exprs.push_back(Expr::CreateLiteral(&pool, TYPE_BIGINT, "0"));
-  exprs.push_back(Expr::CreateLiteral(&pool, TYPE_BIGINT, "0"));
-  exprs.push_back(Expr::CreateLiteral(&pool, TYPE_BIGINT, "0"));
-  exprs.push_back(Expr::CreateLiteral(&pool, TYPE_DOUBLE, "0"));
+  exprs.push_back(pool.Add(Literal::CreateLiteral(TYPE_BIGINT, "0")));
+  exprs.push_back(pool.Add(Literal::CreateLiteral(TYPE_BIGINT, "0")));
+  exprs.push_back(pool.Add(Literal::CreateLiteral(TYPE_BIGINT, "0")));
+  exprs.push_back(pool.Add(Literal::CreateLiteral(TYPE_DOUBLE, "0")));
   expected_offsets[8].insert(expected_byte_size);
   expected_offsets[8].insert(expected_byte_size + 8);
   expected_offsets[8].insert(expected_byte_size + 16);
   expected_offsets[8].insert(expected_byte_size + 24);
   expected_byte_size += 4 * 8;      // No more padding
 
-  exprs.push_back(Expr::CreateLiteral(&pool, TYPE_TIMESTAMP, "0"));
-  exprs.push_back(Expr::CreateLiteral(&pool, TYPE_TIMESTAMP, "0"));
+  exprs.push_back(pool.Add(Literal::CreateLiteral(TYPE_TIMESTAMP, "0")));
+  exprs.push_back(pool.Add(Literal::CreateLiteral(TYPE_TIMESTAMP, "0")));
   expected_offsets[16].insert(expected_byte_size);
   expected_offsets[16].insert(expected_byte_size + 16);
   expected_byte_size += 2 * 16;
 
-  exprs.push_back(Expr::CreateLiteral(&pool, TYPE_STRING, "0"));
-  exprs.push_back(Expr::CreateLiteral(&pool, TYPE_STRING, "0"));
+  exprs.push_back(pool.Add(Literal::CreateLiteral(TYPE_STRING, "0")));
+  exprs.push_back(pool.Add(Literal::CreateLiteral(TYPE_STRING, "0")));
   expected_offsets[0].insert(expected_byte_size);
   expected_offsets[0].insert(expected_byte_size + 16);
   expected_var_begin = expected_byte_size;
@@ -3309,10 +3603,6 @@ TEST_F(ExprTest, DecimalFunctions) {
   TestValue("precision(1)", TYPE_INT, 3);
   TestValue("precision(cast(1 as smallint))", TYPE_INT, 5);
   TestValue("precision(cast(123 as bigint))", TYPE_INT, 19);
-  TestValue("precision(cast(123 as float))", TYPE_INT, 38);
-  TestValue("scale(cast(123 as float))", TYPE_INT, 9);
-  TestValue("precision(cast(123.45 as double))", TYPE_INT, 38);
-  TestValue("scale(cast(123.45 as double))", TYPE_INT, 17);
   TestValue("precision(123.45)", TYPE_INT, 5);
   TestValue("scale(123.45)", TYPE_INT, 2);
   TestValue("precision(1 + 1)", TYPE_INT, 5);
@@ -3322,20 +3612,20 @@ TEST_F(ExprTest, DecimalFunctions) {
   TestValue("scale(cast(NULL as decimal(10, 2)))", TYPE_INT, 2);
 
   // Test result scale/precision from round()/truncate()
-  TestValue("scale(round(cast(\"123.456\" as decimal(6, 3)), 3))", TYPE_INT, 3);
+  TestValue("scale(round(123.456, 3))", TYPE_INT, 3);
   TestValue("precision(round(cast(\"123.456\" as decimal(6, 3)), 3))", TYPE_INT, 6);
 
-  TestValue("scale(truncate(cast(\"123.456\" as decimal(6, 3)), 1))", TYPE_INT, 1);
-  TestValue("precision(truncate(cast(\"123.456\" as decimal(6, 3)), 1))", TYPE_INT, 4);
+  TestValue("scale(truncate(123.456, 1))", TYPE_INT, 1);
+  TestValue("precision(truncate(123.456, 1))", TYPE_INT, 4);
 
   TestValue("scale(round(cast(\"123.456\" as decimal(6, 3)), -2))", TYPE_INT, 0);
-  TestValue("precision(round(cast(\"123.456\" as decimal(6, 3)), -2))", TYPE_INT, 3);
+  TestValue("precision(round(123.456, -2))", TYPE_INT, 4);
 
-  TestValue("scale(truncate(cast(\"123.456\" as decimal(6, 3)), 10))", TYPE_INT, 10);
+  TestValue("scale(truncate(123.456, 10))", TYPE_INT, 10);
   TestValue("precision(truncate(cast(\"123.456\" as decimal(6, 3)), 10))", TYPE_INT, 13);
 
-  TestValue("scale(round(cast(\"123.456\" as decimal(6, 3)), -10))", TYPE_INT, 0);
-  TestValue("precision(round(cast(\"123.456\" as decimal(6, 3)), -10))", TYPE_INT, 3);
+  TestValue("scale(round(123.456, -10))", TYPE_INT, 0);
+  TestValue("precision(round(cast(\"123.456\" as decimal(6, 3)), -10))", TYPE_INT, 4);
 
   // Abs()
   TestDecimalValue("abs(cast('0' as decimal(2,0)))", Decimal4Value(0),
@@ -3459,19 +3749,26 @@ TEST_F(ExprTest, DecimalFunctions) {
       ColumnType::CreateDecimalType(2,0));
 
   // Case
-  TestDecimalValue("case when true then cast('10' as decimal(2,0)) end",
+  TestDecimalValue("CASE when true then cast('10' as decimal(2,0)) end",
       Decimal4Value(10), ColumnType::CreateDecimalType(2, 0));
-  TestDecimalValue("case when true then cast('1.1' as decimal(18,1)) end",
+  TestDecimalValue("CASE when true then cast('1.1' as decimal(18,1)) end",
       Decimal8Value(11), ColumnType::CreateDecimalType(18,1));
-  TestDecimalValue("case when true then cast('-1.23' as decimal(32,2)) end",
+  TestDecimalValue("CASE when true then cast('-1.23' as decimal(32,2)) end",
       Decimal8Value(-123), ColumnType::CreateDecimalType(32,2));
-  TestDecimalValue("case when false then NULL else cast('10' as decimal(2,0)) end",
+  TestDecimalValue("CASE when false then NULL else cast('10' as decimal(2,0)) end",
       Decimal4Value(10), ColumnType::CreateDecimalType(2, 0));
-  TestDecimalValue("case when false then NULL else cast('1.1' as decimal(18,1)) end",
+  TestDecimalValue("CASE when false then NULL else cast('1.1' as decimal(18,1)) end",
       Decimal8Value(11), ColumnType::CreateDecimalType(18,1));
-  TestDecimalValue("case when false then NULL else cast('-1.23' as decimal(32,2)) end",
+  TestDecimalValue("CASE when false then NULL else cast('-1.23' as decimal(32,2)) end",
       Decimal8Value(-123), ColumnType::CreateDecimalType(32,2));
 
+  TestValue("CASE 1.1 when 1.1 then 1 when 2.22 then 2 else 3 end", TYPE_TINYINT, 1);
+  TestValue("CASE 2.22 when 1.1 then 1 when 2.22 then 2 else 3 end", TYPE_TINYINT, 2);
+  TestValue("CASE 2.21 when 1.1 then 1 when 2.22 then 2 else 3 end", TYPE_TINYINT, 3);
+  TestValue("CASE NULL when 1.1 then 1 when 2.22 then 2 else 3 end", TYPE_TINYINT, 3);
+
+  TestDecimalValue("CASE 2.21 when 1.1 then 1.1 when 2.21 then 2.2 else 3.3 end",
+      Decimal4Value(22), ColumnType::CreateDecimalType(2, 1));
 
   // Positive()
   TestDecimalValue("positive(cast('10' as decimal(2,0)))",
@@ -3480,7 +3777,8 @@ TEST_F(ExprTest, DecimalFunctions) {
       Decimal8Value(11), ColumnType::CreateDecimalType(18,1));
   TestDecimalValue("positive(cast('-1.23' as decimal(32,2)))",
       Decimal8Value(-123), ColumnType::CreateDecimalType(32,2));
-  TestIsNull("positive(cast(NULL as decimal(32,2)))", ColumnType::CreateDecimalType(32,2));
+  TestIsNull("positive(cast(NULL as decimal(32,2)))",
+      ColumnType::CreateDecimalType(32,2));
 
   // Negative()
   TestDecimalValue("negative(cast('10' as decimal(2,0)))",
@@ -3489,8 +3787,10 @@ TEST_F(ExprTest, DecimalFunctions) {
       Decimal8Value(-11), ColumnType::CreateDecimalType(18,1));
   TestDecimalValue("negative(cast('-1.23' as decimal(32,2)))",
       Decimal8Value(123), ColumnType::CreateDecimalType(32,2));
-  TestIsNull("negative(cast(NULL as decimal(32,2)))", ColumnType::CreateDecimalType(32,2));
+  TestIsNull("negative(cast(NULL as decimal(32,2)))",
+      ColumnType::CreateDecimalType(32,2));
 
+  // TODO: Disabled due to IMPALA-1111.
   // Least()
   TestDecimalValue("least(cast('10' as decimal(2,0)), cast('-10' as decimal(2,0)))",
       Decimal4Value(-10), ColumnType::CreateDecimalType(2, 0));
@@ -3508,9 +3808,11 @@ TEST_F(ExprTest, DecimalFunctions) {
   // Greatest()
   TestDecimalValue("greatest(cast('10' as decimal(2,0)), cast('-10' as decimal(2,0)))",
       Decimal4Value(10), ColumnType::CreateDecimalType(2, 0));
-  TestDecimalValue("greatest(cast('1.1' as decimal(18,1)), cast('-1.1' as decimal(18,1)))",
+  TestDecimalValue(
+      "greatest(cast('1.1' as decimal(18,1)), cast('-1.1' as decimal(18,1)))",
       Decimal8Value(11), ColumnType::CreateDecimalType(18,1));
-  TestDecimalValue("greatest(cast('-1.23' as decimal(32,2)), cast('1.23' as decimal(32,2)))",
+  TestDecimalValue(
+      "greatest(cast('-1.23' as decimal(32,2)), cast('1.23' as decimal(32,2)))",
       Decimal8Value(123), ColumnType::CreateDecimalType(32,2));
   TestIsNull("greatest(cast(NULL as decimal(32,2)), cast('1.23' as decimal(32,2)))",
       ColumnType::CreateDecimalType(32,2));
@@ -3557,6 +3859,8 @@ TEST_F(ExprTest, DecimalFunctions) {
       ColumnType::CreateDecimalType(33, 0));
   TestDecimalValue("ceil(cast('3' as decimal(33,5)))", Decimal16Value(3),
       ColumnType::CreateDecimalType(33, 0));
+  TestDecimalValue("ceil(cast('9.14159' as decimal(6,5)))", Decimal4Value(10),
+      ColumnType::CreateDecimalType(2, 0));
   TestIsNull("ceil(cast(NULL as decimal(2,0)))", ColumnType::CreateDecimalType(2,0));
 
   // Floor()
@@ -3578,6 +3882,8 @@ TEST_F(ExprTest, DecimalFunctions) {
       ColumnType::CreateDecimalType(33, 0));
   TestDecimalValue("floor(cast('3' as decimal(33,5)))", Decimal16Value(3),
       ColumnType::CreateDecimalType(33, 0));
+  TestDecimalValue("floor(cast('-9.14159' as decimal(6,5)))", Decimal4Value(-10),
+      ColumnType::CreateDecimalType(2, 0));
   TestIsNull("floor(cast(NULL as decimal(2,0)))", ColumnType::CreateDecimalType(2,0));
 
   // Round()
@@ -3599,6 +3905,10 @@ TEST_F(ExprTest, DecimalFunctions) {
       ColumnType::CreateDecimalType(33, 0));
   TestDecimalValue("round(cast('3' as decimal(33,5)))", Decimal16Value(3),
       ColumnType::CreateDecimalType(33, 0));
+  TestDecimalValue("round(cast('9.54159' as decimal(6,5)))", Decimal4Value(10),
+      ColumnType::CreateDecimalType(2, 0));
+  TestDecimalValue("round(cast('-9.54159' as decimal(6,5)))", Decimal4Value(-10),
+      ColumnType::CreateDecimalType(2, 0));
   TestIsNull("round(cast(NULL as decimal(2,0)))", ColumnType::CreateDecimalType(2,0));
 
   // Truncate()
@@ -3620,6 +3930,8 @@ TEST_F(ExprTest, DecimalFunctions) {
       ColumnType::CreateDecimalType(33, 0));
   TestDecimalValue("truncate(cast('3' as decimal(33,5)))", Decimal16Value(3),
       ColumnType::CreateDecimalType(33, 0));
+  TestDecimalValue("truncate(cast('9.54159' as decimal(6,5)))", Decimal4Value(9),
+      ColumnType::CreateDecimalType(1, 0));
   TestIsNull("truncate(cast(NULL as decimal(2,0)))", ColumnType::CreateDecimalType(2,0));
 
   // RoundTo()
@@ -3649,6 +3961,8 @@ TEST_F(ExprTest, DecimalFunctions) {
       ColumnType::CreateDecimalType(6, 0));
   TestDecimalValue("round(cast('175.0' as decimal(6,1)), -4)", Decimal4Value(0),
       ColumnType::CreateDecimalType(6, 0));
+  TestDecimalValue("round(cast('999.951' as decimal(6,3)), 1)", Decimal4Value(10000),
+      ColumnType::CreateDecimalType(5, 1));
 
   TestDecimalValue("round(cast('-3.1615' as decimal(16,4)), 0)", Decimal8Value(-3),
       ColumnType::CreateDecimalType(12, 0));
@@ -3664,6 +3978,8 @@ TEST_F(ExprTest, DecimalFunctions) {
       ColumnType::CreateDecimalType(16, 4));
   TestDecimalValue("round(cast('3.1615' as decimal(16,4)), 5)", Decimal8Value(316150),
       ColumnType::CreateDecimalType(17, 5));
+  TestDecimalValue("round(cast('-999.951' as decimal(16,3)), 1)", Decimal8Value(-10000),
+      ColumnType::CreateDecimalType(17, 1));
 
   TestDecimalValue("round(cast('-175.0' as decimal(15,1)), 0)", Decimal8Value(-175),
       ColumnType::CreateDecimalType(15, 0));
@@ -3700,6 +4016,8 @@ TEST_F(ExprTest, DecimalFunctions) {
       ColumnType::CreateDecimalType(35, 0));
   TestDecimalValue("round(cast('-175.0' as decimal(35,1)), -4)", Decimal16Value(0),
       ColumnType::CreateDecimalType(35, 0));
+  TestDecimalValue("round(cast('99999.9951' as decimal(35,4)), 2)",
+      Decimal16Value(10000000), ColumnType::CreateDecimalType(36, 2));
 
   // TruncateTo()
   TestIsNull("truncate(cast(NULL as decimal(2,0)), 1)",
@@ -3773,6 +4091,14 @@ TEST_F(ExprTest, DecimalFunctions) {
       Decimal16Value(0), ColumnType::CreateDecimalType(35, 0));
   TestDecimalValue("truncate(cast('-175.0' as decimal(35,1)), -4)",
       Decimal16Value(0), ColumnType::CreateDecimalType(35, 0));
+
+  // Overflow on Round()/etc. This can only happen when the input is has enough
+  // leading 9's.
+  // Rounding this value requires a precision of 39 so it overflows.
+  TestIsNull("round(99999999999999999999999999999999999999., -1)",
+      ColumnType::CreateDecimalType(38, 0));
+  TestIsNull("round(-99999999999999999999999999999999000000., -7)",
+      ColumnType::CreateDecimalType(38, 0));
 }
 
 // Sanity check some overflow casting. We have a random test framework that covers
@@ -3883,9 +4209,20 @@ TEST_F(ExprTest, MADlib) {
 
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
-  InitCommonRuntime(argc, argv, true);
+  InitCommonRuntime(argc, argv, true, TestInfo::BE_TEST);
   InitFeSupport();
   impala::LlvmCodeGen::InitializeLlvm();
+
+  // Disable llvm optimization passes if the env var is no set to true. Running without
+  // the optimizations makes the tests run much faster.
+  char* optimizations = getenv("EXPR_TEST_ENABLE_OPTIMIZATIONS");
+  if (optimizations != NULL && strcmp(optimizations, "true") == 0) {
+    cout << "Running with optimization passes." << endl;
+    FLAGS_disable_optimization_passes = false;
+  } else {
+    cout << "Running without optimization passes." << endl;
+    FLAGS_disable_optimization_passes = true;
+  }
 
   // Create an in-process Impala server and in-process backends for test environment
   // without any startup validation check

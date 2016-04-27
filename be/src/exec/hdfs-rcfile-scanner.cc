@@ -72,11 +72,9 @@ Status HdfsRCFileScanner::InitNewRange() {
   only_parsing_header_ = false;
   row_group_buffer_size_ = 0;
 
-  // Can reuse buffer if we need to compact (because the data is copied out)
-  reuse_row_group_buffer_ = scan_node_->requires_compaction();
-  // Or, there are no string columns (since the tuple won't contain ptrs into
-  // the decompressed data).
-  reuse_row_group_buffer_ |= scan_node_->tuple_desc()->string_slots().empty();
+  // Can reuse buffer if there are no string columns (since the tuple won't contain
+  // ptrs into the decompressed data).
+  reuse_row_group_buffer_ = scan_node_->tuple_desc()->string_slots().empty();
 
   // The scanner currently copies all the column data out of the io buffer so the
   // stream never contains any tuple data.
@@ -128,7 +126,7 @@ Status HdfsRCFileScanner::ReadFileHeader() {
   if (rc_header->version == SEQ6) {
     // Validate class name key/value
     uint8_t* class_name_key;
-    int len;
+    int64_t len;
     RETURN_IF_FALSE(
         stream_->ReadText(&class_name_key, &len, &parse_status_));
     if (len != strlen(HdfsRCFileScanner::RCFILE_KEY_CLASS_NAME) ||
@@ -171,7 +169,7 @@ Status HdfsRCFileScanner::ReadFileHeader() {
   }
   if (header_->is_compressed) {
     uint8_t* codec_ptr;
-    int len;
+    int64_t len;
     // Read the codec and get the right decompressor class.
     RETURN_IF_FALSE(stream_->ReadText(&codec_ptr, &len, &parse_status_));
     header_->codec = string(reinterpret_cast<char*>(codec_ptr), len);
@@ -202,7 +200,7 @@ Status HdfsRCFileScanner::ReadNumColumnsMetadata() {
 
   for (int i = 0; i < map_size; ++i) {
     uint8_t* key, *value;
-    int key_len, value_len;
+    int64_t key_len, value_len;
     RETURN_IF_FALSE(stream_->ReadText(&key, &key_len, &parse_status_));
     RETURN_IF_FALSE(stream_->ReadText(&value, &value_len, &parse_status_));
 
@@ -317,7 +315,7 @@ Status HdfsRCFileScanner::ReadKeyBuffers() {
         compressed_key_length_, &compressed_buffer, &parse_status_));
     {
       SCOPED_TIMER(decompress_timer_);
-      RETURN_IF_ERROR(decompressor_->ProcessBlock(true, compressed_key_length_,
+      RETURN_IF_ERROR(decompressor_->ProcessBlock32(true, compressed_key_length_,
           compressed_buffer, &key_length_, &key_buffer));
       VLOG_FILE << "Decompressed " << compressed_key_length_ << " to " << key_length_;
     }
@@ -432,7 +430,7 @@ Status HdfsRCFileScanner::ReadColumnBuffers() {
       uint8_t* compressed_output = row_group_buffer_ + column.start_offset;
       {
         SCOPED_TIMER(decompress_timer_);
-        RETURN_IF_ERROR(decompressor_->ProcessBlock(true, column.buffer_len,
+        RETURN_IF_ERROR(decompressor_->ProcessBlock32(true, column.buffer_len,
             compressed_input, &column.uncompressed_buffer_len,
             &compressed_output));
         VLOG_FILE << "Decompressed " << column.buffer_len << " to "
@@ -484,7 +482,7 @@ Status HdfsRCFileScanner::ProcessRange() {
         // we can shortcircuit the parse loop
         row_pos_ += max_tuples;
         int num_to_commit = WriteEmptyTuples(context_, current_row, max_tuples);
-        COUNTER_UPDATE(scan_node_->rows_read_counter(), max_tuples);
+        COUNTER_ADD(scan_node_->rows_read_counter(), max_tuples);
         RETURN_IF_ERROR(CommitRows(num_to_commit));
         continue;
       }
@@ -517,7 +515,7 @@ Status HdfsRCFileScanner::ProcessRange() {
               reinterpret_cast<const char*>(row_group_buffer_ + row_group_length_));
 
           if (!text_converter_->WriteSlot(slot_desc, tuple, col_start, field_len,
-              scan_node_->requires_compaction(), false, pool)) {
+              false, false, pool)) {
             ReportColumnParseError(slot_desc, col_start, field_len);
             error_in_row = true;
           }
@@ -538,13 +536,13 @@ Status HdfsRCFileScanner::ProcessRange() {
 
         current_row->SetTuple(scan_node_->tuple_idx(), tuple);
         // Evaluate the conjuncts and add the row to the batch
-        if (ExecNode::EvalConjuncts(&(*conjuncts_)[0], num_conjuncts_, current_row)) {
+        if (EvalConjuncts(current_row)) {
           ++num_to_commit;
           current_row = next_row(current_row);
           tuple = next_tuple(tuple);
         }
       }
-      COUNTER_UPDATE(scan_node_->rows_read_counter(), max_tuples);
+      COUNTER_ADD(scan_node_->rows_read_counter(), max_tuples);
       RETURN_IF_ERROR(CommitRows(num_to_commit));
       if (scan_node_->ReachedLimit()) return Status::OK;
     }

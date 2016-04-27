@@ -74,11 +74,11 @@ DEFINE_int32(llama_callback_port, 28000,
              "Port where Llama notification callback should be started");
 // TODO: Deprecate llama_host and llama_port in favor of the new llama_hostports.
 // This needs to be coordinated with CM.
-DEFINE_string(llama_host, "127.0.0.1",
+DEFINE_string(llama_host, "",
               "Host of Llama service that the resource broker should connect to");
 DEFINE_int32(llama_port, 15000,
              "Port of Llama service that the resource broker should connect to");
-DEFINE_string(llama_addresses, "127.0.0.1:15000",
+DEFINE_string(llama_addresses, "",
              "Llama availability group given as a comma-separated list of hostports.");
 DEFINE_int64(llama_registration_timeout_secs, 30,
              "Maximum number of seconds that Impala will attempt to (re-)register "
@@ -134,11 +134,12 @@ ExecEnv::ExecEnv()
     cgroups_mgr_(NULL),
     hdfs_op_thread_pool_(
         CreateHdfsOpThreadPool("hdfs-worker-pool", FLAGS_num_hdfs_worker_threads, 1024)),
-    request_pool_service_(new RequestPoolService()),
+    request_pool_service_(new RequestPoolService(metrics_.get())),
     frontend_(new Frontend()),
     enable_webserver_(FLAGS_enable_webserver),
     tz_database_(TimezoneDatabase()),
     is_fe_tests_(false),
+    backend_address_(MakeNetworkAddress(FLAGS_hostname, FLAGS_be_port)),
     is_pseudo_distributed_llama_(false) {
   if (FLAGS_enable_rm) InitRm();
   // Initialize the scheduler either dynamically (with a statestore) or statically (with
@@ -148,14 +149,13 @@ ExecEnv::ExecEnv()
         MakeNetworkAddress(FLAGS_hostname, FLAGS_state_store_subscriber_port);
     TNetworkAddress statestore_address =
         MakeNetworkAddress(FLAGS_state_store_host, FLAGS_state_store_port);
-    TNetworkAddress backend_address = MakeNetworkAddress(FLAGS_hostname, FLAGS_be_port);
 
     statestore_subscriber_.reset(new StatestoreSubscriber(
-        TNetworkAddressToString(backend_address), subscriber_address, statestore_address,
+        TNetworkAddressToString(backend_address_), subscriber_address, statestore_address,
         metrics_.get()));
 
     scheduler_.reset(new SimpleScheduler(statestore_subscriber_.get(),
-        statestore_subscriber_->id(), backend_address, metrics_.get(),
+        statestore_subscriber_->id(), backend_address_, metrics_.get(),
         webserver_.get(), resource_broker_.get(), request_pool_service_.get()));
   } else {
     vector<TNetworkAddress> addresses;
@@ -180,12 +180,13 @@ ExecEnv::ExecEnv(const string& hostname, int backend_port, int subscriber_port,
     thread_mgr_(new ThreadResourceMgr),
     hdfs_op_thread_pool_(
         CreateHdfsOpThreadPool("hdfs-worker-pool", FLAGS_num_hdfs_worker_threads, 1024)),
-    request_pool_service_(new RequestPoolService()),
     frontend_(new Frontend()),
     enable_webserver_(FLAGS_enable_webserver && webserver_port > 0),
     tz_database_(TimezoneDatabase()),
     is_fe_tests_(false),
+    backend_address_(MakeNetworkAddress(FLAGS_hostname, FLAGS_be_port)),
     is_pseudo_distributed_llama_(false) {
+  request_pool_service_.reset(new RequestPoolService(metrics_.get()));
   if (FLAGS_enable_rm) InitRm();
 
   if (FLAGS_use_statestore && statestore_port > 0) {
@@ -193,14 +194,13 @@ ExecEnv::ExecEnv(const string& hostname, int backend_port, int subscriber_port,
         MakeNetworkAddress(hostname, subscriber_port);
     TNetworkAddress statestore_address =
         MakeNetworkAddress(statestore_host, statestore_port);
-    TNetworkAddress backend_address = MakeNetworkAddress(hostname, backend_port);
 
     statestore_subscriber_.reset(new StatestoreSubscriber(
-        TNetworkAddressToString(backend_address), subscriber_address, statestore_address,
+        TNetworkAddressToString(backend_address_), subscriber_address, statestore_address,
         metrics_.get()));
 
     scheduler_.reset(new SimpleScheduler(statestore_subscriber_.get(),
-        statestore_subscriber_->id(), backend_address, metrics_.get(),
+        statestore_subscriber_->id(), backend_address_, metrics_.get(),
         webserver_.get(), resource_broker_.get(), request_pool_service_.get()));
   } else {
     vector<TNetworkAddress> addresses;
@@ -215,22 +215,27 @@ ExecEnv::ExecEnv(const string& hostname, int backend_port, int subscriber_port,
 void ExecEnv::InitRm() {
   // Unique addresses from FLAGS_llama_addresses and FLAGS_llama_host/FLAGS_llama_port.
   vector<TNetworkAddress> llama_addresses;
-  vector<string> components;
-  split(components, FLAGS_llama_addresses, is_any_of(","), token_compress_on);
-  for (int i = 0; i < components.size(); ++i) {
-    to_lower(components[i]);
-    TNetworkAddress llama_address = MakeNetworkAddress(components[i]);
+  if (!FLAGS_llama_addresses.empty()) {
+    vector<string> components;
+    split(components, FLAGS_llama_addresses, is_any_of(","), token_compress_on);
+    for (int i = 0; i < components.size(); ++i) {
+      to_lower(components[i]);
+      TNetworkAddress llama_address = MakeNetworkAddress(components[i]);
+      if (find(llama_addresses.begin(), llama_addresses.end(), llama_address)
+          == llama_addresses.end()) {
+        llama_addresses.push_back(llama_address);
+      }
+    }
+  }
+  // Add Llama hostport from deprecated flags (if it does not already exist).
+  if (!FLAGS_llama_host.empty()) {
+    to_lower(FLAGS_llama_host);
+    TNetworkAddress llama_address =
+        MakeNetworkAddress(FLAGS_llama_host, FLAGS_llama_port);
     if (find(llama_addresses.begin(), llama_addresses.end(), llama_address)
         == llama_addresses.end()) {
       llama_addresses.push_back(llama_address);
     }
-  }
-  // Add Llama hostport from deprecated flags (if it does not already exist).
-  to_lower(FLAGS_llama_host);
-  TNetworkAddress llama_address = MakeNetworkAddress(FLAGS_llama_host, FLAGS_llama_port);
-  if (find(llama_addresses.begin(), llama_addresses.end(), llama_address)
-      == llama_addresses.end()) {
-    llama_addresses.push_back(llama_address);
   }
   for (int i = 0; i < llama_addresses.size(); ++i) {
     LOG(INFO) << "Llama address " << i << ": " << llama_addresses[i];
@@ -261,7 +266,7 @@ ExecEnv::~ExecEnv() {
 }
 
 Status ExecEnv::InitForFeTests() {
-  mem_tracker_.reset(new MemTracker(-1, "Process"));
+  mem_tracker_.reset(new MemTracker(-1, -1, "Process"));
   is_fe_tests_ = true;
   return Status::OK;
 }
@@ -307,7 +312,7 @@ Status ExecEnv::StartServices() {
 #ifndef ADDRESS_SANITIZER
   // Limit of -1 means no memory limit.
   mem_tracker_.reset(new MemTracker(TcmallocMetric::PHYSICAL_BYTES_RESERVED,
-                                    bytes_limit > 0 ? bytes_limit : -1, "Process"));
+      bytes_limit > 0 ? bytes_limit : -1, -1, "Process"));
 
   // Since tcmalloc does not free unused memory, we may exceed the process mem limit even
   // if Impala is not actually using that much memory. Add a callback to free any unused
@@ -317,7 +322,7 @@ Status ExecEnv::StartServices() {
 #else
   // tcmalloc metrics aren't defined in ASAN builds, just use the default behavior to
   // track process memory usage (sum of all children trackers).
-  mem_tracker_.reset(new MemTracker(bytes_limit > 0 ? bytes_limit : -1, "Process"));
+  mem_tracker_.reset(new MemTracker(bytes_limit > 0 ? bytes_limit : -1, -1, "Process"));
 #endif
 
   mem_tracker_->RegisterMetrics(metrics_.get(), "mem-tracker.process");
@@ -335,7 +340,7 @@ Status ExecEnv::StartServices() {
 
   // Start services in order to ensure that dependencies between them are met
   if (enable_webserver_) {
-    AddDefaultPathHandlers(webserver_.get(), mem_tracker_.get());
+    AddDefaultUrlCallbacks(webserver_.get(), mem_tracker_.get());
     RETURN_IF_ERROR(webserver_->Start());
   } else {
     LOG(INFO) << "Not starting webserver";

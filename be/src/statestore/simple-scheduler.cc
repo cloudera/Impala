@@ -47,6 +47,7 @@ using namespace boost;
 using namespace boost::algorithm;
 using namespace apache::thrift;
 using namespace strings;
+using namespace rapidjson;
 
 DECLARE_int32(be_port);
 DECLARE_string(hostname);
@@ -54,8 +55,6 @@ DECLARE_bool(enable_rm);
 DECLARE_int32(rm_default_cpu_vcores);
 DECLARE_string(rm_default_memory);
 
-// Admission control is disabled by default (CDH4 only) due to HUE-994, Hue doesn't
-// close queries (fixed in CDH5). Default is false on CDH5.
 DEFINE_bool(disable_admission_control, true, "Disables admission control.");
 DEFINE_bool(require_username, false, "Requires that a user be provided in order to "
     "schedule requests. If enabled and a user is not provided, requests will be "
@@ -69,6 +68,9 @@ static const string ASSIGNMENTS_KEY("simple-scheduler.assignments.total");
 static const string SCHEDULER_INIT_KEY("simple-scheduler.initialized");
 static const string NUM_BACKENDS_KEY("simple-scheduler.num-backends");
 static const string DEFAULT_USER("default");
+
+static const string BACKENDS_WEB_PAGE = "/backends";
+static const string BACKENDS_TEMPLATE = "backends.tmpl";
 
 const string SimpleScheduler::IMPALA_MEMBERSHIP_TOPIC("impala-membership");
 
@@ -178,9 +180,10 @@ Status SimpleScheduler::Init() {
   LOG(INFO) << "Starting simple scheduler";
 
   if (webserver_ != NULL) {
-    Webserver::PathHandlerCallback backends_callback =
-        bind<void>(mem_fn(&SimpleScheduler::BackendsPathHandler), this, _1, _2);
-    webserver_->RegisterPathHandler("/backends", backends_callback);
+    Webserver::UrlCallback backends_callback =
+        bind<void>(mem_fn(&SimpleScheduler::BackendsUrlCallback), this, _1, _2);
+    webserver_->RegisterUrlCallback(BACKENDS_WEB_PAGE, BACKENDS_TEMPLATE,
+        backends_callback);
   }
 
   if (statestore_subscriber_ != NULL) {
@@ -247,41 +250,18 @@ bool TBackendDescriptorComparator(const TBackendDescriptor& a,
   return TNetworkAddressComparator(a.address, b.address);
 }
 
-void SimpleScheduler::BackendsPathHandler(const Webserver::ArgumentMap& args,
-                                          stringstream* output) {
+void SimpleScheduler::BackendsUrlCallback(const Webserver::ArgumentMap& args,
+    Document* document) {
   BackendList backends;
   GetAllKnownBackends(&backends);
-  sort(backends.begin(), backends.end(), TBackendDescriptorComparator);
-  if (args.find("raw") == args.end()) {
-    (*output) << "<h2>Known Backends "
-              << "(" << backends.size() << ")"
-              << "</h2>" << endl;
-
-    (*output) << "<table class='table table-hover table-bordered'>";
-    (*output) << "<tr><th>Backend</th><th></th>" << endl;
-    BOOST_FOREACH(const BackendList::value_type& backend, backends) {
-      (*output) << "<tr><td>" << backend.address << "</td>"
-                << "<td>";
-      if (backend.__isset.debug_http_address) {
-        if (backend.__isset.secure_webserver && backend.secure_webserver) {
-          (*output) << "<a href='https://";
-        } else {
-          (*output) << "<a href='http://";
-        }
-        (*output) << backend.debug_http_address << "'>Debug pages</a>";
-      } else {
-        (*output) << "N/A";
-      }
-      (*output) << "</td></tr>" << endl;
-    }
-    (*output) << "</table>";
-  } else {
-    (*output) << "Known Backends " << "(" << backends.size() << ")" << endl;
-
-    BOOST_FOREACH(const BackendList::value_type& backend, backends) {
-      (*output) << backend.address << endl;
-    }
+  Value backends_list(kArrayType);
+  BOOST_FOREACH(const BackendList::value_type& backend, backends) {
+    Value str(TNetworkAddressToString(backend.address).c_str(), document->GetAllocator());
+    backends_list.PushBack(str, document->GetAllocator());
   }
+
+  document->AddMember("backends", backends_list, document->GetAllocator());
+  document->AddMember("num_backends", backends.size(), document->GetAllocator());
 }
 
 void SimpleScheduler::UpdateMembership(
@@ -469,15 +449,16 @@ Status SimpleScheduler::ComputeScanRangeAssignment(const TQueryExecRequest& exec
     FragmentScanRangeAssignment* assignment =
         &(*schedule->exec_params())[fragment_idx].scan_range_assignment;
     RETURN_IF_ERROR(ComputeScanRangeAssignment(
-        entry->first, entry->second, exec_at_coord, schedule->query_options(),
-        assignment));
+        entry->first, entry->second, exec_request.host_list, exec_at_coord,
+        schedule->query_options(), assignment));
     schedule->AddScanRanges(entry->second.size());
   }
   return Status::OK;
 }
 
 Status SimpleScheduler::ComputeScanRangeAssignment(
-    PlanNodeId node_id, const vector<TScanRangeLocations>& locations, bool exec_at_coord,
+    PlanNodeId node_id, const vector<TScanRangeLocations>& locations,
+    const vector<TNetworkAddress>& host_list, bool exec_at_coord,
     const TQueryOptions& query_options, FragmentScanRangeAssignment* assignment) {
   // If cached reads are enabled, we will always prefer cached replicas over non-cached
   // replicas. Since it is likely that only one replica is cached, this could generate
@@ -504,11 +485,13 @@ Status SimpleScheduler::ComputeScanRangeAssignment(
     int volume_id = -1;
     bool is_cached = false;
     BOOST_FOREACH(const TScanRangeLocation& location, scan_range_locations.locations) {
+      DCHECK_LT(location.host_idx, host_list.size());
+      const TNetworkAddress& replica_host = host_list[location.host_idx];
       // Deprioritize non-collocated datanodes by assigning a very high initial bytes
       uint64_t initial_bytes =
-          (!HasLocalBackend(location.server)) ? numeric_limits<int64_t>::max() : 0L;
+          !HasLocalBackend(replica_host) ? numeric_limits<int64_t>::max() : 0L;
       uint64_t* assigned_bytes =
-          FindOrInsert(&assigned_bytes_per_host, location.server, initial_bytes);
+          FindOrInsert(&assigned_bytes_per_host, replica_host, initial_bytes);
 
       // Adjust whether or not this replica should count as being cached based on
       // the query option and whether it is collocated. If the DN is not collocated
@@ -525,7 +508,7 @@ Status SimpleScheduler::ComputeScanRangeAssignment(
       // a less busy host.
       if ((is_replica_cached && !is_cached) || *assigned_bytes < min_assigned_bytes) {
         min_assigned_bytes = *assigned_bytes;
-        data_host = &location.server;
+        data_host = &replica_host;
         volume_id = location.volume_id;
         is_cached = is_replica_cached;
       }
@@ -567,6 +550,7 @@ Status SimpleScheduler::ComputeScanRangeAssignment(
     // Explicitly set the optional fields.
     scan_range_params.__set_volume_id(volume_id);
     scan_range_params.__set_is_cached(is_cached);
+    scan_range_params.__set_is_remote(remote_read);
     scan_range_params_list->push_back(scan_range_params);
   }
 
@@ -669,7 +653,6 @@ void SimpleScheduler::ComputeFragmentHosts(const TQueryExecRequest& exec_request
   scan_node_types.push_back(TPlanNodeType::HBASE_SCAN_NODE);
   scan_node_types.push_back(TPlanNodeType::DATA_SOURCE_NODE);
 
-  unordered_set<TNetworkAddress> unique_hosts;
   // compute hosts of producer fragment before those of consumer fragment(s),
   // the latter might inherit the set of hosts from the former
   for (int i = exec_request.fragments.size() - 1; i >= 0; --i) {
@@ -711,7 +694,6 @@ void SimpleScheduler::ComputeFragmentHosts(const TQueryExecRequest& exec_request
       }
       DCHECK(!hosts.empty()) << "no hosts for fragment " << i << " with a UnionNode";
 
-      // Set unique hosts in the fragment's params.
       params.hosts.assign(hosts.begin(), hosts.end());
       continue;
     }
@@ -733,8 +715,13 @@ void SimpleScheduler::ComputeFragmentHosts(const TQueryExecRequest& exec_request
     // This fragment is executed on those hosts that have scan ranges
     // for the leftmost scan.
     GetScanHosts(leftmost_scan_id, exec_request, params, &params.hosts);
-    unique_hosts.insert(params.hosts.begin(), params.hosts.end());
   }
+
+  unordered_set<TNetworkAddress> unique_hosts;
+  BOOST_FOREACH(const FragmentExecParams& exec_params, *fragment_exec_params) {
+    unique_hosts.insert(exec_params.hosts.begin(), exec_params.hosts.end());
+  }
+
   schedule->SetUniqueHosts(unique_hosts);
 }
 

@@ -17,7 +17,6 @@
 #include <avro/errors.h>
 #include <avro/legacy.h>
 #include <avro/schema.h>
-#include <boost/array.hpp>
 #include <boost/foreach.hpp>
 
 #include "codegen/llvm-codegen.h"
@@ -27,6 +26,7 @@
 #include "runtime/raw-value.h"
 #include "runtime/runtime-state.h"
 #include "util/codec.h"
+#include "util/decompress.h"
 #include "util/runtime-profile.h"
 
 // Note: the Avro C++ library uses exceptions for error handling. Any Avro
@@ -80,23 +80,14 @@ HdfsAvroScanner::HdfsAvroScanner(HdfsScanNode* scan_node, RuntimeState* state)
     codegend_decode_avro_data_(NULL) {
 }
 
-HdfsAvroScanner::~HdfsAvroScanner() {
-  DCHECK(codegend_decode_avro_data_ == NULL);
-}
-
-Function* HdfsAvroScanner::Codegen(HdfsScanNode* node, const vector<Expr*>& conjuncts) {
+Function* HdfsAvroScanner::Codegen(HdfsScanNode* node,
+                                   const vector<ExprContext*>& conjunct_ctxs) {
   if (!node->runtime_state()->codegen_enabled()) return NULL;
-  LlvmCodeGen* codegen = node->runtime_state()->codegen();
+  LlvmCodeGen* codegen;
+  if (!node->runtime_state()->GetCodegen(&codegen).ok()) return NULL;
   Function* materialize_tuple_fn = CodegenMaterializeTuple(node, codegen);
   if (materialize_tuple_fn == NULL) return NULL;
-  return CodegenDecodeAvroData(codegen, materialize_tuple_fn, conjuncts);
-}
-
-void HdfsAvroScanner::Close() {
-  scan_node_->ReleaseCodegenFn(
-      THdfsFileFormat::AVRO, reinterpret_cast<void*>(codegend_decode_avro_data_));
-  codegend_decode_avro_data_ = NULL;
-  BaseSequenceScanner::Close();
+  return CodegenDecodeAvroData(node->runtime_state(), materialize_tuple_fn, conjunct_ctxs);
 }
 
 BaseSequenceScanner::FileHeader* HdfsAvroScanner::AllocateFileHeader() {
@@ -421,8 +412,7 @@ HdfsAvroScanner::SchemaElement HdfsAvroScanner::ConvertSchema(
         // not a complex type nor a [<primitive type>, "null"] union itself), we treat
         // this node as the same type as child except with null_union_position set
         // appropriately.
-        if (is_avro_primitive(child.schema.get()) &&
-            child.null_union_position == -1) {
+        if (is_avro_primitive(child.schema.get()) && child.null_union_position == -1) {
           element = child;
           element.null_union_position = null_position;
         }
@@ -464,7 +454,7 @@ HdfsAvroScanner::SchemaElement HdfsAvroScanner::ConvertSchema(
       return Status::OK;
     case AVRO_STRING:
     case AVRO_BYTES:
-      if (slot_desc->type().type == TYPE_STRING) return Status::OK;
+      if (slot_desc->type().IsStringType()) return Status::OK;
       break;
     case AVRO_INT32:
       if (slot_desc->type().type == TYPE_INT) return Status::OK;
@@ -506,9 +496,7 @@ Status HdfsAvroScanner::InitNewRange() {
   avro_header_ = reinterpret_cast<AvroFileHeader*>(header_);
   template_tuple_ = avro_header_->template_tuple;
   if (header_->is_compressed) {
-    RETURN_IF_ERROR(Codec::CreateDecompressor(
-        data_buffer_pool_.get(), scan_node_->tuple_desc()->string_slots().empty(),
-        header_->compression_type, &decompressor_));
+    RETURN_IF_ERROR(UpdateDecompressor(header_->compression_type));
   }
 
   if (avro_header_->use_codegend_decode_avro_data) {
@@ -546,12 +534,12 @@ Status HdfsAvroScanner::ProcessRange() {
       if (header_->compression_type == THdfsCompression::SNAPPY) {
         // Snappy-compressed data block includes trailing 4-byte checksum,
         // decompressor_ doesn't expect this
-        compressed_size -= 4;
+        compressed_size -= SnappyDecompressor::TRAILING_CHECKSUM_LEN;
       }
-      int size;
+      int64_t size;
       SCOPED_TIMER(decompress_timer_);
-      RETURN_IF_ERROR(decompressor_->ProcessBlock(
-          false, compressed_size, compressed_data, &size, &data));
+      RETURN_IF_ERROR(decompressor_->ProcessBlock(false, compressed_size, compressed_data,
+                                                  &size, &data));
       VLOG_FILE << "Decompressed " << compressed_size << " to " << size;
     } else {
       data = compressed_data;
@@ -580,7 +568,7 @@ Status HdfsAvroScanner::ProcessRange() {
       }
       RETURN_IF_ERROR(CommitRows(num_to_commit));
       num_records -= max_tuples;
-      COUNTER_UPDATE(scan_node_->rows_read_counter(), max_tuples);
+      COUNTER_ADD(scan_node_->rows_read_counter(), max_tuples);
 
       if (scan_node_->ReachedLimit()) return Status::OK;
     }
@@ -632,7 +620,14 @@ void HdfsAvroScanner::MaterializeTuple(MemPool* pool, uint8_t** data, Tuple* tup
         ReadAvroDouble(slot_type, data, write_slot, slot, pool);
         break;
       case AVRO_STRING:
-        ReadAvroString(slot_type, data, write_slot, slot, pool);
+      case AVRO_BYTES:
+        if (slot_desc != NULL && slot_desc->type().type == TYPE_VARCHAR) {
+          ReadAvroVarchar(slot_type, slot_desc->type().len, data, write_slot, slot, pool);
+        } else if (slot_desc != NULL && slot_desc->type().type == TYPE_CHAR) {
+          ReadAvroChar(slot_type, slot_desc->type().len, data, write_slot, slot, pool);
+        } else {
+          ReadAvroString(slot_type, data, write_slot, slot, pool);
+        }
         break;
       case AVRO_DECIMAL: {
         int slot_byte_size = 0;
@@ -716,6 +711,18 @@ Function* HdfsAvroScanner::CodegenMaterializeTuple(HdfsScanNode* node,
   }
   int num_fields = avro_schema_record_size(table_schema.get());
   DCHECK_GT(num_fields, 0);
+  // Disable Codegen for TYPE_CHAR
+  for (int field_idx = 0; field_idx < num_fields; ++field_idx) {
+    int col_idx = field_idx + node->num_partition_keys();
+    int slot_idx = node->GetMaterializedSlotIdx(col_idx);
+    if (slot_idx != HdfsScanNode::SKIP_COLUMN) {
+      SlotDescriptor* slot_desc = node->materialized_slots()[slot_idx];
+      if (slot_desc->type().type == TYPE_CHAR) {
+        LOG(INFO) << "Avro codegen skipped because CHAR is not supported.";
+        return NULL;
+      }
+    }
+  }
 
   LLVMContext& context = codegen->context();
   LlvmCodeGen::LlvmBuilder builder(context);
@@ -795,6 +802,11 @@ Function* HdfsAvroScanner::CodegenMaterializeTuple(HdfsScanNode* node,
       builder.CreateBr(read_field_block);
     }
 
+    SlotDescriptor* slot_desc = NULL;
+    if (slot_idx != HdfsScanNode::SKIP_COLUMN) {
+      slot_desc = node->materialized_slots()[slot_idx];
+    }
+
     // Write read_field_block IR starting at the beginning of the block
     builder.SetInsertPoint(read_field_block, read_field_block->begin());
     Function* read_field_fn;
@@ -816,10 +828,17 @@ Function* HdfsAvroScanner::CodegenMaterializeTuple(HdfsScanNode* node,
         break;
       case AVRO_STRING:
       case AVRO_BYTES:
-        read_field_fn = codegen->GetFunction(IRFunction::READ_AVRO_STRING);
+        if ((slot_idx != HdfsScanNode::SKIP_COLUMN) &&
+            (slot_desc->type().type == TYPE_VARCHAR)) {
+          read_field_fn = codegen->GetFunction(IRFunction::READ_AVRO_VARCHAR);
+        } else {
+          read_field_fn = codegen->GetFunction(IRFunction::READ_AVRO_STRING);
+        }
         break;
       default:
         // Unsupported type, can't codegen
+        VLOG(1) << "Failed to codegen MaterializeTuple() due to unsupported type: "
+                << element.schema->type;
         fn->eraseFromParent();
         return NULL;
     }
@@ -831,7 +850,6 @@ Function* HdfsAvroScanner::CodegenMaterializeTuple(HdfsScanNode* node,
     if (slot_idx != HdfsScanNode::SKIP_COLUMN) {
       // Field corresponds to a materialized column, fill in relevant arguments
       write_slot_val = builder.getTrue();
-      SlotDescriptor* slot_desc = node->materialized_slots()[slot_idx];
       if (slot_desc->type().type == TYPE_DECIMAL) {
         // ReadAvroDecimal() takes slot byte size instead of slot type
         slot_type_val = builder.getInt32(slot_desc->type().GetByteSize());
@@ -843,18 +861,31 @@ Function* HdfsAvroScanner::CodegenMaterializeTuple(HdfsScanNode* node,
       opaque_slot_val =
           builder.CreateBitCast(slot_val, codegen->ptr_type(), "opaque_slot");
     }
-    Value* read_field_args[] =
-        {this_val, slot_type_val, data_val, write_slot_val, opaque_slot_val, pool_val};
-    builder.CreateCall(read_field_fn, read_field_args);
+
+    // NOTE: ReadAvroVarchar/Char has different signature than rest of read functions
+    if ((slot_idx != HdfsScanNode::SKIP_COLUMN) &&
+        (slot_desc->type().type == TYPE_VARCHAR ||
+         slot_desc->type().type == TYPE_CHAR)) {
+      // Need to pass an extra argument (the length) to the codegen function
+      Value* fixed_len = builder.getInt32(slot_desc->type().len);
+      Value* read_field_args[] = {this_val, slot_type_val, fixed_len, data_val,
+        write_slot_val, opaque_slot_val, pool_val};
+      builder.CreateCall(read_field_fn, read_field_args);
+    } else {
+      Value* read_field_args[] =
+          {this_val, slot_type_val, data_val, write_slot_val, opaque_slot_val, pool_val};
+      builder.CreateCall(read_field_fn, read_field_args);
+    }
   }
   builder.SetInsertPoint(&fn->back());
   builder.CreateRetVoid();
   return codegen->FinalizeFunction(fn);
 }
 
-Function* HdfsAvroScanner::CodegenDecodeAvroData(LlvmCodeGen* codegen,
-                                                 Function* materialize_tuple_fn,
-                                                 const vector<Expr*>& conjuncts) {
+Function* HdfsAvroScanner::CodegenDecodeAvroData(RuntimeState* state,
+    Function* materialize_tuple_fn, const vector<ExprContext*>& conjunct_ctxs) {
+  LlvmCodeGen* codegen;
+  if (!state->GetCodegen(&codegen).ok()) return NULL;
   SCOPED_TIMER(codegen->codegen_timer());
   DCHECK(materialize_tuple_fn != NULL);
 
@@ -864,15 +895,13 @@ Function* HdfsAvroScanner::CodegenDecodeAvroData(LlvmCodeGen* codegen,
       materialize_tuple_fn, "MaterializeTuple", &replaced);
   DCHECK_EQ(replaced, 1);
 
-  // TODO: If skipping fields in a record becomes more efficient than reading fields,
-  // interleave reading and evaluating the conjuncts for a field so we can skip more
-  // unneeded fields
-  Function* eval_conjuncts_fn = ExecNode::CodegenEvalConjuncts(codegen, conjuncts);
-  if (eval_conjuncts_fn != NULL) {
-    decode_avro_data_fn = codegen->ReplaceCallSites(decode_avro_data_fn, false,
-        eval_conjuncts_fn, "EvalConjuncts", &replaced);
-    DCHECK_EQ(replaced, 1);
-  }
+  Function* eval_conjuncts_fn = ExecNode::CodegenEvalConjuncts(state, conjunct_ctxs);
+  decode_avro_data_fn = codegen->ReplaceCallSites(decode_avro_data_fn, false,
+      eval_conjuncts_fn, "EvalConjuncts", &replaced);
+  DCHECK_EQ(replaced, 1);
+  decode_avro_data_fn->setName("DecodeAvroData");
 
-  return codegen->FinalizeFunction(decode_avro_data_fn);
+  decode_avro_data_fn = codegen->OptimizeFunctionWithExprs(decode_avro_data_fn);
+  DCHECK(decode_avro_data_fn != NULL);
+  return decode_avro_data_fn;
 }

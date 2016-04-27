@@ -1,0 +1,1027 @@
+# subquery with aggregation and order by/limit, as left-hand side of join;
+# having clause in subquery is transfered to merge agg step in distrib plan
+select *
+from (
+  select int_col, count(*)
+  from functional.alltypessmall
+  where month = 1
+  group by int_col
+  having count(*) > 1
+  order by count(*) desc limit 5
+  ) t1
+join functional.alltypes t2 on (t1.int_col = t2.int_col)
+where month = 1
+---- PLAN
+04:HASH JOIN [INNER JOIN]
+|  hash predicates: t2.int_col = int_col
+|
+|--02:TOP-N [LIMIT=5]
+|  |  order by: count(*) DESC
+|  |
+|  01:AGGREGATE [FINALIZE]
+|  |  output: count(*)
+|  |  group by: int_col
+|  |  having: count(*) > 1
+|  |
+|  00:SCAN HDFS [functional.alltypessmall]
+|     partitions=1/4 files=1 size=1.57KB
+|
+03:SCAN HDFS [functional.alltypes t2]
+   partitions=2/24 files=2 size=40.32KB
+---- DISTRIBUTEDPLAN
+09:EXCHANGE [UNPARTITIONED]
+|
+04:HASH JOIN [INNER JOIN, BROADCAST]
+|  hash predicates: t2.int_col = int_col
+|
+|--08:EXCHANGE [BROADCAST]
+|  |
+|  07:MERGING-EXCHANGE [UNPARTITIONED]
+|  |  order by: count(*) DESC
+|  |  limit: 5
+|  |
+|  02:TOP-N [LIMIT=5]
+|  |  order by: count(*) DESC
+|  |
+|  06:AGGREGATE [FINALIZE]
+|  |  output: count:merge(*)
+|  |  group by: int_col
+|  |  having: count(*) > 1
+|  |
+|  05:EXCHANGE [HASH(int_col)]
+|  |
+|  01:AGGREGATE
+|  |  output: count(*)
+|  |  group by: int_col
+|  |
+|  00:SCAN HDFS [functional.alltypessmall]
+|     partitions=1/4 files=1 size=1.57KB
+|
+03:SCAN HDFS [functional.alltypes t2]
+   partitions=2/24 files=2 size=40.32KB
+====
+# simple full scan subquery
+select * from (select y x from (select id y from functional_hbase.alltypessmall) a) b
+---- PLAN
+00:SCAN HBASE [functional_hbase.alltypessmall]
+---- DISTRIBUTEDPLAN
+01:EXCHANGE [UNPARTITIONED]
+|
+00:SCAN HBASE [functional_hbase.alltypessmall]
+====
+# subquery doing join
+select * from (select t2.*
+from functional.testtbl t1 join functional.testtbl t2 using(id)
+where t1.zip = 94611) x
+---- PLAN
+02:HASH JOIN [INNER JOIN]
+|  hash predicates: t1.id = t2.id
+|
+|--01:SCAN HDFS [functional.testtbl t2]
+|     partitions=1/1 files=0 size=0B
+|
+00:SCAN HDFS [functional.testtbl t1]
+   partitions=1/1 files=0 size=0B
+   predicates: t1.zip = 94611
+---- DISTRIBUTEDPLAN
+04:EXCHANGE [UNPARTITIONED]
+|
+02:HASH JOIN [INNER JOIN, BROADCAST]
+|  hash predicates: t1.id = t2.id
+|
+|--03:EXCHANGE [BROADCAST]
+|  |
+|  01:SCAN HDFS [functional.testtbl t2]
+|     partitions=1/1 files=0 size=0B
+|
+00:SCAN HDFS [functional.testtbl t1]
+   partitions=1/1 files=0 size=0B
+   predicates: t1.zip = 94611
+====
+# subquery doing join
+# multiple join predicates;
+# scan predicates get propagated correctly;
+# non-eq join predicates are evaluated as extra conjuncts by the join node
+select *
+from
+  (select a.*
+   from functional.alltypesagg a
+     right outer join functional.alltypessmall b using (id, int_col)
+   where a.day >= 6
+     and b.month > 2
+     and a.tinyint_col = 15
+     and b.string_col = '15'
+     and a.tinyint_col + b.tinyint_col < 15) x
+---- PLAN
+02:HASH JOIN [RIGHT OUTER JOIN]
+|  hash predicates: a.id = b.id, a.int_col = b.int_col
+|  other predicates: a.day >= 6, a.tinyint_col = 15, a.tinyint_col + b.tinyint_col < 15
+|
+|--01:SCAN HDFS [functional.alltypessmall b]
+|     partitions=2/4 files=2 size=3.17KB
+|     predicates: b.string_col = '15'
+|
+00:SCAN HDFS [functional.alltypesagg a]
+   partitions=5/11 files=5 size=372.38KB
+   predicates: a.tinyint_col = 15
+---- SCANRANGELOCATIONS
+NODE 0:
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypesagg/year=2010/month=1/day=10/100110.txt 0:76263
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypesagg/year=2010/month=1/day=6/100106.txt 0:76263
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypesagg/year=2010/month=1/day=7/100107.txt 0:76263
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypesagg/year=2010/month=1/day=8/100108.txt 0:76263
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypesagg/year=2010/month=1/day=9/100109.txt 0:76263
+NODE 1:
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypessmall/year=2009/month=3/090301.txt 0:1620
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypessmall/year=2009/month=4/090401.txt 0:1621
+---- DISTRIBUTEDPLAN
+05:EXCHANGE [UNPARTITIONED]
+|
+02:HASH JOIN [RIGHT OUTER JOIN, PARTITIONED]
+|  hash predicates: a.id = b.id, a.int_col = b.int_col
+|  other predicates: a.day >= 6, a.tinyint_col = 15, a.tinyint_col + b.tinyint_col < 15
+|
+|--04:EXCHANGE [HASH(b.id,b.int_col)]
+|  |
+|  01:SCAN HDFS [functional.alltypessmall b]
+|     partitions=2/4 files=2 size=3.17KB
+|     predicates: b.string_col = '15'
+|
+03:EXCHANGE [HASH(a.id,a.int_col)]
+|
+00:SCAN HDFS [functional.alltypesagg a]
+   partitions=5/11 files=5 size=372.38KB
+   predicates: a.tinyint_col = 15
+====
+# predicate pushdown
+select * from (select * from functional_hbase.alltypessmall) a where id < 5
+---- PLAN
+00:SCAN HBASE [functional_hbase.alltypessmall]
+   predicates: functional_hbase.alltypessmall.id < 5
+====
+# subquery join
+# multiple join predicates;
+# scan predicates get propagated correctly;
+# non-eq join predicates are evaluated as extra conjuncts by the join node
+select *
+from
+  (select id, int_col, day, tinyint_col from functional.alltypesagg) a
+  right outer join
+  (select id, int_col, month, string_col, tinyint_col
+   from functional.alltypessmall) b using (id, int_col)
+where a.day >= 6
+and b.month > 2
+and a.tinyint_col = 15
+and b.string_col = '15'
+and a.tinyint_col + b.tinyint_col < 15
+and b.id + 15 = 27
+---- PLAN
+02:HASH JOIN [RIGHT OUTER JOIN]
+|  hash predicates: id = id, int_col = int_col
+|  other predicates: day >= 6, tinyint_col = 15, tinyint_col + tinyint_col < 15
+|
+|--01:SCAN HDFS [functional.alltypessmall]
+|     partitions=2/4 files=2 size=3.17KB
+|     predicates: functional.alltypessmall.string_col = '15', functional.alltypessmall.id + 15 = 27
+|
+00:SCAN HDFS [functional.alltypesagg]
+   partitions=5/11 files=5 size=372.38KB
+   predicates: functional.alltypesagg.tinyint_col = 15, functional.alltypesagg.id + 15 = 27
+---- DISTRIBUTEDPLAN
+05:EXCHANGE [UNPARTITIONED]
+|
+02:HASH JOIN [RIGHT OUTER JOIN, PARTITIONED]
+|  hash predicates: id = id, int_col = int_col
+|  other predicates: day >= 6, tinyint_col = 15, tinyint_col + tinyint_col < 15
+|
+|--04:EXCHANGE [HASH(id,int_col)]
+|  |
+|  01:SCAN HDFS [functional.alltypessmall]
+|     partitions=2/4 files=2 size=3.17KB
+|     predicates: functional.alltypessmall.string_col = '15', functional.alltypessmall.id + 15 = 27
+|
+03:EXCHANGE [HASH(id,int_col)]
+|
+00:SCAN HDFS [functional.alltypesagg]
+   partitions=5/11 files=5 size=372.38KB
+   predicates: functional.alltypesagg.tinyint_col = 15, functional.alltypesagg.id + 15 = 27
+====
+# subquery join
+# multiple join predicates;
+# scan predicates get propagated correctly;
+# non-eq join predicates are evaluated as extra conjuncts by the join node
+select *
+from
+  (select id, int_col, day, tinyint_col
+   from
+     (select id, int_col, day, tinyint_col from functional.alltypesagg) a0
+   where a0.day >= 6) a
+  right outer join
+  (select id, int_col, month, string_col, tinyint_col from functional.alltypessmall) b
+  using (id, int_col)
+where b.month > 2
+and a.tinyint_col = 15
+and b.string_col = '15'
+and a.tinyint_col + b.tinyint_col < 15
+---- PLAN
+02:HASH JOIN [RIGHT OUTER JOIN]
+|  hash predicates: id = id, int_col = int_col
+|  other predicates: tinyint_col = 15, tinyint_col + tinyint_col < 15
+|
+|--01:SCAN HDFS [functional.alltypessmall]
+|     partitions=2/4 files=2 size=3.17KB
+|     predicates: functional.alltypessmall.string_col = '15'
+|
+00:SCAN HDFS [functional.alltypesagg]
+   partitions=5/11 files=5 size=372.38KB
+   predicates: functional.alltypesagg.tinyint_col = 15
+---- SCANRANGELOCATIONS
+NODE 0:
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypesagg/year=2010/month=1/day=10/100110.txt 0:76263
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypesagg/year=2010/month=1/day=6/100106.txt 0:76263
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypesagg/year=2010/month=1/day=7/100107.txt 0:76263
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypesagg/year=2010/month=1/day=8/100108.txt 0:76263
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypesagg/year=2010/month=1/day=9/100109.txt 0:76263
+NODE 1:
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypessmall/year=2009/month=3/090301.txt 0:1620
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypessmall/year=2009/month=4/090401.txt 0:1621
+---- DISTRIBUTEDPLAN
+05:EXCHANGE [UNPARTITIONED]
+|
+02:HASH JOIN [RIGHT OUTER JOIN, PARTITIONED]
+|  hash predicates: id = id, int_col = int_col
+|  other predicates: tinyint_col = 15, tinyint_col + tinyint_col < 15
+|
+|--04:EXCHANGE [HASH(id,int_col)]
+|  |
+|  01:SCAN HDFS [functional.alltypessmall]
+|     partitions=2/4 files=2 size=3.17KB
+|     predicates: functional.alltypessmall.string_col = '15'
+|
+03:EXCHANGE [HASH(id,int_col)]
+|
+00:SCAN HDFS [functional.alltypesagg]
+   partitions=5/11 files=5 size=372.38KB
+   predicates: functional.alltypesagg.tinyint_col = 15
+====
+# complex join, having joined subquery on the rhs, and predicate
+# at multiple subquery level. This tests that both sides of a join
+# that is itself on the build side of another join get compacted.
+select x.smallint_col, x.id, x.tinyint_col, c.id, x.int_col, x.float_col, c.string_col
+from functional.alltypessmall c
+join (
+   select a.smallint_col smallint_col, a.tinyint_col tinyint_col, a.day day,
+           a.int_col int_col, a.month month, b.float_col float_col, b.id id
+   from ( select * from functional.alltypesagg a where month=1 ) a
+   join functional.alltypessmall b on (a.smallint_col = b.id)
+ ) x on (x.tinyint_col = c.id)
+where x.day=1
+and x.int_col > 899
+and x.float_col > 4.5
+and c.string_col < '7'
+and x.int_col + x.float_col + cast(c.string_col as float) < 1000
+---- PLAN
+04:HASH JOIN [INNER JOIN]
+|  hash predicates: a.tinyint_col = c.id
+|  other predicates: a.int_col + b.float_col + CAST(c.string_col AS FLOAT) < 1000
+|
+|--00:SCAN HDFS [functional.alltypessmall c]
+|     partitions=4/4 files=4 size=6.32KB
+|     predicates: c.string_col < '7'
+|
+03:HASH JOIN [INNER JOIN]
+|  hash predicates: a.smallint_col = b.id
+|
+|--02:SCAN HDFS [functional.alltypessmall b]
+|     partitions=4/4 files=4 size=6.32KB
+|     predicates: b.float_col > 4.5
+|
+01:SCAN HDFS [functional.alltypesagg a]
+   partitions=1/11 files=1 size=73.39KB
+   predicates: a.int_col > 899
+---- SCANRANGELOCATIONS
+NODE 0:
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypessmall/year=2009/month=1/090101.txt 0:1610
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypessmall/year=2009/month=2/090201.txt 0:1621
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypessmall/year=2009/month=3/090301.txt 0:1620
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypessmall/year=2009/month=4/090401.txt 0:1621
+NODE 1:
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypesagg/year=2010/month=1/day=1/100101.txt 0:75153
+NODE 2:
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypessmall/year=2009/month=1/090101.txt 0:1610
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypessmall/year=2009/month=2/090201.txt 0:1621
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypessmall/year=2009/month=3/090301.txt 0:1620
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypessmall/year=2009/month=4/090401.txt 0:1621
+---- DISTRIBUTEDPLAN
+07:EXCHANGE [UNPARTITIONED]
+|
+04:HASH JOIN [INNER JOIN, BROADCAST]
+|  hash predicates: a.tinyint_col = c.id
+|  other predicates: a.int_col + b.float_col + CAST(c.string_col AS FLOAT) < 1000
+|
+|--06:EXCHANGE [BROADCAST]
+|  |
+|  00:SCAN HDFS [functional.alltypessmall c]
+|     partitions=4/4 files=4 size=6.32KB
+|     predicates: c.string_col < '7'
+|
+03:HASH JOIN [INNER JOIN, BROADCAST]
+|  hash predicates: a.smallint_col = b.id
+|
+|--05:EXCHANGE [BROADCAST]
+|  |
+|  02:SCAN HDFS [functional.alltypessmall b]
+|     partitions=4/4 files=4 size=6.32KB
+|     predicates: b.float_col > 4.5
+|
+01:SCAN HDFS [functional.alltypesagg a]
+   partitions=1/11 files=1 size=73.39KB
+   predicates: a.int_col > 899
+====
+# with grouping
+select tinyint_col, count(*), min(tinyint_col), max(tinyint_col), sum(tinyint_col),
+avg(tinyint_col)
+from (select * from functional.alltypesagg) a
+group by 1
+---- PLAN
+01:AGGREGATE [FINALIZE]
+|  output: count(*), min(functional.alltypesagg.tinyint_col), max(functional.alltypesagg.tinyint_col), sum(functional.alltypesagg.tinyint_col), avg(functional.alltypesagg.tinyint_col)
+|  group by: functional.alltypesagg.tinyint_col
+|
+00:SCAN HDFS [functional.alltypesagg]
+   partitions=11/11 files=11 size=814.73KB
+---- SCANRANGELOCATIONS
+NODE 0:
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypesagg/year=2010/month=1/day=1/100101.txt 0:75153
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypesagg/year=2010/month=1/day=10/100110.txt 0:76263
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypesagg/year=2010/month=1/day=2/100102.txt 0:76263
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypesagg/year=2010/month=1/day=3/100103.txt 0:76263
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypesagg/year=2010/month=1/day=4/100104.txt 0:76263
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypesagg/year=2010/month=1/day=5/100105.txt 0:76263
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypesagg/year=2010/month=1/day=6/100106.txt 0:76263
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypesagg/year=2010/month=1/day=7/100107.txt 0:76263
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypesagg/year=2010/month=1/day=8/100108.txt 0:76263
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypesagg/year=2010/month=1/day=9/100109.txt 0:76263
+  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypesagg/year=2010/month=1/day=__HIVE_DEFAULT_PARTITION__/000000_0 0:72759
+---- DISTRIBUTEDPLAN
+04:EXCHANGE [UNPARTITIONED]
+|
+03:AGGREGATE [FINALIZE]
+|  output: count:merge(*), min:merge(tinyint_col), max:merge(tinyint_col), sum:merge(tinyint_col), avg:merge(tinyint_col)
+|  group by: tinyint_col
+|
+02:EXCHANGE [HASH(tinyint_col)]
+|
+01:AGGREGATE
+|  output: count(*), min(functional.alltypesagg.tinyint_col), max(functional.alltypesagg.tinyint_col), sum(functional.alltypesagg.tinyint_col), avg(functional.alltypesagg.tinyint_col)
+|  group by: functional.alltypesagg.tinyint_col
+|
+00:SCAN HDFS [functional.alltypesagg]
+   partitions=11/11 files=11 size=814.73KB
+====
+# with grouping
+select * from (
+select tinyint_col, count(*), min(tinyint_col), max(tinyint_col), sum(tinyint_col),
+avg(tinyint_col)
+from functional.alltypesagg
+group by 1
+) a
+---- PLAN
+01:AGGREGATE [FINALIZE]
+|  output: count(*), min(tinyint_col), max(tinyint_col), sum(tinyint_col), avg(tinyint_col)
+|  group by: tinyint_col
+|
+00:SCAN HDFS [functional.alltypesagg]
+   partitions=11/11 files=11 size=814.73KB
+---- DISTRIBUTEDPLAN
+04:EXCHANGE [UNPARTITIONED]
+|
+03:AGGREGATE [FINALIZE]
+|  output: count:merge(*), min:merge(tinyint_col), max:merge(tinyint_col), sum:merge(tinyint_col), avg:merge(tinyint_col)
+|  group by: tinyint_col
+|
+02:EXCHANGE [HASH(tinyint_col)]
+|
+01:AGGREGATE
+|  output: count(*), min(tinyint_col), max(tinyint_col), sum(tinyint_col), avg(tinyint_col)
+|  group by: tinyint_col
+|
+00:SCAN HDFS [functional.alltypesagg]
+   partitions=11/11 files=11 size=814.73KB
+====
+select c1, c2, c3
+from
+  (select c1, c2, c3
+   from
+     (select int_col c1, sum(float_col) c2, min(float_col) c3
+      from functional_hbase.alltypessmall
+      group by 1) x
+    order by 2,3 desc
+    limit 5
+) y
+---- PLAN
+02:TOP-N [LIMIT=5]
+|  order by: c2 ASC, c3 DESC
+|
+01:AGGREGATE [FINALIZE]
+|  output: sum(float_col), min(float_col)
+|  group by: int_col
+|
+00:SCAN HBASE [functional_hbase.alltypessmall]
+---- DISTRIBUTEDPLAN
+05:MERGING-EXCHANGE [UNPARTITIONED]
+|  order by: c2 ASC, c3 DESC
+|  limit: 5
+|
+02:TOP-N [LIMIT=5]
+|  order by: c2 ASC, c3 DESC
+|
+04:AGGREGATE [FINALIZE]
+|  output: sum:merge(float_col), min:merge(float_col)
+|  group by: int_col
+|
+03:EXCHANGE [HASH(int_col)]
+|
+01:AGGREGATE
+|  output: sum(float_col), min(float_col)
+|  group by: int_col
+|
+00:SCAN HBASE [functional_hbase.alltypessmall]
+====
+select c1, x2
+from (
+  select c1, min(c2) x2
+  from (
+    select c1, c2, c3
+    from (
+      select int_col c1, tinyint_col c2, min(float_col) c3
+      from functional_hbase.alltypessmall
+      group by 1, 2
+      order by 1,2
+      limit 1
+    ) x
+  ) x2
+  group by c1
+) y
+order by 2,1 desc
+limit 0
+---- PLAN
+00:EMPTYSET
+---- DISTRIBUTEDPLAN
+00:EMPTYSET
+====
+# distinct *
+select distinct *
+from (select distinct * from functional.testtbl) x
+---- PLAN
+02:AGGREGATE [FINALIZE]
+|  group by: functional.testtbl.id, functional.testtbl.name, functional.testtbl.zip
+|
+01:AGGREGATE [FINALIZE]
+|  group by: functional.testtbl.id, functional.testtbl.name, functional.testtbl.zip
+|
+00:SCAN HDFS [functional.testtbl]
+   partitions=1/1 files=0 size=0B
+---- DISTRIBUTEDPLAN
+07:EXCHANGE [UNPARTITIONED]
+|
+06:AGGREGATE [FINALIZE]
+|  group by: x.id, x.name, x.zip
+|
+05:EXCHANGE [HASH(x.id,x.name,x.zip)]
+|
+02:AGGREGATE
+|  group by: functional.testtbl.id, functional.testtbl.name, functional.testtbl.zip
+|
+04:AGGREGATE [FINALIZE]
+|  group by: functional.testtbl.id, functional.testtbl.name, functional.testtbl.zip
+|
+03:EXCHANGE [HASH(functional.testtbl.id,functional.testtbl.name,functional.testtbl.zip)]
+|
+01:AGGREGATE
+|  group by: functional.testtbl.id, functional.testtbl.name, functional.testtbl.zip
+|
+00:SCAN HDFS [functional.testtbl]
+   partitions=1/1 files=0 size=0B
+====
+# distinct w/ explicit select list
+select distinct id, zip
+from (select distinct * from functional.testtbl) x
+---- PLAN
+02:AGGREGATE [FINALIZE]
+|  group by: functional.testtbl.id, functional.testtbl.zip
+|
+01:AGGREGATE [FINALIZE]
+|  group by: functional.testtbl.id, functional.testtbl.name, functional.testtbl.zip
+|
+00:SCAN HDFS [functional.testtbl]
+   partitions=1/1 files=0 size=0B
+---- DISTRIBUTEDPLAN
+07:EXCHANGE [UNPARTITIONED]
+|
+06:AGGREGATE [FINALIZE]
+|  group by: id, zip
+|
+05:EXCHANGE [HASH(id,zip)]
+|
+02:AGGREGATE
+|  group by: functional.testtbl.id, functional.testtbl.zip
+|
+04:AGGREGATE [FINALIZE]
+|  group by: functional.testtbl.id, functional.testtbl.name, functional.testtbl.zip
+|
+03:EXCHANGE [HASH(functional.testtbl.id,functional.testtbl.name,functional.testtbl.zip)]
+|
+01:AGGREGATE
+|  group by: functional.testtbl.id, functional.testtbl.name, functional.testtbl.zip
+|
+00:SCAN HDFS [functional.testtbl]
+   partitions=1/1 files=0 size=0B
+====
+# aggregate with group-by, having
+select *
+from (
+       select int_col % 7 c1, count(*) c2, avg(int_col) c3
+       from (
+              select * from functional.alltypesagg
+            ) a
+       group by 1
+       having avg(int_col) > 500 or count(*) = 10
+     ) b
+where c1 is not null
+and   c2 > 10
+---- PLAN
+01:AGGREGATE [FINALIZE]
+|  output: count(*), avg(functional.alltypesagg.int_col)
+|  group by: functional.alltypesagg.int_col % 7
+|  having: avg(int_col) > 500 OR count(*) = 10, count(*) > 10, int_col % 7 IS NOT NULL
+|
+00:SCAN HDFS [functional.alltypesagg]
+   partitions=11/11 files=11 size=814.73KB
+---- DISTRIBUTEDPLAN
+04:EXCHANGE [UNPARTITIONED]
+|
+03:AGGREGATE [FINALIZE]
+|  output: count:merge(*), avg:merge(int_col)
+|  group by: int_col % 7
+|  having: avg(int_col) > 500 OR count(*) = 10, count(*) > 10, int_col % 7 IS NOT NULL
+|
+02:EXCHANGE [HASH(int_col % 7)]
+|
+01:AGGREGATE
+|  output: count(*), avg(functional.alltypesagg.int_col)
+|  group by: functional.alltypesagg.int_col % 7
+|
+00:SCAN HDFS [functional.alltypesagg]
+   partitions=11/11 files=11 size=814.73KB
+====
+# subquery with left outer join
+select j.*, d.*
+from (
+       select *
+       from functional.JoinTbl a
+     ) j
+     left outer join
+     (
+       select *
+       from functional.DimTbl b
+     ) d
+     on (j.test_name = d.name)
+where j.test_id <= 1006
+---- PLAN
+02:HASH JOIN [RIGHT OUTER JOIN]
+|  hash predicates: b.name = a.test_name
+|
+|--00:SCAN HDFS [functional.jointbl a]
+|     partitions=1/1 files=1 size=433B
+|     predicates: a.test_id <= 1006
+|
+01:SCAN HDFS [functional.dimtbl b]
+   partitions=1/1 files=1 size=171B
+---- DISTRIBUTEDPLAN
+05:EXCHANGE [UNPARTITIONED]
+|
+02:HASH JOIN [RIGHT OUTER JOIN, PARTITIONED]
+|  hash predicates: b.name = a.test_name
+|
+|--04:EXCHANGE [HASH(a.test_name)]
+|  |
+|  00:SCAN HDFS [functional.jointbl a]
+|     partitions=1/1 files=1 size=433B
+|     predicates: a.test_id <= 1006
+|
+03:EXCHANGE [HASH(b.name)]
+|
+01:SCAN HDFS [functional.dimtbl b]
+   partitions=1/1 files=1 size=171B
+====
+# complex join, having joined subquery on the rhs, and predicate
+# at multiple subquery level
+select x.smallint_col, count(x.id)
+from functional.alltypessmall c
+     left outer join
+     (
+       select a.smallint_col smallint_col, a.tinyint_col tinyint_col, a.day day,
+               a.int_col int_col, a.month month, b.float_col float_col, b.id id
+        from (
+                select *
+                from functional.alltypesagg a
+             ) a
+             join
+             functional.alltypessmall b
+             on (a.smallint_col = b.id)
+     ) x
+     on (x.tinyint_col = c.id)
+group by x.smallint_col
+---- PLAN
+05:AGGREGATE [FINALIZE]
+|  output: count(b.id)
+|  group by: a.smallint_col
+|
+04:HASH JOIN [RIGHT OUTER JOIN]
+|  hash predicates: a.tinyint_col = c.id
+|
+|--00:SCAN HDFS [functional.alltypessmall c]
+|     partitions=4/4 files=4 size=6.32KB
+|
+03:HASH JOIN [INNER JOIN]
+|  hash predicates: a.smallint_col = b.id
+|
+|--02:SCAN HDFS [functional.alltypessmall b]
+|     partitions=4/4 files=4 size=6.32KB
+|
+01:SCAN HDFS [functional.alltypesagg a]
+   partitions=11/11 files=11 size=814.73KB
+---- DISTRIBUTEDPLAN
+11:EXCHANGE [UNPARTITIONED]
+|
+10:AGGREGATE [FINALIZE]
+|  output: count:merge(x.id)
+|  group by: x.smallint_col
+|
+09:EXCHANGE [HASH(x.smallint_col)]
+|
+05:AGGREGATE
+|  output: count(b.id)
+|  group by: a.smallint_col
+|
+04:HASH JOIN [RIGHT OUTER JOIN, PARTITIONED]
+|  hash predicates: a.tinyint_col = c.id
+|
+|--08:EXCHANGE [HASH(c.id)]
+|  |
+|  00:SCAN HDFS [functional.alltypessmall c]
+|     partitions=4/4 files=4 size=6.32KB
+|
+07:EXCHANGE [HASH(a.tinyint_col)]
+|
+03:HASH JOIN [INNER JOIN, BROADCAST]
+|  hash predicates: a.smallint_col = b.id
+|
+|--06:EXCHANGE [BROADCAST]
+|  |
+|  02:SCAN HDFS [functional.alltypessmall b]
+|     partitions=4/4 files=4 size=6.32KB
+|
+01:SCAN HDFS [functional.alltypesagg a]
+   partitions=11/11 files=11 size=814.73KB
+====
+# complex join, having joined subquery on the lhs, and predicate
+# at multiple subquery level
+select x.smallint_col, x.id, x.tinyint_col, c.id, x.int_col, x.float_col, c.string_col
+from
+     (
+       select a.smallint_col smallint_col, a.tinyint_col tinyint_col, a.day day,
+               a.int_col int_col, a.month month, b.float_col float_col, b.id id
+        from (
+                select *
+                from functional.alltypesagg a
+                where month=1
+             ) a
+             join
+             functional.alltypessmall b
+             on (a.smallint_col = b.id)
+     ) x
+     join
+      functional.alltypessmall c
+     on (x.tinyint_col = c.id)
+where x.day=1
+and x.int_col > 899
+and x.float_col > 4.5
+and c.string_col < '7'
+and x.int_col + x.float_col + CAST(c.string_col AS FLOAT) < 1000
+---- PLAN
+04:HASH JOIN [INNER JOIN]
+|  hash predicates: a.tinyint_col = c.id
+|  other predicates: a.int_col + b.float_col + CAST(c.string_col AS FLOAT) < 1000
+|
+|--03:SCAN HDFS [functional.alltypessmall c]
+|     partitions=4/4 files=4 size=6.32KB
+|     predicates: c.string_col < '7'
+|
+02:HASH JOIN [INNER JOIN]
+|  hash predicates: a.smallint_col = b.id
+|
+|--01:SCAN HDFS [functional.alltypessmall b]
+|     partitions=4/4 files=4 size=6.32KB
+|     predicates: b.float_col > 4.5
+|
+00:SCAN HDFS [functional.alltypesagg a]
+   partitions=1/11 files=1 size=73.39KB
+   predicates: a.int_col > 899
+---- DISTRIBUTEDPLAN
+07:EXCHANGE [UNPARTITIONED]
+|
+04:HASH JOIN [INNER JOIN, BROADCAST]
+|  hash predicates: a.tinyint_col = c.id
+|  other predicates: a.int_col + b.float_col + CAST(c.string_col AS FLOAT) < 1000
+|
+|--06:EXCHANGE [BROADCAST]
+|  |
+|  03:SCAN HDFS [functional.alltypessmall c]
+|     partitions=4/4 files=4 size=6.32KB
+|     predicates: c.string_col < '7'
+|
+02:HASH JOIN [INNER JOIN, BROADCAST]
+|  hash predicates: a.smallint_col = b.id
+|
+|--05:EXCHANGE [BROADCAST]
+|  |
+|  01:SCAN HDFS [functional.alltypessmall b]
+|     partitions=4/4 files=4 size=6.32KB
+|     predicates: b.float_col > 4.5
+|
+00:SCAN HDFS [functional.alltypesagg a]
+   partitions=1/11 files=1 size=73.39KB
+   predicates: a.int_col > 899
+====
+# complex join, having joined aggregate subquery on the rhs, and predicate
+# at multiple subquery level
+select x.smallint_col, sum(x.cnt)
+from functional.alltypessmall c
+  join (
+    select count(a.id) cnt, b.smallint_col smallint_col
+    from ( select * from functional.alltypesagg a ) a
+      join functional.alltypessmall b on (a.smallint_col = b.id)
+    group by b.smallint_col
+  ) x on (x.smallint_col = c.id)
+group by x.smallint_col
+---- PLAN
+06:AGGREGATE [FINALIZE]
+|  output: sum(count(a.id))
+|  group by: b.smallint_col
+|
+05:HASH JOIN [INNER JOIN]
+|  hash predicates: c.id = b.smallint_col
+|
+|--04:AGGREGATE [FINALIZE]
+|  |  output: count(a.id)
+|  |  group by: b.smallint_col
+|  |
+|  03:HASH JOIN [INNER JOIN]
+|  |  hash predicates: a.smallint_col = b.id
+|  |
+|  |--02:SCAN HDFS [functional.alltypessmall b]
+|  |     partitions=4/4 files=4 size=6.32KB
+|  |
+|  01:SCAN HDFS [functional.alltypesagg a]
+|     partitions=11/11 files=11 size=814.73KB
+|
+00:SCAN HDFS [functional.alltypessmall c]
+   partitions=4/4 files=4 size=6.32KB
+---- DISTRIBUTEDPLAN
+13:EXCHANGE [UNPARTITIONED]
+|
+12:AGGREGATE [FINALIZE]
+|  output: sum:merge(x.cnt)
+|  group by: x.smallint_col
+|
+11:EXCHANGE [HASH(x.smallint_col)]
+|
+06:AGGREGATE
+|  output: sum(count(a.id))
+|  group by: b.smallint_col
+|
+05:HASH JOIN [INNER JOIN, BROADCAST]
+|  hash predicates: c.id = b.smallint_col
+|
+|--10:EXCHANGE [BROADCAST]
+|  |
+|  09:AGGREGATE [FINALIZE]
+|  |  output: count:merge(a.id)
+|  |  group by: b.smallint_col
+|  |
+|  08:EXCHANGE [HASH(b.smallint_col)]
+|  |
+|  04:AGGREGATE
+|  |  output: count(a.id)
+|  |  group by: b.smallint_col
+|  |
+|  03:HASH JOIN [INNER JOIN, BROADCAST]
+|  |  hash predicates: a.smallint_col = b.id
+|  |
+|  |--07:EXCHANGE [BROADCAST]
+|  |  |
+|  |  02:SCAN HDFS [functional.alltypessmall b]
+|  |     partitions=4/4 files=4 size=6.32KB
+|  |
+|  01:SCAN HDFS [functional.alltypesagg a]
+|     partitions=11/11 files=11 size=814.73KB
+|
+00:SCAN HDFS [functional.alltypessmall c]
+   partitions=4/4 files=4 size=6.32KB
+====
+# Values statement in subqueries with predicate
+select * from (select y from (values((1 as y),(11))) a where y < 10) b
+---- PLAN
+00:UNION
+   constant-operands=1
+---- DISTRIBUTEDPLAN
+00:UNION
+   constant-operands=1
+====
+# Mixed constant and non-constant select; the predicate is evaluated directly
+# by the non-const select
+select * from
+  (select y from
+    ((select 1 as y)
+     union all
+     (select tinyint_col from functional.alltypes)) a
+   where y < 10) b
+---- PLAN
+00:UNION
+|  constant-operands=1
+|
+01:SCAN HDFS [functional.alltypes]
+   partitions=24/24 files=24 size=478.45KB
+   predicates: functional.alltypes.tinyint_col < 10
+---- DISTRIBUTEDPLAN
+02:EXCHANGE [UNPARTITIONED]
+|
+00:UNION
+|  constant-operands=1
+|
+01:SCAN HDFS [functional.alltypes]
+   partitions=24/24 files=24 size=478.45KB
+   predicates: functional.alltypes.tinyint_col < 10
+====
+# Union of constant selects in subquery
+select * from (select 1 as y union all select 2 union all select * from (select 11) a) b
+where y < 10
+---- PLAN
+00:UNION
+   constant-operands=2
+---- DISTRIBUTEDPLAN
+00:UNION
+   constant-operands=2
+====
+# Union of values statements in subquery
+# TODO: We could combine the merge nodes below.
+select * from (values(1 as y) union all values(2) union all select * from (values(11)) a) b
+where y < 10
+---- PLAN
+00:UNION
+|  constant-operands=2
+|
+01:UNION
+---- DISTRIBUTEDPLAN
+00:UNION
+|  constant-operands=2
+|
+01:UNION
+====
+# Inner join on inline views made up of unions of constant selects
+select * from
+(select 1 a, 2 b union all select 1 a, 2 b) x
+inner join
+(select 1 a, 3 b union all select 1 a, 2 b) y on x.a = y.a
+inner join
+(select 1 a, 3 b union all select 1 a, 3 b) z on z.b = y.b
+---- PLAN
+04:HASH JOIN [INNER JOIN]
+|  hash predicates: b = b
+|
+|--02:UNION
+|     constant-operands=2
+|
+03:HASH JOIN [INNER JOIN]
+|  hash predicates: a = a
+|
+|--01:UNION
+|     constant-operands=2
+|
+00:UNION
+   constant-operands=2
+---- DISTRIBUTEDPLAN
+04:HASH JOIN [INNER JOIN, BROADCAST]
+|  hash predicates: b = b
+|
+|--06:EXCHANGE [UNPARTITIONED]
+|  |
+|  02:UNION
+|     constant-operands=2
+|
+03:HASH JOIN [INNER JOIN, BROADCAST]
+|  hash predicates: a = a
+|
+|--05:EXCHANGE [UNPARTITIONED]
+|  |
+|  01:UNION
+|     constant-operands=2
+|
+00:UNION
+   constant-operands=2
+====
+# Semi and inner join on a table and on inline views made up of constant selects
+select * from functional.alltypessmall x
+left semi join
+(select 1 a, 3 b union all select 1 a, 3 b) y on y.a = x.id
+inner join
+(select 1 a, 3 b union all select 1 a, 3 b) z on z.b = x.id + 2
+---- PLAN
+04:HASH JOIN [INNER JOIN]
+|  hash predicates: x.id + 2 = b
+|
+|--02:UNION
+|     constant-operands=2
+|
+03:HASH JOIN [LEFT SEMI JOIN]
+|  hash predicates: x.id = a
+|
+|--01:UNION
+|     constant-operands=2
+|
+00:SCAN HDFS [functional.alltypessmall x]
+   partitions=4/4 files=4 size=6.32KB
+---- DISTRIBUTEDPLAN
+07:EXCHANGE [UNPARTITIONED]
+|
+04:HASH JOIN [INNER JOIN, BROADCAST]
+|  hash predicates: x.id + 2 = b
+|
+|--06:EXCHANGE [BROADCAST]
+|  |
+|  02:UNION
+|     constant-operands=2
+|
+03:HASH JOIN [LEFT SEMI JOIN, BROADCAST]
+|  hash predicates: x.id = a
+|
+|--05:EXCHANGE [BROADCAST]
+|  |
+|  01:UNION
+|     constant-operands=2
+|
+00:SCAN HDFS [functional.alltypessmall x]
+   partitions=4/4 files=4 size=6.32KB
+====
+# Tests that views correctly reanalyze cloned exprs. (IMPALA-984)
+select b.* from functional.decimal_tbl a left outer join
+  (select d1, d1 + NULL IS NULL x from functional.decimal_tbl) b
+on (a.d1 = b.d1)
+---- PLAN
+02:HASH JOIN [LEFT OUTER JOIN]
+|  hash predicates: a.d1 = d1
+|
+|--01:SCAN HDFS [functional.decimal_tbl]
+|     partitions=1/1 files=1 size=195B
+|
+00:SCAN HDFS [functional.decimal_tbl a]
+   partitions=1/1 files=1 size=195B
+====
+# Test predicate assignment through inline view when the query contains
+# group by and distinct (IMPALA-1165)
+select foo, sum(distinct foo)
+from (select int_col + int_col as foo from functional.alltypesagg) t
+where foo = 10
+group by foo
+limit 10
+---- PLAN
+02:AGGREGATE [FINALIZE]
+|  output: sum(foo)
+|  group by: foo
+|  limit: 10
+|
+01:AGGREGATE
+|  group by: int_col + int_col, int_col + int_col
+|
+00:SCAN HDFS [functional.alltypesagg]
+   partitions=11/11 files=11 size=814.73KB
+   predicates: int_col + int_col = 10
+====
+# Test enforcement of inline-view slot equivalences when the inline-view
+# contains an outer join (IMPALA-1441)
+select * from
+  (select t1.int_col, t1.tinyint_col, t2.int_col as int_col2, t2.tinyint_col as tinyint_col2
+   from functional.alltypestiny t1 left outer join functional.alltypes t2
+   on t1.int_col = t2.int_col and t1.tinyint_col = t2.tinyint_col) t
+---- PLAN
+02:HASH JOIN [RIGHT OUTER JOIN]
+|  hash predicates: t2.int_col = t1.int_col, t2.tinyint_col = t1.tinyint_col
+|
+|--00:SCAN HDFS [functional.alltypestiny t1]
+|     partitions=4/4 files=4 size=460B
+|
+01:SCAN HDFS [functional.alltypes t2]
+   partitions=24/24 files=24 size=478.45KB
+====

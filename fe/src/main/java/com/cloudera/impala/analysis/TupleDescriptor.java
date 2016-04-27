@@ -15,13 +15,12 @@
 package com.cloudera.impala.analysis;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.util.Map;
 
 import com.cloudera.impala.catalog.ColumnStats;
-import com.cloudera.impala.catalog.PrimitiveType;
 import com.cloudera.impala.catalog.Table;
 import com.cloudera.impala.thrift.TTupleDescriptor;
 import com.google.common.base.Joiner;
@@ -30,11 +29,18 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 
 public class TupleDescriptor {
-  private final static Logger LOG = LoggerFactory.getLogger(TupleDescriptor.class);
   private final TupleId id_;
-  private String alias_;
+  private final String debugName_;  // debug-only
   private final ArrayList<SlotDescriptor> slots_;
-  private Table table_;  // underlying table, if there is one
+
+  // Underlying table, if there is one.
+  private Table table_;
+
+  // Explicit or fully-qualified implicit alias.
+  private String alias_;
+
+  // True if alias_ is an explicit alias.
+  private boolean hasExplicitAlias_;
 
   // if false, this tuple doesn't need to be materialized
   private boolean isMaterialized_ = true;
@@ -48,9 +54,10 @@ public class TupleDescriptor {
 
   private float avgSerializedSize_;  // in bytes; includes serialization overhead
 
-  TupleDescriptor(TupleId id) {
-    this.id_ = id;
-    this.slots_ = new ArrayList<SlotDescriptor>();
+  TupleDescriptor(TupleId id, String debugName) {
+    id_ = id;
+    debugName_ = debugName;
+    slots_ = new ArrayList<SlotDescriptor>();
   }
 
   public void addSlot(SlotDescriptor desc) {
@@ -69,10 +76,19 @@ public class TupleDescriptor {
   public void setTable(Table tbl) { table_ = tbl; }
   public int getByteSize() { return byteSize_; }
   public float getAvgSerializedSize() { return avgSerializedSize_; }
-  public boolean getIsMaterialized() { return isMaterialized_; }
+  public boolean isMaterialized() { return isMaterialized_; }
   public void setIsMaterialized(boolean value) { isMaterialized_ = value; }
   public String getAlias() { return alias_; }
-  public void setAlias(String alias) { alias_ = alias; }
+  public boolean hasExplicitAlias() { return hasExplicitAlias_; }
+  public void setAlias(String alias, boolean isExplicit) {
+    alias_ = alias;
+    hasExplicitAlias_ = isExplicit;
+  }
+
+  public TableName getAliasAsName() {
+    if (hasExplicitAlias_) return new TableName(null, alias_);
+    return getTableName();
+  }
 
   public String debugString() {
     String tblStr = (table_ == null ? "null" : table_.getFullName());
@@ -82,6 +98,7 @@ public class TupleDescriptor {
     }
     return Objects.toStringHelper(this)
         .add("id", id_.asInt())
+        .add("name", debugName_)
         .add("tbl", tblStr)
         .add("byte_size", byteSize_)
         .add("is_materialized", isMaterialized_)
@@ -113,11 +130,8 @@ public class TupleDescriptor {
     hasMemLayout_ = true;
 
     // sort slots by size
-    List<List<SlotDescriptor>> slotsBySize =
-        Lists.newArrayListWithCapacity(PrimitiveType.getMaxSlotSize());
-    for (int i = 0; i <= PrimitiveType.getMaxSlotSize(); ++i) {
-      slotsBySize.add(new ArrayList<SlotDescriptor>());
-    }
+    Map<Integer, List<SlotDescriptor>> slotsBySize =
+        new HashMap<Integer, List<SlotDescriptor>>();
 
     // populate slotsBySize; also compute avgSerializedSize
     int numNullableSlots = 0;
@@ -130,11 +144,15 @@ public class TupleDescriptor {
         // TODO: for computed slots, try to come up with stats estimates
         avgSerializedSize_ += d.getType().getSlotSize();
       }
+      if (!slotsBySize.containsKey(d.getType().getSlotSize())) {
+        slotsBySize.put(d.getType().getSlotSize(), new ArrayList<SlotDescriptor>());
+      }
       slotsBySize.get(d.getType().getSlotSize()).add(d);
       if (d.getIsNullable()) ++numNullableSlots;
     }
-    // we shouldn't have anything of size 0
-    Preconditions.checkState(slotsBySize.get(0).isEmpty());
+    // we shouldn't have anything of size <= 0
+    Preconditions.checkState(!slotsBySize.containsKey(0));
+    Preconditions.checkState(!slotsBySize.containsKey(-1));
 
     // assign offsets to slots in order of ascending size
     numNullBytes_ = (numNullableSlots + 7) / 8;
@@ -144,7 +162,9 @@ public class TupleDescriptor {
     // slotIdx is the index into the resulting tuple struct.  The first (smallest) field
     // is 0, next is 1, etc.
     int slotIdx = 0;
-    for (int slotSize = 1; slotSize <= PrimitiveType.getMaxSlotSize(); ++slotSize) {
+    List<Integer> sortedSizes = new ArrayList<Integer>(slotsBySize.keySet());
+    Collections.sort(sortedSizes);
+    for (int slotSize: sortedSizes) {
       if (slotsBySize.get(slotSize).isEmpty()) continue;
       if (slotSize > 1) {
         // insert padding

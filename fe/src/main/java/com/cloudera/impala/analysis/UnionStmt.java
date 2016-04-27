@@ -16,14 +16,11 @@ package com.cloudera.impala.analysis;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.ListIterator;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.cloudera.impala.catalog.AuthorizationException;
 import com.cloudera.impala.catalog.ColumnStats;
-import com.cloudera.impala.catalog.ColumnType;
 import com.cloudera.impala.common.AnalysisException;
 import com.cloudera.impala.common.InternalException;
 import com.google.common.base.Preconditions;
@@ -60,7 +57,7 @@ public class UnionStmt extends QueryStmt {
     private Analyzer analyzer_;
 
     // map from UnionStmts result slots to our resultExprs; useful during plan generation
-    private final Expr.SubstitutionMap smap_ = new Expr.SubstitutionMap();
+    private final ExprSubstitutionMap smap_ = new ExprSubstitutionMap();
 
     // set if this operand is guaranteed to return an empty result set;
     // used in planning when assigning conjuncts
@@ -71,9 +68,8 @@ public class UnionStmt extends QueryStmt {
       this.qualifier_ = qualifier;
     }
 
-    public void analyze(Analyzer parent)
-        throws AnalysisException, AuthorizationException {
-      analyzer_ = new Analyzer(parent, parent.getUser());
+    public void analyze(Analyzer parent) throws AnalysisException {
+      analyzer_ = new Analyzer(parent);
       queryStmt_.analyze(analyzer_);
     }
 
@@ -82,13 +78,22 @@ public class UnionStmt extends QueryStmt {
     // Used for propagating DISTINCT.
     public void setQualifier(Qualifier qualifier) { this.qualifier_ = qualifier; }
     public Analyzer getAnalyzer() { return analyzer_; }
-    public Expr.SubstitutionMap getSmap() { return smap_; }
+    public ExprSubstitutionMap getSmap() { return smap_; }
     public void drop() { isDropped_ = true; }
     public boolean isDropped() { return isDropped_; }
 
     @Override
     public UnionOperand clone() {
       return new UnionOperand(queryStmt_.clone(), qualifier_);
+    }
+
+    public boolean hasAnalyticExprs() {
+      if (queryStmt_ instanceof SelectStmt) {
+        return ((SelectStmt) queryStmt_).hasAnalyticInfo();
+      } else {
+        Preconditions.checkState(queryStmt_ instanceof UnionStmt);
+        return ((UnionStmt) queryStmt_).hasAnalyticExprs();
+      }
     }
   }
 
@@ -114,6 +119,9 @@ public class UnionStmt extends QueryStmt {
   // set prior to unnesting
   protected String toSqlString_ = null;
 
+  // true if any of the operands_ references an AnalyticExpr
+  private boolean hasAnalyticExprs_ = false;
+
   public UnionStmt(List<UnionOperand> operands,
       ArrayList<OrderByElement> orderByElements, LimitElement limitElement) {
     super(orderByElements, limitElement);
@@ -126,6 +134,7 @@ public class UnionStmt extends QueryStmt {
   public List<UnionOperand> getAllOperands() { return allOperands_; }
   public boolean hasAllOps() { return !allOperands_.isEmpty(); }
   public AggregateInfo getDistinctAggInfo() { return distinctAggInfo_; }
+  public boolean hasAnalyticExprs() { return hasAnalyticExprs_; }
 
   public void removeAllOperands() {
     operands_.removeAll(allOperands_);
@@ -137,8 +146,7 @@ public class UnionStmt extends QueryStmt {
    * union operands are union compatible, adding implicit casts if necessary.
    */
   @Override
-  public void analyze(Analyzer analyzer)
-      throws AnalysisException, AuthorizationException {
+  public void analyze(Analyzer analyzer) throws AnalysisException {
     try {
       super.analyze(analyzer);
     } catch (AnalysisException e) {
@@ -158,7 +166,9 @@ public class UnionStmt extends QueryStmt {
       if (analyzer.getMissingTbls().isEmpty()) throw e;
     }
 
+    List<List<Expr>> resultExprLists = Lists.newArrayList();
     List<Expr> firstQueryExprs = firstQuery.getBaseTblResultExprs();
+    resultExprLists.add(firstQueryExprs);
     for (int i = 1; i < operands_.size(); ++i) {
       QueryStmt query = operands_.get(i).getQueryStmt();
       try {
@@ -170,6 +180,7 @@ public class UnionStmt extends QueryStmt {
               firstQueryExprs.size() + " column(s)\n" +
               "'" + queryStmtToSql(query) + "' has " + exprs.size() + " column(s)");
         }
+        resultExprLists.add(exprs);
       } catch (AnalysisException e) {
         if (analyzer.getMissingTbls().isEmpty()) throw e;
       }
@@ -179,28 +190,16 @@ public class UnionStmt extends QueryStmt {
       throw new AnalysisException("Found missing tables. Aborting analysis.");
     }
 
-    // Determine compatible types for exprs, position by position.
-    for (int i = 0; i < firstQueryExprs.size(); ++i) {
-      // Type compatible with the i-th exprs of all selects.
-      // Initialize with type of i-th expr in first select.
-      ColumnType compatibleType = firstQueryExprs.get(i).getType();
-      // Remember last compatible expr for error reporting.
-      Expr lastCompatibleExpr = firstQueryExprs.get(i);
-      for (int j = 1; j < operands_.size(); ++j) {
-        List<Expr> resultExprs = operands_.get(j).getQueryStmt().getBaseTblResultExprs();
-        compatibleType = analyzer.getCompatibleType(compatibleType,
-            lastCompatibleExpr, resultExprs.get(i));
-        lastCompatibleExpr = resultExprs.get(i);
-      }
-      // Now that we've found a compatible type, add implicit casts if necessary.
-      for (int j = 0; j < operands_.size(); ++j) {
-        List<Expr> resultExprs = operands_.get(j).getQueryStmt().getBaseTblResultExprs();
-        if (!resultExprs.get(i).getType().equals(compatibleType)) {
-          Expr castExpr = resultExprs.get(i).castTo(compatibleType);
-          resultExprs.set(i, castExpr);
-        }
+    // compute hasAnalyticExprs_
+    hasAnalyticExprs_ = false;
+    for (UnionOperand op: operands_) {
+      if (op.hasAnalyticExprs()) {
+        hasAnalyticExprs_ = true;
+        break;
       }
     }
+
+    analyzer.castToUnionCompatibleTypes(resultExprLists);
 
     // Create tuple descriptor materialized by this UnionStmt,
     // its resultExprs, and its sortInfo if necessary.
@@ -208,9 +207,9 @@ public class UnionStmt extends QueryStmt {
     createSortInfo(analyzer);
     toSqlString_ = toSql();
 
-    // fill distinct-/allOperands
     unnestOperands(analyzer);
     if (evaluateOrderBy_) createSortTupleInfo(analyzer);
+    baseTblResultExprs_ = resultExprs_;
   }
 
   /**
@@ -219,7 +218,7 @@ public class UnionStmt extends QueryStmt {
    * Calls materializeRequiredSlots() on the operands themselves.
    */
   @Override
-  public void materializeRequiredSlots(Analyzer analyzer) {
+  public void materializeRequiredSlots(Analyzer analyzer) throws InternalException {
     TupleDescriptor tupleDesc = analyzer.getDescTbl().getTupleDesc(tupleId_);
     if (!distinctOperands_.isEmpty()) {
       // to keep things simple we materialize all grouping exprs = output slots,
@@ -245,7 +244,7 @@ public class UnionStmt extends QueryStmt {
       if (distinctAggInfo_ != null) {
         // also mark the corresponding slot in the distinct agg tuple as being
         // materialized
-        distinctAggInfo_.getAggTupleDesc().getSlots().get(i).setIsMaterialized(true);
+        distinctAggInfo_.getOutputTupleDesc().getSlots().get(i).setIsMaterialized(true);
       }
     }
     materializeSlots(analyzer, exprs);
@@ -259,8 +258,7 @@ public class UnionStmt extends QueryStmt {
    * Fill distinct-/allOperands and performs possible unnesting of UnionStmt
    * operands in the process.
    */
-  private void unnestOperands(Analyzer analyzer)
-      throws AnalysisException, AuthorizationException {
+  private void unnestOperands(Analyzer analyzer) throws AnalysisException {
     if (operands_.size() == 1) {
       // ValuesStmt for a single row.
       allOperands_.add(operands_.get(0));
@@ -305,15 +303,12 @@ public class UnionStmt extends QueryStmt {
     // create distinctAggInfo, if necessary
     if (!distinctOperands_.isEmpty()) {
       // Aggregate produces exactly the same tuple as the original union stmt.
-      ArrayList<Expr> groupingExprs = Expr.cloneList(resultExprs_, null);
+      ArrayList<Expr> groupingExprs = Expr.cloneList(resultExprs_);
       try {
         distinctAggInfo_ =
             AggregateInfo.create(groupingExprs, null,
               analyzer.getDescTbl().getTupleDesc(tupleId_), analyzer);
       } catch (AnalysisException e) {
-        // this should never happen
-        throw new AnalysisException("error creating agg info in UnionStmt.analyze()");
-      } catch (InternalException e) {
         // this should never happen
         throw new AnalysisException("error creating agg info in UnionStmt.analyze()");
       }
@@ -330,10 +325,10 @@ public class UnionStmt extends QueryStmt {
     operand.getSmap().clear();
     for (int i = 0; i < tupleDesc.getSlots().size(); ++i) {
       SlotDescriptor outputSlot = tupleDesc.getSlots().get(i);
-      operand.getSmap().addMapping(
+      operand.getSmap().put(
           new SlotRef(outputSlot),
           // TODO: baseTblResultExprs?
-          operand.getQueryStmt().getResultExprs().get(i).clone(null));
+          operand.getQueryStmt().getResultExprs().get(i).clone());
     }
   }
 
@@ -403,10 +398,10 @@ public class UnionStmt extends QueryStmt {
    */
   private void createMetadata(Analyzer analyzer) throws AnalysisException {
     // Create tuple descriptor for materialized tuple created by the union.
-    TupleDescriptor tupleDesc = analyzer.getDescTbl().createTupleDescriptor();
+    TupleDescriptor tupleDesc = analyzer.getDescTbl().createTupleDescriptor("union");
     tupleDesc.setIsMaterialized(true);
     tupleId_ = tupleDesc.getId();
-    LOG.info("UnionStmt.createMetadata: tupleId=" + tupleId_.toString());
+    LOG.trace("UnionStmt.createMetadata: tupleId=" + tupleId_.toString());
 
     // One slot per expr in the select blocks. Use first select block as representative.
     List<Expr> firstSelectExprs = operands_.get(0).getQueryStmt().getBaseTblResultExprs();
@@ -441,13 +436,16 @@ public class UnionStmt extends QueryStmt {
         if (aliasSmap_.containsMappingFor(aliasRef)) {
           ambiguousAliasList_.add(aliasRef);
         } else {
-          aliasSmap_.addMapping(aliasRef, outputSlotRef);
+          aliasSmap_.put(aliasRef, outputSlotRef);
         }
       }
 
       // register single-directional value transfers from output slot
-      // to operands' result exprs (if those happen to be slotrefs)
+      // to operands' result exprs (if those happen to be slotrefs);
+      // don't do that if the operand computes analytic exprs
+      // (see Planner.createInlineViewPlan() for the reasoning)
       for (UnionOperand op: operands_) {
+        if (op.hasAnalyticExprs()) continue;
         Expr resultExpr = op.getQueryStmt().getBaseTblResultExprs().get(i);
         SlotRef slotRef = resultExpr.unwrapSlotRef(true);
         if (slotRef == null) continue;
@@ -457,36 +455,7 @@ public class UnionStmt extends QueryStmt {
     baseTblResultExprs_ = resultExprs_;
   }
 
-  /**
-   * Substitute exprs of the form "<number>" with the corresponding
-   * expressions from the resultExprs.
-   */
-  @Override
-  protected void substituteOrdinals(List<Expr> exprs, String errorPrefix)
-      throws AnalysisException {
-    // Substitute ordinals.
-    ListIterator<Expr> i = exprs.listIterator();
-    while (i.hasNext()) {
-      Expr expr = i.next();
-      if (!(expr instanceof IntLiteral)) continue;
-      long pos = ((IntLiteral) expr).getValue();
-      if (pos < 1) {
-        throw new AnalysisException(
-            errorPrefix + ": ordinal must be >= 1: " + expr.toSql());
-      }
-      if (pos > resultExprs_.size()) {
-        throw new AnalysisException(
-            errorPrefix + ": ordinal exceeds number of items in select list: "
-            + expr.toSql());
-      }
-      // Create copy to protect against accidentally shared state.
-      i.set(resultExprs_.get((int) pos - 1).clone(null));
-    }
-  }
-
-  public TupleId getTupleId() {
-    return tupleId_;
-  }
+  public TupleId getTupleId() { return tupleId_; }
 
   @Override
   public void getMaterializedTupleIds(ArrayList<TupleId> tupleIdList) {
@@ -562,8 +531,9 @@ public class UnionStmt extends QueryStmt {
       operandClones.add(operand.clone());
     }
     UnionStmt unionClone = new UnionStmt(operandClones, cloneOrderByElements(),
-        limitElement_ == null ? null : limitElement_.clone(null));
+        limitElement_ == null ? null : limitElement_.clone());
     unionClone.setWithClause(cloneWithClause());
+    unionClone.hasAnalyticExprs_ = hasAnalyticExprs_;
     return unionClone;
   }
 }

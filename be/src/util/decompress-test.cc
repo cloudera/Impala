@@ -17,6 +17,7 @@
 #include <iostream>
 #include <gtest/gtest.h>
 #include "runtime/mem-tracker.h"
+#include "runtime/mem-pool.h"
 #include "util/decompress.h"
 #include "util/compress.h"
 #include "gen-cpp/Descriptors_types.h"
@@ -39,6 +40,13 @@ class DecompressorTest : public ::testing::Test {
         *ip++ = ch;
       }
     }
+
+    // The input for the streaming tests is a larger buffer which contains input_
+    // at the beginning and end and is null otherwise.
+    memset(&input_streaming_, 0, sizeof(input_streaming_));
+    memcpy(&input_streaming_, &input_, sizeof(input_));
+    memcpy(&input_streaming_[sizeof(input_streaming_) - sizeof(input_)],
+        &input_, sizeof(input_));
   }
 
   ~DecompressorTest() {
@@ -75,68 +83,121 @@ class DecompressorTest : public ::testing::Test {
     decompressor->Close();
   }
 
+  void RunTestStreaming(THdfsCompression::type format) {
+    scoped_ptr<Codec> compressor;
+    scoped_ptr<Codec> decompressor;
+    EXPECT_TRUE(
+        Codec::CreateCompressor(&mem_pool_, true, format, &compressor).ok());
+    EXPECT_TRUE(
+        Codec::CreateDecompressor(&mem_pool_, true, format, &decompressor).ok());
+
+    CompressAndStreamingDecompress(compressor.get(), decompressor.get(),
+        sizeof(input_streaming_), input_streaming_);
+    CompressAndStreamingDecompress(compressor.get(), decompressor.get(),
+        0, NULL);
+
+    compressor->Close();
+    decompressor->Close();
+  }
+
   void CompressAndDecompress(Codec* compressor, Codec* decompressor,
-      int input_len, uint8_t* input) {
+      int64_t input_len, uint8_t* input) {
     // Non-preallocated output buffers
     uint8_t* compressed;
-    int compressed_length;
+    int64_t compressed_length;
     EXPECT_TRUE(compressor->ProcessBlock(false, input_len,
         input, &compressed_length, &compressed).ok());
     uint8_t* output;
-    int output_len;
-    EXPECT_TRUE(
-        decompressor->ProcessBlock(false, compressed_length,
+    int64_t output_len;
+    EXPECT_TRUE(decompressor->ProcessBlock(false, compressed_length,
         compressed, &output_len, &output).ok());
 
     EXPECT_EQ(output_len, input_len);
     EXPECT_EQ(memcmp(input, output, input_len), 0);
 
     // Preallocated output buffers
-    int max_compressed_length = compressor->MaxOutputLen(input_len, input);
+    int64_t max_compressed_length = compressor->MaxOutputLen(input_len, input);
 
     // Don't redo compression if compressor doesn't support MaxOutputLen()
     if (max_compressed_length != -1) {
       EXPECT_GE(max_compressed_length, 0);
       uint8_t* compressed = mem_pool_.Allocate(max_compressed_length);
       compressed_length = max_compressed_length;
-      EXPECT_TRUE(compressor->ProcessBlock(true, input_len,
-          input, &compressed_length, &compressed).ok());
+
+
+      EXPECT_TRUE(compressor->ProcessBlock(true, input_len, input, &compressed_length,
+                                           &compressed).ok());
     }
 
     output_len = decompressor->MaxOutputLen(compressed_length, compressed);
     if (output_len == -1) output_len = input_len;
     output = mem_pool_.Allocate(output_len);
 
-    EXPECT_TRUE(decompressor->ProcessBlock(true, compressed_length,
-        compressed, &output_len, &output).ok());
+    EXPECT_TRUE(decompressor->ProcessBlock(true, compressed_length, compressed,
+                                           &output_len, &output).ok());
 
     EXPECT_EQ(output_len, input_len);
     EXPECT_EQ(memcmp(input, output, input_len), 0);
   }
 
- // Only tests compressors and decompressors with allocated output.
-  void CompressAndDecompressNoOutputAllocated(Codec* compressor,
-      Codec* decompressor, int input_len, uint8_t* input) {
-    // Preallocated output buffers for compressor
-    int max_compressed_length = compressor->MaxOutputLen(input_len, input);
-    uint8_t* compressed = mem_pool_.Allocate(max_compressed_length);
-    int compressed_length = max_compressed_length;
-
-    EXPECT_TRUE(compressor->ProcessBlock(true, input_len,
+  void CompressAndStreamingDecompress(Codec* compressor, Codec* decompressor,
+      int64_t input_len, uint8_t* input) {
+    uint8_t* compressed;
+    int64_t compressed_length;
+    EXPECT_TRUE(compressor->ProcessBlock(false, input_len,
         input, &compressed_length, &compressed).ok());
 
-    int output_len = decompressor->MaxOutputLen(compressed_length, compressed);
+    // Should take multiple calls to ProcessBlockStreaming() to decompress the buffer.
+    int64_t total_output_produced = 0;
+    int64_t compressed_bytes_remaining = compressed_length;
+    bool eos = false;
+    while (!eos) {
+      EXPECT_LE(total_output_produced, input_len);
+      uint8_t* output = NULL;
+      int64_t output_len = 0;
+      int64_t compressed_bytes_read = 0;
+      EXPECT_TRUE(decompressor->ProcessBlockStreaming(compressed_bytes_remaining,
+            compressed, &compressed_bytes_read, &output_len, &output, &eos).ok());
+      EXPECT_EQ(memcmp(input + total_output_produced, output, output_len), 0);
+      total_output_produced += output_len;
+      compressed = compressed + compressed_bytes_read;
+      compressed_bytes_remaining -= compressed_bytes_read;
+    }
+    EXPECT_EQ(0, compressed_bytes_remaining);
+    EXPECT_EQ(total_output_produced, input_len);
+  }
+
+  // Only tests compressors and decompressors with allocated output.
+  void CompressAndDecompressNoOutputAllocated(Codec* compressor,
+      Codec* decompressor, int64_t input_len, uint8_t* input) {
+    // Preallocated output buffers for compressor
+    int64_t max_compressed_length = compressor->MaxOutputLen(input_len, input);
+    uint8_t* compressed = mem_pool_.Allocate(max_compressed_length);
+    int64_t compressed_length = max_compressed_length;
+
+    EXPECT_TRUE(compressor->ProcessBlock(true, input_len, input, &compressed_length,
+                                         &compressed).ok());
+
+    int64_t output_len = decompressor->MaxOutputLen(compressed_length, compressed);
     if (output_len == -1) output_len = input_len;
     uint8_t* output = mem_pool_.Allocate(output_len);
 
-    EXPECT_TRUE(decompressor->ProcessBlock(true, compressed_length,
-        compressed, &output_len, &output).ok());
+    EXPECT_TRUE(decompressor->ProcessBlock(true, compressed_length, compressed,
+                                           &output_len, &output).ok());
 
     EXPECT_EQ(output_len, input_len);
     EXPECT_EQ(memcmp(input, output, input_len), 0);
   }
 
+
   uint8_t input_[2 * 26 * 1024];
+
+  // Buffer for testing ProcessBlockStreaming() which allocates 16mb output buffers. This
+  // is 2x + 1 the size of the output buffers to ensure that the decompressed output
+  // requires several calls and doesn't need to be nicely aligned (the last call gets a
+  // small amount of data).
+  uint8_t input_streaming_[32 * 1024 * 1024 + 1];
+
   MemTracker mem_tracker_;
   MemPool mem_pool_;
 };
@@ -155,10 +216,12 @@ TEST_F(DecompressorTest, LZ4) {
 
 TEST_F(DecompressorTest, Gzip) {
   RunTest(THdfsCompression::GZIP);
+  RunTestStreaming(THdfsCompression::GZIP);
 }
 
 TEST_F(DecompressorTest, Deflate) {
   RunTest(THdfsCompression::DEFLATE);
+  RunTestStreaming(THdfsCompression::GZIP);
 }
 
 TEST_F(DecompressorTest, Bzip) {
@@ -167,6 +230,30 @@ TEST_F(DecompressorTest, Bzip) {
 
 TEST_F(DecompressorTest, SnappyBlocked) {
   RunTest(THdfsCompression::SNAPPY_BLOCKED);
+}
+
+TEST_F(DecompressorTest, Impala1506) {
+  // Regression test for IMPALA-1506
+  MemTracker trax;
+  MemPool pool(&trax);
+  scoped_ptr<Codec> compressor;
+  Codec::CreateCompressor(&pool, true, impala::THdfsCompression::GZIP, &compressor);
+
+  int64_t input_len = 3;
+  const uint8_t input[3] = {1, 2, 3};
+  int64_t output_len = -1;
+  uint8_t* output = NULL;
+
+  // call twice because the compressor will reallocate the first time
+  EXPECT_TRUE(
+      compressor->ProcessBlock(false, input_len, input, &output_len, &output).ok());
+  EXPECT_GE(output_len, 0);
+  output_len = -1;
+  EXPECT_TRUE(
+      compressor->ProcessBlock(false, input_len, input, &output_len, &output).ok());
+  EXPECT_GE(output_len, 0);
+
+  pool.FreeAll();
 }
 
 }

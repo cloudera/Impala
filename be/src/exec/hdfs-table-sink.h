@@ -145,13 +145,14 @@ class HdfsTableSink : public DataSink {
   static Status GetFileBlockSize(OutputPartition* output_partition, int64_t* size);
 
   virtual RuntimeProfile* profile() { return runtime_profile_; }
-
+  const HdfsTableDescriptor& TableDesc() { return *table_desc_; }
   MemTracker* mem_tracker() { return mem_tracker_.get(); }
 
   RuntimeProfile::Counter* rows_inserted_counter() { return rows_inserted_counter_; }
   RuntimeProfile::Counter* bytes_written_counter() { return bytes_written_counter_; }
   RuntimeProfile::Counter* encode_timer() { return encode_timer_; }
   RuntimeProfile::Counter* hdfs_write_timer() { return hdfs_write_timer_; }
+  RuntimeProfile::Counter* compress_timer() { return compress_timer_; }
 
   std::string DebugString() const;
 
@@ -179,7 +180,7 @@ class HdfsTableSink : public DataSink {
   // Generates string key for hash_tbl_ as a concatenation
   // of all evaluated exprs, evaluated against current_row_.
   // The generated string is much shorter than the full Hdfs file name.
-  void GetHashTblKey(const std::vector<Expr*>& exprs, std::string* key);
+  void GetHashTblKey(const std::vector<ExprContext*>& ctxs, std::string* key);
 
   // Given a hashed partition key, get the output partition structure from
   // the partition_keys_to_output_partitions_.
@@ -210,7 +211,7 @@ class HdfsTableSink : public DataSink {
   const HdfsPartitionDescriptor* default_partition_;
 
   // Exprs that materialize output values
-  std::vector<Expr*> output_exprs_;
+  std::vector<ExprContext*> output_expr_ctxs_;
 
   // Current row from the current RowBatch to output
   TupleRow* current_row_;
@@ -233,13 +234,13 @@ class HdfsTableSink : public DataSink {
   const std::vector<TExpr>& partition_key_texprs_;
 
   // Exprs of partition keys.
-  std::vector<Expr*> partition_key_exprs_;
+  std::vector<ExprContext*> partition_key_expr_ctxs_;
 
   // Indicates whether the existing partitions should be overwritten.
   bool overwrite_;
 
   // The directory in which to write intermediate results. Set to
-  // <hdfs_table_base_dir>/.impala_insert_staging/ during Prepare()
+  // <hdfs_table_base_dir>/_impala_insert_staging/ during Prepare()
   std::string staging_dir_;
 
   // string representation of the unique fragment instance id. Used for per-partition
@@ -253,9 +254,9 @@ class HdfsTableSink : public DataSink {
   // OutputPartition in the map to simplify the code.
   PartitionMap partition_keys_to_output_partitions_;
 
-  // Subset of partition_key_exprs_ which are not constant. Set in Prepare().
+  // Subset of partition_key_expr_ctxs_ which are not constant. Set in Prepare().
   // Used for generating the string key of hash_tbl_.
-  std::vector<Expr*> dynamic_partition_key_exprs_;
+  std::vector<ExprContext*> dynamic_partition_key_expr_ctxs_;
 
   // Map from row key (i.e. concatenated non-constant partition keys) to
   // partition descriptor. We don't own the HdfsPartitionDescriptors, they
@@ -269,6 +270,8 @@ class HdfsTableSink : public DataSink {
 
   // Allocated from runtime state's pool.
   RuntimeProfile* runtime_profile_;
+  RuntimeProfile::Counter* partitions_created_counter_;
+  RuntimeProfile::Counter* files_created_counter_;
   RuntimeProfile::Counter* rows_inserted_counter_;
   RuntimeProfile::Counter* bytes_written_counter_;
 
@@ -276,6 +279,8 @@ class HdfsTableSink : public DataSink {
   RuntimeProfile::Counter* encode_timer_;
   // Time spent writing to hdfs
   RuntimeProfile::Counter* hdfs_write_timer_;
+  // Time spent compressing data
+  RuntimeProfile::Counter* compress_timer_;
 };
 }
 #endif

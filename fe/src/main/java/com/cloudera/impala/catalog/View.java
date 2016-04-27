@@ -16,23 +16,22 @@ package com.cloudera.impala.catalog;
 
 import java.io.StringReader;
 import java.util.List;
+import java.util.Set;
 
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
-import org.apache.hadoop.hive.serde.serdeConstants;
 
 import com.cloudera.impala.analysis.ParseNode;
 import com.cloudera.impala.analysis.QueryStmt;
 import com.cloudera.impala.analysis.SqlParser;
 import com.cloudera.impala.analysis.SqlScanner;
-import com.cloudera.impala.analysis.ViewRef;
 import com.cloudera.impala.thrift.TCatalogObjectType;
 import com.cloudera.impala.thrift.TTable;
 import com.cloudera.impala.thrift.TTableDescriptor;
 import com.cloudera.impala.thrift.TTableType;
 
 /**
- * Table metadata representing a view.
+ * Table metadata representing a catalog view or a local view from a WITH clause.
  * Most methods inherited from Table are not supposed to be called on this class because
  * views are substituted with their underlying definition during analysis of a statement.
  *
@@ -41,18 +40,43 @@ import com.cloudera.impala.thrift.TTableType;
  */
 public class View extends Table {
 
-  // The original SQL-string given as view definition.
+  // The original SQL-string given as view definition. Set during analysis.
+  // Corresponds to Hive's viewOriginalText.
   private String originalViewDef_;
 
-  // The extended SQL-string used for view substitution.
+  // Query statement (as SQL string) that defines the View for view substitution.
+  // It is a transformation of the original view definition, e.g., to enforce the
+  // explicit column definitions even if the original view definition has explicit
+  // column aliases.
+  // If column definitions were given, then this "expanded" view definition
+  // wraps the original view definition in a select stmt as follows.
+  //
+  // SELECT viewName.origCol1 AS colDesc1, viewName.origCol2 AS colDesc2, ...
+  // FROM (originalViewDef) AS viewName
+  //
+  // Corresponds to Hive's viewExpandedText, but is not identical to the SQL
+  // Hive would produce in view creation.
   private String inlineViewDef_;
 
-  // View definition created by parsing expandedViewDef into a QueryStmt.
-  private ViewRef viewDef_;
+  // View definition created by parsing inlineViewDef_ into a QueryStmt.
+  private QueryStmt queryStmt_;
+
+  // Set if this View is from a WITH clause and not persisted in the catalog.
+  private final boolean isLocalView_;
 
   public View(TableId id, org.apache.hadoop.hive.metastore.api.Table msTable,
       Db db, String name, String owner) {
     super(id, msTable, db, name, owner);
+    isLocalView_ = false;
+  }
+
+  /**
+   * C'tor for WITH-clause views that already have a parsed QueryStmt.
+   */
+  public View(String alias, QueryStmt queryStmt) {
+    super(null, null, null, alias, null);
+    isLocalView_ = true;
+    queryStmt_ = queryStmt;
   }
 
   @Override
@@ -63,21 +87,14 @@ public class View extends Table {
       List<FieldSchema> fieldSchemas = client.getFields(db_.getName(), name_);
       for (int i = 0; i < fieldSchemas.size(); ++i) {
         FieldSchema s = fieldSchemas.get(i);
-        // catch currently unsupported hive schema elements
-        if (!serdeConstants.PrimitiveTypes.contains(s.getType())) {
-          throw new TableLoadingException(
-              String.format("Failed to load metadata for table '%s' due to unsupported " +
-              "column type '%s' in column '%s'", getName(), s.getType(), s.getName()));
-        }
-        ColumnType type = parseColumnType(s);
+        Type type = parseColumnType(s);
         Column col = new Column(s.getName(), type, s.getComment(), i);
-        colsByPos_.add(col);
-        colsByName_.put(s.getName(), col);
+        addColumn(col);
       }
       // These fields are irrelevant for views.
       numClusteringCols_ = 0;
       numRows_ = -1;
-      initViewDef();
+      init();
     } catch (TableLoadingException e) {
       throw e;
     } catch (Exception e) {
@@ -88,21 +105,21 @@ public class View extends Table {
   @Override
   protected void loadFromThrift(TTable t) throws TableLoadingException {
     super.loadFromThrift(t);
-    initViewDef();
+    init();
   }
 
   /**
-   * Initializes the originalViewDef, inlineViewDef, and viewDef members
+   * Initializes the originalViewDef_, inlineViewDef_, and queryStmt_ members
    * by parsing the expanded view definition SQL-string.
    * Throws a TableLoadingException if there was any error parsing the
    * the SQL or if the view definition did not parse into a QueryStmt.
    */
-  private void initViewDef() throws TableLoadingException {
+  private void init() throws TableLoadingException {
     // Set view-definition SQL strings.
     originalViewDef_ = getMetaStoreTable().getViewOriginalText();
     inlineViewDef_ = getMetaStoreTable().getViewExpandedText();
     // Parse the expanded view definition SQL-string into a QueryStmt and
-    // populate a ViewRef to provide as view definition.
+    // populate a view definition.
     SqlScanner input = new SqlScanner(new StringReader(inlineViewDef_));
     SqlParser parser = new SqlParser(input);
     ParseNode node = null;
@@ -120,12 +137,12 @@ public class View extends Table {
       throw new TableLoadingException(String.format("View definition of %s.%s " +
           "is not a query statement", db_.getName(), name_));
     }
-    viewDef_ = new ViewRef(name_, (QueryStmt) node, this);
+    queryStmt_ = (QueryStmt) node;
   }
 
   @Override
   public TCatalogObjectType getCatalogObjectType() { return TCatalogObjectType.VIEW; }
-  public ViewRef getViewDef() { return viewDef_; }
+  public QueryStmt getQueryStmt() { return queryStmt_; }
   public String getOriginalViewDef() { return originalViewDef_; }
   public String getInlineViewDef() { return inlineViewDef_; }
 
@@ -136,9 +153,10 @@ public class View extends Table {
 
   @Override
   public boolean isVirtualTable() { return true; }
+  public boolean isLocalView() { return isLocalView_; }
 
   @Override
-  public TTableDescriptor toThriftDescriptor() {
+  public TTableDescriptor toThriftDescriptor(Set<Long> referencedPartitions) {
     throw new IllegalStateException("Cannot call toThriftDescriptor() on a view.");
   }
 

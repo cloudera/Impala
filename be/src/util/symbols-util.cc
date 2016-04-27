@@ -61,6 +61,15 @@ string SymbolsUtil::Demangle(const string& name) {
   return result;
 }
 
+string SymbolsUtil::DemangleNameOnly(const string& symbol) {
+  string fn_name = Demangle(symbol);
+  // Chop off argument list (e.g. "foo(int)" => "foo")
+  fn_name = fn_name.substr(0, fn_name.find('('));
+  // Chop off namespace and/or class name if present (e.g. "impala::foo" => "foo")
+  fn_name = fn_name.substr(fn_name.find_last_of(':') + 1);
+  return fn_name;
+}
+
 // Appends <Length><String> to the stream.
 // e.g. Hello --> "5Hello"
 static void AppendMangledToken(const string& s, stringstream* out) {
@@ -96,10 +105,6 @@ static void AppendSeqId(int seq_id, stringstream* out) {
 }
 
 static void AppendAnyValType(int namespace_id, const ColumnType& type, stringstream* s) {
-  if (type.type == TYPE_CHAR) {
-    (*s) << "Ph"; // TYPE_CHAR just maps to uint8_t* and is a builtin type.
-    return;
-  }
   (*s) << "N";
   // All the AnyVal types are in the impala_udf namespace, that token
   // already came with impala_udf::FunctionContext
@@ -128,6 +133,8 @@ static void AppendAnyValType(int namespace_id, const ColumnType& type, stringstr
       AppendMangledToken("DoubleVal", s);
       break;
     case TYPE_STRING:
+    case TYPE_VARCHAR:
+    case TYPE_CHAR:
       AppendMangledToken("StringVal", s);
       break;
     case TYPE_TIMESTAMP:
@@ -201,11 +208,7 @@ string SymbolsUtil::MangleUserFunction(const string& fn_name,
 
     ss << "K"; // This indicates it is const
     seq_id += 2; // For impala_udf::*Val, which is two tokens.
-    if (arg_types[i].type == TYPE_CHAR) {
-      ss << "Ph";
-    } else {
-      AppendAnyValType(impala_udf_seq_id, arg_types[i], &ss);
-    }
+    AppendAnyValType(impala_udf_seq_id, arg_types[i], &ss);
     argument_map[arg_types[i].type] = seq_id;
   }
 

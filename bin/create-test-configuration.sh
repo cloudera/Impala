@@ -69,7 +69,16 @@ if [ $CREATE_METASTORE -eq 1 ]; then
 
   psql -U hiveuser -d hive_$METASTORE_DB \
        -f ${HIVE_HOME}/scripts/metastore/upgrade/postgres/hive-schema-0.10.0.postgres.sql
+  # Increase the size limit of PARAM_VALUE from SERDE_PARAMS table to be able to create
+  # HBase tables with large number of columns.
+  echo "alter table \"SERDE_PARAMS\" alter column \"PARAM_VALUE\" type character varying" \
+      | psql -U hiveuser -d hive_$METASTORE_DB
 fi
+
+set +e
+echo "Creating Sentry Policy Server DB"
+createdb -U hiveuser sentry_policy
+set -e
 
 function generate_config {
   # Search for strings like ${FOO}, if FOO is defined in the environment then replace
@@ -95,6 +104,9 @@ generate_config hbase-site.xml.template hbase-site.xml
 
 echo "Generating authorization policy file"
 generate_config authz-policy.ini.template authz-policy.ini
+
+echo "Generating sentry policy server config file"
+generate_config sentry-site.xml.template sentry-site.xml
 popd
 
 echo "Completed config generation"

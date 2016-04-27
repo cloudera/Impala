@@ -23,7 +23,6 @@ import org.apache.hadoop.hdfs.DistributedFileSystem;
 import com.cloudera.impala.authorization.AuthorizeableUri;
 import com.cloudera.impala.authorization.Privilege;
 import com.cloudera.impala.authorization.PrivilegeRequest;
-import com.cloudera.impala.catalog.AuthorizationException;
 import com.cloudera.impala.common.AnalysisException;
 import com.cloudera.impala.common.FileSystemUtil;
 import com.google.common.base.Preconditions;
@@ -48,7 +47,16 @@ public class HdfsUri {
   }
 
   public void analyze(Analyzer analyzer, Privilege privilege)
-      throws AnalysisException, AuthorizationException {
+      throws AnalysisException {
+    analyze(analyzer, privilege, true);
+  }
+
+  /**
+   * Analyzes the URI, optionally registering a privilege request. Used by GRANT/REVOKE
+   * privilege statements.
+   */
+  public void analyze(Analyzer analyzer, Privilege privilege, boolean registerPrivReq)
+      throws AnalysisException {
     if (location_.isEmpty()) {
       throw new AnalysisException("URI path cannot be empty.");
     }
@@ -58,20 +66,19 @@ public class HdfsUri {
       throw new AnalysisException("URI path must be absolute: " + uriPath_);
     }
     try {
-      FileSystem fs = uriPath_.getFileSystem(FileSystemUtil.getConfiguration());
-      if (!(fs instanceof DistributedFileSystem)) {
+      if (!FileSystemUtil.isDistributedFileSystem(uriPath_)) {
         throw new AnalysisException(String.format("URI location '%s' " +
             "must point to an HDFS file system.", uriPath_));
       }
     } catch (IOException e) {
       throw new AnalysisException(e.getMessage(), e);
     }
-
     // Fully-qualify the path
     uriPath_ = FileSystemUtil.createFullyQualifiedPath(uriPath_);
-    PrivilegeRequest req = new PrivilegeRequest(
-        new AuthorizeableUri(uriPath_.toString()), privilege);
-    analyzer.getCatalog().checkAccess(analyzer.getUser(), req);
+    if (registerPrivReq) {
+      analyzer.registerPrivReq(new PrivilegeRequest(
+          new AuthorizeableUri(uriPath_.toString()), privilege));
+    }
   }
 
   @Override

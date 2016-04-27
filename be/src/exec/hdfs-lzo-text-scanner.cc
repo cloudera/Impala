@@ -30,6 +30,9 @@ using namespace boost::algorithm;
 using namespace impala;
 using namespace std;
 
+DEFINE_bool(skip_lzo_version_check, false, "Disables checking the LZO library version "
+            "against the running Impala version.");
+
 const string HdfsLzoTextScanner::LIB_IMPALA_LZO = "libimpalalzo.so";
 
 namespace impala {
@@ -55,14 +58,14 @@ HdfsScanner* HdfsLzoTextScanner::GetHdfsLzoTextScanner(
   return (*CreateLzoTextScanner)(scan_node, state);
 }
 
-Status HdfsLzoTextScanner::IssueInitialRanges(RuntimeState* state,
-    HdfsScanNode* scan_node, const vector<HdfsFileDesc*>& files) {
+Status HdfsLzoTextScanner::IssueInitialRanges(HdfsScanNode* scan_node,
+    const vector<HdfsFileDesc*>& files) {
   if (LzoIssueInitialRanges == NULL) {
     lock_guard<mutex> l(lzo_load_lock_);
     if (library_load_status_.ok()) {
       // LzoIssueInitialRanges && library_load_status_.ok() means we haven't tried loading
       // the library yet.
-      library_load_status_ = LoadLzoLibrary(state);
+      library_load_status_ = LoadLzoLibrary();
       if (!library_load_status_.ok()) {
         stringstream ss;
         ss << "Error loading impala-lzo library. Check that the impala-lzo library "
@@ -79,7 +82,7 @@ Status HdfsLzoTextScanner::IssueInitialRanges(RuntimeState* state,
   return (*LzoIssueInitialRanges)(scan_node, files);
 }
 
-Status HdfsLzoTextScanner::LoadLzoLibrary(RuntimeState* state) {
+Status HdfsLzoTextScanner::LoadLzoLibrary() {
   void* handle;
   RETURN_IF_ERROR(DynamicOpen(LIB_IMPALA_LZO.c_str(), &handle));
   RETURN_IF_ERROR(DynamicLookup(handle,
@@ -90,13 +93,17 @@ Status HdfsLzoTextScanner::LoadLzoLibrary(RuntimeState* state) {
     ss << "Impala LZO library was built against Impala version "
        << (*GetImpalaBuildVersion)() << ", but the running Impala version is "
        << IMPALA_BUILD_VERSION;
-    return Status(ss.str());
+    if (FLAGS_skip_lzo_version_check) {
+      LOG(ERROR) << ss.str();
+    } else {
+      return Status(ss.str());
+    }
   }
 
   RETURN_IF_ERROR(DynamicLookup(handle,
       "CreateLzoTextScanner", reinterpret_cast<void**>(&CreateLzoTextScanner)));
   RETURN_IF_ERROR(DynamicLookup(handle,
-      "IssueInitialRanges", reinterpret_cast<void**>(&LzoIssueInitialRanges)));
+      "LzoIssueInitialRangesImpl", reinterpret_cast<void**>(&LzoIssueInitialRanges)));
 
   DCHECK(CreateLzoTextScanner != NULL);
   DCHECK(LzoIssueInitialRanges != NULL);

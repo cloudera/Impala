@@ -22,11 +22,13 @@ import static org.junit.Assert.fail;
 import java.io.StringReader;
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.List;
 
 import org.junit.Test;
 
 import com.cloudera.impala.analysis.TimestampArithmeticExpr.TimeUnit;
 import com.cloudera.impala.common.AnalysisException;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 
 public class ParserTest {
@@ -84,7 +86,7 @@ public class ParserTest {
     } catch (java.lang.Exception e) {
       if (expectedErrorString != null) {
         String errorString = parser.getErrorMsg(stmt);
-        assertEquals(expectedErrorString, errorString);
+        assertTrue(errorString.startsWith(expectedErrorString));
       }
       return;
     }
@@ -152,6 +154,8 @@ public class ParserTest {
       ParsesOk("select a 'b' from tbl".replace('\'', quote));
       ParsesOk("select a as 'b' from tbl".replace('\'', quote));
       ParsesOk("select a 'x', b as 'y', c 'z' from tbl".replace('\'', quote));
+      ParsesOk(
+          "select a 'x', b as 'y', sum(x) over () 'z' from tbl".replace('\'', quote));
       // Table aliases.
       ParsesOk("select a from tbl 'b'".replace('\'', quote));
       ParsesOk("select a from tbl as 'b'".replace('\'', quote));
@@ -181,18 +185,258 @@ public class ParserTest {
     ParserError("select * from tbl where f(tbl.*) = 5");
   }
 
+  /**
+   * Various test cases for (multiline) C-style comments.
+   */
   @Test
-  public void TestJoinHints() {
-    ParsesOk("select * from functional.alltypes a join [broadcast] " +
+  public void TestMultilineComment() {
+    ParserError("/**/");
+    ParserError("/*****/");
+    ParserError("/* select 1 */");
+    ParserError("/*/ select 1");
+    ParserError("select 1 /*/");
+    ParsesOk("/**/select 1");
+    ParsesOk("select/* */1");
+    ParsesOk("/** */ select 1");
+    ParsesOk("select 1/* **/");
+    ParsesOk("/*/*/select 1");
+    ParsesOk("/*//*/select 1");
+    ParsesOk("select 1/***/");
+    ParsesOk("/*****/select 1");
+    ParsesOk("/**//**/select 1");
+    ParserError("/**/**/select 1");
+    ParsesOk("\nselect 1/**/");
+    ParsesOk("/*\n*/select 1");
+    ParsesOk("/*\r*/select 1");
+    ParsesOk("/*\r\n*/select 1");
+    ParsesOk("/**\n* Doc style\n*/select 1");
+    ParsesOk("/************\n*\n* Header style\n*\n***********/select 1");
+    ParsesOk("/* 1 */ select 1 /* 2 */");
+    ParsesOk("select\n/**/\n1");
+    ParserError("/**// select 1");
+    ParserError("/**/*/ select 1");
+    ParserError("/ **/ select 1");
+    ParserError("/** / select 1");
+    ParserError("/\n**/ select 1");
+    ParserError("/**\n/ select 1");
+    ParsesOk("/*--*/ select 1");
+    ParsesOk("/* --foo */ select 1");
+    ParsesOk("/*\n--foo */ select 1");
+    ParsesOk("/*\n--foo\n*/ select 1");
+    ParserError("select 1 /* --bar");
+    ParserError("select 1 /*--");
+    ParsesOk("/* select 1; */ select 1");
+    ParsesOk("/** select 1; */ select 1");
+    ParsesOk("/* select */ select 1 /* 1 */");
+  }
+
+  /**
+   * Various test cases for one line comment style (starts with --).
+   */
+  @Test
+  public void TestSinglelineComment() {
+    ParserError("--");
+    ParserError("--select 1");
+    ParsesOk("select 1--");
+    ParsesOk("select 1 --foo");
+    ParsesOk("select 1 --\ncol_name");
+    ParsesOk("--foo\nselect 1 --bar");
+    ParsesOk("--foo\r\nselect 1 --bar");
+    ParsesOk("--/* foo */\n select 1");
+    ParsesOk("select 1 --/**/");
+    ParsesOk("-- foo /*\nselect 1");
+    ParserError("-- baz /*\nselect 1*/");
+    ParsesOk("select -- blah\n 1");
+    ParsesOk("select -- select 1\n 1");
+  }
+
+  /**
+   * Parses stmt and checks that the all table refs in stmt have the expected join hints.
+   * The expectedHints contains the hints of all table refs from left to right (starting
+   * with the second tableRef because the first one cannot have hints).
+   */
+  private void TestJoinHints(String stmt, String... expectedHints) {
+    SelectStmt selectStmt = (SelectStmt) ParsesOk(stmt);
+    Preconditions.checkState(selectStmt.getTableRefs().size() > 1);
+    List<String> actualHints = Lists.newArrayList();
+    assertEquals(null, selectStmt.getTableRefs().get(0).getJoinHints());
+    for (int i = 1; i < selectStmt.getTableRefs().size(); ++i) {
+      List<String> hints = selectStmt.getTableRefs().get(i).getJoinHints();
+      if (hints != null) actualHints.addAll(hints);
+    }
+    if (actualHints.isEmpty()) actualHints = Lists.<String>newArrayList((String) null);
+    assertEquals(Lists.newArrayList(expectedHints), actualHints);
+  }
+
+  /**
+   * Parses stmt and checks that the select-list plan hints in stmt are the
+   * expected hints.
+   */
+  private void TestSelectListHints(String stmt, String... expectedHints) {
+    SelectStmt selectStmt = (SelectStmt) ParsesOk(stmt);
+    List<String> actualHints = selectStmt.getSelectList().getPlanHints();
+    if (actualHints == null) actualHints = Lists.<String>newArrayList((String) null);
+    assertEquals(Lists.newArrayList(expectedHints), actualHints);
+  }
+
+  /**
+   * Parses stmt and checks that the insert hints stmt are the expected hints.
+   */
+  private void TestInsertHints(String stmt, String... expectedHints) {
+    InsertStmt insertStmt = (InsertStmt) ParsesOk(stmt);
+    List<String> actualHints = insertStmt.getPlanHints();
+    if (actualHints == null) actualHints = Lists.<String>newArrayList((String) null);
+    assertEquals(Lists.newArrayList(expectedHints), actualHints);
+  }
+
+  @Test
+  public void TestPlanHints() {
+    // All plan-hint styles embed a comma-separated list of hints.
+    String[][] hintStyles = new String[][] {
+        new String[] { "/* +", "*/" }, // traditional commented hint
+        new String[] { "-- +", "\n" }, // eol commented hint
+        new String[] { "\n-- +", "\n" }, // eol commented hint
+        new String[] { "[", "]" } // legacy style
+    };
+    String[][] commentStyles = new String[][] {
+        new String[] { "/*", "*/" }, // traditional comment
+        new String[] { "--", "\n" } // eol comment
+    };
+    for (String[] hintStyle: hintStyles) {
+      String prefix = hintStyle[0];
+      String suffix = hintStyle[1];
+      // Test join hints.
+      TestJoinHints(String.format(
+          "select * from functional.alltypes a join %sbroadcast%s " +
+              "functional.alltypes b", prefix, suffix), "broadcast");
+      TestJoinHints(String.format(
+          "select * from functional.alltypes a join %sbroadcast%s " +
+              "functional.alltypes b using(id)", prefix, suffix), "broadcast");
+      TestJoinHints(String.format(
+          "select * from functional.alltypes a join %sbroadcast%s " +
+              "functional.alltypes b on(a.id = b.id)", prefix, suffix), "broadcast");
+      TestJoinHints(String.format(
+          "select * from functional.alltypes a cross join %sbroadcast%s " +
+              "functional.alltypes b", prefix, suffix), "broadcast");
+      // Multiple comma-separated hints.
+      TestJoinHints(String.format(
+          "select * from functional.alltypes a join " +
+              "%sbroadcast,shuffle,foo,bar%s " +
+              "functional.alltypes b using(id)", prefix, suffix),
+              "broadcast", "shuffle", "foo", "bar");
+      // Test hints in a multi-way join.
+      TestJoinHints(String.format(
+          "select * from functional.alltypes a " +
+              "join %sbroadcast%s functional.alltypes b using(id) " +
+              "join %sshuffle%s functional.alltypes c using(int_col) " +
+              "join %sbroadcast%s functional.alltypes d using(int_col) " +
+              "join %sshuffle%s functional.alltypes e using(string_col)",
+              prefix, suffix, prefix, suffix, prefix, suffix, prefix, suffix),
+              "broadcast", "shuffle", "broadcast", "shuffle");
+      // Test hints in a multi-way join (flipped prefix/suffix -> bad hint start/ends).
+      ParserError(String.format(
+          "select * from functional.alltypes a " +
+              "join %sbroadcast%s functional.alltypes b using(id) " +
+              "join %sshuffle%s functional.alltypes c using(int_col) " +
+              "join %sbroadcast%s functional.alltypes d using(int_col) " +
+              "join %sshuffle%s functional.alltypes e using(string_col)",
+              prefix, suffix, suffix, prefix, prefix, suffix, suffix, prefix));
+      // Test hints in a multi-way join (missing prefixes/suffixes).
+      ParserError(String.format(
+          "select * from functional.alltypes a " +
+              "join %sbroadcast%s functional.alltypes b using(id) " +
+              "join %sshuffle%s functional.alltypes c using(int_col) " +
+              "join %sbroadcast%s functional.alltypes d using(int_col) " +
+              "join %sshuffle%s functional.alltypes e using(string_col)",
+              suffix, suffix, suffix, suffix, prefix, "", "", ""));
+
+      // Test insert hints.
+      TestInsertHints(String.format(
+          "insert into t %snoshuffle%s select * from t", prefix, suffix),
+          "noshuffle");
+      TestInsertHints(String.format(
+          "insert overwrite t %snoshuffle%s select * from t", prefix, suffix),
+          "noshuffle");
+      TestInsertHints(String.format(
+          "insert into t partition(x, y) %snoshuffle%s select * from t",
+          prefix, suffix), "noshuffle");
+      TestInsertHints(String.format(
+          "insert into t(a, b) partition(x, y) %sshuffle%s select * from t",
+          prefix, suffix), "shuffle");
+      TestInsertHints(String.format(
+          "insert overwrite t(a, b) partition(x, y) %sfoo,bar,baz%s select * from t",
+          prefix, suffix), "foo", "bar", "baz");
+
+      // Test select-list hints (e.g., straight_join). The legacy-style hint has no
+      // prefix and suffix.
+      if (prefix.contains("[")) {
+        prefix = "";
+        suffix = "";
+      }
+      TestSelectListHints(String.format(
+          "select %sstraight_join%s * from functional.alltypes a", prefix, suffix),
+          "straight_join");
+      // Only the new hint-style is recognized
+      if (!prefix.equals("")) {
+        TestSelectListHints(String.format(
+            "select %sfoo,bar,baz%s * from functional.alltypes a", prefix, suffix),
+            "foo", "bar", "baz");
+      }
+      if (prefix.isEmpty()) continue;
+
+      // Test mixing commented hints and comments.
+      for (String[] commentStyle: commentStyles) {
+        String commentPrefix = commentStyle[0];
+        String commentSuffix = commentStyle[1];
+        String queryTemplate =
+            "$1comment$2 select $1comment$2 $3straight_join$4 $1comment$2 * " +
+            "from $1comment$2 functional.alltypes a join $1comment$2 $3shuffle$4 " +
+            "$1comment$2 functional.alltypes b $1comment$2 on $1comment$2 " +
+            "(a.id = b.id)";
+        String query = queryTemplate.replaceAll("\\$1", commentPrefix)
+            .replaceAll("\\$2", commentSuffix).replaceAll("\\$3", prefix)
+            .replaceAll("\\$4", suffix);
+        TestSelectListHints(query, "straight_join");
+        TestJoinHints(query, "shuffle");
+      }
+    }
+    // No "+" at the beginning so the comment is not recognized as a hint.
+    TestJoinHints("select * from functional.alltypes a join /* comment */" +
+        "functional.alltypes b using (int_col)", (String) null);
+    TestSelectListHints("select /* comment */ * from functional.alltypes",
+        (String) null);
+    TestInsertHints("insert into t(a, b) partition(x, y) /* comment */ select 1",
+        (String) null);
+    TestSelectListHints("select /* -- +straight_join */ * from functional.alltypes",
+        (String) null);
+    TestSelectListHints("select /* abcdef +straight_join */ * from functional.alltypes",
+        (String) null);
+    TestSelectListHints("select \n-- abcdef +straight_join\n * from functional.alltypes",
+        (String) null);
+    TestSelectListHints("select \n-- /*+straight_join\n * from functional.alltypes",
+        (String) null);
+
+    // Commented hints cannot span lines (recognized as comments instead).
+    TestSelectListHints("select /*\n +straight_join */ * from functional.alltypes",
+        (String) null);
+    TestSelectListHints("select /* +straight_join \n*/ * from functional.alltypes",
+        (String) null);
+    TestSelectListHints("select /* +straight_\njoin */ * from functional.alltypes",
+        (String) null);
+    ParserError("select -- +straight_join * from functional.alltypes");
+    ParserError("select \n-- +straight_join * from functional.alltypes");
+
+    // Missing "/*" or "/*"
+    ParserError("select * from functional.alltypes a join + */" +
         "functional.alltypes b using (int_col)");
-    ParsesOk("select * from functional.alltypes a join [bla,bla] " +
+    ParserError("select * from functional.alltypes a join /* + " +
         "functional.alltypes b using (int_col)");
-    ParsesOk("select * from functional.alltypes a cross join [bla,bla] " +
-        "functional.alltypes b"); // Parses but fails during analysis
-    ParserError("select * from functional.alltypes a join [bla bla] " +
-        "functional.alltypes b using (int_col)");
-    ParserError("select * from functional.alltypes a join [1 + 2] " +
-        "functional.alltypes b using (int_col)");
+
+    // Test empty hint tokens.
+    TestSelectListHints("select /* +straight_join, ,, */ * from functional.alltypes",
+        "straight_join");
+    // Traditional commented hints are not parsed inside a comment.
+    ParserError("select /* /* +straight_join */ */ * from functional.alltypes");
   }
 
   @Test
@@ -205,6 +449,12 @@ public class ParserTest {
         "full outer join src src3 on " +
         "  src2.key = src3.key and src3.key < 10 " +
         "left semi join src src3 on " +
+        "  src2.key = src3.key and src3.key < 10 " +
+        "left anti join src src3 on " +
+        "  src2.key = src3.key and src3.key < 10 " +
+        "right semi join src src3 on " +
+        "  src2.key = src3.key and src3.key < 10 " +
+        "right anti join src src3 on " +
         "  src2.key = src3.key and src3.key < 10 " +
         "join src src3 on " +
         "  src2.key = src3.key and src3.key < 10 " +
@@ -221,6 +471,12 @@ public class ParserTest {
         "  (src2.key = src3.key and src3.key < 10) " +
         "left semi join src src3 on " +
         "  (src2.key = src3.key and src3.key < 10) " +
+        "left anti join src src3 on " +
+        "  src2.key = src3.key and src3.key < 10 " +
+        "right semi join src src3 on " +
+        "  (src2.key = src3.key and src3.key < 10) " +
+        "right anti join src src3 on " +
+        "  src2.key = src3.key and src3.key < 10 " +
         "join src src3 on " +
         "  (src2.key = src3.key and src3.key < 10) " +
         "inner join src src3 on " +
@@ -232,6 +488,9 @@ public class ParserTest {
         "right outer join src src3 using (d, e, f) " +
         "full outer join src src3 using (d, e, f) " +
         "left semi join src src3 using (d, e, f) " +
+        "left anti join src src3 using (d, e, f) " +
+        "right semi join src src3 using (d, e, f) " +
+        "right anti join src src3 using (d, e, f) " +
         "join src src3 using (d, e, f) " +
         "inner join src src3 using (d, e, f) " +
         "where src2.bla = src3.bla " +
@@ -242,6 +501,9 @@ public class ParserTest {
         "right outer join src src3 on (NULL) " +
         "full outer join src src3 on NULL " +
         "left semi join src src3 on (NULL) " +
+        "left anti join src src3 on (NULL) " +
+        "right semi join src src3 on (NULL) " +
+        "right anti join src src3 on (NULL) " +
         "join src src3 on NULL " +
         "inner join src src3 on (NULL) " +
         "where src2.bla = src3.bla " +
@@ -666,47 +928,47 @@ public class ParserTest {
   @Test
   public void TestLiteralExprs() {
     // negative integer literal
-    ParsesOk("select -1 from t where -1", IntLiteral.class);
-    ParsesOk("select - 1 from t where - 1", IntLiteral.class);
+    ParsesOk("select -1 from t where -1", NumericLiteral.class);
+    ParsesOk("select - 1 from t where - 1", NumericLiteral.class);
     ParsesOk("select a - - 1 from t where a - - 1", ArithmeticExpr.class);
     ParsesOk("select a - - - 1 from t where a - - - 1", ArithmeticExpr.class);
 
     // positive integer literal
-    ParsesOk("select +1 from t where +1", IntLiteral.class);
-    ParsesOk("select + 1 from t where + 1", IntLiteral.class);
+    ParsesOk("select +1 from t where +1", NumericLiteral.class);
+    ParsesOk("select + 1 from t where + 1", NumericLiteral.class);
     ParsesOk("select a + + 1 from t where a + + 1", ArithmeticExpr.class);
     ParsesOk("select a + + + 1 from t where a + + + 1", ArithmeticExpr.class);
 
     // float literals
-    ParsesOk("select +1.0 from t where +1.0", DecimalLiteral.class);
-    ParsesOk("select +-1.0 from t where +-1.0", DecimalLiteral.class);
+    ParsesOk("select +1.0 from t where +1.0", NumericLiteral.class);
+    ParsesOk("select +-1.0 from t where +-1.0", NumericLiteral.class);
     ParsesOk("select +1.-0 from t where +1.-0", ArithmeticExpr.class);
 
     // test scientific notation
-    ParsesOk("select 8e6 from t where 8e6", DecimalLiteral.class);
-    ParsesOk("select +8e6 from t where +8e6", DecimalLiteral.class);
-    ParsesOk("select 8e+6 from t where 8e+6", DecimalLiteral.class);
-    ParsesOk("select -8e6 from t where -8e6", DecimalLiteral.class);
-    ParsesOk("select 8e-6 from t where 8e-6", DecimalLiteral.class);
-    ParsesOk("select -8e-6 from t where -8e-6", DecimalLiteral.class);
+    ParsesOk("select 8e6 from t where 8e6", NumericLiteral.class);
+    ParsesOk("select +8e6 from t where +8e6", NumericLiteral.class);
+    ParsesOk("select 8e+6 from t where 8e+6", NumericLiteral.class);
+    ParsesOk("select -8e6 from t where -8e6", NumericLiteral.class);
+    ParsesOk("select 8e-6 from t where 8e-6", NumericLiteral.class);
+    ParsesOk("select -8e-6 from t where -8e-6", NumericLiteral.class);
     // with a decimal point
-    ParsesOk("select 4.5e2 from t where 4.5e2", DecimalLiteral.class);
-    ParsesOk("select +4.5e2 from t where +4.5e2", DecimalLiteral.class);
-    ParsesOk("select 4.5e+2 from t where 4.5e+2", DecimalLiteral.class);
-    ParsesOk("select -4.5e2 from t where -4.5e2", DecimalLiteral.class);
-    ParsesOk("select 4.5e-2 from t where 4.5e-2", DecimalLiteral.class);
-    ParsesOk("select -4.5e-2 from t where -4.5e-2", DecimalLiteral.class);
+    ParsesOk("select 4.5e2 from t where 4.5e2", NumericLiteral.class);
+    ParsesOk("select +4.5e2 from t where +4.5e2", NumericLiteral.class);
+    ParsesOk("select 4.5e+2 from t where 4.5e+2", NumericLiteral.class);
+    ParsesOk("select -4.5e2 from t where -4.5e2", NumericLiteral.class);
+    ParsesOk("select 4.5e-2 from t where 4.5e-2", NumericLiteral.class);
+    ParsesOk("select -4.5e-2 from t where -4.5e-2", NumericLiteral.class);
     // with a decimal point but without a number before the decimal
-    ParsesOk("select .7e9 from t where .7e9", DecimalLiteral.class);
-    ParsesOk("select +.7e9 from t where +.7e9", DecimalLiteral.class);
-    ParsesOk("select .7e+9 from t where .7e+9", DecimalLiteral.class);
-    ParsesOk("select -.7e9 from t where -.7e9", DecimalLiteral.class);
-    ParsesOk("select .7e-9 from t where .7e-9", DecimalLiteral.class);
-    ParsesOk("select -.7e-9 from t where -.7e-9", DecimalLiteral.class);
+    ParsesOk("select .7e9 from t where .7e9", NumericLiteral.class);
+    ParsesOk("select +.7e9 from t where +.7e9", NumericLiteral.class);
+    ParsesOk("select .7e+9 from t where .7e+9", NumericLiteral.class);
+    ParsesOk("select -.7e9 from t where -.7e9", NumericLiteral.class);
+    ParsesOk("select .7e-9 from t where .7e-9", NumericLiteral.class);
+    ParsesOk("select -.7e-9 from t where -.7e-9", NumericLiteral.class);
 
     // mixed signs
-    ParsesOk("select -+-1 from t where -+-1", IntLiteral.class);
-    ParsesOk("select - +- 1 from t where - +- 1", IntLiteral.class);
+    ParsesOk("select -+-1 from t where -+-1", NumericLiteral.class);
+    ParsesOk("select - +- 1 from t where - +- 1", NumericLiteral.class);
     ParsesOk("select 1 + -+ 1 from t where 1 + -+ 1", ArithmeticExpr.class);
 
     // Boolean literals
@@ -783,6 +1045,7 @@ public class ParserTest {
     ParsesOk("select f1(*)");
     ParsesOk("select f1(distinct col)");
     ParsesOk("select f1(distinct col, col2)");
+    ParsesOk("select decode(col, col2, col3)");
     ParserError("select f( from t");
     ParserError("select f(5.0 5.0) from t");
   }
@@ -930,6 +1193,37 @@ public class ParserTest {
   }
 
   @Test
+  public void TestAnalyticExprs() {
+    ParsesOk("select sum(v) over (partition by a, 2*b order by 3*c rows between "
+        + "2+2 preceding and 2-2 following) from t");
+    ParsesOk("select sum(v) over (order by 3*c rows between "
+        + "unbounded preceding and unbounded following) from t");
+    ParsesOk("select sum(v) over (partition by a, 2*b) from t");
+    ParsesOk("select sum(v) over (partition by a, 2*b order by 3*c range between "
+        + "unbounded preceding and unbounded following) from t");
+    ParsesOk("select sum(v) over (order by 3*c range between "
+        + "2 following and 4 following) from t");
+    ParsesOk("select sum(v) over (partition by a, 2*b) from t");
+    ParsesOk("select 2 * x, sum(v) over (partition by a, 2*b order by 3*c rows between "
+        + "2+2 preceding and 2-2 following), rank() over (), y from t");
+    // not a function call
+    ParserError("select v over (partition by a, 2*b order by 3*c rows between 2 "
+        + "preceding and 2 following) from t");
+    // something missing
+    ParserError("select sum(v) over (partition a, 2*b order by 3*c rows between "
+        + "unbounded preceding and current row) from t");
+    ParserError("select sum(v) over (partition by a, 2*b order 3*c rows between 2 "
+        + "preceding and 2 following) from t");
+    ParserError("select sum(v) over (partition by a, 2*b order by 3*c rows 2 "
+        + "preceding and 2 following) from t");
+    ParsesOk("select sum(v) over (partition by a, 2*b) from t");
+    // Special case for DECODE, which results in a parse error when used in
+    // an analytic context. Note that "ecode() over ()" would parse fine since
+    // that is handled by the standard function call lookup.
+    ParserError("select decode(1, 2, 3) over () from t");
+  }
+
+  @Test
   public void TestPredicates() {
     ArrayList<String> operations = new ArrayList<String>();
     for (BinaryPredicate.Operator op : BinaryPredicate.Operator.values()) {
@@ -1013,6 +1307,19 @@ public class ParserTest {
         }
       }
     }
+
+    // Test right associativity of NOT.
+    for (String notStr : notStrs) {
+      SelectStmt stmt =
+          (SelectStmt) ParsesOk(String.format("select %s a != b", notStr));
+      // The NOT should be applied on the result of a != b, and not on a only.
+      Expr e = stmt.getSelectList().getItems().get(0).getExpr();
+      assertTrue(e instanceof CompoundPredicate);
+      CompoundPredicate cp = (CompoundPredicate) e;
+      assertEquals(CompoundPredicate.Operator.NOT, cp.getOp());
+      assertEquals(1, cp.getChildren().size());
+      assertTrue(cp.getChild(0) instanceof BinaryPredicate);
+    }
   }
 
   @Test
@@ -1078,77 +1385,75 @@ public class ParserTest {
   private void testInsert() {
     for (String qualifier: new String[] {"overwrite", "into"}) {
       for (String optTbl: new String[] {"", "table"}) {
-        for (String optHints: new String[] {"[shuffle]", "[badhint,noshuffle]", ""}) {
-          // Entire unpartitioned table.
-          ParsesOk(String.format("insert %s %s t %s select a from src where b > 5",
-              qualifier, optTbl, optHints));
-          // Static partition with one partitioning key.
-          ParsesOk(String.format(
-              "insert %s %s t partition (pk1=10) %s select a from src where b > 5",
-              qualifier, optTbl, optHints));
-          // Dynamic partition with one partitioning key.
-          ParsesOk(String.format(
-              "insert %s %s t partition (pk1) %s select a from src where b > 5",
-              qualifier, optTbl, optHints));
-          // Static partition with two partitioning keys.
-          ParsesOk(String.format("insert %s %s t partition (pk1=10, pk2=20) %s " +
-              "select a from src where b > 5",
-              qualifier, optTbl, optHints));
-          // Fully dynamic partition with two partitioning keys.
-          ParsesOk(String.format(
-              "insert %s %s t partition (pk1, pk2) %s select a from src where b > 5",
-              qualifier, optTbl, optHints));
-          // Partially dynamic partition with two partitioning keys.
-          ParsesOk(String.format(
-              "insert %s %s t partition (pk1=10, pk2) %s select a from src where b > 5",
-              qualifier, optTbl, optHints));
-          // Partially dynamic partition with two partitioning keys.
-          ParsesOk(String.format(
-              "insert %s %s t partition (pk1, pk2=20) %s select a from src where b > 5",
-              qualifier, optTbl, optHints));
-          // Static partition with two NULL partitioning keys.
-          ParsesOk(String.format("insert %s %s t partition (pk1=NULL, pk2=NULL) %s " +
-              "select a from src where b > 5",
-              qualifier, optTbl, optHints));
-          // Static partition with boolean partitioning keys.
-          ParsesOk(String.format("insert %s %s t partition (pk1=false, pk2=true) %s " +
-              "select a from src where b > 5",
-              qualifier, optTbl, optHints));
-          // Static partition with arbitrary exprs as partitioning keys.
-          ParsesOk(String.format("insert %s %s t partition (pk1=abc, pk2=(5*8+10)) %s " +
-              "select a from src where b > 5",
-              qualifier, optTbl, optHints));
-          ParsesOk(String.format(
-              "insert %s %s t partition (pk1=f(a), pk2=!true and false) %s " +
-              "select a from src where b > 5",
-              qualifier, optTbl, optHints));
-          // Permutation
-          ParsesOk(String.format("insert %s %s t(a,b,c) %s values(1,2,3)",
-              qualifier, optTbl, optHints));
-          // Permutation with mismatched select list (should parse fine)
-          ParsesOk(String.format("insert %s %s t(a,b,c) %s values(1,2,3,4,5,6)",
-              qualifier, optTbl, optHints));
-          // Permutation and partition
-          ParsesOk(String.format("insert %s %s t(a,b,c) partition(d) %s values(1,2,3,4)",
-              qualifier, optTbl, optHints));
-          // Empty permutation list
-          ParsesOk(String.format("insert %s %s t() %s select 1 from a",
-              qualifier, optTbl, optHints));
-          // Permutation with optional query statement
-          ParsesOk(String.format("insert %s %s t() partition(d) %s",
-              qualifier, optTbl, optHints));
-          ParsesOk(String.format("insert %s %s t() %s",
-              qualifier, optTbl, optHints));
-          // No comma in permutation list
-          ParserError(String.format("insert %s %s t(a b c) %s select 1 from a",
-              qualifier, optTbl, optHints));
-          // Can't use strings as identifiers in permutation list
-          ParserError(String.format("insert %s %s t('a') %s select 1 from a",
-              qualifier, optTbl, optHints));
-          // Expressions not allowed in permutation list
-          ParserError(String.format("insert %s %s t(a=1, b) %s select 1 from a",
-              qualifier, optTbl, optHints));
-        }
+        // Entire unpartitioned table.
+        ParsesOk(String.format("insert %s %s t select a from src where b > 5",
+            qualifier, optTbl));
+        // Static partition with one partitioning key.
+        ParsesOk(String.format(
+            "insert %s %s t partition (pk1=10) select a from src where b > 5",
+            qualifier, optTbl));
+        // Dynamic partition with one partitioning key.
+        ParsesOk(String.format(
+            "insert %s %s t partition (pk1) select a from src where b > 5",
+            qualifier, optTbl));
+        // Static partition with two partitioning keys.
+        ParsesOk(String.format("insert %s %s t partition (pk1=10, pk2=20) " +
+            "select a from src where b > 5",
+            qualifier, optTbl));
+        // Fully dynamic partition with two partitioning keys.
+        ParsesOk(String.format(
+            "insert %s %s t partition (pk1, pk2) select a from src where b > 5",
+            qualifier, optTbl));
+        // Partially dynamic partition with two partitioning keys.
+        ParsesOk(String.format(
+            "insert %s %s t partition (pk1=10, pk2) select a from src where b > 5",
+            qualifier, optTbl));
+        // Partially dynamic partition with two partitioning keys.
+        ParsesOk(String.format(
+            "insert %s %s t partition (pk1, pk2=20) select a from src where b > 5",
+            qualifier, optTbl));
+        // Static partition with two NULL partitioning keys.
+        ParsesOk(String.format("insert %s %s t partition (pk1=NULL, pk2=NULL) " +
+            "select a from src where b > 5",
+            qualifier, optTbl));
+        // Static partition with boolean partitioning keys.
+        ParsesOk(String.format("insert %s %s t partition (pk1=false, pk2=true) " +
+            "select a from src where b > 5",
+            qualifier, optTbl));
+        // Static partition with arbitrary exprs as partitioning keys.
+        ParsesOk(String.format("insert %s %s t partition (pk1=abc, pk2=(5*8+10)) " +
+            "select a from src where b > 5",
+            qualifier, optTbl));
+        ParsesOk(String.format(
+            "insert %s %s t partition (pk1=f(a), pk2=!true and false) " +
+                "select a from src where b > 5",
+                qualifier, optTbl));
+        // Permutation
+        ParsesOk(String.format("insert %s %s t(a,b,c) values(1,2,3)",
+            qualifier, optTbl));
+        // Permutation with mismatched select list (should parse fine)
+        ParsesOk(String.format("insert %s %s t(a,b,c) values(1,2,3,4,5,6)",
+            qualifier, optTbl));
+        // Permutation and partition
+        ParsesOk(String.format("insert %s %s t(a,b,c) partition(d) values(1,2,3,4)",
+            qualifier, optTbl));
+        // Empty permutation list
+        ParsesOk(String.format("insert %s %s t() select 1 from a",
+            qualifier, optTbl));
+        // Permutation with optional query statement
+        ParsesOk(String.format("insert %s %s t() partition(d) ",
+            qualifier, optTbl));
+        ParsesOk(String.format("insert %s %s t() ",
+            qualifier, optTbl));
+        // No comma in permutation list
+        ParserError(String.format("insert %s %s t(a b c) select 1 from a",
+            qualifier, optTbl));
+        // Can't use strings as identifiers in permutation list
+        ParserError(String.format("insert %s %s t('a') select 1 from a",
+            qualifier, optTbl));
+        // Expressions not allowed in permutation list
+        ParserError(String.format("insert %s %s t(a=1, b) select 1 from a",
+            qualifier, optTbl));
       }
     }
   }
@@ -1213,24 +1518,20 @@ public class ParserTest {
     ParsesOk("SHOW DATABASES LIKE 'pattern'");
     ParsesOk("SHOW SCHEMAS LIKE 'p*ttern'");
     // Data sources
-    ParsesOk("SHOW DATASOURCES");
-    ParsesOk("SHOW DATASOURCES 'pattern'");
-    ParsesOk("SHOW DATASOURCES LIKE 'pattern'");
-    ParsesOk("SHOW DATASOURCES LIKE 'p*ttern'");
-    // Functions
-    ParsesOk("SHOW FUNCTIONS");
-    ParsesOk("SHOW FUNCTIONS LIKE 'pattern'");
-    ParsesOk("SHOW FUNCTIONS LIKE 'p*ttern'");
-    ParsesOk("SHOW FUNCTIONS");
-    ParsesOk("SHOW FUNCTIONS in DB LIKE 'pattern'");
-    ParsesOk("SHOW FUNCTIONS in DB");
+    ParsesOk("SHOW DATA SOURCES");
+    ParsesOk("SHOW DATA SOURCES 'pattern'");
+    ParsesOk("SHOW DATA SOURCES LIKE 'pattern'");
+    ParsesOk("SHOW DATA SOURCES LIKE 'p*ttern'");
 
-    ParsesOk("SHOW AGGREGATE FUNCTIONS");
-    ParsesOk("SHOW AGGREGATE FUNCTIONS LIKE 'pattern'");
-    ParsesOk("SHOW AGGREGATE FUNCTIONS LIKE 'p*ttern'");
-    ParsesOk("SHOW AGGREGATE FUNCTIONS");
-    ParsesOk("SHOW AGGREGATE FUNCTIONS in DB LIKE 'pattern'");
-    ParsesOk("SHOW AGGREGATE FUNCTIONS in DB");
+    // Functions
+    for (String fnType: new String[] { "", "AGGREGATE", "ANALYTIC"}) {
+      ParsesOk(String.format("SHOW %s FUNCTIONS", fnType));
+      ParsesOk(String.format("SHOW %s FUNCTIONS LIKE 'pattern'", fnType));
+      ParsesOk(String.format("SHOW %s FUNCTIONS LIKE 'p*ttern'", fnType));
+      ParsesOk(String.format("SHOW %s FUNCTIONS", fnType));
+      ParsesOk(String.format("SHOW %s FUNCTIONS in DB LIKE 'pattern'", fnType));
+      ParsesOk(String.format("SHOW %s FUNCTIONS in DB", fnType));
+    }
 
     // Show table/column stats.
     ParsesOk("SHOW TABLE STATS tbl");
@@ -1249,10 +1550,10 @@ public class ParserTest {
     ParserError("SHOW");
     // Malformed pattern (no quotes)
     ParserError("SHOW TABLES tablename");
-    // Invalid SHOW DATASOURCE statements
+    // Invalid SHOW DATA SOURCE statements
     ParserError("SHOW DATA");
     ParserError("SHOW SOURCE");
-    ParserError("SHOW DATASOURCE LIKE NotStrLiteral");
+    ParserError("SHOW DATA SOURCE LIKE NotStrLiteral");
     ParserError("SHOW UNKNOWN FUNCTIONS");
     // Missing table/column qualifier.
     ParserError("SHOW STATS tbl");
@@ -1648,17 +1949,24 @@ public class ParserTest {
     // Table and column names starting with digits.
     ParsesOk("CREATE TABLE 01_Foo (01_i int, 02_j string)");
 
+    // Unpartitioned tables
     ParsesOk("CREATE TABLE Foo (i int, s string)");
     ParsesOk("CREATE EXTERNAL TABLE Foo (i int, s string)");
     ParsesOk("CREATE EXTERNAL TABLE Foo (i int, s string) LOCATION '/test-warehouse/'");
     ParsesOk("CREATE TABLE Foo (i int, s string) COMMENT 'hello' LOCATION '/a/b/'");
     ParsesOk("CREATE TABLE Foo (i int, s string) COMMENT 'hello' LOCATION '/a/b/' " +
         "TBLPROPERTIES ('123'='1234')");
+    // No column definitions.
+    ParsesOk("CREATE TABLE Foo COMMENT 'hello' LOCATION '/a/b/' " +
+        "TBLPROPERTIES ('123'='1234')");
 
     // Partitioned tables
     ParsesOk("CREATE TABLE Foo (i int) PARTITIONED BY (j string)");
     ParsesOk("CREATE TABLE Foo (i int) PARTITIONED BY (s string, d double)");
     ParsesOk("CREATE TABLE Foo (i int, s string) PARTITIONED BY (s string, d double)" +
+        " COMMENT 'hello' LOCATION '/a/b/'");
+    // No column definitions.
+    ParsesOk("CREATE TABLE Foo PARTITIONED BY (s string, d double)" +
         " COMMENT 'hello' LOCATION '/a/b/'");
     ParserError("CREATE TABLE Foo (i int) PARTITIONED BY (int)");
     ParserError("CREATE TABLE Foo (i int) PARTITIONED BY ()");
@@ -1680,6 +1988,9 @@ public class ParserTest {
       ParsesOk(String.format(
           "CREATE EXTERNAL TABLE Foo (f float) COMMENT 'c' STORED AS %s LOCATION '/b'",
           format));
+      // No column definitions.
+      ParsesOk(String.format(
+          "CREATE EXTERNAL TABLE Foo COMMENT 'c' STORED AS %s LOCATION '/b'", format));
     }
 
     // Table Properties
@@ -1780,27 +2091,26 @@ public class ParserTest {
     ParserError("CREATE TABLE Foo (i intt)");
     ParserError("CREATE TABLE Foo (int i)");
     ParserError("CREATE TABLE Foo ()");
-    ParserError("CREATE TABLE Foo.Bar");
-    ParserError("CREATE TABLE Foo");
     ParserError("CREATE TABLE");
     ParserError("CREATE EXTERNAL");
-    ParserError("CREATE EXTERNAL TABLE Foo");
     ParserError("CREATE");
 
-    // Valid syntax for tables PRODUCED BY DATASOURCE
-    ParsesOk("CREATE TABLE Foo (i int, s string) PRODUCED BY DATASOURCE Bar");
-    ParsesOk("CREATE TABLE Foo (i int, s string) PRODUCED BY DATASOURCE Bar(\"\")");
-    ParsesOk("CREATE TABLE Foo (i int) PRODUCED BY DATASOURCE " +
+    // Valid syntax for tables PRODUCED BY DATA SOURCE
+    ParsesOk("CREATE TABLE Foo (i int, s string) PRODUCED BY DATA SOURCE Bar");
+    ParsesOk("CREATE TABLE Foo (i int, s string) PRODUCED BY DATA SOURCE Bar(\"\")");
+    ParsesOk("CREATE TABLE Foo (i int) PRODUCED BY DATA SOURCE " +
         "Bar(\"Foo \\!@#$%^&*()\")");
-    ParsesOk("CREATE TABLE IF NOT EXISTS Foo (i int) PRODUCED BY DATASOURCE Bar(\"\")");
+    ParsesOk("CREATE TABLE IF NOT EXISTS Foo (i int) PRODUCED BY DATA SOURCE Bar(\"\")");
 
-    // Invalid syntax for tables PRODUCED BY DATASOURCE
-    ParserError("CREATE TABLE Foo (i int) PRODUCED BY DATASOURCE Foo.Bar");
-    ParserError("CREATE TABLE Foo (i int) PRODUCED BY DATASOURCE Foo()");
-    ParserError("CREATE EXTERNAL TABLE Foo (i int) PRODUCED BY DATASOURCE Foo(\"\")");
-    ParserError("CREATE TABLE Foo (i int) PRODUCED BY DATASOURCE Foo(\"\") " +
+    // Invalid syntax for tables PRODUCED BY DATA SOURCE
+    ParserError("CREATE TABLE Foo (i int) PRODUCED BY DATA Foo");
+    ParserError("CREATE TABLE Foo (i int) PRODUCED BY DATA SRC Foo");
+    ParserError("CREATE TABLE Foo (i int) PRODUCED BY DATA SOURCE Foo.Bar");
+    ParserError("CREATE TABLE Foo (i int) PRODUCED BY DATA SOURCE Foo()");
+    ParserError("CREATE EXTERNAL TABLE Foo (i int) PRODUCED BY DATA SOURCE Foo(\"\")");
+    ParserError("CREATE TABLE Foo (i int) PRODUCED BY DATA SOURCE Foo(\"\") " +
         "LOCATION 'x'");
-    ParserError("CREATE TABLE Foo (i int) PRODUCED BY DATASOURCE Foo(\"\") " +
+    ParserError("CREATE TABLE Foo (i int) PRODUCED BY DATA SOURCE Foo(\"\") " +
         "ROW FORMAT DELIMITED");
     ParserError("CREATE TABLE Foo (i int) PARTITIONED BY (j string) PRODUCED BY DATA " +
         "SOURCE Foo(\"\")");
@@ -1808,46 +2118,51 @@ public class ParserTest {
 
   @Test
   public void TestCreateDataSource() {
-    ParsesOk("CREATE DATASOURCE foo LOCATION '/foo.jar' CLASS 'com.bar.Foo' " +
+    ParsesOk("CREATE DATA SOURCE foo LOCATION '/foo.jar' CLASS 'com.bar.Foo' " +
         "API_VERSION 'V1'");
-    ParsesOk("CREATE DATASOURCE foo LOCATION \"/foo.jar\" CLASS \"com.bar.Foo\" " +
+    ParsesOk("CREATE DATA SOURCE foo LOCATION \"/foo.jar\" CLASS \"com.bar.Foo\" " +
         "API_VERSION \"V1\"");
-    ParsesOk("CREATE DATASOURCE foo LOCATION '/x/foo@hi_^!#.jar' CLASS 'com.bar.Foo' " +
+    ParsesOk("CREATE DATA SOURCE foo LOCATION '/x/foo@hi_^!#.jar' CLASS 'com.bar.Foo' " +
         "API_VERSION 'V1'");
 
-    ParserError("CREATE DATASOURCE foo.bar LOCATION '/x/foo.jar' CLASS 'com.bar.Foo' " +
+    ParserError("CREATE DATA foo LOCATION '/foo.jar' CLASS 'com.bar.Foo' " +
         "API_VERSION 'V1'");
-    ParserError("CREATE DATASOURCE foo LOCATION /x/foo.jar CLASS 'com.bar.Foo' " +
+    ParserError("CREATE DATA SRC foo.bar LOCATION '/foo.jar' CLASS 'com.bar.Foo' " +
         "API_VERSION 'V1'");
-    ParserError("CREATE DATASOURCE foo LOCATION '/x/foo.jar' CLASS com.bar.Foo " +
+    ParserError("CREATE DATA SOURCE foo.bar LOCATION '/x/foo.jar' CLASS 'com.bar.Foo' " +
         "API_VERSION 'V1'");
-    ParserError("CREATE DATASOURCE foo LOCATION '/x/foo.jar' CLASS 'com.bar.Foo' " +
+    ParserError("CREATE DATA SOURCE foo LOCATION /x/foo.jar CLASS 'com.bar.Foo' " +
+        "API_VERSION 'V1'");
+    ParserError("CREATE DATA SOURCE foo LOCATION '/x/foo.jar' CLASS com.bar.Foo " +
+        "API_VERSION 'V1'");
+    ParserError("CREATE DATA SOURCE foo LOCATION '/x/foo.jar' CLASS 'com.bar.Foo' " +
         "API_VERSION V1");
-    ParserError("CREATE DATASOURCE LOCATION '/x/foo.jar' CLASS 'com.bar.Foo' " +
+    ParserError("CREATE DATA SOURCE LOCATION '/x/foo.jar' CLASS 'com.bar.Foo' " +
         "API_VERSION 'V1'");
-    ParserError("CREATE DATASOURCE foo CLASS 'com.bar.Foo' " +
+    ParserError("CREATE DATA SOURCE foo CLASS 'com.bar.Foo' " +
         "API_VERSION 'V1'");
-    ParserError("CREATE DATASOURCE foo LOCATION CLASS 'com.bar.Foo' " +
+    ParserError("CREATE DATA SOURCE foo LOCATION CLASS 'com.bar.Foo' " +
         "API_VERSION 'V1'");
-    ParserError("CREATE DATASOURCE foo LOCATION '/foo.jar' API_VERSION 'V1'");
-    ParserError("CREATE DATASOURCE foo LOCATION '/foo.jar' CLASS API_VERSION 'V1'");
-    ParserError("CREATE DATASOURCE foo LOCATION '/foo.jar' CLASS 'com.bar.Foo'");
-    ParserError("CREATE DATASOURCE foo LOCATION '/foo.jar' CLASS 'Foo' API_VERSION");
-    ParserError("CREATE DATASOURCE foo CLASS 'com.bar.Foo' LOCATION '/x/foo.jar' " +
+    ParserError("CREATE DATA SOURCE foo LOCATION '/foo.jar' API_VERSION 'V1'");
+    ParserError("CREATE DATA SOURCE foo LOCATION '/foo.jar' CLASS API_VERSION 'V1'");
+    ParserError("CREATE DATA SOURCE foo LOCATION '/foo.jar' CLASS 'com.bar.Foo'");
+    ParserError("CREATE DATA SOURCE foo LOCATION '/foo.jar' CLASS 'Foo' API_VERSION");
+    ParserError("CREATE DATA SOURCE foo CLASS 'com.bar.Foo' LOCATION '/x/foo.jar' " +
         "API_VERSION 'V1'");
-    ParserError("CREATE DATASOURCE foo CLASS 'com.bar.Foo' API_VERSION 'V1' " +
+    ParserError("CREATE DATA SOURCE foo CLASS 'com.bar.Foo' API_VERSION 'V1' " +
         "LOCATION '/x/foo.jar' ");
-    ParserError("CREATE DATASOURCE foo API_VERSION 'V1' LOCATION '/x/foo.jar' " +
+    ParserError("CREATE DATA SOURCE foo API_VERSION 'V1' LOCATION '/x/foo.jar' " +
         "CLASS 'com.bar.Foo'");
   }
 
   @Test
   public void TestDropDataSource() {
-    ParsesOk("DROP DATASOURCE foo");
+    ParsesOk("DROP DATA SOURCE foo");
 
     ParserError("DROP DATA foo");
-    ParserError("DROP DATASOURCE foo.bar");
-    ParserError("DROP DATASOURCE");
+    ParserError("DROP DATA SRC foo");
+    ParserError("DROP DATA SOURCE foo.bar");
+    ParserError("DROP DATA SOURCE");
   }
 
   @Test
@@ -2019,12 +2334,80 @@ public class ParserTest {
     ParserError("LOAD DATA LOCAL INPATH '/a/b' INTO TABLE Foo");
   }
 
+  /**
+   * Wraps the given typeDefs in a CREATE TABLE and CAST and runs ParsesOk().
+   * Also tests that the type is parsed correctly in ARRAY, MAP, and STRUCT types.
+   */
+  private void TypeDefsParseOk(String... typeDefs) {
+    for (String typeDefStr: typeDefs) {
+      ParsesOk(String.format("CREATE TABLE t (i %s)", typeDefStr));
+      ParsesOk(String.format("SELECT CAST (i AS %s)", typeDefStr));
+      // Test typeDefStr in complex types.
+      ParsesOk(String.format("CREATE TABLE t (i MAP<%s, %s>)", typeDefStr, typeDefStr));
+      ParsesOk(String.format("CREATE TABLE t (i ARRAY<%s>)", typeDefStr));
+      ParsesOk(String.format("CREATE TABLE t (i STRUCT<f:%s>)", typeDefStr));
+    }
+  }
+
+  /**
+   * Asserts that the given typeDefs fail to parse.
+   */
+  private void TypeDefsError(String... typeDefs) {
+    for (String typeDefStr: typeDefs) {
+      ParserError(String.format("CREATE TABLE t (i %s)", typeDefStr));
+      ParserError(String.format("SELECT CAST (i AS %s)", typeDefStr));
+    }
+  }
+
   @Test
-  public void TestTypeSynonyms() {
-    ParsesOk("CREATE TABLE bar (i INTEGER)");
-    ParsesOk("CREATE TABLE bar (r REAL)");
-    ParsesOk("SELECT CAST(a as INTEGER) from tbl");
-    ParsesOk("SELECT CAST(a as REAL) from tbl");
+  public void TestTypes() {
+    // Test primitive types.
+    TypeDefsParseOk("BOOLEAN");
+    TypeDefsParseOk("TINYINT");
+    TypeDefsParseOk("SMALLINT");
+    TypeDefsParseOk("INT", "INTEGER");
+    TypeDefsParseOk("BIGINT");
+    TypeDefsParseOk("FLOAT");
+    TypeDefsParseOk("DOUBLE", "REAL");
+    TypeDefsParseOk("STRING");
+    TypeDefsParseOk("CHAR(1)", "CHAR(20)");
+    TypeDefsParseOk("BINARY");
+    TypeDefsParseOk("DECIMAL");
+    TypeDefsParseOk("TIMESTAMP");
+
+    // Test decimal.
+    TypeDefsParseOk("DECIMAL");
+    TypeDefsParseOk("DECIMAL(1)");
+    TypeDefsParseOk("DECIMAL(1, 2)");
+    TypeDefsParseOk("DECIMAL(2, 1)");
+    TypeDefsParseOk("DECIMAL(6, 6)");
+    TypeDefsParseOk("DECIMAL(100, 0)");
+    TypeDefsParseOk("DECIMAL(0, 0)");
+
+    TypeDefsError("DECIMAL()");
+    TypeDefsError("DECIMAL(a)");
+    TypeDefsError("DECIMAL(1, a)");
+    TypeDefsError("DECIMAL(1, 2, 3)");
+    TypeDefsError("DECIMAL(-1)");
+
+    // Test complex types.
+    TypeDefsParseOk("ARRAY<BIGINT>");
+    TypeDefsParseOk("MAP<TINYINT, DOUBLE>");
+    TypeDefsParseOk("STRUCT<f:TINYINT>");
+    TypeDefsParseOk("STRUCT<a:TINYINT, b:BIGINT, c:DOUBLE>");
+    TypeDefsParseOk("STRUCT<a:TINYINT COMMENT 'x', b:BIGINT, c:DOUBLE COMMENT 'y'>");
+
+    TypeDefsError("CHAR()");
+    TypeDefsError("CHAR(1, 1)");
+    TypeDefsError("ARRAY<>");
+    TypeDefsError("ARRAY BIGINT");
+    TypeDefsError("MAP<>");
+    TypeDefsError("MAP<TINYINT>");
+    TypeDefsError("MAP<TINYINT, BIGINT, DOUBLE>");
+    TypeDefsError("STRUCT<>");
+    TypeDefsError("STRUCT<TINYINT>");
+    TypeDefsError("STRUCT<a TINYINT>");
+    TypeDefsError("STRUCT<'a':TINYINT>");
   }
 
   @Test
@@ -2042,20 +2425,24 @@ public class ParserTest {
   }
 
   @Test
-  public void TestComputeStats() {
-    ParsesOk("compute stats bar");
-    ParsesOk("compute stats `bar`");
-    ParsesOk("compute stats foo.bar");
-    ParsesOk("compute stats `foo`.`bar`");
+  public void TestComputeDropStats() {
+    String[] prefixes = {"compute", "drop"};
 
-    // Missing table name.
-    ParserError("compute stats");
-    // Missing 'stats' keyword.
-    ParserError("compute foo");
-    // Cannot use string literal as table name.
-    ParserError("compute stats 'foo'");
-    // Cannot analyze multiple tables in one stmt.
-    ParserError("compute stats foo bar");
+    for (String prefix: prefixes) {
+      ParsesOk(prefix + " stats bar");
+      ParsesOk(prefix + " stats `bar`");
+      ParsesOk(prefix + " stats foo.bar");
+      ParsesOk(prefix + " stats `foo`.`bar`");
+
+      // Missing table name.
+      ParserError(prefix + " stats");
+      // Missing 'stats' keyword.
+      ParserError(prefix + " foo");
+      // Cannot use string literal as table name.
+      ParserError(prefix + " stats 'foo'");
+      // Cannot analyze multiple tables in one stmt.
+      ParserError(prefix + " stats foo bar");
+    }
   }
 
   @Test
@@ -2067,8 +2454,9 @@ public class ParserTest {
         "c, b, c from t\n" +
         "^\n" +
         "Encountered: IDENTIFIER\n" +
-        "Expected: ALTER, COMPUTE, CREATE, DESCRIBE, DROP, EXPLAIN, INSERT, " +
-        "INVALIDATE, LOAD, REFRESH, SELECT, SHOW, USE, VALUES, WITH\n");
+        "Expected: ALTER, COMPUTE, CREATE, DESCRIBE, DROP, EXPLAIN, GRANT, " +
+        "INSERT, INVALIDATE, LOAD, REFRESH, REVOKE, SELECT, SET, SHOW, USE, " +
+        "VALUES, WITH\n");
 
     // missing select list
     ParserError("select from t",
@@ -2076,7 +2464,7 @@ public class ParserTest {
         "select from t\n" +
         "       ^\n" +
         "Encountered: FROM\n" +
-        "Expected: ALL, CASE, CAST, DISTINCT, " +
+        "Expected: ALL, CASE, CAST, DISTINCT, EXISTS, " +
         "FALSE, IF, INTERVAL, NOT, NULL, " +
         "STRAIGHT_JOIN, TRUE, IDENTIFIER\n");
 
@@ -2103,7 +2491,7 @@ public class ParserTest {
         "select c, b, c from t where\n" +
         "                           ^\n" +
         "Encountered: EOF\n" +
-        "Expected: CASE, CAST, FALSE, " +
+        "Expected: CASE, CAST, EXISTS, FALSE, " +
         "IF, INTERVAL, NOT, NULL, TRUE, IDENTIFIER\n");
 
     // missing predicate in where clause (group by)
@@ -2112,7 +2500,7 @@ public class ParserTest {
         "select c, b, c from t where group by a, b\n" +
         "                            ^\n" +
         "Encountered: GROUP\n" +
-        "Expected: CASE, CAST, FALSE, " +
+        "Expected: CASE, CAST, EXISTS, FALSE, " +
         "IF, INTERVAL, NOT, NULL, TRUE, IDENTIFIER\n");
 
     // unmatched string literal starting with "
@@ -2133,28 +2521,21 @@ public class ParserTest {
         "select (i + 5)(1 - i) from t\n" +
         "              ^\n" +
         "Encountered: (\n" +
-        "Expected: AND, AS, ASC, BETWEEN, CROSS, DESC, DIV, ELSE, END, FROM, FULL, " +
-        "GROUP, HAVING, IN, INNER, IS, JOIN, LEFT, LIKE, LIMIT, NOT, NULLS, OFFSET, " +
-        "OR, ORDER, REGEXP, RIGHT, RLIKE, THEN, UNION, WHEN, WHERE, COMMA, " +
-        "IDENTIFIER\n");
+        "Expected:");
 
     ParserError("select (i + 5)\n(1 - i) from t",
         "Syntax error in line 2:\n" +
         "(1 - i) from t\n" +
         "^\n" +
         "Encountered: (\n" +
-        "Expected: AND, AS, ASC, BETWEEN, CROSS, DESC, DIV, ELSE, END, FROM, FULL, " +
-        "GROUP, HAVING, IN, INNER, IS, JOIN, LEFT, LIKE, LIMIT, NOT, NULLS, OFFSET, " +
-        "OR, ORDER, REGEXP, RIGHT, RLIKE, THEN, UNION, WHEN, WHERE, COMMA, IDENTIFIER\n");
+        "Expected");
 
     ParserError("select (i + 5)\n(1 - i)\nfrom t",
         "Syntax error in line 2:\n" +
         "(1 - i)\n" +
         "^\n" +
         "Encountered: (\n" +
-        "Expected: AND, AS, ASC, BETWEEN, CROSS, DESC, DIV, ELSE, END, FROM, FULL, " +
-        "GROUP, HAVING, IN, INNER, IS, JOIN, LEFT, LIKE, LIMIT, NOT, NULLS, OFFSET, " +
-        "OR, ORDER, REGEXP, RIGHT, RLIKE, THEN, UNION, WHEN, WHERE, COMMA, IDENTIFIER\n");
+        "Expected");
 
     // Long line: error in the middle
     ParserError("select c, b, c,c,c,c,c,c,c,c,c,a a a,c,c,c,c,c,c,c,cd,c,d,d,,c, from t",
@@ -2180,9 +2561,36 @@ public class ParserTest {
         "...c,c,c,c,c,c,c,c,cd,c,d,d, ,c, from t\n" +
         "                             ^\n" +
         "Encountered: COMMA\n" +
-        "Expected: CASE, CAST, FALSE, " +
+        "Expected: CASE, CAST, EXISTS, FALSE, " +
         "IF, INTERVAL, NOT, NULL, TRUE, IDENTIFIER\n");
 
+    // Parsing identifiers that have different names printed as EXPECTED
+    ParserError("DROP DATA SRC foo",
+        "Syntax error in line 1:\n" +
+        "DROP DATA SRC foo\n" +
+        "          ^\n" +
+        "Encountered: IDENTIFIER\n" +
+        "Expected: SOURCE\n");
+    ParserError("SHOW DATA SRCS",
+        "Syntax error in line 1:\n" +
+        "SHOW DATA SRCS\n" +
+        "          ^\n" +
+        "Encountered: IDENTIFIER\n" +
+        "Expected: SOURCES\n");
+    ParserError("USE ` `",
+        "Syntax error in line 1:\n" +
+        "USE ` `\n" +
+        "    ^\n" +
+        "Encountered: EMPTY IDENTIFIER\n" +
+        "Expected: IDENTIFIER\n");
+
+    // Expecting = token
+    ParserError("SET foo",
+         "Syntax error in line 1:\n" +
+         "SET foo\n" +
+         "       ^\n" +
+         "Encountered: EOF\n" +
+         "Expected: =\n");
   }
 
   @Test
@@ -2197,21 +2605,273 @@ public class ParserTest {
   }
 
   @Test
-  public void TestDecimal() {
-    ParsesOk("CREATE TABLE foo(d decimal)");
-    ParsesOk("CREATE TABLE foo(d decimal, d2 decimal(1))");
-    ParsesOk("CREATE TABLE foo(d decimal(1, 2))");
-    ParsesOk("CREATE TABLE foo(d decimal(0, 0))");
+  public void TestSubqueries() {
+    // Binary nested predicates
+    String subquery = "(SELECT count(*) FROM bar)";
+    String[] operators = {"=", "!=", "<>", ">", ">=", "<", "<="};
+    for (String op: operators) {
+      ParsesOk(String.format("SELECT * FROM foo WHERE a %s %s", op, subquery));
+      ParsesOk(String.format("SELECT * FROM foo WHERE %s %s a", subquery, op));
+    }
+    // Binary predicate with an arithmetic expr
+    ParsesOk("SELECT * FROM foo WHERE a+1 > (SELECT count(a) FROM bar)");
+    ParsesOk("SELECT * FROM foo WHERE (SELECT count(a) FROM bar) < a+1");
 
-    ParsesOk("SELECT CAST(1 as DECIMAL)");
-    ParsesOk("SELECT CAST(1 as DECIMAL(0))");
-    ParsesOk("SELECT CAST(1 as DECIMAL(100, 0))");
+    // [NOT] IN nested predicates
+    ParsesOk("SELECT * FROM foo WHERE a IN (SELECT a FROM bar)");
+    ParsesOk("SELECT * FROM foo WHERE a NOT IN (SELECT a FROM bar)");
 
-    ParserError("CREATE TABLE foo(d decimal())");
-    ParserError("CREATE TABLE foo(d decimal(a))");
-    ParserError("CREATE TABLE foo(d decimal(1, a))");
-    ParserError("CREATE TABLE foo(d decimal(1, 2, 3))");
-    ParserError("CREATE TABLE foo(d decimal(-1))");
+    // [NOT] EXISTS predicates
+    ParsesOk("SELECT * FROM foo WHERE EXISTS (SELECT a FROM bar WHERE b > 0)");
+    ParsesOk("SELECT * FROM foo WHERE NOT EXISTS (SELECT a FROM bar WHERE b > 0)");
+    ParsesOk("SELECT * FROM foo WHERE NOT (EXISTS (SELECT a FROM bar))");
+
+    // Compound nested predicates
+    ParsesOk("SELECT * FROM foo WHERE a = (SELECT count(a) FROM bar) AND " +
+             "b != (SELECT count(b) FROM baz) and c IN (SELECT c FROM qux)");
+    ParsesOk("SELECT * FROM foo WHERE EXISTS (SELECT a FROM bar WHERE b < 0) AND " +
+             "NOT EXISTS (SELECT a FROM baz WHERE b > 0)");
+    ParsesOk("SELECT * FROM foo WHERE EXISTS (SELECT a from bar) AND " +
+             "NOT EXISTS (SELECT a FROM baz) AND b IN (SELECT b FROM bar) AND " +
+             "c NOT IN (SELECT c FROM qux) AND d = (SELECT max(d) FROM quux)");
+
+    // Nested parentheses
+    ParsesOk("SELECT * FROM foo WHERE EXISTS ((SELECT * FROM bar))");
+    ParsesOk("SELECT * FROM foo WHERE EXISTS (((SELECT * FROM bar)))");
+    ParsesOk("SELECT * FROM foo WHERE a IN ((SELECT a FROM bar))");
+    ParsesOk("SELECT * FROM foo WHERE a = ((SELECT max(a) FROM bar))");
+
+    // More than one nesting level
+    ParsesOk("SELECT * FROM foo WHERE a IN (SELECT a FROM bar WHERE b IN " +
+             "(SELECT b FROM baz))");
+    ParsesOk("SELECT * FROM foo WHERE EXISTS (SELECT a FROM bar WHERE b NOT IN " +
+             "(SELECT b FROM baz WHERE c < 10 AND d = (SELECT max(d) FROM qux)))");
+
+    // Binary predicate between subqueries
+    for (String op: operators) {
+      ParsesOk(String.format("SELECT * FROM foo WHERE %s %s %s", subquery, op,
+          subquery));
+    }
+
+    // Malformed nested subqueries
+    // Missing or misplaced parenthesis around a subquery
+    ParserError("SELECT * FROM foo WHERE a IN SELECT a FROM bar");
+    ParserError("SELECT * FROM foo WHERE a = SELECT count(*) FROM bar");
+    ParserError("SELECT * FROM foo WHERE EXISTS SELECT * FROM bar");
+    ParserError("SELECT * FROM foo WHERE a IN (SELECT a FROM bar");
+    ParserError("SELECT * FROM foo WHERE a IN SELECT a FROM bar)");
+    ParserError("SELECT * FROM foo WHERE a IN (SELECT) a FROM bar");
+
+    // Invalid syntax for [NOT] EXISTS
+    ParserError("SELECT * FROM foo WHERE a EXISTS (SELECT * FROM bar)");
+    ParserError("SELECT * FROM foo WHERE a NOT EXISTS (SELECT * FROM bar)");
+
+    // Set operations between subqueries
+    ParserError("SELECT * FROM foo WHERE EXISTS ((SELECT a FROM bar) UNION " +
+                "(SELECT a FROM baz))");
+
+    // Nested predicate in the HAVING clause
+    ParsesOk("SELECT a, count(*) FROM foo GROUP BY a HAVING count(*) > " +
+             "(SELECT count(*) FROM bar)");
+    ParsesOk("SELECT a, count(*) FROM foo GROUP BY a HAVING 10 > " +
+             "(SELECT count(*) FROM bar)");
+
+    // Subquery in the SELECT clause
+    ParsesOk("SELECT a, b, (SELECT c FROM foo) FROM foo");
+    ParsesOk("SELECT (SELECT a FROM foo), b, c FROM bar");
+    ParsesOk("SELECT (SELECT (SELECT a FROM foo) FROM bar) FROM baz");
+    ParsesOk("SELECT (SELECT a FROM foo)");
+
+    // Malformed subquery in the SELECT clause
+    ParserError("SELECT SELECT a FROM foo FROM bar");
+    ParserError("SELECT (SELECT a FROM foo FROM bar");
+    ParserError("SELECT SELECT a FROM foo) FROM bar");
+    ParserError("SELECT (SELECT) a FROM foo");
+
+    // Subquery in the GROUP BY clause
+    ParsesOk("SELECT a, count(*) FROM foo GROUP BY (SELECT a FROM bar)");
+    ParsesOk("SELECT a, count(*) FROM foo GROUP BY a, (SELECT b FROM bar)");
+
+    // Malformed subquery in the GROUP BY clause
+    ParserError("SELECT a, count(*) FROM foo GROUP BY SELECT a FROM bar");
+    ParserError("SELECT a, count(*) FROM foo GROUP BY (SELECT) a FROM bar");
+    ParserError("SELECT a, count(*) FROM foo GROUP BY (SELECT a FROM bar");
+
+    // Subquery in the ORDER BY clause
+    ParsesOk("SELECT a, b FROM foo ORDER BY (SELECT a FROM bar)");
+    ParsesOk("SELECT a, b FROM foo ORDER BY (SELECT a FROM bar) DESC");
+    ParsesOk("SELECT a, b FROM foo ORDER BY a ASC, (SELECT a FROM bar) DESC");
+
+    // Malformed subquery in the ORDER BY clause
+    ParserError("SELECT a, count(*) FROM foo ORDER BY SELECT a FROM bar");
+    ParserError("SELECT a, count(*) FROM foo ORDER BY (SELECT) a FROM bar DESC");
+    ParserError("SELECT a, count(*) FROM foo ORDER BY (SELECT a FROM bar ASC");
   }
 
+  @Test
+  public void TestSet() {
+    ParsesOk("SET foo='bar'");
+    ParsesOk("SET foo=\"bar\"");
+    ParsesOk("SET foo=bar");
+    ParsesOk("SET foo = bar");
+    ParsesOk("SET foo=1");
+    ParsesOk("SET foo=true");
+    ParsesOk("SET foo=false");
+    ParsesOk("SET foo=1.2");
+    ParsesOk("SET foo=null");
+    ParsesOk("SET foo=10g");
+    ParsesOk("SET `foo`=0");
+    ParsesOk("SET foo=''");
+    ParsesOk("SET");
+
+    ParserError("SET foo");
+    ParserError("SET foo=");
+    ParserError("SET foo=1+2");
+    ParserError("SET foo = '10");
+  }
+
+  @Test
+  public void TestCreateDropRole() {
+    ParsesOk("CREATE ROLE foo");
+    ParsesOk("DROP ROLE foo");
+    ParsesOk("DROP ROLE foo");
+    ParsesOk("CREATE ROLE `role`");
+    ParsesOk("DROP ROLE  `role`");
+    ParserError("CREATE ROLE");
+    ParserError("DROP ROLE");
+    ParserError("CREATE ROLE 'foo'");
+    ParserError("DROP ROLE 'foo'");
+  }
+
+  @Test
+  public void TestGrantRevokeRole() {
+    ParsesOk("GRANT ROLE foo TO GROUP bar");
+    ParsesOk("REVOKE ROLE foo FROM GROUP bar");
+    ParsesOk("GRANT ROLE `foo` TO GROUP `bar`");
+
+    ParserError("GRANT ROLE foo TO GROUP");
+    ParserError("GRANT ROLE foo FROM GROUP bar");
+
+    ParserError("REVOKE ROLE foo FROM GROUP");
+    ParserError("REVOKE ROLE foo TO GROUP bar");
+  }
+
+  @Test
+  public void TestGrantRevokePrivilege() {
+    Object[][] grantRevFormatStrs = {{"GRANT", "TO"}, {"REVOKE", "FROM"}};
+    for (Object[] formatStr: grantRevFormatStrs) {
+      ParsesOk(String.format("%s ALL ON TABLE foo %s myRole", formatStr));
+
+      // KW_ROLE is optional (Hive requires KW_ROLE, but Impala does not).
+      ParsesOk(String.format("%s ALL ON TABLE foo %s ROLE myRole", formatStr));
+
+      ParsesOk(String.format("%s ALL ON DATABASE foo %s myRole", formatStr));
+      ParsesOk(String.format("%s ALL ON URI 'foo' %s  myRole", formatStr));
+
+      ParsesOk(String.format("%s INSERT ON TABLE foo %s myRole", formatStr));
+      ParsesOk(String.format("%s INSERT ON DATABASE foo %s myRole", formatStr));
+      ParsesOk(String.format("%s INSERT ON URI 'foo' %s  myRole", formatStr));
+
+      ParsesOk(String.format("%s SELECT ON TABLE foo %s myRole", formatStr));
+      ParsesOk(String.format("%s SELECT ON DATABASE foo %s myRole", formatStr));
+      ParsesOk(String.format("%s SELECT ON URI 'foo' %s  myRole", formatStr));
+
+      // Server scope does not accept a name.
+      ParsesOk(String.format("%s ALL ON SERVER %s myRole", formatStr));
+      ParsesOk(String.format("%s INSERT ON SERVER %s myRole", formatStr));
+      ParsesOk(String.format("%s SELECT ON SERVER %s myRole", formatStr));
+
+      // URIs are string literals
+      ParserError(String.format("%s ALL ON URI foo %s myRole", formatStr));
+      ParserError(String.format("%s ALL ON DATABASE 'foo' %s myRole", formatStr));
+      ParserError(String.format("%s ALL ON TABLE 'foo' %s myRole", formatStr));
+
+      // No object name (only works for SERVER scope)
+      ParserError(String.format("GRANT ALL ON TABLE FROM myrole", formatStr));
+      ParserError(String.format("GRANT ALL ON DATABASE FROM myrole", formatStr));
+      ParserError(String.format("GRANT ALL ON URI FROM myrole", formatStr));
+
+      // No role specified
+      ParserError(String.format("%s ALL ON TABLE foo %s", formatStr));
+      // Invalid privilege
+      ParserError(String.format("%s FAKE ON TABLE foo %s myRole", formatStr));
+    }
+    ParsesOk("GRANT ALL ON TABLE foo TO myRole WITH GRANT OPTION");
+    ParsesOk("GRANT ALL ON DATABASE foo TO myRole WITH GRANT OPTION");
+    ParsesOk("GRANT ALL ON SERVER TO myRole WITH GRANT OPTION");
+    ParsesOk("GRANT ALL ON URI '/abc/' TO myRole WITH GRANT OPTION");
+    ParserError("GRANT ALL ON TABLE foo TO myRole WITH GRANT");
+    ParserError("GRANT ALL ON TABLE foo TO myRole WITH");
+    ParserError("GRANT ALL ON TABLE foo TO ROLE");
+    ParserError("REVOKE ALL ON TABLE foo TO ROLE");
+
+    ParsesOk("REVOKE GRANT OPTION FOR ALL ON TABLE foo FROM myRole");
+    ParsesOk("REVOKE GRANT OPTION FOR ALL ON DATABASE foo FROM myRole");
+    ParsesOk("REVOKE GRANT OPTION FOR ALL ON SERVER FROM myRole");
+    ParsesOk("REVOKE GRANT OPTION FOR ALL ON URI '/abc/' FROM myRole");
+    ParserError("REVOKE GRANT OPTION ALL ON URI '/abc/' FROM myRole");
+    ParserError("REVOKE GRANT ALL ON URI '/abc/' FROM myRole");
+
+    ParserError("ALL ON TABLE foo TO myrole");
+    ParserError("ALL ON TABLE foo FROM myrole");
+
+    ParserError("GRANT ALL ON TABLE foo FROM myrole");
+    ParserError("REVOKE ALL ON TABLE foo TO myrole");
+  }
+
+  @Test
+  public void TestShowRoles() {
+    ParsesOk("SHOW ROLES");
+    ParsesOk("SHOW CURRENT ROLES");
+    ParsesOk("SHOW ROLE GRANT GROUP myGroup");
+    ParserError("SHOW ROLES blah");
+    ParserError("SHOW ROLE GRANT GROUP");
+    ParserError("SHOW CURRENT");
+    ParserError("SHOW ROLE");
+    ParserError("SHOW");
+  }
+
+  @Test
+  public void TestShowGrantRole() {
+    // Show all grants on a role
+    ParsesOk("SHOW GRANT ROLE foo");
+
+    // Show grants on a specific object
+    ParsesOk("SHOW GRANT ROLE foo ON SERVER");
+    ParsesOk("SHOW GRANT ROLE foo ON DATABASE foo");
+    ParsesOk("SHOW GRANT ROLE foo ON TABLE foo");
+    ParsesOk("SHOW GRANT ROLE foo ON TABLE foo.bar");
+    ParsesOk("SHOW GRANT ROLE foo ON URI '/abc/123'");
+
+    ParserError("SHOW GRANT ROLE");
+    ParserError("SHOW GRANT ROLE foo ON SERVER foo");
+    ParserError("SHOW GRANT ROLE foo ON DATABASE");
+    ParserError("SHOW GRANT ROLE foo ON TABLE");
+    ParserError("SHOW GRANT ROLE foo ON URI abc");
+  }
+
+  @Test
+  public void TestComputeStats() {
+    ParsesOk("COMPUTE STATS functional.alltypes");
+    ParserError("COMPUTE functional.alltypes");
+    ParserError("COMPUTE STATS ON functional.alltypes");
+    ParserError("COMPUTE STATS");
+  }
+
+  @Test
+  public void TestComputeStatsIncremental() {
+    ParsesOk("COMPUTE INCREMENTAL STATS functional.alltypes");
+    ParserError("COMPUTE INCREMENTAL functional.alltypes");
+
+    ParsesOk(
+        "COMPUTE INCREMENTAL STATS functional.alltypes PARTITION(month=10, year=2010)");
+    // No dynamic partition specs
+    ParserError("COMPUTE INCREMENTAL STATS functional.alltypes PARTITION(month, year)");
+
+    ParserError("COMPUTE INCREMENTAL STATS");
+
+    ParsesOk("DROP INCREMENTAL STATS functional.alltypes PARTITION(month=10, year=2010)");
+    ParserError("DROP INCREMENTAL STATS functional.alltypes PARTITION(month, year)");
+    ParserError("DROP INCREMENTAL STATS functional.alltypes");
+  }
 }

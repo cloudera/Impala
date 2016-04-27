@@ -14,7 +14,6 @@
 
 package com.cloudera.impala.analysis;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -23,7 +22,9 @@ import java.util.List;
 import com.cloudera.impala.catalog.Table;
 import com.cloudera.impala.common.IdGenerator;
 import com.cloudera.impala.thrift.TDescriptorTable;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 
 /**
@@ -32,29 +33,53 @@ import com.google.common.collect.Sets;
  * them unique ids.
  */
 public class DescriptorTable {
-  private final HashMap<TupleId, TupleDescriptor> tupleDescs_;
-  private final HashMap<SlotId, SlotDescriptor> slotDescs_;
+  private final HashMap<TupleId, TupleDescriptor> tupleDescs_ = Maps.newHashMap();
+  private final HashMap<SlotId, SlotDescriptor> slotDescs_ = Maps.newHashMap();
   private final IdGenerator<TupleId> tupleIdGenerator_ = TupleId.createGenerator();
   private final IdGenerator<SlotId> slotIdGenerator_ = SlotId.createGenerator();
   // List of referenced tables with no associated TupleDescriptor to ship to the BE.
   // For example, the output table of an insert query.
-  private final List<Table> referencedTables_;
+  private final List<Table> referencedTables_ = Lists.newArrayList();
+  // For each table, the set of partitions that are referenced by at least one scan range.
+  private final HashMap<Table, HashSet<Long>> referencedPartitionsPerTable_ =
+      Maps.newHashMap();
 
-  public DescriptorTable() {
-    tupleDescs_ = new HashMap<TupleId, TupleDescriptor>();
-    slotDescs_ = new HashMap<SlotId, SlotDescriptor>();
-    referencedTables_ = new ArrayList<Table>();
+  public TupleDescriptor createTupleDescriptor(String debugName) {
+    TupleDescriptor d = new TupleDescriptor(tupleIdGenerator_.getNextId(), debugName);
+    tupleDescs_.put(d.getId(), d);
+    return d;
   }
 
-  public TupleDescriptor createTupleDescriptor() {
-    TupleDescriptor d = new TupleDescriptor(tupleIdGenerator_.getNextId());
+  /**
+   * Create copy of src with new id. The returned descriptor has its mem layout
+   * computed.
+   */
+  public TupleDescriptor copyTupleDescriptor(TupleId srcId, String debugName) {
+    TupleDescriptor d = new TupleDescriptor(tupleIdGenerator_.getNextId(), debugName);
     tupleDescs_.put(d.getId(), d);
+    // create copies of slots
+    TupleDescriptor src = tupleDescs_.get(srcId);
+    for (SlotDescriptor slot: src.getSlots()) {
+      copySlotDescriptor(d, slot);
+    }
+    d.computeMemLayout();
+    Preconditions.checkState(d.getByteSize() == src.getByteSize());
     return d;
   }
 
   public SlotDescriptor addSlotDescriptor(TupleDescriptor d) {
     SlotDescriptor result = new SlotDescriptor(slotIdGenerator_.getNextId(), d);
     d.addSlot(result);
+    slotDescs_.put(result.getId(), result);
+    return result;
+  }
+
+  /**
+   * Append copy of src to dest.
+   */
+  public SlotDescriptor copySlotDescriptor(TupleDescriptor dest, SlotDescriptor src) {
+    SlotDescriptor result = new SlotDescriptor(slotIdGenerator_.getNextId(), dest, src);
+    dest.addSlot(result);
     slotDescs_.put(result.getId(), result);
     return result;
   }
@@ -68,6 +93,27 @@ public class DescriptorTable {
 
   public void addReferencedTable(Table table) {
     referencedTables_.add(table);
+  }
+
+  /**
+   * Find the set of referenced partitions for the given table.  Allocates a set if
+   * none has been allocated for the table yet.
+   */
+  private HashSet<Long> getReferencedPartitions(Table table) {
+    HashSet<Long> refPartitions = referencedPartitionsPerTable_.get(table);
+    if (refPartitions == null) {
+      refPartitions = new HashSet<Long>();
+      referencedPartitionsPerTable_.put(table, refPartitions);
+    }
+    return refPartitions;
+  }
+
+  /**
+   * Add the partition with ID partitionId to the set of referenced partitions for the
+   * given table.
+   */
+  public void addReferencedPartition(Table table, long partitionId) {
+    getReferencedPartitions(table).add(partitionId);
   }
 
   /**
@@ -102,27 +148,34 @@ public class DescriptorTable {
   public TDescriptorTable toThrift() {
     TDescriptorTable result = new TDescriptorTable();
     HashSet<Table> referencedTbls = Sets.newHashSet();
-    for (TupleDescriptor tupleD: tupleDescs_.values()) {
+    HashSet<Table> allPartitionsTbls = Sets.newHashSet();
+    for (TupleDescriptor tupleDesc: tupleDescs_.values()) {
       // inline view of a non-constant select has a non-materialized tuple descriptor
       // in the descriptor table just for type checking, which we need to skip
-      if (tupleD.getIsMaterialized()) {
-        result.addToTupleDescriptors(tupleD.toThrift());
+      if (tupleDesc.isMaterialized()) {
+        result.addToTupleDescriptors(tupleDesc.toThrift());
         // views and inline views have a materialized tuple if they are defined by a
         // constant select. they do not require or produce a thrift table descriptor.
-        Table table = tupleD.getTable();
+        Table table = tupleDesc.getTable();
         if (table != null && !table.isVirtualTable()) {
           referencedTbls.add(table);
         }
-        for (SlotDescriptor slotD: tupleD.getSlots()) {
+        for (SlotDescriptor slotD: tupleDesc.getSlots()) {
           result.addToSlotDescriptors(slotD.toThrift());
         }
       }
     }
     for (Table table: referencedTables_) {
       referencedTbls.add(table);
+      // We don't know which partitions are needed for INSERT, so include them all.
+      allPartitionsTbls.add(table);
     }
     for (Table tbl: referencedTbls) {
-      result.addToTableDescriptors(tbl.toThriftDescriptor());
+      HashSet<Long> referencedPartitions = null; // null means include all partitions.
+      if (!allPartitionsTbls.contains(tbl)) {
+        referencedPartitions = getReferencedPartitions(tbl);
+      }
+      result.addToTableDescriptors(tbl.toThriftDescriptor(referencedPartitions));
     }
     return result;
   }

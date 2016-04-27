@@ -18,7 +18,7 @@
 
 # Exit on non-true return value
 set -e
-# Exit on reference to unitialized variable
+# Exit on reference to uninitialized variable
 set -u
 
 # By default, git clean every library we build
@@ -27,7 +27,7 @@ CLEAN_ACTION=1
 # By default, build every library
 BUILD_ALL=1
 
-# If BUILD_ALL -eq 1, these are ignored, otherwise only build those libaries with
+# If BUILD_ALL -eq 1, these are ignored, otherwise only build those libraries with
 # BUILD_<lib> -eq 1
 BUILD_AVRO=0
 BUILD_THRIFT=0
@@ -123,6 +123,20 @@ function build_preamble() {
   fi
 }
 
+# Build Sasl
+if [ $BUILD_ALL -eq 1 ] || [ $BUILD_SASL -eq 1 ]; then
+  build_preamble $IMPALA_HOME/thirdparty/cyrus-sasl-${IMPALA_CYRUS_SASL_VERSION} Sasl
+  # Disable everything except those protocols needed -- currently just Kerberos.
+  # Sasl does not have a --with-pic configuration.
+  CFLAGS="-fPIC -DPIC" CXXFLAGS="-fPIC -DPIC" ./configure \
+    --disable-sql --disable-otp --disable-ldap --disable-digest --with-saslauthd=no \
+    --prefix=$IMPALA_CYRUS_SASL_INSTALL_DIR --enable-static --enable-staticdlopen
+  # the first time you do a make it fails, build again.
+  (make || make)
+  make install
+fi
+
+set -e
 # build thrift
 if [ $BUILD_ALL -eq 1 ] || [ $BUILD_THRIFT -eq 1 ]; then
   cd ${THRIFT_SRC_DIR}
@@ -134,7 +148,7 @@ if [ $BUILD_ALL -eq 1 ] || [ $BUILD_THRIFT -eq 1 ]; then
     ./configure --with-pic --prefix=${THRIFT_HOME} \
     --with-php=no --with-java=no --with-perl=no --with-erlang=no \
     --with-ruby=no --with-haskell=no --with-erlang=no --with-d=no \
-    --with-qt4=no --with-libevent=no ${PIC_LIB_OPTIONS:-}
+    --with-go=no --with-qt4=no --with-libevent=no ${PIC_LIB_OPTIONS:-}
   make # Make with -j fails
   make install
   cd ${THRIFT_SRC_DIR}/contrib/fb303
@@ -142,7 +156,7 @@ if [ $BUILD_ALL -eq 1 ] || [ $BUILD_THRIFT -eq 1 ]; then
   ./bootstrap.sh
   chmod 755 configure
   CPPFLAGS="-I${THRIFT_HOME}/include" PY_PREFIX=${THRIFT_HOME}/python ./configure \
-    --prefix=${THRIFT_HOME} --with-thriftpath=${THRIFT_HOME}
+    --with-java=no --with-php=no --prefix=${THRIFT_HOME} --with-thriftpath=${THRIFT_HOME}
   make
   make install
 fi
@@ -192,6 +206,7 @@ fi
 # Build Snappy
 if [ $BUILD_ALL -eq 1 ] || [ $BUILD_SNAPPY -eq 1 ]; then
   build_preamble $IMPALA_HOME/thirdparty/snappy-${IMPALA_SNAPPY_VERSION} Snappy
+  ./autogen.sh
   ./configure --with-pic --prefix=$IMPALA_HOME/thirdparty/snappy-${IMPALA_SNAPPY_VERSION}/build
   make install
 fi
@@ -212,26 +227,10 @@ fi
 # Build Ldap
 if [ $BUILD_ALL -eq 1 ] || [ $BUILD_LDAP -eq 1 ]; then
     build_preamble $IMPALA_HOME/thirdparty/openldap-${IMPALA_OPENLDAP_VERSION} Openldap
-    ./configure --enable-slapd=no --prefix=`pwd`/install --enable-static --with-pic
+    ./configure --enable-slapd=no --prefix=`pwd`/impala_install --enable-static --with-pic
     make -j4
     make -j4 depend
     make install
-fi
-
-# Build Sasl
-if [ $BUILD_ALL -eq 1 ] || [ $BUILD_SASL -eq 1 ]; then
-  if [ -z "$USE_PIC_LIB_PATH" ]; then
-    build_preamble $IMPALA_HOME/thirdparty/cyrus-sasl-${IMPALA_CYRUS_SASL_VERSION} Sasl
-    # Disable everything except those protocols needed -- currently just Kerberos.
-    # Sasl does not have a --with-pic configuration.
-    CFLAGS="-fPIC -DPIC" CXXFLAGS="-fPIC -DPIC" ./configure \
-      --disable-sql --disable-otp --disable-ldap --disable-digest --with-saslauthd=no \
-      --prefix=$IMPALA_HOME/thirdparty/cyrus-sasl-${IMPALA_CYRUS_SASL_VERSION}/build \
-      --enable-static --enable-staticdlopen
-    # the first time you do a make it fails, ignore the error.
-    (make || true)
-    make install
-  fi
 fi
 
 # Build Avro

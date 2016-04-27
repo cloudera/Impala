@@ -18,9 +18,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import com.cloudera.impala.analysis.ArithmeticExpr.Operator;
-import com.cloudera.impala.catalog.AuthorizationException;
 import com.cloudera.impala.catalog.Function.CompareMode;
-import com.cloudera.impala.catalog.PrimitiveType;
 import com.cloudera.impala.common.AnalysisException;
 import com.cloudera.impala.thrift.TExprNode;
 import com.cloudera.impala.thrift.TExprNodeType;
@@ -102,9 +100,20 @@ public class TimestampArithmeticExpr extends Expr {
     children_.add(e2);
   }
 
+  /**
+   * Copy c'tor used in clone().
+   */
+  protected TimestampArithmeticExpr(TimestampArithmeticExpr other) {
+    super(other);
+    funcName_ = other.funcName_;
+    op_ = other.op_;
+    timeUnitIdent_ = other.timeUnitIdent_;
+    timeUnit_ = other.timeUnit_;
+    intervalFirst_ = other.intervalFirst_;
+  }
+
   @Override
-  public void analyze(Analyzer analyzer) throws AnalysisException,
-      AuthorizationException {
+  public void analyze(Analyzer analyzer) throws AnalysisException {
     if (isAnalyzed_) return;
     super.analyze(analyzer);
 
@@ -128,11 +137,10 @@ public class TimestampArithmeticExpr extends Expr {
     }
 
     // The first child must return a timestamp or null.
-    if (getChild(0).getType().getPrimitiveType() != PrimitiveType.TIMESTAMP &&
-        !getChild(0).getType().isNull()) {
+    if (!getChild(0).getType().isTimestamp() && !getChild(0).getType().isNull()) {
       throw new AnalysisException("Operand '" + getChild(0).toSql() +
           "' of timestamp arithmetic expression '" + toSql() + "' returns type '" +
-          getChild(0).getType() + "'. Expected type 'TIMESTAMP'.");
+          getChild(0).getType().toSql() + "'. Expected type 'TIMESTAMP'.");
     }
 
     // The second child must be an integer type.
@@ -140,7 +148,7 @@ public class TimestampArithmeticExpr extends Expr {
         !getChild(1).getType().isNull()) {
       throw new AnalysisException("Operand '" + getChild(1).toSql() +
           "' of timestamp arithmetic expression '" + toSql() + "' returns type '" +
-          getChild(1).getType() + "'. Expected an integer type.");
+          getChild(1).getType().toSql() + "'. Expected an integer type.");
     }
 
     String funcOpName = String.format("%sS_%s", timeUnit_.toString(),
@@ -148,17 +156,16 @@ public class TimestampArithmeticExpr extends Expr {
 
     fn_ = getBuiltinFunction(analyzer, funcOpName.toLowerCase(),
          collectChildReturnTypes(), CompareMode.IS_SUPERTYPE_OF);
-    castForFunctionCall();
+    castForFunctionCall(false);
 
     Preconditions.checkNotNull(fn_);
-    Preconditions.checkState(
-        fn_.getReturnType().getPrimitiveType() == PrimitiveType.TIMESTAMP);
+    Preconditions.checkState(fn_.getReturnType().isTimestamp());
     type_ = fn_.getReturnType();
   }
 
   @Override
   protected void toThrift(TExprNode msg) {
-    msg.node_type = TExprNodeType.COMPUTE_FUNCTION_CALL;
+    msg.node_type = TExprNodeType.FUNCTION_CALL;
   }
 
   public String getTimeUnitIdent() { return timeUnitIdent_; }
@@ -195,4 +202,7 @@ public class TimestampArithmeticExpr extends Expr {
     }
     return strBuilder.toString();
   }
+
+  @Override
+  public Expr clone() { return new TimestampArithmeticExpr(this); }
 }

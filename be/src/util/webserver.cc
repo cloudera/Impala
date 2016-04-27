@@ -21,10 +21,15 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/mem_fn.hpp>
 #include <boost/thread/locks.hpp>
+#include <gutil/strings/substitute.h>
 #include <map>
+#include <fstream>
 #include <stdio.h>
 #include <signal.h>
 #include <string>
+#include <mustache/mustache.h>
+#include <rapidjson/stringbuffer.h>
+#include <rapidjson/prettywriter.h>
 
 #include "common/logging.h"
 #include "util/cpu-info.h"
@@ -33,12 +38,16 @@
 #include "util/os-info.h"
 #include "util/url-coding.h"
 #include "util/debug-util.h"
+#include "util/stopwatch.h"
 #include "rpc/thrift-util.h"
 
 using namespace std;
 using namespace boost;
 using namespace boost::filesystem;
 using namespace google;
+using namespace strings;
+using namespace rapidjson;
+using namespace mustache;
 
 const char* GetDefaultDocumentRoot();
 
@@ -68,6 +77,14 @@ static const int DOC_FOLDER_LEN = strlen(DOC_FOLDER);
 static const uint32_t PROCESSING_COMPLETE = 1;
 static const uint32_t NOT_PROCESSED = 0;
 
+// Standard key in the json document sent to templates for rendering. Must be kept in
+// sync with the templates themselves.
+static const char* COMMON_JSON_KEY = "__common__";
+
+// Standard key used to add errors to the argument map passed to the webserver's error
+// handler.
+static const char* ERROR_KEY = "__error_msg__";
+
 // Returns $IMPALA_HOME if set, otherwise /tmp/impala_www
 const char* GetDefaultDocumentRoot() {
   stringstream ss;
@@ -85,13 +102,44 @@ const char* GetDefaultDocumentRoot() {
 
 namespace impala {
 
-Webserver::Webserver() : context_(NULL) {
+const char* Webserver::ENABLE_RAW_JSON_KEY = "__raw__";
+
+// Supported HTTP response codes
+enum ResponseCode {
+  OK = 200,
+  NOT_FOUND = 404
+};
+
+// Supported HTTP content types
+enum ContentType {
+  HTML,
+  PLAIN
+};
+
+// Builds a valid HTTP header given the response code and a content type.
+string BuildHeaderString(ResponseCode response, ContentType content_type) {
+  static const string RESPONSE_TEMPLATE = "HTTP/1.1 $0 $1\r\n"
+      "Content-Type: text/$2\r\n"
+      "Content-Length: %d\r\n"
+      "\r\n";
+
+  return Substitute(RESPONSE_TEMPLATE, response, response == OK ? "OK" : "Not found",
+      content_type == HTML ? "html" : "plain");
+}
+
+Webserver::Webserver()
+    : context_(NULL),
+      error_handler_(UrlHandler(bind<void>(&Webserver::ErrorHandler, this, _1, _2),
+          "error.tmpl", false)) {
   http_address_ = MakeNetworkAddress(
       FLAGS_webserver_interface.empty() ? "0.0.0.0" : FLAGS_webserver_interface,
       FLAGS_webserver_port);
 }
 
-Webserver::Webserver(const int port) : context_(NULL) {
+Webserver::Webserver(const int port)
+    : context_(NULL),
+      error_handler_(UrlHandler(bind<void>(&Webserver::ErrorHandler, this, _1, _2),
+          "error.tmpl", false)) {
   http_address_ = MakeNetworkAddress("0.0.0.0", port);
 }
 
@@ -99,34 +147,26 @@ Webserver::~Webserver() {
   Stop();
 }
 
-void Webserver::RootHandler(const Webserver::ArgumentMap& args, stringstream* output) {
-  // path_handler_lock_ already held by SqueaselCallback
-  (*output) << "<h2>Version</h2>";
-  (*output) << "<pre>" << GetVersionString() << "</pre>" << endl;
+void Webserver::RootHandler(const ArgumentMap& args, Document* document) {
+  Value version(GetVersionString().c_str(), document->GetAllocator());
+  document->AddMember("version", version, document->GetAllocator());
+  Value cpu_info(CpuInfo::DebugString().c_str(), document->GetAllocator());
+  document->AddMember("cpu_info", cpu_info, document->GetAllocator());
+  Value mem_info(MemInfo::DebugString().c_str(), document->GetAllocator());
+  document->AddMember("mem_info", mem_info, document->GetAllocator());
+  Value disk_info(DiskInfo::DebugString().c_str(), document->GetAllocator());
+  document->AddMember("disk_info", disk_info, document->GetAllocator());
+  Value os_info(OsInfo::DebugString().c_str(), document->GetAllocator());
+  document->AddMember("os_info", os_info, document->GetAllocator());
+  document->AddMember("pid", getpid(), document->GetAllocator());
+}
 
-  (*output) << "<h2>Hardware Info</h2>";
-  (*output) << "<pre>";
-  (*output) << CpuInfo::DebugString();
-  (*output) << MemInfo::DebugString();
-  (*output) << DiskInfo::DebugString();
-  (*output) << "</pre>";
+void Webserver::ErrorHandler(const ArgumentMap& args, Document* document) {
+  ArgumentMap::const_iterator it = args.find(ERROR_KEY);
+  if (it == args.end()) return;
 
-  (*output) << "<h2>OS Info</h2>";
-  (*output) << "<pre>";
-  (*output) << OsInfo::DebugString();
-  (*output) << "</pre>";
-
-  (*output) << "<h2>Process Info</h2>";
-  (*output) << "<pre>";
-  (*output) << "Process ID: " << getpid();
-  (*output) << "</pre>";
-
-  (*output) << "<h2>Status Pages</h2>";
-  BOOST_FOREACH(const PathHandlerMap::value_type& handler, path_handlers_) {
-    if (handler.second.is_on_nav_bar()) {
-      (*output) << "<a href=\"" << handler.first << "\">" << handler.first << "</a><br/>";
-    }
-  }
+  Value error(it->second.c_str(), document->GetAllocator());
+  document->AddMember("error", error, document->GetAllocator());
 }
 
 void Webserver::BuildArgumentMap(const string& args, ArgumentMap* output) {
@@ -227,10 +267,10 @@ Status Webserver::Start() {
     return Status(error_msg.str());
   }
 
-  PathHandlerCallback default_callback =
+  UrlCallback default_callback =
       bind<void>(mem_fn(&Webserver::RootHandler), this, _1, _2);
 
-  RegisterPathHandler("/", default_callback);
+  RegisterUrlCallback("/", "root.tmpl", default_callback);
 
   LOG(INFO) << "Webserver started";
   return Status::OK;
@@ -241,6 +281,26 @@ void Webserver::Stop() {
     sq_stop(context_);
     context_ = NULL;
   }
+}
+
+void Webserver::GetCommonJson(Document* document) {
+  DCHECK(document != NULL);
+  Value obj(kObjectType);
+  obj.AddMember("process-name", google::ProgramInvocationShortName(),
+      document->GetAllocator());
+
+  Value lst(kArrayType);
+  BOOST_FOREACH(const UrlHandlerMap::value_type& handler, url_handlers_) {
+    if (handler.second.is_on_nav_bar()) {
+      Value obj(kObjectType);
+      obj.AddMember("link", handler.first.c_str(), document->GetAllocator());
+      obj.AddMember("title", handler.first.c_str(), document->GetAllocator());
+      lst.PushBack(obj, document->GetAllocator());
+    }
+  }
+
+  obj.AddMember("navbar", lst, document->GetAllocator());
+  document->AddMember(COMMON_JSON_KEY, obj, document->GetAllocator());
 }
 
 int Webserver::LogMessageCallbackStatic(const struct sq_connection* connection,
@@ -267,113 +327,88 @@ int Webserver::BeginRequestCallback(struct sq_connection* connection,
       return NOT_PROCESSED;
     }
   }
-  shared_lock<shared_mutex> lock(path_handlers_lock_);
-  PathHandlerMap::const_iterator it = path_handlers_.find(request_info->uri);
-  if (it == path_handlers_.end()) {
-    sq_printf(connection, "HTTP/1.1 404 Not Found\r\n"
-        "Content-Type: text/plain\r\n\r\n");
-    sq_printf(connection, "No handler for URI %s\r\n\r\n", request_info->uri);
-    return PROCESSING_COMPLETE;
-  }
-
-  // Should we render with css styles?
-  bool use_style = true;
 
   map<string, string> arguments;
   if (request_info->query_string != NULL) {
     BuildArgumentMap(request_info->query_string, &arguments);
   }
-  if (!it->second.is_styled() || arguments.find("raw") != arguments.end()) {
-    use_style = false;
-  }
 
-  stringstream output;
-  if (use_style) BootstrapPageHeader(&output);
-  BOOST_FOREACH(const PathHandlerCallback& callback_, it->second.callbacks()) {
-    callback_(arguments, &output);
-  }
-  if (use_style) BootstrapPageFooter(&output);
-
-  string str = output.str();
-  // Without styling, render the page as plain text
-  if (arguments.find("raw") != arguments.end()) {
-    sq_printf(connection, "HTTP/1.1 200 OK\r\n"
-        "Content-Type: text/plain\r\n"
-        "Content-Length: %d\r\n"
-        "\r\n", (int)str.length());
+  shared_lock<shared_mutex> lock(url_handlers_lock_);
+  UrlHandlerMap::const_iterator it = url_handlers_.find(request_info->uri);
+  ResponseCode response = OK;
+  ContentType content_type = HTML;
+  const UrlHandler* url_handler = NULL;
+  if (it == url_handlers_.end()) {
+    response = NOT_FOUND;
+    arguments[ERROR_KEY] = Substitute("No URI handler for '$0'", request_info->uri);
+    url_handler = &error_handler_;
   } else {
-    sq_printf(connection, "HTTP/1.1 200 OK\r\n"
-        "Content-Type: text/html\r\n"
-        "Content-Length: %d\r\n"
-        "\r\n", (int)str.length());
+    url_handler = &it->second;
   }
+
+  MonotonicStopWatch sw;
+  sw.Start();
+
+  Document document;
+  document.SetObject();
+  GetCommonJson(&document);
+
+  // The output of this page is accumulated into this stringstream.
+  stringstream output;
+  bool raw_json = (arguments.find("json") != arguments.end());
+  url_handler->callback()(arguments, &document);
+  if (raw_json) {
+    // Callbacks may optionally be rendered as a text-only, pretty-printed Json document
+    // (mostly for debugging or integration with third-party tools).
+    StringBuffer strbuf;
+    PrettyWriter<StringBuffer> writer(strbuf);
+    document.Accept(writer);
+    output << strbuf.GetString();
+    content_type = PLAIN;
+  } else {
+    if (arguments.find("raw") != arguments.end()) {
+      document.AddMember(ENABLE_RAW_JSON_KEY, "true", document.GetAllocator());
+    }
+    if (document.HasMember(ENABLE_RAW_JSON_KEY)) {
+      content_type = PLAIN;
+    }
+
+    const string& full_template_path =
+        Substitute("$0/$1/$2", FLAGS_webserver_doc_root, DOC_FOLDER,
+            url_handler->template_filename());
+    ifstream tmpl(full_template_path.c_str());
+    if (!tmpl.is_open()) {
+      output << "Could not open template: " << full_template_path;
+      content_type = PLAIN;
+    } else {
+      stringstream buffer;
+      buffer << tmpl.rdbuf();
+      RenderTemplate(buffer.str(), Substitute("$0/", FLAGS_webserver_doc_root), document,
+          &output);
+    }
+  }
+
+  VLOG(3) << "Rendering page " << request_info->uri << " took "
+          << PrettyPrinter::Print(sw.ElapsedTime(), TCounterType::CPU_TICKS);
+
+  const string& str = output.str();
+  const string& headers = BuildHeaderString(response, content_type);
+  sq_printf(connection, headers.c_str(), (int)str.length());
 
   // Make sure to use sq_write for printing the body; sq_printf truncates at 8kb
   sq_write(connection, str.c_str(), str.length());
   return PROCESSING_COMPLETE;
 }
 
-void Webserver::RegisterPathHandler(const string& path,
-    const PathHandlerCallback& callback, bool is_styled, bool is_on_nav_bar) {
-  upgrade_lock<shared_mutex> lock(path_handlers_lock_);
+void Webserver::RegisterUrlCallback(const string& path,
+    const string& template_filename, const UrlCallback& callback, bool is_on_nav_bar) {
+  upgrade_lock<shared_mutex> lock(url_handlers_lock_);
   upgrade_to_unique_lock<shared_mutex> writer_lock(lock);
-  PathHandlerMap::iterator it = path_handlers_.find(path);
-  if (it == path_handlers_.end()) {
-    it = path_handlers_.insert(
-        make_pair(path, PathHandler(is_styled, is_on_nav_bar))).first;
-  }
-  it->second.AddCallback(callback);
-}
+  DCHECK(url_handlers_.find(path) == url_handlers_.end())
+      << "Duplicate Url handler for: " << path;
 
-const string PAGE_HEADER = "<!DOCTYPE html>"
-" <html>"
-"   <head><title>Cloudera Impala</title>"
-" <link href='www/bootstrap/css/bootstrap.min.css' rel='stylesheet' media='screen'>"
-"  <style>"
-"  body {"
-"    padding-top: 60px; "
-"  }"
-"  </style>"
-" </head>"
-" <body>";
-
-static const string PAGE_FOOTER = "</div></body></html>";
-
-static const string NAVIGATION_BAR_PREFIX =
-"<div class='navbar navbar-inverse navbar-fixed-top'>"
-"      <div class='navbar-inner'>"
-"        <div class='container'>"
-"          <a class='btn btn-navbar' data-toggle='collapse' data-target='.nav-collapse'>"
-"            <span class='icon-bar'></span>"
-"            <span class='icon-bar'></span>"
-"            <span class='icon-bar'></span>"
-"          </a>"
-"          <a class='brand' href='/'>Impala</a>"
-"          <div class='nav-collapse collapse'>"
-"            <ul class='nav'>";
-
-static const string NAVIGATION_BAR_SUFFIX =
-"            </ul>"
-"          </div>"
-"        </div>"
-"      </div>"
-"    </div>"
-"    <div class='container'>";
-
-void Webserver::BootstrapPageHeader(stringstream* output) {
-  (*output) << PAGE_HEADER;
-  (*output) << NAVIGATION_BAR_PREFIX;
-  BOOST_FOREACH(const PathHandlerMap::value_type& handler, path_handlers_) {
-    if (handler.second.is_on_nav_bar()) {
-      (*output) << "<li><a href=\"" << handler.first << "\">" << handler.first
-                << "</a></li>";
-    }
-  }
-  (*output) << NAVIGATION_BAR_SUFFIX;
-}
-
-void Webserver::BootstrapPageFooter(stringstream* output) {
-  (*output) << PAGE_FOOTER;
+  url_handlers_.insert(
+      make_pair(path, UrlHandler(callback, template_filename, is_on_nav_bar)));
 }
 
 }

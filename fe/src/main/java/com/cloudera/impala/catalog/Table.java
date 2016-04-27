@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.TableType;
@@ -53,7 +54,7 @@ public abstract class Table implements CatalogObject {
   // concurrency bugs. Currently used to serialize calls to "getTable()" due to HIVE-5457.
   private static final Object metastoreAccessLock_ = new Object();
   private long catalogVersion_ = Catalog.INITIAL_CATALOG_VERSION;
-  private final org.apache.hadoop.hive.metastore.api.Table msTable_;
+  protected final org.apache.hadoop.hive.metastore.api.Table msTable_;
 
   protected final TableId id_;
   protected final Db db_;
@@ -71,10 +72,10 @@ public abstract class Table implements CatalogObject {
 
   // colsByPos[i] refers to the ith column in the table. The first numClusteringCols are
   // the clustering columns.
-  protected final ArrayList<Column> colsByPos_;
+  private final ArrayList<Column> colsByPos_;
 
   // map from lowercase column name to Column object.
-  protected final Map<String, Column> colsByName_;
+  private final Map<String, Column> colsByName_;
 
   // The lastDdlTime for this table; -1 if not set
   protected long lastDdlTime_;
@@ -98,7 +99,7 @@ public abstract class Table implements CatalogObject {
 
   //number of nodes that contain data for this table; -1: unknown
   public abstract int getNumNodes();
-  public abstract TTableDescriptor toThriftDescriptor();
+  public abstract TTableDescriptor toThriftDescriptor(Set<Long> referencedPartitions);
   public abstract TCatalogObjectType getCatalogObjectType();
 
   /**
@@ -107,6 +108,16 @@ public abstract class Table implements CatalogObject {
    */
   public abstract void load(Table oldValue, HiveMetaStoreClient client,
       org.apache.hadoop.hive.metastore.api.Table msTbl) throws TableLoadingException;
+
+  public void addColumn(Column col) {
+    colsByPos_.add(col);
+    colsByName_.put(col.getName().toLowerCase(), col);
+  }
+
+  public void clearColumns() {
+    colsByPos_.clear();
+    colsByName_.clear();
+  }
 
   /**
    * Updates the lastDdlTime for this Table, if the new value is greater
@@ -204,6 +215,7 @@ public abstract class Table implements CatalogObject {
           TableId.createInvalidId(), parentDb, thriftTable.getTbl_name());
     }
     newTable.loadFromThrift(thriftTable);
+    newTable.validate();
     return newTable;
   }
 
@@ -232,6 +244,19 @@ public abstract class Table implements CatalogObject {
     // Default to READ_WRITE access if the field is not set.
     accessLevel_ = thriftTable.isSetAccess_level() ? thriftTable.getAccess_level() :
         TAccessLevel.READ_WRITE;
+  }
+
+  /**
+   * Checks preconditions for this table to function as expected. Currently only checks
+   * that all entries in colsByName_ use lower case keys.
+   */
+  public void validate() throws TableLoadingException {
+    for (String colName: colsByName_.keySet()) {
+      if (!colName.equals(colName.toLowerCase())) {
+        throw new TableLoadingException(
+            "Expected lower case column name but found: " + colName);
+      }
+    }
   }
 
   public TTable toThrift() {
@@ -268,7 +293,7 @@ public abstract class Table implements CatalogObject {
     return catalogObject;
   }
 
-  /*
+  /**
    * Gets the ColumnType from the given FieldSchema by using Impala's SqlParser.
    * Throws a TableLoadingException if the FieldSchema could not be parsed.
    * The type can either be:
@@ -277,8 +302,8 @@ public abstract class Table implements CatalogObject {
    *     returned but type.IsSupported() returns false.
    *   - A type Impala can't understand at all, and a TableLoadingException is thrown.
    */
-   protected ColumnType parseColumnType(FieldSchema fs) throws TableLoadingException {
-     ColumnType type = ColumnType.parseColumnType(fs);
+   protected Type parseColumnType(FieldSchema fs) throws TableLoadingException {
+     Type type = Type.parseColumnType(fs);
      if (type == null) {
        throw new TableLoadingException(String.format(
            "Unsupported type '%s' in column '%s' of table '%s'",
@@ -296,7 +321,9 @@ public abstract class Table implements CatalogObject {
   public Db getDb() { return db_; }
   public String getName() { return name_; }
   public String getFullName() { return (db_ != null ? db_.getName() + "." : "") + name_; }
-  public TableName getTableName() { return new TableName(db_.getName(), name_); }
+  public TableName getTableName() {
+    return new TableName(db_ != null ? db_.getName() : null, name_);
+  }
   public String getOwner() { return owner_; }
   public ArrayList<Column> getColumns() { return colsByPos_; }
 
@@ -323,15 +350,19 @@ public abstract class Table implements CatalogObject {
    * which Hive enumerates columns.
    */
   public ArrayList<Column> getColumnsInHiveOrder() {
-    ArrayList<Column> columns = Lists.newArrayList();
-    for (Column column: colsByPos_.subList(numClusteringCols_, colsByPos_.size())) {
-      columns.add(column);
-    }
+    ArrayList<Column> columns = Lists.newArrayList(getNonClusteringColumns());
 
     for (Column column: colsByPos_.subList(0, numClusteringCols_)) {
       columns.add(column);
     }
     return columns;
+  }
+
+  /**
+   * Returns the list of all columns excluding any partition columns.
+   */
+  public List<Column> getNonClusteringColumns() {
+    return colsByPos_.subList(numClusteringCols_, colsByPos_.size());
   }
 
   /**

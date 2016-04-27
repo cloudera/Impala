@@ -42,7 +42,7 @@ class HdfsTableWriter {
                   RuntimeState* state, OutputPartition* output_partition,
                   const HdfsPartitionDescriptor* partition_desc,
                   const HdfsTableDescriptor* table_desc,
-                  const std::vector<Expr*>& output_exprs);
+                  const std::vector<ExprContext*>& output_expr_ctxs);
 
   virtual ~HdfsTableWriter() { }
 
@@ -87,7 +87,10 @@ class HdfsTableWriter {
 
   // Default block size to use for this file format.  If the file format doesn't
   // care, it should return 0 and the hdfs config default will be used.
-  virtual uint64_t default_block_size() = 0;
+  virtual uint64_t default_block_size() const = 0;
+
+  // Returns the file extension for this writer.
+  virtual std::string file_extension() const = 0;
 
  protected:
   // Size to buffer output before calling Write() (which calls hdfsWrite), in bytes
@@ -118,10 +121,11 @@ class HdfsTableWriter {
   const HdfsTableDescriptor* table_desc_;
 
   // Expressions that materialize output values.
-  std::vector<Expr*> output_exprs_;
+  std::vector<ExprContext*> output_expr_ctxs_;
 
   // Subclass should populate any file format specific stats.
   TInsertStats stats_;
+
 };
 }
 #endif

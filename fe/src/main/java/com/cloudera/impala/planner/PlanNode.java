@@ -24,10 +24,10 @@ import org.slf4j.LoggerFactory;
 import com.cloudera.impala.analysis.Analyzer;
 import com.cloudera.impala.analysis.Expr;
 import com.cloudera.impala.analysis.ExprId;
+import com.cloudera.impala.analysis.ExprSubstitutionMap;
 import com.cloudera.impala.analysis.SlotId;
 import com.cloudera.impala.analysis.TupleDescriptor;
 import com.cloudera.impala.analysis.TupleId;
-import com.cloudera.impala.catalog.AuthorizationException;
 import com.cloudera.impala.common.InternalException;
 import com.cloudera.impala.common.PrintUtils;
 import com.cloudera.impala.common.TreeNode;
@@ -39,6 +39,7 @@ import com.cloudera.impala.thrift.TQueryOptions;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.google.common.math.LongMath;
 
 /**
  * Each PlanNode represents a single relational operator
@@ -74,15 +75,8 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
 
   // ids of the TblRefs "materialized" by this node; identical with tupleIds_
   // if the tree rooted at this node only materializes BaseTblRefs;
-  // useful for during plan generation
+  // useful during plan generation
   protected ArrayList<TupleId> tblRefIds_;
-
-  // Composition of rows produced by this node. Possibly a superset of tupleIds_
-  // (the same RowBatch passes through multiple nodes; for instances, join nodes
-  // form a left-deep chain and pass RowBatches on to their left children).
-  // rowTupleIds_[0] is the first tuple in the row, rowTupleIds_[1] the second, etc.
-  // Set in PlanFragment.finalize()
-  protected ArrayList<TupleId> rowTupleIds_ = Lists.newArrayList();
 
   // A set of nullable TupleId produced by this node. It is a subset of tupleIds_.
   // A tuple is nullable within a particular plan tree if it's the "nullable" side of
@@ -96,7 +90,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
   protected PlanFragment fragment_;
 
   // if set, needs to be applied by parent node to reference this node's output
-  protected Expr.SubstitutionMap baseTblSmap_;
+  protected ExprSubstitutionMap outputSmap_;
 
   // global state of planning wrt conjunct assignment; used by planner as a shortcut
   // to avoid having to pass assigned conjuncts back and forth
@@ -114,9 +108,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
 
   // sum of tupleIds_' avgSerializedSizes; set in computeStats()
   protected float avgRowSize_;
-
-  //  Node should compact data.
-  protected boolean compactData_;
 
   // estimated per-host memory requirement for this node;
   // set in computeCosts(); invalid: -1
@@ -163,12 +154,10 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     limit_ = node.limit_;
     tupleIds_ = Lists.newArrayList(node.tupleIds_);
     tblRefIds_ = Lists.newArrayList(node.tblRefIds_);
-    rowTupleIds_ = Lists.newArrayList(node.rowTupleIds_);
     nullableTupleIds_ = Sets.newHashSet(node.nullableTupleIds_);
-    conjuncts_ = Expr.cloneList(node.conjuncts_, null);
+    conjuncts_ = Expr.cloneList(node.conjuncts_);
     cardinality_ = -1;
     numNodes_ = -1;
-    compactData_ = node.compactData_;
     displayName_ = displayName;
   }
 
@@ -186,19 +175,11 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
   public void setFragment(PlanFragment fragment) { fragment_ = fragment; }
   public PlanFragment getFragment() { return fragment_; }
   public List<Expr> getConjuncts() { return conjuncts_; }
-  public Expr.SubstitutionMap getBaseTblSmap() { return baseTblSmap_; }
-  public void setBaseTblSmap(Expr.SubstitutionMap sMap) { baseTblSmap_ = sMap; }
+  public ExprSubstitutionMap getOutputSmap() { return outputSmap_; }
+  public void setOutputSmap(ExprSubstitutionMap smap) { outputSmap_ = smap; }
   public Set<ExprId> getAssignedConjuncts() { return assignedConjuncts_; }
   public void setAssignedConjuncts(Set<ExprId> conjuncts) {
     assignedConjuncts_ = conjuncts;
-  }
-
-  /** Set the value of compactData_ in all children. */
-  public void setCompactData(boolean on) {
-    compactData_ = on;
-    for (PlanNode child: this.getChildren()) {
-      child.setCompactData(on);
-    }
   }
 
   /**
@@ -219,11 +200,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
 
   public ArrayList<TupleId> getTblRefIds() { return tblRefIds_; }
   public void setTblRefIds(ArrayList<TupleId> ids) { tblRefIds_ = ids; }
-
-  public ArrayList<TupleId> getRowTupleIds() {
-    Preconditions.checkState(rowTupleIds_ != null);
-    return rowTupleIds_;
-  }
 
   public Set<TupleId> getNullableTupleIds() {
     Preconditions.checkState(nullableTupleIds_ != null);
@@ -381,14 +357,15 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     msg.setLabel_detail(getDisplayLabelDetail());
     msg.setEstimated_stats(estimatedStats);
 
-    for (TupleId tid: rowTupleIds_) {
+    msg.setRow_tuples(Lists.<Integer>newArrayListWithCapacity(tupleIds_.size()));
+    msg.setNullable_tuples(Lists.<Boolean>newArrayListWithCapacity(tupleIds_.size()));
+    for (TupleId tid: tupleIds_) {
       msg.addToRow_tuples(tid.asInt());
       msg.addToNullable_tuples(nullableTupleIds_.contains(tid));
     }
     for (Expr e: conjuncts_) {
       msg.addToConjuncts(e.treeToThrift());
     }
-    msg.compact_data = compactData_;
     toThrift(msg);
     container.addToNodes(msg);
     // For the purpose of the BE consider ExchangeNodes to have no children.
@@ -412,10 +389,10 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
    * state required for toThrift().
    * This is called directly after construction.
    */
-  public void init(Analyzer analyzer) throws InternalException, AuthorizationException {
+  public void init(Analyzer analyzer) throws InternalException {
     assignConjuncts(analyzer);
     computeStats(analyzer);
-    createDefaultSmap();
+    createDefaultSmap(analyzer);
   }
 
   /**
@@ -430,25 +407,26 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
   /**
    * Returns an smap that combines the childrens' smaps.
    */
-  protected Expr.SubstitutionMap getCombinedChildSmap() {
-    if (getChildren().size() == 0) return new Expr.SubstitutionMap();
-    if (getChildren().size() == 1) return getChild(0).getBaseTblSmap();
-    Expr.SubstitutionMap result = Expr.SubstitutionMap.combine(
-        getChild(0).getBaseTblSmap(), getChild(1).getBaseTblSmap());
+  protected ExprSubstitutionMap getCombinedChildSmap() {
+    if (getChildren().size() == 0) return new ExprSubstitutionMap();
+    if (getChildren().size() == 1) return getChild(0).getOutputSmap();
+    ExprSubstitutionMap result = ExprSubstitutionMap.combine(
+        getChild(0).getOutputSmap(), getChild(1).getOutputSmap());
     for (int i = 2; i < getChildren().size(); ++i) {
-      result = Expr.SubstitutionMap.combine(result, getChild(i).getBaseTblSmap());
+      result = ExprSubstitutionMap.combine(result, getChild(i).getOutputSmap());
     }
     return result;
   }
 
   /**
-   * Sets baseTblSmap to compose(existing smap, combined child smap). Also
+   * Sets outputSmap_ to compose(existing smap, combined child smap). Also
    * substitutes conjuncts_ using the combined child smap.
    */
-  protected void createDefaultSmap() {
-    Expr.SubstitutionMap combinedChildSmap = getCombinedChildSmap();
-    baseTblSmap_ = Expr.SubstitutionMap.compose(baseTblSmap_, combinedChildSmap);
-    conjuncts_ = Expr.cloneList(conjuncts_, combinedChildSmap);
+  protected void createDefaultSmap(Analyzer analyzer) {
+    ExprSubstitutionMap combinedChildSmap = getCombinedChildSmap();
+    outputSmap_ =
+        ExprSubstitutionMap.compose(outputSmap_, combinedChildSmap, analyzer);
+    conjuncts_ = Expr.substituteList(conjuncts_, outputSmap_, analyzer, false);
   }
 
   /**
@@ -544,6 +522,32 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
   }
 
   /**
+   * Computes and returns the sum of two cardinalities. If an overflow occurs,
+   * the maximum Long value is returned (Long.MAX_VALUE).
+   */
+  public static long addCardinalities(long a, long b) {
+    try {
+      return LongMath.checkedAdd(a, b);
+    } catch (ArithmeticException e) {
+      LOG.warn("overflow when adding cardinalities: " + a + ", " + b);
+      return Long.MAX_VALUE;
+    }
+  }
+
+  /**
+   * Computes and returns the product of two cardinalities. If an overflow
+   * occurs, the maximum Long value is returned (Long.MAX_VALUE).
+   */
+  public static long multiplyCardinalities(long a, long b) {
+    try {
+      return LongMath.checkedMultiply(a, b);
+    } catch (ArithmeticException e) {
+      LOG.warn("overflow when multiplying cardinalities: " + a + ", " + b);
+      return Long.MAX_VALUE;
+    }
+  }
+
+  /**
    * Returns true if this plan node can output its first row only after consuming
    * all rows of all its children. This method is used to group plan nodes
    * into pipelined units for resource estimation.
@@ -557,5 +561,19 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
    */
   public void computeCosts(TQueryOptions queryOptions) {
     perHostMemCost_ = 0;
+  }
+
+  /**
+   * The input cardinality is the sum of output cardinalities of its children.
+   * For scan nodes the input cardinality is the expected number of rows scanned.
+   */
+  public long getInputCardinality() {
+    long sum = 0;
+    for(PlanNode p : children_) {
+      long tmp = p.getCardinality();
+      if (tmp == -1) return -1;
+      sum = addCardinalities(sum, tmp);
+    }
+    return sum;
   }
 }

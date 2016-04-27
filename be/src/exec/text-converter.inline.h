@@ -28,6 +28,7 @@
 #include "runtime/timestamp-value.h"
 #include "runtime/mem-pool.h"
 #include "runtime/string-value.inline.h"
+#include "exprs/string-functions.h"
 
 namespace impala {
 
@@ -35,7 +36,7 @@ namespace impala {
 // corresponding changes to CodegenWriteSlot.
 inline bool TextConverter::WriteSlot(const SlotDescriptor* slot_desc, Tuple* tuple,
     const char* data, int len, bool copy_string, bool need_escape, MemPool* pool) {
-  if ((len == 0 && slot_desc->type().type != TYPE_STRING) || data == NULL) {
+  if ((len == 0 && !slot_desc->type().IsStringType()) || data == NULL) {
     tuple->SetNull(slot_desc->null_indicator_offset());
     return true;
   } else if (check_null_ && len == null_col_val_.size() &&
@@ -49,20 +50,39 @@ inline bool TextConverter::WriteSlot(const SlotDescriptor* slot_desc, Tuple* tup
   void* slot = tuple->GetSlot(slot_desc->tuple_offset());
 
   // Parse the raw-text data. Translate the text string to internal format.
-  switch (slot_desc->type().type) {
-    case TYPE_STRING: {
-      StringValue* str_slot = reinterpret_cast<StringValue*>(slot);
-      str_slot->ptr = const_cast<char*>(data);
-      str_slot->len = len;
-      if (len != 0 && (copy_string || need_escape)) {
-        DCHECK(pool != NULL);
-        char* slot_data = reinterpret_cast<char*>(pool->Allocate(len));
+  const ColumnType& type = slot_desc->type();
+  switch (type.type) {
+    case TYPE_STRING:
+    case TYPE_VARCHAR:
+    case TYPE_CHAR: {
+      int buffer_len = len;
+      if (type.type == TYPE_VARCHAR || type.type == TYPE_CHAR) buffer_len = type.len;
+
+      bool reuse_data = type.IsVarLen() && !(len != 0 && (copy_string || need_escape));
+      if (type.type == TYPE_CHAR) reuse_data &= (buffer_len <= len);
+
+      StringValue str;
+      str.len = std::min(buffer_len, len);
+      if (reuse_data) {
+        str.ptr = const_cast<char*>(data);
+      } else {
+        str.ptr = type.IsVarLen() ? reinterpret_cast<char*>(pool->Allocate(buffer_len)) :
+            reinterpret_cast<char*>(slot);
         if (need_escape) {
-          UnescapeString(data, slot_data, &str_slot->len);
+          UnescapeString(data, str.ptr, &str.len, buffer_len);
         } else {
-          memcpy(slot_data, data, str_slot->len);
+          memcpy(str.ptr, data, str.len);
         }
-        str_slot->ptr = slot_data;
+      }
+
+      if (type.type == TYPE_CHAR) {
+        StringValue::PadWithSpaces(str.ptr, buffer_len, str.len);
+        str.len = type.len;
+      }
+      // write back to the slot, if !IsVarLen() we already wrote to the slot
+      if (type.IsVarLen()) {
+        StringValue* str_slot = reinterpret_cast<StringValue*>(slot);
+        *str_slot = str;
       }
       break;
     }

@@ -6,11 +6,10 @@ import java.util.Set;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 
 import com.cloudera.impala.authorization.Privilege;
-import com.cloudera.impala.catalog.AuthorizationException;
 import com.cloudera.impala.catalog.Column;
-import com.cloudera.impala.catalog.ColumnType;
 import com.cloudera.impala.catalog.HdfsTable;
 import com.cloudera.impala.catalog.Table;
+import com.cloudera.impala.catalog.Type;
 import com.cloudera.impala.common.AnalysisException;
 import com.cloudera.impala.thrift.TPartitionKeyValue;
 import com.google.common.base.Joiner;
@@ -73,8 +72,7 @@ public class PartitionSpec implements ParseNode {
   }
 
   @Override
-  public void analyze(Analyzer analyzer) throws AnalysisException,
-      AuthorizationException {
+  public void analyze(Analyzer analyzer) throws AnalysisException {
     Preconditions.checkNotNull(tableName_);
     Preconditions.checkNotNull(privilegeRequirement_);
 
@@ -128,10 +126,10 @@ public class PartitionSpec implements ParseNode {
         continue;
       }
 
-      ColumnType colType = c.getType();
-      ColumnType literalType = pk.getValue().getType();
-      ColumnType compatibleType =
-          ColumnType.getAssignmentCompatibleType(colType, literalType);
+      Type colType = c.getType();
+      Type literalType = pk.getValue().getType();
+      Type compatibleType =
+          Type.getAssignmentCompatibleType(colType, literalType);
       if (!compatibleType.isValid()) {
         throw new AnalysisException(String.format("Value of partition spec (column=%s) "
             + "has incompatible type: '%s'. Expected type: '%s'.",

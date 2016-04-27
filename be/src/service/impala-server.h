@@ -42,6 +42,7 @@
 #include "runtime/runtime-state.h"
 #include "runtime/timestamp-value.h"
 #include "runtime/types.h"
+#include "rapidjson/rapidjson.h"
 
 namespace impala {
 
@@ -53,13 +54,9 @@ class RowDescriptor;
 class TCatalogUpdate;
 class TPlanExecRequest;
 class TPlanExecParams;
-class TExecPlanFragmentParams;
-class TExecPlanFragmentResult;
 class TInsertResult;
 class TReportExecStatusArgs;
 class TReportExecStatusResult;
-class TCancelPlanFragmentArgs;
-class TCancelPlanFragmentResult;
 class TTransmitDataArgs;
 class TTransmitDataResult;
 class TNetworkAddress;
@@ -67,6 +64,8 @@ class TClientRequest;
 class TExecRequest;
 class TSessionState;
 class TQueryOptions;
+class TGetExecSummaryResp;
+class TGetExecSummaryReq;
 
 // An ImpalaServer contains both frontend and backend functionality;
 // it implements ImpalaService (Beeswax), ImpalaHiveServer2Service (HiveServer2)
@@ -82,7 +81,6 @@ class TQueryOptions;
 // fragment: the originating coordinator might die, but we can get notified of
 // that via the statestore. This still needs to be implemented.
 class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
-                     public ImpalaInternalServiceIf,
                      public ThriftServer::ConnectionHandlerIf {
  public:
   ImpalaServer(ExecEnv* exec_env);
@@ -124,11 +122,9 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
   // Pings the Impala service and gets the server version string.
   virtual void PingImpalaService(TPingImpalaServiceResp& return_val);
 
-  // TODO: Need to implement HiveServer2 version of GetRuntimeProfile
   virtual void GetRuntimeProfile(std::string& profile_output,
       const beeswax::QueryHandle& query_id);
 
-  // TODO: Need to implement HiveServer2 version of GetExecSummary
   virtual void GetExecSummary(impala::TExecSummary& result,
       const beeswax::QueryHandle& query_id);
 
@@ -191,17 +187,26 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
       const apache::hive::service::cli::thrift::TFetchResultsReq& request);
   virtual void GetLog(apache::hive::service::cli::thrift::TGetLogResp& return_val,
       const apache::hive::service::cli::thrift::TGetLogReq& request);
+  virtual void GetExecSummary(TGetExecSummaryResp& return_val,
+      const TGetExecSummaryReq& request);
+  virtual void GetRuntimeProfile(TGetRuntimeProfileResp& return_val,
+      const TGetRuntimeProfileReq& request);
+  virtual void GetDelegationToken(
+      apache::hive::service::cli::thrift::TGetDelegationTokenResp& return_val,
+      const apache::hive::service::cli::thrift::TGetDelegationTokenReq& req);
+  virtual void CancelDelegationToken(
+      apache::hive::service::cli::thrift::TCancelDelegationTokenResp& return_val,
+      const apache::hive::service::cli::thrift::TCancelDelegationTokenReq& req);
+  virtual void RenewDelegationToken(
+      apache::hive::service::cli::thrift::TRenewDelegationTokenResp& return_val,
+      const apache::hive::service::cli::thrift::TRenewDelegationTokenReq& req);
 
   // ImpalaService common extensions (implemented in impala-server.cc)
   // ImpalaInternalService rpcs
-  virtual void ExecPlanFragment(
-      TExecPlanFragmentResult& return_val, const TExecPlanFragmentParams& params);
-  virtual void ReportExecStatus(
-      TReportExecStatusResult& return_val, const TReportExecStatusParams& params);
-  virtual void CancelPlanFragment(
-      TCancelPlanFragmentResult& return_val, const TCancelPlanFragmentParams& params);
-  virtual void TransmitData(
-      TTransmitDataResult& return_val, const TTransmitDataParams& params);
+  void ReportExecStatus(TReportExecStatusResult& return_val,
+      const TReportExecStatusParams& params);
+  void TransmitData(TTransmitDataResult& return_val,
+      const TTransmitDataParams& params);
 
   // Generates a unique id for this query and sets it in the given query context.
   // Prepares the given query context by populating fields required for evaluating
@@ -253,7 +258,6 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
   }
 
  private:
-  class FragmentExecState;
   friend class ChildQuery;
 
   // Query result set stores converted rows returned by QueryExecState.fetchRows(). It
@@ -281,17 +285,19 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
     virtual int AddRows(const QueryResultSet* other, int start_idx, int num_rows) = 0;
 
     // Returns the approximate size of this result set in bytes.
-    int64_t BytesSize() { return BytesSize(0, size()); }
+    int64_t ByteSize() { return ByteSize(0, size()); }
 
     // Returns the approximate size of the given range of rows in bytes.
-    virtual int64_t BytesSize(int start_idx, int num_rows) = 0;
+    virtual int64_t ByteSize(int start_idx, int num_rows) = 0;
 
     // Returns the size of this result set in number of rows.
     virtual size_t size() = 0;
   };
 
-  class AsciiQueryResultSet; // extends QueryResultSet
-  class TRowQueryResultSet; // extends QueryResultSet
+  // Result set implementations for Beeswax and HS2
+  class AsciiQueryResultSet;
+  class HS2RowOrientedResultSet;
+  class HS2ColumnarResultSet;
 
   struct SessionState;
 
@@ -307,25 +313,10 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
   // Ascii output precision for double/float
   static const int ASCII_PRECISION;
 
-  // Initiate execution of plan fragment in newly created thread.
-  // Creates new FragmentExecState and registers it in fragment_exec_state_map_.
-  Status StartPlanFragmentExecution(const TExecPlanFragmentParams& exec_params);
-
-  // Top-level loop for synchronously executing plan fragment, which runs in
-  // exec_state's thread. Repeatedly calls GetNext() on the executor
-  // and feeds the result into the data sink.
-  // Returns exec status.
-  Status ExecPlanFragment(FragmentExecState* exec_state);
-
-  // Call ExecPlanFragment() and report status to coord.
-  void RunExecPlanFragment(FragmentExecState* exec_state);
-
-  // Report status of fragment execution to initiating coord.
-  Status ReportStatus(FragmentExecState* exec_state);
-
-  Status CreateDataSink(
-      const TPlanExecRequest& request, const TPlanExecParams& params,
-      const RowDescriptor& row_desc, DataSink** sink);
+  QueryResultSet* CreateHS2ResultSet(
+      apache::hive::service::cli::thrift::TProtocolVersion::type version,
+      const TResultSetMetadata& metadata,
+      apache::hive::service::cli::thrift::TRowSet* rowset = NULL);
 
   // Return exec state for given query_id, or NULL if not found.
   // If 'lock' is true, the returned exec state's lock() will be acquired before
@@ -337,10 +328,6 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
   // false if no query with the given ID is found.
   bool GetSessionIdForQuery(const TUniqueId& query_id, TUniqueId* session_id);
 
-  // Return exec state for given fragment_instance_id, or NULL if not found.
-  boost::shared_ptr<FragmentExecState> GetFragmentExecState(
-      const TUniqueId& fragment_instance_id);
-
   // Updates the number of databases / tables metrics from the FE catalog
   Status UpdateCatalogMetrics();
 
@@ -348,7 +335,8 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
   // in exec_state), registers it and calls Coordinator::Execute().
   // If it returns with an error status, exec_state will be NULL and nothing
   // will have been registered in query_exec_state_map_.
-  // session_state is a ptr to the session running this query.
+  // session_state is a ptr to the session running this query and must have
+  // been checked out.
   // query_session_state is a snapshot of session state that changes when the
   // query was run. (e.g. default database).
   Status Execute(TQueryCtx* query_ctx,
@@ -363,22 +351,38 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
 
   // Registers the query exec state with query_exec_state_map_ using the globally
   // unique query_id and add the query id to session state's open query list.
+  // The caller must have checked out the session state.
   Status RegisterQuery(boost::shared_ptr<SessionState> session_state,
       const boost::shared_ptr<QueryExecState>& exec_state);
 
-  // Cancel the query execution if the query is still running. Removes exec_state from
-  // query_exec_state_map_, and removes the query id from session state's open query list.
-  // Updates the query's status to that provided, unless status is already not OK or
-  // provided status is NULL.
-  // Returns true if it found a registered exec_state, otherwise false.
-  bool UnregisterQuery(const TUniqueId& query_id, const Status* status = NULL);
+  // Adds the query to the set of in-flight queries for the session. The query remains
+  // in-flight until the query is unregistered.  Until a query is in-flight, an attempt
+  // to cancel or close the query by the user will return an error status.  If the
+  // session is closed before a query is in-flight, then the query cancellation is
+  // deferred until after the issuing path has completed initializing the query.  Once
+  // a query is in-flight, it can be cancelled/closed asynchronously by the user
+  // (e.g. via an RPC) and the session close path can close (cancel and unregister) it.
+  // The query must have already been registered using RegisterQuery().  The caller
+  // must have checked out the session state.
+  Status SetQueryInflight(boost::shared_ptr<SessionState> session_state,
+      const boost::shared_ptr<QueryExecState>& exec_state);
+
+  // Unregister the query by cancelling it, removing exec_state from
+  // query_exec_state_map_, and removing the query id from session state's in-flight
+  // query list.  If check_inflight is true, then return an error if the query is not
+  // yet in-flight.  Otherwise, proceed even if the query isn't yet in-flight (for
+  // cleaning up after an error on the query issuing path).
+  Status UnregisterQuery(const TUniqueId& query_id, bool check_inflight,
+      const Status* cause = NULL);
 
   // Initiates query cancellation reporting the given cause as the query status.
-  // Assumes deliberate cancellation by the user if the cause is NULL.
-  // Returns OK unless query_id is not found.
-  // Queries still need to be unregistered, usually via Close, after cancellation.
-  // Caller should not hold any locks when calling this function.
-  Status CancelInternal(const TUniqueId& query_id, const Status* cause = NULL);
+  // Assumes deliberate cancellation by the user if the cause is NULL.  Returns an
+  // error if query_id is not found.  If check_inflight is true, then return an error
+  // if the query is not yet in-flight.  Otherwise, returns OK.  Queries still need to
+  // be unregistered, after cancellation.  Caller should not hold any locks when
+  // calling this function.
+  Status CancelInternal(const TUniqueId& query_id, bool check_inflight,
+      const Status* cause = NULL);
 
   // Close the session and release all resource used by this session.
   // Caller should not hold any locks when calling this function.
@@ -399,39 +403,97 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
   // Returns the exec summary for this query.
   Status GetExecSummary(const TUniqueId& query_id, TExecSummary* result);
 
-  // Webserver callback. Retrieves Hadoop confs from frontend and writes them to output
-  void RenderHadoopConfigs(const Webserver::ArgumentMap& args, std::stringstream* output);
+  // Json callback for /hadoop-varz. Produces Json with a list, 'configs', of (key, value)
+  // pairs, one for each Hadoop configuration value.
+  void HadoopVarzUrlCallback(const Webserver::ArgumentMap& args,
+      rapidjson::Document* document);
 
-  // Webserver callback. Prints a sorted table of current queries, including their states,
-  // types and IDs.
-  void QueryStatePathHandler(const Webserver::ArgumentMap& args,
-      std::stringstream* output);
+  // Webserver callback. Returns two sorted lists of queries, one in-flight and one
+  // completed, as well as a list of active backends and their plan-fragment count.
+  //
+  // "in_flight_queries": [],
+  // "num_in_flight_queries": 0,
+  // "completed_queries": [
+  //       {
+  //         "effective_user": "henry",
+  //         "default_db": "default",
+  //         "stmt": "select sleep(10000)",
+  //         "stmt_type": "QUERY",
+  //         "start_time": "2014-08-07 18:37:47.923614000",
+  //         "end_time": "2014-08-07 18:37:58.146494000",
+  //         "progress": "0 / 0 (0%)",
+  //         "state": "FINISHED",
+  //         "rows_fetched": 1,
+  //         "query_id": "7c459a59fb8cefe3:8b7042d55bf19887"
+  //       }
+  // ],
+  // "completed_log_size": 25,
+  // "query_locations": [
+  //     {
+  //       "location": "henry-impala:22000",
+  //        "count": 0
+  //     }
+  // ]
+  void QueryStateUrlCallback(const Webserver::ArgumentMap& args,
+      rapidjson::Document* document);
 
-  // Webserver callback.  Prints the query profile (via PrettyPrint)
-  void QueryProfilePathHandler(const Webserver::ArgumentMap& args,
-      std::stringstream* output);
+  // Json callback for /query_profile. Expects query_id as an argument, produces Json with
+  // 'profile' set to the profile string.
+  void QueryProfileUrlCallback(const Webserver::ArgumentMap& args,
+      rapidjson::Document* document);
 
-  // Webserver callback.  Cancels an in-flight query.
-  void CancelQueryPathHandler(const Webserver::ArgumentMap& args,
-      std::stringstream* output);
+  // Webserver callback. Produces a Json structure with query summary information.
+  // Example:
+  // { "summary": <....>,
+  //   "plan": <....>,
+  //   "stmt": "select count(*) from functional.alltypes"
+  //   "id": <...>,
+  //   "state": "FINISHED"
+  // }
+  void QuerySummaryCallback(const Webserver::ArgumentMap& args,
+      rapidjson::Document* document);
 
-  // Webserver callback.  Prints the query profile as a base64 encoded object.
-  void QueryProfileEncodedPathHandler(const Webserver::ArgumentMap& args,
-      std::stringstream* output);
+  // Webserver callback. Cancels an in-flight query and writes the result to 'contents'.
+  void CancelQueryUrlCallback(const Webserver::ArgumentMap& args,
+      rapidjson::Document* document);
 
-  // Webserver callback.  Prints the inflight query ids.
-  void InflightQueryIdsPathHandler(const Webserver::ArgumentMap& args,
-      std::stringstream* output);
+  // Webserver callback.  Upon return, 'document' will contain the query profile as a
+  // base64 encoded object in 'contents'.
+  void QueryProfileEncodedUrlCallback(const Webserver::ArgumentMap& args,
+      rapidjson::Document* document);
 
-  // Webserver callback that prints a table of active sessions.
-  void SessionPathHandler(const Webserver::ArgumentMap& args, std::stringstream* output);
+  // Webserver callback. Produces a list of inflight query IDs printed as text in
+  // 'contents'.
+  void InflightQueryIdsUrlCallback(const Webserver::ArgumentMap& args,
+      rapidjson::Document* document);
+
+  // Json callback for /sessions, which prints a table of active client sessions.
+  // "sessions": [
+  // {
+  //     "type": "BEESWAX",
+  //     "num_queries": 0,
+  //     "user": "",
+  //     "delegated_user": "",
+  //     "session_id": "6242f69b02e4d609:ac84df1fbb0e16a3",
+  //     "network_address": "127.0.0.1:46484",
+  //     "default_database": "default",
+  //     "start_time": "2014-08-07 22:50:49",
+  //     "last_accessed": "2014-08-07 22:50:49",
+  //     "expired": false,
+  //     "closed": false,
+  //     "ref_count": 0
+  //     }
+  // ],
+  // "num_sessions": 1
+  void SessionsUrlCallback(const Webserver::ArgumentMap& args,
+      rapidjson::Document* document);
 
   // Webserver callback that prints a list of all known databases and tables
-  void CatalogPathHandler(const Webserver::ArgumentMap& args, std::stringstream* output);
+  void CatalogUrlCallback(const Webserver::ArgumentMap& args, rapidjson::Document* output);
 
   // Webserver callback that allows for dumping information on objects in the catalog.
-  void CatalogObjectsPathHandler(const Webserver::ArgumentMap& args,
-      std::stringstream* output);
+  void CatalogObjectsUrlCallback(const Webserver::ArgumentMap& args,
+      rapidjson::Document* output);
 
   // Initialize "default_configs_" to show the default values for ImpalaQueryOptions and
   // "support_start_over/false" to indicate that Impala does not support start over
@@ -474,7 +536,7 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
   // Must be called with query_exec_state_map_lock_ held
   void ArchiveQuery(const QueryExecState& query);
 
-  // Checks whether the given user is allowed to impersonate as the specified do_as_user.
+  // Checks whether the given user is allowed to delegate as the specified do_as_user.
   // Returns OK if the authorization suceeds, otherwise returns an status with details
   // on why the failure occurred.
   Status AuthorizeProxyUser(const std::string& user, const std::string& do_as_user);
@@ -491,8 +553,8 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
     TUniqueId id;
 
     // Queries are run and authorized on behalf of the effective_user.
-    // If there is no impersonated user, this will be the connected user. Otherwise, it
-    // will be set to the impersonated user.
+    // If there is no delegated user, this will be the connected user. Otherwise, it
+    // will be set to the delegated user.
     std::string effective_user;
 
     // default db for this query
@@ -500,6 +562,9 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
 
     // SQL statement text
     std::string stmt;
+
+    // Text representation of plan
+    std::string plan;
 
     // DDL, DML etc.
     TStmtType::type stmt_type;
@@ -525,6 +590,8 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
     // Summary of execution for this query.
     TExecSummary exec_summary;
 
+    Status query_status;
+
     // Initialise from an exec_state. If copy_profile is true, print the query
     // profile to a string and copy that into this.profile (which is expensive),
     // otherwise leave this.profile empty.
@@ -540,10 +607,10 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
     bool operator() (const QueryStateRecord& lhs, const QueryStateRecord& rhs) const;
   };
 
-  // Helper method to render a single QueryStateRecord as an HTML table
-  // row. Used by QueryStatePathHandler.
-  void RenderSingleQueryTableRow(const QueryStateRecord& record, bool render_end_time,
-      bool render_cancel, std::stringstream* output);
+  // Helper method to render a single QueryStateRecord as a Json object
+  // Used by QueryStateUrlCallback().
+  void QueryStateToJson(const ImpalaServer::QueryStateRecord& record,
+      rapidjson::Value* value, rapidjson::Document* document);
 
   // Beeswax private methods
 
@@ -595,20 +662,8 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
   Status TExecuteStatementReqToTQueryContext(
       const apache::hive::service::cli::thrift::TExecuteStatementReq execute_request,
       TQueryCtx* query_ctx);
-  static void TColumnValueToHiveServer2TColumnValue(const TColumnValue& value,
-      const TColumnType& type,
-      apache::hive::service::cli::thrift::TColumnValue* hs2_col_val);
   static void TQueryOptionsToMap(const TQueryOptions& query_option,
       std::map<std::string, std::string>* configuration);
-
-  // Convert an expr value to HiveServer2 TColumnValue
-  static void ExprValueToHiveServer2TColumnValue(const void* value,
-      const TColumnType& type,
-      apache::hive::service::cli::thrift::TColumnValue* hs2_col_val);
-
-  // Helper function to translate between Beeswax and HiveServer2 type
-  static apache::hive::service::cli::thrift::TOperationState::type
-      QueryStateToTOperationState(const beeswax::QueryState::type& query_state);
 
   // Helper method to process cancellations that result from failed backends, called from
   // the cancellation thread pool. The cancellation_work contains the query id to cancel
@@ -638,13 +693,6 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
   // than FLAGS_idle_session_timeout are 'expired': they will no longer accept queries and
   // any running queries associated with those sessions are cancelled.
   void ExpireSessions();
-
-  // Cancels all queries associated with a session
-  void CancelSessionQueries(SessionState* session_state);
-
-  // Cancels all queries associated with a session asynchronously, by placing them on the
-  // cancellation queue.
-  void CancelSessionQueriesAsync(SessionState* session_state, const std::string& cause);
 
   // Runs forever, walking queries_by_timestamp_ and expiring any queries that have been
   // idle (i.e. no client input and no time spent processing locally) for
@@ -702,13 +750,6 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
   QueryExecStateMap query_exec_state_map_;
   boost::mutex query_exec_state_map_lock_;  // protects query_exec_state_map_
 
-  // map from fragment id to exec state; FragmentExecState is owned by us and
-  // referenced as a shared_ptr to allow asynchronous calls to CancelPlanFragment()
-  typedef boost::unordered_map<TUniqueId, boost::shared_ptr<FragmentExecState> >
-      FragmentExecStateMap;
-  FragmentExecStateMap fragment_exec_state_map_;
-  boost::mutex fragment_exec_state_map_lock_;  // protects fragment_exec_state_map_
-
   // Default query options in the form of TQueryOptions and beeswax::ConfigVariable
   TQueryOptions default_query_options_;
   std::vector<beeswax::ConfigVariable> default_configs_;
@@ -717,7 +758,13 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
   // is one ref count in the SessionStateMap for as long as the session is active.
   // All queries running from this session also have a reference.
   struct SessionState {
-    SessionState() : closed(false), expired(false), ref_count(0) { }
+    // The default hs2_version must be V1 so that child queries (which use HS2, but may
+    // run as children of Beeswax sessions) get results back in the expected format -
+    // child queries inherit the HS2 version from their parents, and a Beeswax session
+    // will never update the HS2 version from the default.
+    SessionState() : closed(false), expired(false), hs2_version(
+        apache::hive::service::cli::thrift::
+        TProtocolVersion::HIVE_CLI_SERVICE_PROTOCOL_V1), ref_count(0) { }
 
     TSessionType::type session_type;
 
@@ -727,7 +774,7 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
     // Connected user for this session, i.e. the user which originated this session.
     std::string connected_user;
 
-    // The user to impersonate. Empty for no impersonation.
+    // The user to delegate to. Empty for no delegation.
     std::string do_as_user;
 
     // Client network address
@@ -751,6 +798,9 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
 
     // The default query options of this session
     TQueryOptions default_query_options;
+
+    // For HS2 only, the protocol version this session is expecting
+    apache::hive::service::cli::thrift::TProtocolVersion::type hs2_version;
 
     // Inflight queries belonging to this session
     boost::unordered_set<TUniqueId> inflight_queries;
@@ -829,8 +879,8 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
 
   // Returns session state for given session_id.
   // If not found, session_state will be NULL and an error status will be returned.
-  // If keep_alive is true, also checks if the session is expired or closed and increments
-  // the session's reference counter if it is still alive.
+  // If mark_active is true, also checks if the session is expired or closed and
+  // increments the session's reference counter if it is still alive.
   Status GetSessionState(const TUniqueId& session_id,
       boost::shared_ptr<SessionState>* session_state, bool mark_active = false);
 
@@ -901,13 +951,13 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
   int64_t min_subscriber_catalog_topic_version_;
 
   // Map of short usernames of authorized proxy users to the set of user(s) they are
-  // allowed to impersonate. Populated by parsing the --authorized_proxy_users_config
+  // allowed to delegate to. Populated by parsing the --authorized_proxy_users_config
   // flag.
   typedef boost::unordered_map<std::string, boost::unordered_set<std::string> >
       ProxyUserMap;
   ProxyUserMap authorized_proxy_user_config_;
 
-  // Guards queries_by_timestamp_
+  // Guards queries_by_timestamp_.  Must not be acquired before a session state lock.
   boost::mutex query_expiration_lock_;
 
   // Describes a query expiration event (t, q) where t is the expiration deadline in
@@ -929,16 +979,12 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
   // accessed during normal query execution and the benefit of that is there is no
   // competition for locks when ExpireQueries() walks this list to find expired queries.
   //
-  // In order to make the query expiration algorithm work, the following conditions always
-  // hold:
+  // In order to make the query expiration algorithm work, the following condition always
+  // holds:
   //
   // * For any pair (t, q) in the set, t is always a lower bound on the true expiration
-  // time of the query q (in q->idle_time()). Therefore it is always correct to sleep
-  // until t and then check q for expiration.
-  //
-  // * Any new pair (t, q) added to a non-empty set whose first value is (t', q') has t' <
-  // t. This guarantees that it is always safe to sleep until t' without missing any new
-  // expirations.
+  // time of the query q (in q->idle_time()). Therefore we can bound the expiration error
+  // by sleeping to no more than t + d for some small d (in our implementation, d is 1s).
   //
   // The reason that the expiration time saved in each entry here may not exactly match
   // the true expiration time of a query is because we wish to avoid accessing (and

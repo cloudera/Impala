@@ -40,12 +40,15 @@ TSaslServerTransport::TSaslServerTransport(shared_ptr<TTransport> transport)
 
 TSaslServerTransport::TSaslServerTransport(const string& mechanism,
                                            const string& protocol,
-                                           const string& serverName, unsigned flags,
+                                           const string& serverName,
+                                           const string& realm,
+                                           unsigned flags,
                                            const map<string, string>& props,
                                            const vector<struct sasl_callback>& callbacks,
                                            shared_ptr<TTransport> transport)
      : TSaslTransport(transport) {
-  addServerDefinition(mechanism, protocol, serverName, flags, props, callbacks);
+  addServerDefinition(mechanism, protocol, serverName, realm, flags,
+      props, callbacks);
 }
 
 TSaslServerTransport:: TSaslServerTransport(
@@ -91,11 +94,11 @@ void TSaslServerTransport::handleSaslStartMessage() {
                     reinterpret_cast<const uint8_t*>(ss.str().c_str()), ss.str().size());
     throw TTransportException(TTransportException::BAD_ARGS, ss.str());
   }
-  // TODO: when should realm be used?
-  string realm;
+
   TSaslServerDefinition* serverDefinition = defn->second;
   sasl_.reset(new TSaslServer(serverDefinition->protocol_,
-                              serverDefinition->serverName_, realm,
+                              serverDefinition->serverName_,
+                              serverDefinition->realm_,
                               serverDefinition->flags_,
                               &serverDefinition->callbacks_[0]));
   // First argument is interpreted as C-string
@@ -106,12 +109,13 @@ void TSaslServerTransport::handleSaslStartMessage() {
 
 shared_ptr<TTransport> TSaslServerTransport::Factory::getTransport(
     boost::shared_ptr<TTransport> trans) {
-  shared_ptr<TSaslServerTransport> retTransport;
+  shared_ptr<TBufferedTransport> retTransport;
   boost::lock_guard<boost::mutex> l (transportMap_mutex_);
-  map<shared_ptr<TTransport>, shared_ptr<TSaslServerTransport> >::iterator transMap =
+  map<shared_ptr<TTransport>, shared_ptr<TBufferedTransport> >::iterator transMap =
       transportMap_.find(trans);
   if (transMap == transportMap_.end()) {
-    retTransport.reset(new TSaslServerTransport(serverDefinitionMap_, trans));
+    shared_ptr<TTransport> wrapped(new TSaslServerTransport(serverDefinitionMap_, trans));
+    retTransport.reset(new TBufferedTransport(wrapped));
     retTransport.get()->open();
     transportMap_[trans] = retTransport;
   } else {

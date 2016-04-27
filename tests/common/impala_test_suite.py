@@ -19,6 +19,8 @@ import logging
 import os
 import pprint
 import pytest
+import grp
+from getpass import getuser
 from functools import wraps
 from random import choice
 from tests.common.impala_service import ImpaladService
@@ -26,11 +28,11 @@ from tests.common.impala_connection import ImpalaConnection, create_connection
 from tests.common.test_dimensions import *
 from tests.common.test_result_verifier import *
 from tests.common.test_vector import *
-from tests.common.workload_runner import Query
+from tests.common.query import Query
 from tests.util.test_file_parser import *
 from tests.util.thrift_util import create_transport
 from tests.common.base_test_suite import BaseTestSuite
-from tests.common.query_executor import JdbcQueryExecOptions, execute_using_jdbc
+from tests.common.query_executor import JdbcQueryExecConfig, execute_using_jdbc
 from tests.util.hdfs_util import HdfsConfig, get_hdfs_client, get_hdfs_client_from_conf
 
 # Imports required for Hive Metastore Client
@@ -111,10 +113,10 @@ class ImpalaTestSuite(BaseTestSuite):
     return client
 
   @classmethod
-  def cleanup_db(self, db_name):
+  def cleanup_db(self, db_name, sync_ddl=1):
     # To drop a db, we need to first drop all the tables in that db
     self.client.execute("use default")
-    self.client.set_configuration({'sync_ddl': 1})
+    self.client.set_configuration({'sync_ddl': sync_ddl})
 
     if db_name in self.client.execute("show databases", ).data:
       # We use quoted identifiers to avoid name clashes with keywords
@@ -151,6 +153,9 @@ class ImpalaTestSuite(BaseTestSuite):
     table_format_info = vector.get_value('table_format')
     exec_options = vector.get_value('exec_option')
 
+    # Resolve the current user's group name.
+    group_name = grp.getgrnam(getuser()).gr_name
+
     target_impalad_clients = list()
     if multiple_impalad:
       target_impalad_clients =\
@@ -176,7 +181,8 @@ class ImpalaTestSuite(BaseTestSuite):
         self.execute_test_case_setup(test_section['SETUP'], table_format_info)
 
       # TODO: support running query tests against different scale factors
-      query = QueryTestSectionReader.build_query(test_section['QUERY'])
+      query = QueryTestSectionReader.build_query(test_section['QUERY'].replace(
+          '$GROUP_NAME', group_name))
 
       if 'QUERY_NAME' in test_section:
         LOG.info('Query Name: \n%s\n' % test_section['QUERY_NAME'])
@@ -188,8 +194,13 @@ class ImpalaTestSuite(BaseTestSuite):
       result = None
       target_impalad_client = choice(target_impalad_clients)
       try:
+        user = None
+        if 'USER' in test_section:
+          # Create a new client so the session will use the new username.
+          user = test_section['USER'].strip()
+          target_impalad_client = self.create_impala_client()
         for query in query.split(';'):
-          result = self.__execute_query(target_impalad_client, query)
+          result = self.__execute_query(target_impalad_client, query, user=user)
       except Exception as e:
         if 'CATCH' in test_section:
           assert test_section['CATCH'].strip() in str(e)
@@ -290,10 +301,21 @@ class ImpalaTestSuite(BaseTestSuite):
     self.change_database(client, vector.get_value('table_format'))
     return client.execute(query)
 
+  def execute_query_async_using_client(self, client, query, vector):
+    self.change_database(client, vector.get_value('table_format'))
+    return client.execute_async(query)
+
+  def close_query_using_client(self, client, query):
+    return client.close_query(query)
+
   @execute_wrapper
   def execute_query_async(self, query, query_options=None):
     self.client.set_configuration(query_options)
     return self.client.execute_async(query)
+
+  @execute_wrapper
+  def close_query(self, query):
+    return self.client.close_query(query)
 
   @execute_wrapper
   def execute_scalar(self, query, query_options=None):
@@ -308,11 +330,11 @@ class ImpalaTestSuite(BaseTestSuite):
     query = Query()
     query.query_str = stmt
     # Run the statement targeting Hive
-    exec_opts = JdbcQueryExecOptions(iterations=1, impalad=HIVE_HS2_HOST_PORT)
+    exec_opts = JdbcQueryExecConfig(impalad=HIVE_HS2_HOST_PORT)
     hive_results = execute_using_jdbc(query, exec_opts).data
 
     # Run the statement targeting Impala
-    exec_opts = JdbcQueryExecOptions(iterations=1, impalad=IMPALAD_HS2_HOST_PORT)
+    exec_opts = JdbcQueryExecConfig(impalad=IMPALAD_HS2_HOST_PORT)
     impala_results = execute_using_jdbc(query, exec_opts).data
 
     # Compare the results
@@ -336,10 +358,10 @@ class ImpalaTestSuite(BaseTestSuite):
     for partition in self.hive_client.get_partition_names(db_name, table_name, 0):
       self.hive_client.drop_partition_by_name(db_name, table_name, partition, True)
 
-  def __execute_query(self, impalad_client, query, query_options=None):
+  def __execute_query(self, impalad_client, query, query_options=None, user=None):
     """Executes the given query against the specified Impalad"""
     if query_options is not None: impalad_client.set_configuration(query_options)
-    return impalad_client.execute(query)
+    return impalad_client.execute(query, user=user)
 
   def __execute_query_new_client(self, query, query_options=None,
       use_kerberos=False):
@@ -373,11 +395,13 @@ class ImpalaTestSuite(BaseTestSuite):
     cluster_sizes = ALL_CLUSTER_SIZES
     disable_codegen_options = ALL_DISABLE_CODEGEN_OPTIONS
     batch_sizes = ALL_BATCH_SIZES
+    exec_single_node_option = [0]
     if cls.exploration_strategy() == 'core':
       disable_codegen_options = [False]
       cluster_sizes = ALL_NODES_ONLY
     return create_exec_option_dimension(cluster_sizes, disable_codegen_options,
-                                        batch_sizes)
+                                        batch_sizes,
+                                        exec_single_node_option=exec_single_node_option)
 
   @classmethod
   def exploration_strategy(cls):

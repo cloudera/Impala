@@ -6,6 +6,7 @@
 #include <thrift/protocol/TDebugProtocol.h>
 
 #include "exprs/expr.h"
+#include "exprs/expr-context.h"
 #include "util/benchmark.h"
 #include "util/cpu-info.h"
 #include "util/debug-util.h"
@@ -81,21 +82,22 @@ class Planner {
 };
 
 struct TestData {
-  Expr* root;
-  vector<Expr*> exprs;
+  ExprContext* ctx;
   int64_t dummy_result;
 };
 
 Planner planner;
 ObjectPool pool;
+MemTracker tracker;
 
 // Utility function to get prepare select list for exprs.  Assumes this is a
 // constant query
-static Status PrepareSelectList(const TExecRequest& request, vector<Expr*>* exprs) {
+static Status PrepareSelectList(const TExecRequest& request, ExprContext** ctx) {
   const TQueryExecRequest& query_request = request.query_exec_request;
   vector<TExpr> texprs = query_request.fragments[0].output_exprs;
-  RETURN_IF_ERROR(Expr::CreateExprTrees(&pool, texprs, exprs));
-  RETURN_IF_ERROR(Expr::Prepare(exprs[0], NULL, RowDescriptor(), true));
+  DCHECK_EQ(texprs.size(), 1);
+  RETURN_IF_ERROR(Expr::CreateExprTree(&pool, texprs[0], ctx));
+  RETURN_IF_ERROR((*ctx)->Prepare(NULL, RowDescriptor(), &tracker));
   return Status::OK;
 }
 
@@ -106,8 +108,7 @@ static TestData* GenerateBenchmarkExprs(const string& query, bool codegen) {
   TestData* test_data = new TestData;
   TExecRequest request;
   EXIT_IF_ERROR(planner.GeneratePlan(ss.str(), &request));
-  EXIT_IF_ERROR(PrepareSelectList(request, &test_data->exprs));
-  test_data->root = test_data->exprs[0];
+  EXIT_IF_ERROR(PrepareSelectList(request, &test_data->ctx));
   return test_data;
 }
 
@@ -118,7 +119,7 @@ void BenchmarkQueryFn(int batch_size, void* d) {
   TestData* data = reinterpret_cast<TestData*>(d);
   for (int i = 0; i < batch_size; ++i) {
     for (int n = 0; n < ITERATIONS; ++n) {
-      void* value = data->root->GetValue(NULL);
+      void* value = data->ctx->GetValue(NULL);
       // Dummy result to prevent this from being optimized away
       data->dummy_result += reinterpret_cast<int64_t>(value);
     }

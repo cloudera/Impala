@@ -15,9 +15,10 @@
 package com.cloudera.impala.common;
 
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Collection;
+import java.util.List;
 
+import com.cloudera.impala.util.Visitor;
 import com.google.common.base.Predicate;
 
 public class TreeNode<NodeType extends TreeNode<NodeType>> {
@@ -37,6 +38,10 @@ public class TreeNode<NodeType extends TreeNode<NodeType>> {
 
   public void addChild(NodeType n) {
     children_.add(n);
+  }
+
+  public void addChildren(List<? extends NodeType> l) {
+    children_.addAll(l);
   }
 
   public void setChild(int index, NodeType n) {
@@ -70,6 +75,23 @@ public class TreeNode<NodeType extends TreeNode<NodeType>> {
   }
 
   /**
+   * Add all nodes in the tree that are of class 'cl' to the list 'matches'.
+   * This node is checked first, followed by its children in order. If the node
+   * itself is of class 'cl', the children are skipped.
+   */
+  public <C extends TreeNode<NodeType>, D extends C> void collect(
+      Class cl, Collection<D> matches) {
+    if (cl.equals(getClass())) {
+      matches.add((D) this);
+      return;
+    }
+
+    for (NodeType child: children_) {
+      child.collect(cl, matches);
+    }
+  }
+
+  /**
    * Add all nodes in the tree that satisfy 'predicate' to the list 'matches'
    * This node is checked first, followed by its children in order. All nodes
    * that match in the subtree are added.
@@ -91,8 +113,19 @@ public class TreeNode<NodeType extends TreeNode<NodeType>> {
    */
   public static <C extends TreeNode<C>, D extends C> void collect(
       Collection<C> nodeList, Predicate<? super C> predicate, Collection<D> matches) {
-    for (C node : nodeList) {
+    for (C node: nodeList) {
       node.collect(predicate, matches);
+    }
+  }
+
+  /**
+   * For each expression in 'nodeList', collect all subexpressions of class 'cl'
+   * into 'matches'
+   */
+  public static <C extends TreeNode<C>, D extends C> void collect(
+      Collection<C> nodeList, Class cl, Collection<D> matches) {
+    for (C node: nodeList) {
+      node.collect(cl, matches);
     }
   }
 
@@ -102,24 +135,65 @@ public class TreeNode<NodeType extends TreeNode<NodeType>> {
   public <C extends TreeNode<NodeType>> boolean contains(
       Predicate<? super C> predicate) {
     if (predicate.apply((C) this)) return true;
-
     for (NodeType child: children_) {
       if (child.contains(predicate)) return true;
     }
-
     return false;
   }
 
   /**
-   * For each expression in 'exprList', return true if any subexpression satisfies
+   * Return true if this node or any of its children is an instance of class 'cl'.
+   */
+  public boolean contains(Class cl) {
+    if (cl.equals(getClass())) return true;
+    for (NodeType child: children_) {
+      if (child.contains(cl)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * For each node in nodeList, return true if any subexpression satisfies
    * contains('predicate').
    */
   public static <C extends TreeNode<C>, D extends C> boolean contains(
       Collection<C> nodeList, Predicate<? super C> predicate) {
-    for (C node : nodeList) {
+    for (C node: nodeList) {
       if (node.contains(predicate)) return true;
     }
-
     return false;
+  }
+
+  /**
+   * Return true if any node in nodeList contains children of class cl.
+   */
+  public static <C extends TreeNode<C>> boolean contains(
+      List<C> nodeList, Class cl) {
+    for (C node: nodeList) {
+      if (node.contains(cl)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Returns the first node/child of class cl (depth-first traversal).
+   */
+  public <C extends NodeType> C findFirstOf(Class<C> cl) {
+    if (this.getClass().equals(cl)) return (C) this;
+    for (NodeType child: children_) {
+      NodeType result = child.findFirstOf(cl);
+      if (result != null) return (C) result;
+    }
+    return null;
+  }
+
+  /**
+   * Visitor pattern accept method
+   */
+  public <C extends TreeNode<NodeType>> void accept(Visitor<C> visitor) {
+    visitor.visit((C) this);
+    for (NodeType p: children_) {
+      p.accept(visitor);
+    }
   }
 }

@@ -29,7 +29,7 @@ namespace impala {
 // /sys/devices)
 class CpuInfo {
  public:
-  static const int64_t SSE3    = (1 << 1);
+  static const int64_t SSSE3   = (1 << 1);
   static const int64_t SSE4_1  = (1 << 2);
   static const int64_t SSE4_2  = (1 << 3);
   static const int64_t POPCNT  = (1 << 4);
@@ -43,6 +43,10 @@ class CpuInfo {
 
   // Initialize CpuInfo.
   static void Init();
+
+  // Determine if the CPU meets the minimum CPU requirements and if not, issue an error
+  // and terminate.
+  static void VerifyCpuRequirements();
 
   // Returns all the flags for this cpu
   static int64_t hardware_flags() {

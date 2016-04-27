@@ -17,6 +17,7 @@
 #define IMPALA_RUNTIME_STRING_VALUE_INLINE_H
 
 #include "runtime/string-value.h"
+
 #include <cstring>
 #include "util/cpu-info.h"
 #ifdef __SSE4_2__
@@ -101,7 +102,42 @@ inline StringValue StringValue::Trim() const {
   return StringValue(ptr + begin, end - begin + 1);
 }
 
+inline void StringValue::PadWithSpaces(char* cptr, int64_t cptr_len, int64_t num_chars) {
+  DCHECK(cptr != NULL);
+  DCHECK_GE(cptr_len, 1);
+  DCHECK_GE(cptr_len, num_chars);
+  memset(&cptr[num_chars], ' ', cptr_len - num_chars);
 }
 
-#endif
+inline int64_t StringValue::UnpaddedCharLength(const char* cptr, int64_t len) {
+  DCHECK(cptr != NULL);
+  DCHECK_GE(len, 0);
+  int64_t last = len - 1;
+  while (last >= 0 && cptr[last] == ' ') --last;
+  return last + 1;
+}
 
+inline char* StringValue::CharSlotToPtr(void* slot, const ColumnType& type) {
+  DCHECK(type.type == TYPE_CHAR);
+  if (slot == NULL) return NULL;
+  if (type.IsVarLen()) {
+    StringValue* sv = reinterpret_cast<StringValue*>(slot);
+    DCHECK_EQ(sv->len, type.len);
+    return sv->ptr;
+  }
+  return reinterpret_cast<char*>(slot);
+}
+
+inline const char* StringValue::CharSlotToPtr(const void* slot, const ColumnType& type) {
+  DCHECK(type.type == TYPE_CHAR);
+  if (slot == NULL) return NULL;
+  if (type.IsVarLen()) {
+    const StringValue* sv = reinterpret_cast<const StringValue*>(slot);
+    DCHECK_EQ(sv->len, type.len);
+    return sv->ptr;
+  }
+  return reinterpret_cast<const char*>(slot);
+}
+
+}
+#endif

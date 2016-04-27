@@ -37,10 +37,10 @@ import com.cloudera.impala.analysis.Expr;
 import com.cloudera.impala.analysis.SlotDescriptor;
 import com.cloudera.impala.analysis.StringLiteral;
 import com.cloudera.impala.analysis.TupleDescriptor;
-import com.cloudera.impala.catalog.ColumnType;
 import com.cloudera.impala.catalog.HBaseColumn;
 import com.cloudera.impala.catalog.HBaseTable;
 import com.cloudera.impala.catalog.PrimitiveType;
+import com.cloudera.impala.catalog.Type;
 import com.cloudera.impala.common.InternalException;
 import com.cloudera.impala.common.Pair;
 import com.cloudera.impala.service.FeSupport;
@@ -49,6 +49,7 @@ import com.cloudera.impala.thrift.TExplainLevel;
 import com.cloudera.impala.thrift.THBaseFilter;
 import com.cloudera.impala.thrift.THBaseKeyRange;
 import com.cloudera.impala.thrift.THBaseScanNode;
+import com.cloudera.impala.thrift.TNetworkAddress;
 import com.cloudera.impala.thrift.TPlanNode;
 import com.cloudera.impala.thrift.TPlanNodeType;
 import com.cloudera.impala.thrift.TQueryOptions;
@@ -115,13 +116,15 @@ public class HBaseScanNode extends ScanNode {
   public void init(Analyzer analyzer) throws InternalException {
     assignConjuncts(analyzer);
     setStartStopKey(analyzer);
-    computeStats(analyzer);
     // Convert predicates to HBase filters_.
     createHBaseFilters(analyzer);
 
     // materialize slots in remaining conjuncts_
     analyzer.materializeSlots(conjuncts_);
     computeMemLayout(analyzer);
+    computeScanRangeLocations(analyzer);
+
+    // Call computeStats() after materializing slots and computing the mem layout.
     computeStats(analyzer);
   }
 
@@ -144,7 +147,7 @@ public class HBaseScanNode extends ScanNode {
       if (rowRange.getLowerBound() != null) {
         Preconditions.checkState(rowRange.getLowerBound().isConstant());
         Preconditions.checkState(
-            rowRange.getLowerBound().getType().equals(ColumnType.STRING));
+            rowRange.getLowerBound().getType().equals(Type.STRING));
         TColumnValue val = FeSupport.EvalConstExpr(rowRange.getLowerBound(),
             analyzer.getQueryCtx());
         if (!val.isSetString_val()) {
@@ -159,7 +162,7 @@ public class HBaseScanNode extends ScanNode {
       if (rowRange.getUpperBound() != null) {
         Preconditions.checkState(rowRange.getUpperBound().isConstant());
         Preconditions.checkState(
-            rowRange.getUpperBound().getType().equals(ColumnType.STRING));
+            rowRange.getUpperBound().getType().equals(Type.STRING));
         TColumnValue val = FeSupport.EvalConstExpr(rowRange.getUpperBound(),
             analyzer.getQueryCtx());
         if (!val.isSetString_val()) {
@@ -194,8 +197,8 @@ public class HBaseScanNode extends ScanNode {
     } else if (rowRange != null && rowRange.isEqRange()) {
       cardinality_ = 1;
     } else {
-     // Set maxCaching so that each fetch from hbase won't return a batch of more than
-     // MAX_HBASE_FETCH_BATCH_SIZE bytes.
+      // Set maxCaching so that each fetch from hbase won't return a batch of more than
+      // MAX_HBASE_FETCH_BATCH_SIZE bytes.
       Pair<Long, Long> estimate = tbl.getEstimatedRowStats(startKey_, stopKey_);
       cardinality_ = estimate.first.longValue();
       if (estimate.second.longValue() > 0) {
@@ -203,6 +206,7 @@ public class HBaseScanNode extends ScanNode {
             Math.max(MAX_HBASE_FETCH_BATCH_SIZE / estimate.second.longValue(), 1);
       }
     }
+    inputCardinality_ = cardinality_;
 
     cardinality_ *= computeSelectivity();
     cardinality_ = Math.max(0, cardinality_);
@@ -279,12 +283,11 @@ public class HBaseScanNode extends ScanNode {
    * relevant region, and the created TScanRange will contain all the relevant regions
    * of that region server.
    */
-  @Override
-  public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
-    List<TScanRangeLocations> result = Lists.newArrayList();
+  private void computeScanRangeLocations(Analyzer analyzer) {
+    scanRanges_ = Lists.newArrayList();
 
     // For empty scan node, return an empty list.
-    if (isEmpty_) return result;
+    if (isEmpty_) return;
 
     // Retrieve relevant HBase regions and their region servers
     HBaseTable tbl = (HBaseTable) desc_.getTable();
@@ -334,9 +337,10 @@ public class HBaseScanNode extends ScanNode {
           setKeyRangeEnd(keyRange, curRegEndKey);
 
           TScanRangeLocations scanRangeLocation = new TScanRangeLocations();
+          TNetworkAddress networkAddress = addressToTNetworkAddress(locEntry.getKey());
           scanRangeLocation.addToLocations(
-              new TScanRangeLocation(addressToTNetworkAddress(locEntry.getKey())));
-          result.add(scanRangeLocation);
+              new TScanRangeLocation(analyzer.getHostIndex().getIndex(networkAddress)));
+          scanRanges_.add(scanRangeLocation);
 
           TScanRange scanRange = new TScanRange();
           scanRange.setHbase_key_range(keyRange);
@@ -345,7 +349,6 @@ public class HBaseScanNode extends ScanNode {
         prevEndKey = curRegEndKey;
       }
     }
-    return result;
   }
 
   /**

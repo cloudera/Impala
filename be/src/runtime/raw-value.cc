@@ -55,6 +55,7 @@ void RawValue::PrintValueAsBytes(const void* value, const ColumnType& type,
       stream->write(chars, sizeof(double));
       break;
     case TYPE_STRING:
+    case TYPE_VARCHAR:
       string_val = reinterpret_cast<const StringValue*>(value);
       stream->write(static_cast<char*>(string_val->ptr), string_val->len);
       break;
@@ -62,7 +63,7 @@ void RawValue::PrintValueAsBytes(const void* value, const ColumnType& type,
       stream->write(chars, TimestampValue::Size());
       break;
     case TYPE_CHAR:
-      stream->write(chars, type.len);
+      stream->write(StringValue::CharSlotToPtr(chars, type), type.len);
       break;
     case TYPE_DECIMAL:
       stream->write(chars, type.GetByteSize());
@@ -92,12 +93,13 @@ void RawValue::PrintValue(const void* value, const ColumnType& type, int scale,
       *str = (val ? "true" : "false");
       return;
     case TYPE_STRING:
+    case TYPE_VARCHAR:
       string_val = reinterpret_cast<const StringValue*>(value);
       tmp.assign(static_cast<char*>(string_val->ptr), string_val->len);
       str->swap(tmp);
       return;
     case TYPE_CHAR:
-      *str = string(static_cast<const char*>(value), type.len);
+      *str = string(StringValue::CharSlotToPtr(value, type), type.len);
       return;
     default:
       PrintValue(value, type, scale, &out);
@@ -149,6 +151,7 @@ int RawValue::Compare(const void* v1, const void* v2, const ColumnType& type) {
       if (isnan(d2)) return 1;
       return d1 > d2 ? 1 : (d1 < d2 ? -1 : 0);
     case TYPE_STRING:
+    case TYPE_VARCHAR:
       string_value1 = reinterpret_cast<const StringValue*>(v1);
       string_value2 = reinterpret_cast<const StringValue*>(v2);
       return string_value1->Compare(*string_value2);
@@ -156,9 +159,13 @@ int RawValue::Compare(const void* v1, const void* v2, const ColumnType& type) {
       ts_value1 = reinterpret_cast<const TimestampValue*>(v1);
       ts_value2 = reinterpret_cast<const TimestampValue*>(v2);
       return *ts_value1 > *ts_value2 ? 1 : (*ts_value1 < *ts_value2 ? -1 : 0);
-    case TYPE_CHAR:
-      return StringCompare(reinterpret_cast<const char*>(v1), type.len,
-          reinterpret_cast<const char*>(v2), type.len, type.len);
+    case TYPE_CHAR: {
+      const char* v1ptr = StringValue::CharSlotToPtr(v1, type);
+      const char* v2ptr = StringValue::CharSlotToPtr(v2, type);
+      int64_t l1 = StringValue::UnpaddedCharLength(v1ptr, type.len);
+      int64_t l2 = StringValue::UnpaddedCharLength(v2ptr, type.len);
+      return StringCompare(v1ptr, l1, v2ptr, l2, std::min(l1, l2));
+    }
     case TYPE_DECIMAL:
       switch (type.GetByteSize()) {
         case 4:
@@ -211,10 +218,18 @@ void RawValue::Write(const void* value, void* dst, const ColumnType& type,
       *reinterpret_cast<TimestampValue*>(dst) =
           *reinterpret_cast<const TimestampValue*>(value);
       break;
-    case TYPE_STRING: {
+    case TYPE_STRING:
+    case TYPE_VARCHAR:
+    case TYPE_CHAR: {
+      if (!type.IsVarLen()) {
+        DCHECK_EQ(type.type, TYPE_CHAR);
+        memcpy(StringValue::CharSlotToPtr(dst, type), value, type.len);
+        break;
+      }
       const StringValue* src = reinterpret_cast<const StringValue*>(value);
       StringValue* dest = reinterpret_cast<StringValue*>(dst);
       dest->len = src->len;
+      if (type.type == TYPE_VARCHAR) DCHECK_LE(dest->len, type.len);
       if (pool != NULL) {
         dest->ptr = reinterpret_cast<char*>(pool->Allocate(dest->len));
         memcpy(dest->ptr, src->ptr, dest->len);
@@ -223,9 +238,61 @@ void RawValue::Write(const void* value, void* dst, const ColumnType& type,
       }
       break;
     }
-    case TYPE_CHAR:
-      memcpy(dst, value, type.len);
+    case TYPE_DECIMAL:
+      memcpy(dst, value, type.GetByteSize());
       break;
+    default:
+      DCHECK(false) << "RawValue::Write(): bad type: " << type.DebugString();
+  }
+}
+
+// TODO: can we remove some of this code duplication? Templated allocator?
+void RawValue::Write(const void* value, const ColumnType& type,
+    void* dst, uint8_t** buf) {
+  DCHECK(value != NULL);
+  switch (type.type) {
+    case TYPE_BOOLEAN:
+      *reinterpret_cast<bool*>(dst) = *reinterpret_cast<const bool*>(value);
+      break;
+    case TYPE_TINYINT:
+      *reinterpret_cast<int8_t*>(dst) = *reinterpret_cast<const int8_t*>(value);
+      break;
+    case TYPE_SMALLINT:
+      *reinterpret_cast<int16_t*>(dst) = *reinterpret_cast<const int16_t*>(value);
+      break;
+    case TYPE_INT:
+      *reinterpret_cast<int32_t*>(dst) = *reinterpret_cast<const int32_t*>(value);
+      break;
+    case TYPE_BIGINT:
+      *reinterpret_cast<int64_t*>(dst) = *reinterpret_cast<const int64_t*>(value);
+      break;
+    case TYPE_FLOAT:
+      *reinterpret_cast<float*>(dst) = *reinterpret_cast<const float*>(value);
+      break;
+    case TYPE_DOUBLE:
+      *reinterpret_cast<double*>(dst) = *reinterpret_cast<const double*>(value);
+      break;
+    case TYPE_TIMESTAMP:
+      *reinterpret_cast<TimestampValue*>(dst) =
+          *reinterpret_cast<const TimestampValue*>(value);
+      break;
+    case TYPE_STRING:
+    case TYPE_VARCHAR:
+    case TYPE_CHAR: {
+      DCHECK(buf != NULL);
+      if (!type.IsVarLen()) {
+        DCHECK_EQ(type.type, TYPE_CHAR);
+        memcpy(dst, value, type.len);
+        break;
+      }
+      const StringValue* src = reinterpret_cast<const StringValue*>(value);
+      StringValue* dest = reinterpret_cast<StringValue*>(dst);
+      dest->len = src->len;
+      dest->ptr = reinterpret_cast<char*>(*buf);
+      memcpy(dest->ptr, src->ptr, dest->len);
+      *buf += dest->len;
+      break;
+    }
     case TYPE_DECIMAL:
       memcpy(dst, value, type.GetByteSize());
       break;

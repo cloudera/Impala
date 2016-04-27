@@ -21,6 +21,7 @@
 #include <stdint.h>
 
 #include <boost/unordered_map.hpp>
+#include <boost/unordered_set.hpp>
 #include <boost/scoped_ptr.hpp>
 #include <boost/thread/condition_variable.hpp>
 #include <boost/thread/mutex.hpp>
@@ -32,6 +33,7 @@
 #include "runtime/disk-io-mgr.h"
 #include "runtime/string-buffer.h"
 #include "util/progress-updater.h"
+#include "util/spinlock.h"
 #include "util/thread.h"
 
 #include "gen-cpp/PlanNodes_types.h"
@@ -47,19 +49,21 @@ class TPlanNode;
 class TScanRange;
 
 // Maintains per file information for files assigned to this scan node.  This includes
-// all the splits for the file as well as a lock which can be used when updating
-// the file's metadata.
+// all the splits for the file. Note that it is not thread-safe.
 struct HdfsFileDesc {
-  boost::mutex lock;
   std::string filename;
 
-  // length of the file. This is not related to which parts of the file have been
+  // Length of the file. This is not related to which parts of the file have been
   // assigned to this node.
   int64_t file_length;
 
+  THdfsCompression::type file_compression;
+
   // Splits (i.e. raw byte ranges) for this file, assigned to this scan node.
   std::vector<DiskIoMgr::ScanRange*> splits;
-  HdfsFileDesc(const std::string& filename) : filename(filename) {}
+  HdfsFileDesc(const std::string& filename)
+    : filename(filename), file_length(0), file_compression(THdfsCompression::NONE) {
+  }
 };
 
 // Struct for additional metadata for scan ranges. This contains the partition id
@@ -104,8 +108,6 @@ class HdfsScanNode : public ScanNode {
 
   int limit() const { return limit_; }
 
-  bool requires_compaction() const { return requires_compaction_; }
-
   const std::vector<SlotDescriptor*>& materialized_slots()
       const { return materialized_slots_; }
 
@@ -114,13 +116,13 @@ class HdfsScanNode : public ScanNode {
   int tuple_idx() const { return 0; }
 
   // Returns number of partition keys in the schema, including non-materialized slots
-  int num_partition_keys() const { return num_partition_keys_; }
+  int num_partition_keys() const { return hdfs_table_->num_clustering_cols(); }
 
   // Returns number of materialized partition key slots
   int num_materialized_partition_keys() const { return partition_key_slots_.size(); }
 
   // Number of columns, including partition keys
-  int num_cols() const { return column_idx_to_materialized_slot_idx_.size(); }
+  int num_cols() const { return hdfs_table_->num_cols(); }
 
   const TupleDescriptor* tuple_desc() { return tuple_desc_; }
 
@@ -132,7 +134,15 @@ class HdfsScanNode : public ScanNode {
 
   DiskIoMgr::RequestContext* reader_context() { return reader_context_; }
 
+  RuntimeProfile::HighWaterMarkCounter* max_compressed_text_file_length() {
+    return max_compressed_text_file_length_;
+  }
+
   const static int SKIP_COLUMN = -1;
+
+  // Creates a clone of conjunct_ctxs_. 'ctxs' should be non-NULL and empty.
+  // The returned contexts must be closed by the caller.
+  Status GetConjunctCtxs(std::vector<ExprContext*>* ctxs);
 
   // Returns index into materialized_slots with 'col_idx'.  Returns SKIP_COLUMN if
   // that column is not materialized.
@@ -150,17 +160,6 @@ class HdfsScanNode : public ScanNode {
   // codegen'd function to use.  Returns NULL if codegen should not be used.
   void* GetCodegenFn(THdfsFileFormat::type);
 
-  // Each call to GetCodegenFn() must call ReleaseCodegenFn().
-  void ReleaseCodegenFn(THdfsFileFormat::type type, void* fn);
-
-  // Returns a prepared copy of the query's conjunct exprs. Scanners use the conjunct
-  // exprs directly when they cannot use a codegen'd function.
-  std::vector<Expr*>* GetConjuncts();
-
-  // Each call to GetConjuncts() must call ReleaseConjuncts().
-  // TODO: this won't be necessary when exprs are threadsafe.
-  void ReleaseConjuncts(std::vector<Expr*>* conjuncts);
-
   inline void IncNumScannersCodegenEnabled() {
     ++num_scanners_codegen_enabled_;
   }
@@ -174,13 +173,14 @@ class HdfsScanNode : public ScanNode {
   // This function will block if materialized_row_batches_ is full.
   void AddMaterializedRowBatch(RowBatch* row_batch);
 
-  // Allocate a new scan range object, stored in the runtime state's object pool.
-  // For scan ranges that correspond to the original hdfs splits, the partition id
-  // must be set to the range's partition id. For other ranges (e.g. columns in parquet,
-  // read past buffers), the partition_id is unused.
+  // Allocate a new scan range object, stored in the runtime state's object pool.  For
+  // scan ranges that correspond to the original hdfs splits, the partition id must be set
+  // to the range's partition id. For other ranges (e.g. columns in parquet, read past
+  // buffers), the partition_id is unused. expected_local should be true if this scan
+  // range is not expected to require a remote read.
   // This is thread safe.
   DiskIoMgr::ScanRange* AllocateScanRange(const char* file, int64_t len, int64_t offset,
-      int64_t partition_id, int disk_id, bool try_cache);
+      int64_t partition_id, int disk_id, bool try_cache, bool expected_local);
 
   // Adds ranges to the io mgr queue and starts up new scanner threads if possible.
   Status AddDiskIoRanges(const std::vector<DiskIoMgr::ScanRange*>& ranges);
@@ -199,7 +199,8 @@ class HdfsScanNode : public ScanNode {
   // the partition columns for the current scan range
   // Returns NULL if there are no materialized partition keys.
   // TODO: cache the tuple template in the partition object.
-  Tuple* InitTemplateTuple(RuntimeState* state, const std::vector<Expr*>& expr_values);
+  Tuple* InitTemplateTuple(RuntimeState* state,
+                           const std::vector<ExprContext*>& value_ctxs);
 
   // Allocates and return an empty template tuple (i.e. with no values filled in).
   // Scanners can use this method to initialize a template tuple even if there are no
@@ -268,11 +269,6 @@ class HdfsScanNode : public ScanNode {
   // Tuple id resolved in Prepare() to set tuple_desc_;
   const int tuple_id_;
 
-  // If true, scanners need to compact the resulting tuples. This is only true if
-  // the planner marked this node as producing compact row batches and there are
-  // materialized string slots.
-  bool requires_compaction_;
-
   // RequestContext object to use with the disk-io-mgr for reads.
   DiskIoMgr::RequestContext* reader_context_;
 
@@ -286,6 +282,9 @@ class HdfsScanNode : public ScanNode {
   // If true, the warning that some disk ids are unknown was logged.  Only log
   // this once per scan node since it can be noisy.
   bool unknown_disk_id_warned_;
+
+  // Partitions scanned by this scan node.
+  boost::unordered_set<int64_t> partition_ids_;
 
   // File path => file descriptor (which includes the file's splits)
   typedef std::map<std::string, HdfsFileDesc*> FileDescMap;
@@ -315,33 +314,13 @@ class HdfsScanNode : public ScanNode {
   typedef std::map<THdfsFileFormat::type, HdfsScanner*> ScannerMap;
   ScannerMap scanner_map_;
 
-  // Per scanner type codegen'd fn.  If the scan node only contains conjuncts that are
-  // thread safe, there is only one entry in the list and the function is shared by all
-  // scanners.  If the codegen'd fn is not thread safe, there is a number of these
-  // functions that are shared by the scanner threads.  The number of entries in the list
-  // is based on the maximum number of parallel scan ranges possible, which is in turn
-  // based on the number of cpu cores.
-  boost::mutex codgend_fn_map_lock_;
-  typedef std::map<THdfsFileFormat::type, std::list<void*> > CodegendFnMap;
+  // Per scanner type codegen'd fn.
+  typedef std::map<THdfsFileFormat::type, void*> CodegendFnMap;
   CodegendFnMap codegend_fn_map_;
 
-  // All conjunct copies that are created, including codegen'd and noncodegen'd
-  // conjuncts.
-  // TODO: remove when exprs are threadsafe
-  std::list<std::vector<Expr*>*> all_conjuncts_copies_;
-
-  // Copies of the conjuncts for use by the scanners when they cannot use codegen'd
-  // functions.
-  // TODO: We will only need one copy once exprs are threadsafe.
-  SpinLock interpreted_conjuncts_copies_lock_;
-  std::list<std::vector<Expr*>*> interpreted_conjuncts_copies_;
-
-  // The number of non-codegen'd conjuncts copies we made in CreateConjunctsCopies(). Used
-  // for debugging.
-  int num_interpreted_conjuncts_copies_;
-
-  // Total number of partition slot descriptors, including non-materialized ones.
-  int num_partition_keys_;
+  // Contexts for each conjunct. These are cloned by the scanners so conjuncts can be
+  // safely evaluated in parallel.
+  std::vector<ExprContext*> conjunct_ctxs_;
 
   // Vector containing indices into materialized_slots_.  The vector is indexed by
   // the slot_desc's col_pos.  Non-materialized slots and partition key slots will
@@ -396,6 +375,10 @@ class HdfsScanNode : public ScanNode {
   AtomicInt<int> num_scanners_codegen_enabled_;
   AtomicInt<int> num_scanners_codegen_disabled_;
 
+  // The size of the largest compressed text file to be scanned. This is used to estimate
+  // scanner thread memory usage.
+  RuntimeProfile::HighWaterMarkCounter* max_compressed_text_file_length_;
+
   // Disk accessed bitmap
   RuntimeProfile::Counter disks_accessed_bitmap_;
 
@@ -407,6 +390,12 @@ class HdfsScanNode : public ScanNode {
 
   // Total number of bytes read from data node cache
   RuntimeProfile::Counter* bytes_read_dn_cache_;
+
+  // Total number of remote scan ranges
+  RuntimeProfile::Counter* num_remote_ranges_;
+
+  // Total number of bytes read remotely that were expected to be local
+  RuntimeProfile::Counter* unexpected_remote_bytes_;
 
   // Lock protects access between scanner thread and main query thread (the one calling
   // GetNext()) for all fields below.  If this lock and any other locks needs to be taken
@@ -436,7 +425,7 @@ class HdfsScanNode : public ScanNode {
   // Mapping of file formats (file type, compression type) to the number of
   // splits of that type and the lock protecting it.
   // This lock cannot be taken together with any other locks except lock_.
-  boost::mutex file_type_counts_lock_;
+  SpinLock file_type_counts_lock_;
   typedef std::map<
       std::pair<THdfsFileFormat::type, THdfsCompression::type>, int> FileTypeCountsMap;
   FileTypeCountsMap file_type_counts_;
@@ -445,13 +434,9 @@ class HdfsScanNode : public ScanNode {
   // profile.
   bool counters_running_;
 
-  // Creates the necessary codegen functions and conjuncts copies for format. Codegen
-  // functions are stored in codegend_fn_map_[format] and non-codegen'd conjuncts are
-  // stored in conjuncts_copies_.
-  Status CreateConjunctsCopies(THdfsFileFormat::type format);
-
-  // Create a prepared copy of the conjuncts for this node.
-  Status CreateConjuncts(std::vector<Expr*>* exprs, bool disable_codegen);
+  // The id of the callback added to the query resource manager when RM is enabled. Used
+  // to remove the callback before this scan node is destroyed.
+  int32_t rm_callback_id_;
 
   // Called when scanner threads are available for this scan node. This will
   // try to spin up as many scanner threads as the quota allows.
@@ -459,9 +444,10 @@ class HdfsScanNode : public ScanNode {
   // thread tokens if they are available.
   void ThreadTokenAvailableCb(ThreadResourceMgr::ResourcePool* pool);
 
-  // Create a new scanner for this partition type.
-  // If the scanner cannot be created return NULL.
-  HdfsScanner* CreateScanner(HdfsPartitionDescriptor*);
+  // Create and prepare new scanner for this partition type.
+  // If the scanner cannot be created, return NULL.
+  HdfsScanner* CreateAndPrepareScanner(HdfsPartitionDescriptor* partition_desc,
+      ScannerContext* context, Status* status);
 
   // Main function for scanner thread. This thread pulls the next range to be
   // processed from the IoMgr and then processes the entire range end to end.

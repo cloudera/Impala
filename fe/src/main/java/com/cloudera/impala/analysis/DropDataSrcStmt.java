@@ -16,13 +16,12 @@ package com.cloudera.impala.analysis;
 
 import org.apache.hadoop.hive.metastore.MetaStoreUtils;
 
-import com.cloudera.impala.catalog.AuthorizationException;
 import com.cloudera.impala.common.AnalysisException;
 import com.cloudera.impala.thrift.TDropDataSourceParams;
 import com.google.common.base.Preconditions;
 
 /**
- * Represents a DROP DATASOURCE statement.
+ * Represents a DROP DATA SOURCE statement.
  */
 public class DropDataSrcStmt extends StatementBase {
 
@@ -36,8 +35,7 @@ public class DropDataSrcStmt extends StatementBase {
   }
 
   @Override
-  public void analyze(Analyzer analyzer) throws AnalysisException,
-      AuthorizationException {
+  public void analyze(Analyzer analyzer) throws AnalysisException {
     if (!MetaStoreUtils.validateName(dataSrcName_) ||
         (!ifExists_ && analyzer.getCatalog().getDataSource(dataSrcName_) == null)) {
       throw new AnalysisException(Analyzer.DATA_SRC_DOES_NOT_EXIST_ERROR_MSG +
@@ -48,7 +46,7 @@ public class DropDataSrcStmt extends StatementBase {
   @Override
   public String toSql() {
     StringBuilder sb = new StringBuilder();
-    sb.append("DROP DATASOURCE ");
+    sb.append("DROP DATA SOURCE ");
     if (ifExists_) sb.append("IF EXISTS ");
     sb.append(dataSrcName_);
     return sb.toString();

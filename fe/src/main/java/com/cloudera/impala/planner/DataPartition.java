@@ -19,13 +19,14 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.cloudera.impala.analysis.Analyzer;
 import com.cloudera.impala.analysis.Expr;
+import com.cloudera.impala.analysis.ExprSubstitutionMap;
 import com.cloudera.impala.thrift.TDataPartition;
 import com.cloudera.impala.thrift.TPartitionType;
 import com.google.common.base.Joiner;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 
 /**
@@ -34,7 +35,6 @@ import com.google.common.collect.Lists;
  * of a plan fragment; etc. (ie, this is not restricted to direct exchanges
  * between two fragments, which in the backend is facilitated by the classes
  * DataStreamSender/DataStreamMgr/DataStreamRecvr).
- * TODO: better name? just Partitioning?
  */
 public class DataPartition {
   private final static Logger LOG = LoggerFactory.getLogger(DataPartition.class);
@@ -42,7 +42,7 @@ public class DataPartition {
   private final TPartitionType type_;
 
   // for hash partition: exprs used to compute hash value
-  private final ImmutableList<Expr> partitionExprs_;
+  private List<Expr> partitionExprs_;
 
   public DataPartition(TPartitionType type, List<Expr> exprs) {
     Preconditions.checkNotNull(exprs);
@@ -50,14 +50,14 @@ public class DataPartition {
     Preconditions.checkState(type == TPartitionType.HASH_PARTITIONED
         || type == TPartitionType.RANGE_PARTITIONED);
     type_ = type;
-    partitionExprs_ = ImmutableList.copyOf(exprs);
+    partitionExprs_ = exprs;
   }
 
   public DataPartition(TPartitionType type) {
     Preconditions.checkState(type == TPartitionType.UNPARTITIONED
         || type == TPartitionType.RANDOM);
     type_ = type;
-    partitionExprs_ = ImmutableList.of();
+    partitionExprs_ = Lists.newArrayList();
   }
 
   public final static DataPartition UNPARTITIONED =
@@ -67,8 +67,13 @@ public class DataPartition {
       new DataPartition(TPartitionType.RANDOM);
 
   public boolean isPartitioned() { return type_ != TPartitionType.UNPARTITIONED; }
+  public boolean isHashPartitioned() { return type_ == TPartitionType.HASH_PARTITIONED; }
   public TPartitionType getType() { return type_; }
-  public ImmutableList<Expr> getPartitionExprs() { return partitionExprs_; }
+  public List<Expr> getPartitionExprs() { return partitionExprs_; }
+
+  public void substitute(ExprSubstitutionMap smap, Analyzer analyzer) {
+    partitionExprs_ = Expr.substituteList(partitionExprs_, smap, analyzer, false);
+  }
 
   public TDataPartition toThrift() {
     TDataPartition result = new TDataPartition(type_);
@@ -76,6 +81,15 @@ public class DataPartition {
       result.setPartition_exprs(Expr.treesToThrift(partitionExprs_));
     }
     return result;
+  }
+
+  @Override
+  public boolean equals(Object obj) {
+    if (obj == null) return false;
+    if (obj.getClass() != this.getClass()) return false;
+    DataPartition other = (DataPartition) obj;
+    if (type_ != other.type_) return false;
+    return Expr.equalLists(partitionExprs_, other.partitionExprs_);
   }
 
   public String debugString() {

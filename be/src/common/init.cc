@@ -23,11 +23,11 @@
 #include "util/cpu-info.h"
 #include "util/debug-util.h"
 #include "util/disk-info.h"
-#include "util/fe-test-info.h"
 #include "util/logging-support.h"
 #include "util/mem-info.h"
 #include "util/network-util.h"
 #include "util/os-info.h"
+#include "util/test-info.h"
 #include "runtime/decimal-value.h"
 #include "runtime/exec-env.h"
 #include "runtime/hdfs-fs-cache.h"
@@ -41,7 +41,6 @@
 DECLARE_string(hostname);
 // TODO: renamed this to be more generic when we have a good CM release to do so.
 DECLARE_int32(logbufsecs);
-DECLARE_bool(abort_on_config_error);
 DECLARE_string(heap_profile_dir);
 DECLARE_bool(enable_process_lifetime_heap_profiling);
 
@@ -64,8 +63,9 @@ static void MaintenanceThread() {
 
     google::FlushLogFiles(google::GLOG_INFO);
 
-    // Front end tests don't use tcmalloc
-    if (impala::FeTestInfo::is_fe_tests()) continue;
+    // Tests don't need to run the maintenance thread. It causes issues when
+    // on teardown.
+    if (impala::TestInfo::is_test()) continue;
 
 #ifndef ADDRESS_SANITIZER
     // Required to ensure memory gets released back to the OS, even if tcmalloc doesn't do
@@ -102,19 +102,18 @@ static void MaintenanceThread() {
   }
 }
 
-void impala::InitCommonRuntime(int argc, char** argv, bool init_jvm, bool is_fe_tests) {
+void impala::InitCommonRuntime(int argc, char** argv, bool init_jvm,
+    TestInfo::Mode test_mode) {
   CpuInfo::Init();
   DiskInfo::Init();
   MemInfo::Init();
   OsInfo::Init();
   DecimalUtil::InitMaxUnscaledDecimal();
+  TestInfo::Init(test_mode);
 
-  FeTestInfo::Init(is_fe_tests);
-
-  if (!CpuInfo::IsSupported(CpuInfo::SSE3)) {
-    LOG(ERROR) << "CPU does not support the SSE3 instruction set, which is required."
-               << " This could lead to instability.";
-  }
+  // Verify CPU meets the minimum requirements before calling InitGoogleLoggingSafe()
+  // which might use SSSE3 instructions (see IMPALA-160).
+  CpuInfo::VerifyCpuRequirements();
 
   // Set the default hostname. The user can override this with the hostname flag.
   GetHostname(&FLAGS_hostname);
@@ -142,6 +141,7 @@ void impala::InitCommonRuntime(int argc, char** argv, bool init_jvm, bool is_fe_
   LOG(INFO) << OsInfo::DebugString();
   LOG(INFO) << "Process ID: " << getpid();
 
+  // Required for the FE's Catalog
   impala::LibCache::Init();
   impala::HdfsFsCache::Init();
 

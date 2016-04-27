@@ -26,7 +26,7 @@ include "Descriptors.thrift"
 include "PlanNodes.thrift"
 include "Planner.thrift"
 include "DataSinks.thrift"
-include "Data.thrift"
+include "Results.thrift"
 include "RuntimeProfile.thrift"
 include "ImpalaService.thrift"
 include "Llama.thrift"
@@ -58,12 +58,11 @@ struct TQueryOptions {
   11: optional string debug_action = ""
   12: optional i64 mem_limit = 0
   13: optional bool abort_on_default_limit_exceeded = 0 // Deprecated in 1.4
-  14: optional CatalogObjects.THdfsCompression parquet_compression_codec =
-      CatalogObjects.THdfsCompression.SNAPPY
+  14: optional CatalogObjects.THdfsCompression compression_codec
   15: optional i32 hbase_caching = 0
   16: optional bool hbase_cache_blocks = 0
   17: optional i64 parquet_file_size = 0
-  18: optional Types.TExplainLevel explain_level
+  18: optional Types.TExplainLevel explain_level = 1
   19: optional bool sync_ddl = 0
 
   // Request pool this request should be submitted to. If not set
@@ -84,6 +83,33 @@ struct TQueryOptions {
 
   // test hook to disable topn on the outermost select block.
   24: optional bool disable_outermost_topn = 0
+
+  // Override for initial memory reservation size if RM is enabled.
+  25: optional i64 rm_initial_mem = 0
+
+  // Time, in s, before a query will be timed out if it is inactive. May not exceed
+  // --idle_query_timeout if that flag > 0.
+  26: optional i32 query_timeout_s = 0
+
+  // test hook to cap max memory for spilling operators (to force them to spill).
+  27: optional i64 max_block_mgr_memory
+
+  // If true, transforms all count(distinct) aggregations into NDV()
+  28: optional bool appx_count_distinct = 0
+
+  // If true, allows Impala to internally disable spilling for potentially
+  // disastrous query plans. Impala will excercise this option if a query
+  // has no plan hints, and at least one table is missing relevant stats.
+  29: optional bool disable_unsafe_spills = 0
+
+  // Mode for compression; RECORD, or BLOCK
+  // This field only applies for certain file types and is ignored
+  // by all other file types.
+  30: optional CatalogObjects.THdfsSeqCompressionMode seq_compression_mode
+
+  // If the number of rows that are processed for a single query is below the
+  // threshold, it will be executed on the coordinator only with codegen disabled
+  31: optional i32 exec_single_node_rows_threshold = 100
 }
 
 // Impala currently has two types of sessions: Beeswax and HiveServer2
@@ -106,8 +132,8 @@ struct TSessionState {
   // The user to whom this session belongs
   2: required string connected_user
 
-  // If set, the user we are impersonating for the current session
-  6: optional string impersonated_user;
+  // If set, the user we are delegating for the current session
+  6: optional string delegated_user;
 
   // Client network address
   4: required Types.TNetworkAddress network_address
@@ -148,6 +174,11 @@ struct TQueryCtx {
   // List of tables missing relevant table and/or column stats. Used for
   // populating query-profile fields consumed by CM as well as warning messages.
   7: optional list<CatalogObjects.TTableName> tables_missing_stats
+
+  // Internal flag to disable spilling. Used as a guard against potentially
+  // disastrous query plans. The rationale is that cancelling queries, e.g.,
+  // with a huge join build is preferable over spilling "forever".
+  8: optional bool disable_spilling
 }
 
 // Context of a fragment instance, including its unique id, the total number
@@ -174,6 +205,7 @@ struct TScanRangeParams {
   1: required PlanNodes.TScanRange scan_range
   2: optional i32 volume_id = -1
   3: optional bool is_cached = false
+  4: optional bool is_remote
 }
 
 // Specification of one output destination of a plan fragment
@@ -363,7 +395,7 @@ struct TTransmitDataParams {
   4: optional Types.TPlanNodeId dest_node_id
 
   // required in V1
-  5: optional Data.TRowBatch row_batch
+  5: optional Results.TRowBatch row_batch
 
   // if set to true, indicates that no more row batches will be sent
   // for this dest_node_id

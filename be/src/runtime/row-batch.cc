@@ -17,17 +17,20 @@
 #include <stdint.h>  // for intptr_t
 #include <boost/scoped_ptr.hpp>
 
+#include "runtime/buffered-tuple-stream.h"
+#include "runtime/mem-tracker.h"
 #include "runtime/string-value.h"
 #include "runtime/tuple-row.h"
-#include "runtime/mem-tracker.h"
 #include "util/compress.h"
 #include "util/decompress.h"
-#include "gen-cpp/Data_types.h"
+#include "gen-cpp/Results_types.h"
 
 using namespace boost;
 using namespace std;
 
 namespace impala {
+
+const int RowBatch::AT_CAPACITY_MEM_USAGE = 8 * 1024 * 1024;
 
 RowBatch::RowBatch(const RowDescriptor& row_desc, int capacity,
     MemTracker* mem_tracker)
@@ -38,12 +41,12 @@ RowBatch::RowBatch(const RowDescriptor& row_desc, int capacity,
     num_tuples_per_row_(row_desc.tuple_descriptors().size()),
     row_desc_(row_desc),
     auxiliary_mem_usage_(0),
+    need_to_return_(false),
     tuple_data_pool_(new MemPool(mem_tracker_)) {
   DCHECK(mem_tracker_ != NULL);
-  tuple_ptrs_size_ = capacity_ * num_tuples_per_row_ * sizeof(Tuple*);
-  tuple_ptrs_ = new Tuple*[capacity_ * num_tuples_per_row_];
-  mem_tracker_->Consume(tuple_ptrs_size_);
   DCHECK_GT(capacity, 0);
+  tuple_ptrs_size_ = capacity_ * num_tuples_per_row_ * sizeof(Tuple*);
+  tuple_ptrs_ = reinterpret_cast<Tuple**>(tuple_data_pool_->Allocate(tuple_ptrs_size_));
 }
 
 // TODO: we want our input_batch's tuple_data to come from our (not yet implemented)
@@ -60,12 +63,11 @@ RowBatch::RowBatch(const RowDescriptor& row_desc, const TRowBatch& input_batch,
     capacity_(num_rows_),
     num_tuples_per_row_(input_batch.row_tuples.size()),
     row_desc_(row_desc),
-    tuple_ptrs_(new Tuple*[num_rows_ * input_batch.row_tuples.size()]),
     auxiliary_mem_usage_(0),
     tuple_data_pool_(new MemPool(mem_tracker)) {
   DCHECK(mem_tracker_ != NULL);
   tuple_ptrs_size_ = num_rows_ * input_batch.row_tuples.size() * sizeof(Tuple*);
-  mem_tracker_->Consume(tuple_ptrs_size_);
+  tuple_ptrs_ = reinterpret_cast<Tuple**>(tuple_data_pool_->Allocate(tuple_ptrs_size_));
   if (input_batch.compression_type != THdfsCompression::NONE) {
     // Decompress tuple data into data pool
     uint8_t* compressed_data = (uint8_t*)input_batch.tuple_data.c_str();
@@ -76,7 +78,7 @@ RowBatch::RowBatch(const RowDescriptor& row_desc, const TRowBatch& input_batch,
         &decompressor);
     DCHECK(status.ok()) << status.GetErrorMsg();
 
-    int uncompressed_size = input_batch.uncompressed_size;
+    int64_t uncompressed_size = input_batch.uncompressed_size;
     DCHECK_NE(uncompressed_size, -1) << "RowBatch decompression failed";
     uint8_t* data = tuple_data_pool_->Allocate(uncompressed_size);
     status = decompressor->ProcessBlock(true, compressed_size, compressed_data,
@@ -96,8 +98,8 @@ RowBatch::RowBatch(const RowDescriptor& row_desc, const TRowBatch& input_batch,
     if (*offset == -1) {
       tuple_ptrs_[tuple_idx++] = NULL;
     } else {
-      tuple_ptrs_[tuple_idx++] =
-          reinterpret_cast<Tuple*>(tuple_data_pool_->GetDataPtr(*offset));
+      tuple_ptrs_[tuple_idx++] = reinterpret_cast<Tuple*>(
+          tuple_data_pool_->GetDataPtr(*offset + tuple_ptrs_size_));
     }
   }
 
@@ -124,10 +126,10 @@ RowBatch::RowBatch(const RowDescriptor& row_desc, const TRowBatch& input_batch,
 
       vector<SlotDescriptor*>::const_iterator slot = (*desc)->string_slots().begin();
       for (; slot != (*desc)->string_slots().end(); ++slot) {
-        DCHECK_EQ((*slot)->type(), TYPE_STRING);
+        DCHECK((*slot)->type().IsVarLen());
         StringValue* string_val = t->GetStringSlot((*slot)->tuple_offset());
-        string_val->ptr = reinterpret_cast<char*>(
-            tuple_data_pool_->GetDataPtr(reinterpret_cast<intptr_t>(string_val->ptr)));
+        int offset = reinterpret_cast<intptr_t>(string_val->ptr) + tuple_ptrs_size_;
+        string_val->ptr = reinterpret_cast<char*>(tuple_data_pool_->GetDataPtr(offset));
       }
     }
   }
@@ -135,10 +137,11 @@ RowBatch::RowBatch(const RowDescriptor& row_desc, const TRowBatch& input_batch,
 
 RowBatch::~RowBatch() {
   tuple_data_pool_->FreeAll();
-  mem_tracker_->Release(tuple_ptrs_size_);
-  delete [] tuple_ptrs_;
   for (int i = 0; i < io_buffers_.size(); ++i) {
     io_buffers_[i]->Return();
+  }
+  for (int i = 0; i < tuple_streams_.size(); ++i) {
+    tuple_streams_[i]->Close();
   }
 }
 
@@ -182,11 +185,11 @@ int RowBatch::Serialize(TRowBatch* output_batch) {
     // Try compressing tuple_data to compression_scratch_, swap if compressed data is
     // smaller
     scoped_ptr<Codec> compressor;
-    Status status =
-        Codec::CreateCompressor(NULL, false, THdfsCompression::SNAPPY, &compressor);
+    Status status = Codec::CreateCompressor(NULL, false, THdfsCompression::LZ4,
+                                            &compressor);
     DCHECK(status.ok()) << status.GetErrorMsg();
 
-    int compressed_size = compressor->MaxOutputLen(size);
+    int64_t compressed_size = compressor->MaxOutputLen(size);
     if (compression_scratch_.size() < compressed_size) {
       compression_scratch_.resize(compressed_size);
     }
@@ -196,7 +199,7 @@ int RowBatch::Serialize(TRowBatch* output_batch) {
     if (LIKELY(compressed_size < size)) {
       compression_scratch_.resize(compressed_size);
       output_batch->tuple_data.swap(compression_scratch_);
-      output_batch->compression_type = THdfsCompression::SNAPPY;
+      output_batch->compression_type = THdfsCompression::LZ4;
     }
     VLOG_ROW << "uncompressed size: " << size << ", compressed size: " << compressed_size;
   }
@@ -213,6 +216,12 @@ void RowBatch::AddIoBuffer(DiskIoMgr::BufferDescriptor* buffer) {
   buffer->SetMemTracker(mem_tracker_);
 }
 
+void RowBatch::AddTupleStream(BufferedTupleStream* stream) {
+  DCHECK(stream != NULL);
+  tuple_streams_.push_back(stream);
+  auxiliary_mem_usage_ += stream->byte_size();
+}
+
 void RowBatch::Reset() {
   DCHECK(tuple_data_pool_.get() != NULL);
   num_rows_ = 0;
@@ -223,7 +232,13 @@ void RowBatch::Reset() {
     io_buffers_[i]->Return();
   }
   io_buffers_.clear();
+  for (int i = 0; i < tuple_streams_.size(); ++i) {
+    tuple_streams_[i]->Close();
+  }
+  tuple_streams_.clear();
   auxiliary_mem_usage_ = 0;
+  tuple_ptrs_ = reinterpret_cast<Tuple**>(tuple_data_pool_->Allocate(tuple_ptrs_size_));
+  need_to_return_ = false;
 }
 
 void RowBatch::TransferResourceOwnership(RowBatch* dest) {
@@ -236,9 +251,14 @@ void RowBatch::TransferResourceOwnership(RowBatch* dest) {
     buffer->SetMemTracker(dest->mem_tracker_);
   }
   io_buffers_.clear();
+  for (int i = 0; i < tuple_streams_.size(); ++i) {
+    dest->tuple_streams_.push_back(tuple_streams_[i]);
+    dest->auxiliary_mem_usage_ += tuple_streams_[i]->byte_size();
+  }
+  tuple_streams_.clear();
+  dest->need_to_return_ |= need_to_return_;
   auxiliary_mem_usage_ = 0;
-  // make sure we can't access our tuples after we gave up the pools holding the
-  // tuple data
+  tuple_ptrs_ = NULL;
   Reset();
 }
 
@@ -269,9 +289,12 @@ void RowBatch::AcquireState(RowBatch* src) {
   src->io_buffers_.clear();
   src->auxiliary_mem_usage_ = 0;
 
+  DCHECK(src->tuple_streams_.empty());
+
   has_in_flight_row_ = src->has_in_flight_row_;
   num_rows_ = src->num_rows_;
   capacity_ = src->capacity_;
+  need_to_return_ = src->need_to_return_;
   std::swap(tuple_ptrs_, src->tuple_ptrs_);
   tuple_data_pool_->AcquireData(src->tuple_data_pool_.get(), false);
   auxiliary_mem_usage_ += src->tuple_data_pool_->total_allocated_bytes();
@@ -290,7 +313,7 @@ int RowBatch::TotalByteSize() {
       result += (*desc)->byte_size();
       vector<SlotDescriptor*>::const_iterator slot = (*desc)->string_slots().begin();
       for (; slot != (*desc)->string_slots().end(); ++slot) {
-        DCHECK_EQ((*slot)->type(), TYPE_STRING);
+        DCHECK((*slot)->type().IsVarLen());
         if (tuple->IsNull((*slot)->null_indicator_offset())) continue;
         StringValue* string_val = tuple->GetStringSlot((*slot)->tuple_offset());
         result += string_val->len;
@@ -298,5 +321,17 @@ int RowBatch::TotalByteSize() {
     }
   }
   return result;
+}
+
+int RowBatch::MaxTupleBufferSize() {
+  int row_size = row_desc_.GetRowSize();
+  if (row_size > AT_CAPACITY_MEM_USAGE) return row_size;
+  int num_rows = 0;
+  if (row_size != 0) {
+    num_rows = std::min(capacity_, AT_CAPACITY_MEM_USAGE / row_size);
+  }
+  int tuple_buffer_size = num_rows * row_size;
+  DCHECK_LE(tuple_buffer_size, AT_CAPACITY_MEM_USAGE);
+  return tuple_buffer_size;
 }
 }

@@ -49,10 +49,10 @@ class TupleRow;
 class HdfsParquetTableWriter : public HdfsTableWriter {
  public:
   HdfsParquetTableWriter(HdfsTableSink* parent,
-                        RuntimeState* state, OutputPartition* output_partition,
-                        const HdfsPartitionDescriptor* part_desc,
-                        const HdfsTableDescriptor* table_desc,
-                        const std::vector<Expr*>& output_exprs);
+                         RuntimeState* state, OutputPartition* output_partition,
+                         const HdfsPartitionDescriptor* part_desc,
+                         const HdfsTableDescriptor* table_desc,
+                         const std::vector<ExprContext*>& output_expr_ctxs);
 
   ~HdfsParquetTableWriter();
 
@@ -73,16 +73,17 @@ class HdfsParquetTableWriter : public HdfsTableWriter {
 
   virtual void Close();
 
-  // Returns the target HDFS block size to use. This can either be a query option
-  // or the default value: 'HDFS_BLOCK_SIZE'
-  virtual uint64_t default_block_size();
+  // Returns the target HDFS block size to use.
+  virtual uint64_t default_block_size() const;
+
+  virtual std::string file_extension() const { return "parq"; }
 
  private:
   // Default data page size. In bytes.
   static const int DATA_PAGE_SIZE = 64 * 1024;
 
   // Default hdfs block size. In bytes.
-  static const int HDFS_BLOCK_SIZE = 1024 * 1024 * 1024;
+  static const int HDFS_BLOCK_SIZE = 256 * 1024 * 1024;
 
   // Align block sizes to this constant. In bytes.
   static const int HDFS_BLOCK_ALIGNMENT = 1024 * 1024;
@@ -102,6 +103,9 @@ class HdfsParquetTableWriter : public HdfsTableWriter {
   template<typename T> friend class ColumnWriter;
   class BoolColumnWriter;
   friend class BoolColumnWriter;
+
+  // Minimum allowable block size in bytes. This is a function of the number of columns.
+  int64_t MinBlockSize() const;
 
   // Fills in the schema portion of the file metadata, converting the schema in
   // table_desc_ into the format in the file metadata
@@ -137,9 +141,11 @@ class HdfsParquetTableWriter : public HdfsTableWriter {
   // Number of rows in current file
   int64_t row_count_;
 
-  // Current estimate of the total size of the file.
-  // If this size would become greater than file_size_limit_ the current data
-  // is written and a new file is started.
+  // Current estimate of the total size of the file.  The file size estimate includes
+  // the running size of the (uncompressed) dictionary, the size of all finalized
+  // (compressed) data pages and their page headers.
+  // If this size exceeds file_size_limit_, the current data is written and a new file
+  // is started.
   int64_t file_size_estimate_;
 
   // Limit on the total size of the file.

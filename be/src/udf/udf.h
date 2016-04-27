@@ -64,6 +64,7 @@ class FunctionContext {
     TYPE_STRING,
     TYPE_FIXED_BUFFER,
     TYPE_DECIMAL,
+    TYPE_VARCHAR
   };
 
   struct TypeDesc {
@@ -72,6 +73,9 @@ class FunctionContext {
     // Only valid if type == TYPE_DECIMAL
     int precision;
     int scale;
+
+    // Only valid if type == TYPE_FIXED_BUFFER || type == TYPE_VARCHAR
+    int len;
   };
 
   struct UniqueId {
@@ -157,6 +161,18 @@ class FunctionContext {
   // to clean up any function state if necessary.
   void SetFunctionState(FunctionStateScope scope, void* ptr);
   void* GetFunctionState(FunctionStateScope scope) const;
+
+  // Returns the return type information of this function. For UDAs, this is the final
+  // return type of the UDA (e.g., the type returned by the finalize function).
+  const TypeDesc& GetReturnType() const;
+
+  // Returns the intermediate type for UDAs, i.e., the one returned by
+  // update and merge functions. Returns INVALID_TYPE for UDFs.
+  const TypeDesc& GetIntermediateType() const;
+
+  // Returns the number of arguments to this function (not including the FunctionContext*
+  // argument).
+  int GetNumArgs() const;
 
   // Returns the type information for the arg_idx-th argument (0-indexed, not including
   // the FunctionContext* argument). Returns NULL if arg_idx is invalid.
@@ -569,6 +585,19 @@ struct DecimalVal : public impala_udf::AnyVal {
     return val16 == other.val16;
   }
   bool operator!=(const DecimalVal& other) const { return !(*this == other); }
+
+  DecimalVal& operator=(const DecimalVal& other) {
+    // Depending on the compiler, the default assignment operator may require 16-byte
+    // alignment of 'this' and 'other'. Cast to void* so the compiler doesn't change back
+    // to an assignment.
+    memcpy(reinterpret_cast<void*>(this), reinterpret_cast<const void*>(&other),
+           sizeof(DecimalVal));
+    return *this;
+  }
+
+  DecimalVal(const DecimalVal& other) {
+    *this = other;
+  }
 };
 
 typedef uint8_t* BufferVal;

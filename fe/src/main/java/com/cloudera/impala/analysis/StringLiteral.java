@@ -17,13 +17,13 @@ package com.cloudera.impala.analysis;
 import java.io.IOException;
 import java.io.StringReader;
 import java.math.BigDecimal;
-import java.math.BigInteger;
 
 import java_cup.runtime.Symbol;
 
 import org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer;
 
-import com.cloudera.impala.catalog.ColumnType;
+import com.cloudera.impala.catalog.ScalarType;
+import com.cloudera.impala.catalog.Type;
 import com.cloudera.impala.common.AnalysisException;
 import com.cloudera.impala.thrift.TExprNode;
 import com.cloudera.impala.thrift.TExprNodeType;
@@ -36,7 +36,20 @@ public class StringLiteral extends LiteralExpr {
 
   public StringLiteral(String value) {
     this.value_ = value;
-    type_ = ColumnType.STRING;
+    type_ = ScalarType.STRING;
+  }
+
+  public StringLiteral(String value, Type type) {
+    this.value_ = value;
+    type_ = type;
+  }
+
+  /**
+   * Copy c'tor used in clone().
+   */
+  protected StringLiteral(StringLiteral other) {
+    super(other);
+    value_ = other.value_;
   }
 
   @Override
@@ -77,11 +90,13 @@ public class StringLiteral extends LiteralExpr {
   }
 
   @Override
-  protected Expr uncheckedCastTo(ColumnType targetType) throws AnalysisException {
+  protected Expr uncheckedCastTo(Type targetType) throws AnalysisException {
     Preconditions.checkState(targetType.isNumericType() || targetType.isDateType()
-        || targetType.equals(this.type_));
+        || targetType.equals(this.type_) || targetType.isStringType());
     if (targetType.equals(this.type_)) {
       return this;
+    } else if (targetType.isStringType()) {
+      type_ = targetType;
     } else if (targetType.isNumericType()) {
       return convertToNumber();
     } else if (targetType.isDateType()) {
@@ -124,35 +139,18 @@ public class StringLiteral extends LiteralExpr {
       throw new AnalysisException("Number too large: " + value_);
     }
     if (sym.sym == SqlParserSymbols.INTEGER_LITERAL) {
-      BigInteger val = (BigInteger) sym.value;
+      BigDecimal val = (BigDecimal) sym.value;
       if (negative) val = val.negate();
-      return new IntLiteral(val);
+      return new NumericLiteral(val);
     }
     if (sym.sym == SqlParserSymbols.DECIMAL_LITERAL) {
       BigDecimal val = (BigDecimal) sym.value;
       if (negative) val = val.negate();
-      return new DecimalLiteral(val);
+      return new NumericLiteral(val);
     }
     // Symbol is not an integer or floating point literal.
     throw new AnalysisException(
         "Failed to convert string literal '" + value_ + "' to number.");
-  }
-
-
-  /**
-   * Convert a string literal to a date literal
-   *
-   * @param targetType
-   *          is the desired type
-   * @return new converted literal (not null)
-   * @throws AnalysisException
-   *           when entire given string cannot be transformed into a date
-   */
-  private LiteralExpr convertToDate(ColumnType targetType)
-      throws AnalysisException {
-    LiteralExpr newLiteral = null;
-    newLiteral = new DateLiteral(value_, targetType);
-    return newLiteral;
   }
 
   @Override
@@ -161,4 +159,7 @@ public class StringLiteral extends LiteralExpr {
     StringLiteral other = (StringLiteral) o;
     return value_.compareTo(other.getStringValue());
   }
+
+  @Override
+  public Expr clone() { return new StringLiteral(this); }
 }

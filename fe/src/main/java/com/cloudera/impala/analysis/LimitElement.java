@@ -14,8 +14,6 @@
 
 package com.cloudera.impala.analysis;
 
-import com.cloudera.impala.analysis.Expr.SubstitutionMap;
-import com.cloudera.impala.catalog.AuthorizationException;
 import com.cloudera.impala.common.AnalysisException;
 import com.cloudera.impala.common.InternalException;
 import com.cloudera.impala.service.FeSupport;
@@ -43,6 +41,17 @@ class LimitElement {
     isAnalyzed_ = false;
     limit_ = -1;
     offset_ = 0;
+  }
+
+  /**
+   * Copy c'tor used in clone().
+   */
+  protected LimitElement(LimitElement other) {
+    limitExpr_ = (other.limitExpr_ == null) ? null : other.limitExpr_.clone().reset();
+    offsetExpr_ = (other.offsetExpr_ == null) ? null : other.offsetExpr_.clone().reset();
+    limit_ = other.limit_;
+    offset_ = other.offset_;
+    isAnalyzed_ = other.isAnalyzed_;
   }
 
   public Expr getLimitExpr() { return limitExpr_; }
@@ -86,8 +95,7 @@ class LimitElement {
     return sb.toString();
   }
 
-  public void analyze(Analyzer analyzer) throws AuthorizationException,
-      AnalysisException {
+  public void analyze(Analyzer analyzer) throws AnalysisException {
     isAnalyzed_ = true;
     if (limitExpr_ != null) {
       if (!limitExpr_.isConstant()) {
@@ -102,6 +110,7 @@ class LimitElement {
       }
       limit_ = evalIntegerExpr(analyzer, limitExpr_, "LIMIT");
     }
+    if (limit_ == 0) analyzer.setHasEmptyResultSet();
 
     if (offsetExpr_ != null) {
       if (!offsetExpr_.isConstant()) {
@@ -116,13 +125,6 @@ class LimitElement {
       }
       offset_ = evalIntegerExpr(analyzer, offsetExpr_, "OFFSET");
     }
-  }
-
-  public LimitElement clone(SubstitutionMap sMap) {
-    LimitElement e = new LimitElement(
-        limitExpr_ == null ? null : limitExpr_.clone(sMap),
-        offsetExpr_ == null ? null : offsetExpr_.clone(sMap));
-    return e;
   }
 
   /**
@@ -158,4 +160,7 @@ class LimitElement {
     }
     return value;
   }
+
+  @Override
+  public LimitElement clone() { return new LimitElement(this); }
 }

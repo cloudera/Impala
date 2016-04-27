@@ -20,10 +20,12 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URL;
 import java.net.URLConnection;
+import java.util.Collections;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -46,10 +48,10 @@ import org.slf4j.LoggerFactory;
 import com.cloudera.impala.analysis.ToSqlUtils;
 import com.cloudera.impala.authorization.AuthorizationConfig;
 import com.cloudera.impala.authorization.ImpalaInternalAdminUser;
-import com.cloudera.impala.authorization.Privilege;
 import com.cloudera.impala.authorization.User;
 import com.cloudera.impala.catalog.DataSource;
 import com.cloudera.impala.catalog.Function;
+import com.cloudera.impala.catalog.Role;
 import com.cloudera.impala.common.FileSystemUtil;
 import com.cloudera.impala.common.ImpalaException;
 import com.cloudera.impala.common.InternalException;
@@ -58,6 +60,7 @@ import com.cloudera.impala.thrift.TCatalogObject;
 import com.cloudera.impala.thrift.TDescribeTableParams;
 import com.cloudera.impala.thrift.TDescribeTableResult;
 import com.cloudera.impala.thrift.TExecRequest;
+import com.cloudera.impala.thrift.TGetAllHadoopConfigsResponse;
 import com.cloudera.impala.thrift.TGetDataSrcsParams;
 import com.cloudera.impala.thrift.TGetDataSrcsResult;
 import com.cloudera.impala.thrift.TGetDbsParams;
@@ -74,6 +77,9 @@ import com.cloudera.impala.thrift.TLogLevel;
 import com.cloudera.impala.thrift.TMetadataOpRequest;
 import com.cloudera.impala.thrift.TQueryCtx;
 import com.cloudera.impala.thrift.TResultSet;
+import com.cloudera.impala.thrift.TShowGrantRoleParams;
+import com.cloudera.impala.thrift.TShowRolesParams;
+import com.cloudera.impala.thrift.TShowRolesResult;
 import com.cloudera.impala.thrift.TShowStatsParams;
 import com.cloudera.impala.thrift.TTableName;
 import com.cloudera.impala.thrift.TUpdateCatalogCacheRequest;
@@ -81,6 +87,8 @@ import com.cloudera.impala.util.GlogAppender;
 import com.cloudera.impala.util.TSessionStateUtil;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 
 /**
  * JNI-callable interface onto a wrapped Frontend instance. The main point is to serialise
@@ -96,17 +104,26 @@ public class JniFrontend {
    * Create a new instance of the Jni Frontend.
    */
   public JniFrontend(boolean lazy, String serverName, String authorizationPolicyFile,
-      String policyProviderClassName, int impalaLogLevel, int otherLogLevel)
-      throws InternalException {
+      String sentryConfigFile, String authPolicyProviderClass, int impalaLogLevel,
+      int otherLogLevel) throws InternalException {
     GlogAppender.Install(TLogLevel.values()[impalaLogLevel],
         TLogLevel.values()[otherLogLevel]);
 
     // Validate the authorization configuration before initializing the Frontend.
     // If there are any configuration problems Impala startup will fail.
-    AuthorizationConfig authorizationConfig = new AuthorizationConfig(serverName,
-        authorizationPolicyFile, policyProviderClassName);
-    authorizationConfig.validateConfig();
-    frontend_ = new Frontend(authorizationConfig);
+    AuthorizationConfig authConfig = new AuthorizationConfig(serverName,
+        authorizationPolicyFile, sentryConfigFile, authPolicyProviderClass);
+    authConfig.validateConfig();
+    if (authConfig.isEnabled()) {
+      LOG.info(String.format("Authorization is 'ENABLED' using %s",
+          authConfig.isFileBasedPolicy() ? " file based policy from: " +
+          authConfig.getPolicyFile() : " using Sentry Policy Service."));
+    } else {
+      LOG.info("Authorization is 'DISABLED'.");
+    }
+    LOG.info(JniUtil.getJavaVersion());
+
+    frontend_ = new Frontend(authConfig);
   }
 
   /**
@@ -120,7 +137,7 @@ public class JniFrontend {
 
     StringBuilder explainString = new StringBuilder();
     TExecRequest result = frontend_.createExecRequest(queryCtx, explainString);
-    LOG.debug(explainString.toString());
+    if (explainString.length() > 0) LOG.debug(explainString.toString());
 
     // TODO: avoid creating serializer for each query?
     TSerializer serializer = new TSerializer(protocolFactory_);
@@ -246,7 +263,7 @@ public class JniFrontend {
     result.setApi_versions(Lists.<String>newArrayListWithCapacity(dataSources.size()));
     for (DataSource dataSource: dataSources) {
       result.addToData_src_names(dataSource.getName());
-      result.addToLocations(dataSource.getLocation().toUri().getPath());
+      result.addToLocations(dataSource.getLocation());
       result.addToClass_names(dataSource.getClassName());
       result.addToApi_versions(dataSource.getApiVersion());
     }
@@ -291,7 +308,7 @@ public class JniFrontend {
     TGetFunctionsResult result = new TGetFunctionsResult();
     List<String> signatures = Lists.newArrayList();
     List<String> retTypes = Lists.newArrayList();
-    List<Function> fns = frontend_.getFunctions(params.type, params.db, params.pattern);
+    List<Function> fns = frontend_.getFunctions(params.category, params.db, params.pattern);
     for (Function fn: fns) {
       signatures.add(fn.signatureString());
       retTypes.add(fn.getReturnType().toString());
@@ -347,8 +364,60 @@ public class JniFrontend {
     TTableName params = new TTableName();
     JniUtil.deserializeThrift(protocolFactory_, params, thriftTableName);
     return ToSqlUtils.getCreateTableSql(frontend_.getCatalog().getTable(
-        params.getDb_name(), params.getTable_name(),
-        ImpalaInternalAdminUser.getInstance(), Privilege.ALL));
+        params.getDb_name(), params.getTable_name()));
+  }
+
+  /**
+   * Gets all roles
+   */
+  public byte[] getRoles(byte[] showRolesParams) throws ImpalaException {
+    TShowRolesParams params = new TShowRolesParams();
+    JniUtil.deserializeThrift(protocolFactory_, params, showRolesParams);
+    TShowRolesResult result = new TShowRolesResult();
+
+    List<Role> roles = Lists.newArrayList();
+    if (params.isIs_show_current_roles() || params.isSetGrant_group()) {
+      User user = new User(params.getRequesting_user());
+      Set<String> groupNames;
+      if (params.isIs_show_current_roles()) {
+        groupNames = frontend_.getAuthzChecker().getUserGroups(user);
+      } else {
+        Preconditions.checkState(params.isSetGrant_group());
+        groupNames = Sets.newHashSet(params.getGrant_group());
+      }
+      for (String groupName: groupNames) {
+        roles.addAll(frontend_.getCatalog().getAuthPolicy().getGrantedRoles(groupName));
+      }
+    } else {
+      Preconditions.checkState(!params.isIs_show_current_roles());
+      roles = frontend_.getCatalog().getAuthPolicy().getAllRoles();
+    }
+
+    result.setRole_names(Lists.<String>newArrayListWithExpectedSize(roles.size()));
+    for (Role role: roles) {
+      result.getRole_names().add(role.getName());
+    }
+
+    Collections.sort(result.getRole_names());
+    TSerializer serializer = new TSerializer(protocolFactory_);
+    try {
+      return serializer.serialize(result);
+    } catch (TException e) {
+      throw new InternalException(e.getMessage());
+    }
+  }
+
+  public byte[] getRolePrivileges(byte[] showGrantRolesParams) throws ImpalaException {
+    TShowGrantRoleParams params = new TShowGrantRoleParams();
+    JniUtil.deserializeThrift(protocolFactory_, params, showGrantRolesParams);
+    TResultSet result = frontend_.getCatalog().getAuthPolicy().getRolePrivileges(
+        params.getRole_name(), params.getPrivilege());
+    TSerializer serializer = new TSerializer(protocolFactory_);
+    try {
+      return serializer.serialize(result);
+    } catch (TException e) {
+      throw new InternalException(e.getMessage());
+    }
   }
 
   /**
@@ -379,33 +448,19 @@ public class JniFrontend {
    * Returns a string of all loaded Hadoop configuration parameters as a table of keys
    * and values. If asText is true, output in raw text. Otherwise, output in html.
    */
-  public String getHadoopConfig(boolean asText) {
-    StringBuilder output = new StringBuilder();
-    if (asText) {
-      output.append("Hadoop Configuration\n");
-      // Write the set of files that make up the configuration
-      output.append(CONF.toString());
-      output.append("\n\n");
-      // Write a table of key, value pairs
-      for (Map.Entry<String, String> e : CONF) {
-        output.append(e.getKey() + "=" + e.getValue() + "\n");
-      }
-      output.append("\n");
-    } else {
-      output.append("<h2>Hadoop Configuration</h2>");
-      // Write the set of files that make up the configuration
-      output.append(CONF.toString());
-      output.append("\n\n");
-      // Write a table of key, value pairs
-      output.append("<table class='table table-bordered table-hover'>");
-      output.append("<tr><th>Key</th><th>Value</th></tr>");
-      for (Map.Entry<String, String> e : CONF) {
-        output.append("<tr><td>" + e.getKey() + "</td><td>" + e.getValue() +
-            "</td></tr>");
-      }
-      output.append("</table>");
+  public byte[] getAllHadoopConfigs() throws ImpalaException {
+    Map<String, String> configs = Maps.newHashMap();
+    for (Map.Entry<String, String> e: CONF) {
+      configs.put(e.getKey(), e.getValue());
     }
-    return output.toString();
+    TGetAllHadoopConfigsResponse result = new TGetAllHadoopConfigsResponse();
+    result.setConfigs(configs);
+    TSerializer serializer = new TSerializer(protocolFactory_);
+    try {
+      return serializer.serialize(result);
+    } catch (TException e) {
+      throw new InternalException(e.getMessage());
+    }
   }
 
   /**

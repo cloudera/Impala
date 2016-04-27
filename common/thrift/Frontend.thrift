@@ -21,8 +21,9 @@ include "PlanNodes.thrift"
 include "Planner.thrift"
 include "Descriptors.thrift"
 include "Data.thrift"
+include "Results.thrift"
 include "Exprs.thrift"
-include "cli_service.thrift"
+include "TCLIService.thrift"
 include "Status.thrift"
 include "CatalogObjects.thrift"
 include "CatalogService.thrift"
@@ -163,8 +164,8 @@ struct TShowStatsParams {
 
 // Parameters for SHOW FUNCTIONS commands
 struct TShowFunctionsParams {
-  // Type of function to show.
-  1: Types.TFunctionType type
+  // Category of function to show.
+  1: Types.TFunctionCategory category
 
   // Database to use for SHOW FUNCTIONS
   2: optional string db
@@ -183,10 +184,49 @@ struct TShowTablesParams {
   2: optional string show_pattern
 }
 
+// Parameters for SHOW [CURRENT] ROLES and SHOW ROLE GRANT GROUP <groupName> commands
+struct TShowRolesParams {
+  // The effective user who submitted this request.
+  1: optional string requesting_user
+
+  // True if this opertion requires admin privileges on the Sentry Service. This is
+  // needed to check for the case where an operation is_user_scope, but the user does
+  // not belong to the specified grant_group.
+  2: required bool is_admin_op
+
+  // True if the statement is "SHOW CURRENT ROLES".
+  3: required bool is_show_current_roles
+
+  // Filters roles to the specified grant group. If null or not set, show roles for all
+  // groups.
+  4: optional string grant_group
+}
+
+// Result of a SHOW ROLES command
+struct TShowRolesResult {
+  1: required list<string> role_names
+}
+
+// Parameters for SHOW GRANT ROLE commands
+struct TShowGrantRoleParams {
+  // The effective user who submitted this request.
+  1: optional string requesting_user
+
+  // The target role name.
+  2: required string role_name
+
+  // True if this operation requires admin privileges on the Sentry Service (when
+  // the requesting user has not been granted the target role name).
+  3: required bool is_admin_op
+
+  // An optional filter to show grants that match a specific privilege spec.
+  4: optional CatalogObjects.TPrivilege privilege
+}
+
 // Arguments to getFunctions(), which returns a list of non-qualified function
 // signatures that match an optional pattern. Parameters for SHOW FUNCTIONS.
 struct TGetFunctionsParams {
-  1: required Types.TFunctionType type
+  1: required Types.TFunctionCategory category
 
   // Database to use for SHOW FUNCTIONS
   2: optional string db
@@ -289,7 +329,7 @@ struct TQueryExecRequest {
       per_node_scan_ranges
 
   // Metadata of the query result set (only for select)
-  5: optional Data.TResultSetMetadata result_set_metadata
+  5: optional Results.TResultSetMetadata result_set_metadata
 
   // Set if the query needs finalization after it executes
   6: optional TFinalizeParams finalize_params
@@ -311,6 +351,9 @@ struct TQueryExecRequest {
   // Estimated per-host CPU requirements in YARN virtual cores.
   // Used for resource management.
   11: optional i16 per_host_vcores
+
+  // List of replica hosts.  Used by the host_idx field of TScanRangeLocation.
+  12: required list<Types.TNetworkAddress> host_list
 }
 
 enum TCatalogOpType {
@@ -323,7 +366,9 @@ enum TCatalogOpType {
   RESET_METADATA,
   DDL,
   SHOW_CREATE_TABLE,
-  SHOW_DATA_SRCS
+  SHOW_DATA_SRCS,
+  SHOW_ROLES,
+  SHOW_GRANT_ROLE,
 }
 
 // TODO: Combine SHOW requests with a single struct that contains a field
@@ -349,6 +394,12 @@ struct TCatalogOpRequest {
   // Parameters for SHOW DATA SOURCES
   11: optional TShowDataSrcsParams show_data_srcs_params
 
+  // Parameters for SHOW ROLES
+  12: optional TShowRolesParams show_roles_params
+
+  // Parameters for SHOW GRANT ROLE
+  13: optional TShowGrantRoleParams show_grant_role_params
+
   // Parameters for DDL requests executed using the CatalogServer
   // such as CREATE, ALTER, and DROP. See CatalogService.TDdlExecRequest
   // for details.
@@ -363,6 +414,13 @@ struct TCatalogOpRequest {
 
   // Parameters for SHOW CREATE TABLE
   10: optional CatalogObjects.TTableName show_create_table_params
+}
+
+// Parameters for the SET query option command
+struct TSetQueryOptionRequest {
+  // Set for "SET key=value", unset for "SET" statement.
+  1: optional string key
+  2: optional string value
 }
 
 // HiveServer2 Metadata operations (JniFrontend.hiveServer2MetadataOperation)
@@ -382,15 +440,15 @@ struct TMetadataOpRequest {
   // opcode
   1: required TMetadataOpcode opcode
 
-  // input parameter
-  2: optional cli_service.TGetInfoReq get_info_req
-  3: optional cli_service.TGetTypeInfoReq get_type_info_req
-  4: optional cli_service.TGetCatalogsReq get_catalogs_req
-  5: optional cli_service.TGetSchemasReq get_schemas_req
-  6: optional cli_service.TGetTablesReq get_tables_req
-  7: optional cli_service.TGetTableTypesReq get_table_types_req
-  8: optional cli_service.TGetColumnsReq get_columns_req
-  9: optional cli_service.TGetFunctionsReq get_functions_req
+  // input parameters
+  2: optional TCLIService.TGetInfoReq get_info_req
+  3: optional TCLIService.TGetTypeInfoReq get_type_info_req
+  4: optional TCLIService.TGetCatalogsReq get_catalogs_req
+  5: optional TCLIService.TGetSchemasReq get_schemas_req
+  6: optional TCLIService.TGetTablesReq get_tables_req
+  7: optional TCLIService.TGetTableTypesReq get_table_types_req
+  8: optional TCLIService.TGetColumnsReq get_columns_req
+  9: optional TCLIService.TGetFunctionsReq get_functions_req
 
   // Session state for the user who initiated this request. If authorization is
   // enabled, only the server objects this user has access to will be returned.
@@ -428,7 +486,7 @@ struct TExecRequest {
   4: optional TCatalogOpRequest catalog_op_request
 
   // Metadata of the query result set (not set for DML)
-  5: optional Data.TResultSetMetadata result_set_metadata
+  5: optional Results.TResultSetMetadata result_set_metadata
 
   // Result of EXPLAIN. Set iff stmt_type is EXPLAIN
   6: optional TExplainResult explain_result
@@ -442,6 +500,9 @@ struct TExecRequest {
 
   // List of warnings that were generated during analysis. May be empty.
   9: required list<string> analysis_warnings
+
+  // Set iff stmt_type is SET
+  10: optional TSetQueryOptionRequest set_query_option_request
 }
 
 // Parameters to FeSupport.cacheJar().
@@ -591,4 +652,8 @@ struct TGetHadoopConfigRequest {
 struct TGetHadoopConfigResponse {
   // The corresponding value if one exists
   1: optional string value
+}
+
+struct TGetAllHadoopConfigsResponse {
+  1: optional map<string, string> configs;
 }

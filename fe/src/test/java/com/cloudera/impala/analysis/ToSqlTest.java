@@ -16,8 +16,11 @@ package com.cloudera.impala.analysis;
 
 import static org.junit.Assert.fail;
 
+import org.junit.Ignore;
 import org.junit.Test;
 
+import com.cloudera.impala.authorization.AuthorizationConfig;
+import com.cloudera.impala.common.AnalysisException;
 import com.cloudera.impala.testutil.TestUtils;
 import com.google.common.base.Preconditions;
 
@@ -26,15 +29,45 @@ import com.google.common.base.Preconditions;
 public class ToSqlTest extends AnalyzerTest {
 
   // Helpers for templated join tests.
-  private final String[] joinConditions_ =
+  private static final String[] joinConditions_ =
       new String[] {"USING (id)", "ON (a.id = b.id)"};
-  private final String[] joinTypes_ = new String[] {"INNER JOIN", "LEFT OUTER JOIN",
-      "RIGHT OUTER JOIN", "FULL OUTER JOIN", "LEFT SEMI JOIN"};
+
+  // All left semi join types.
+  private static final String[] leftSemiJoinTypes_ =
+      new String[] {"LEFT SEMI JOIN", "LEFT ANTI JOIN"};
+
+  // All right semi join types.
+  private static final String[] rightSemiJoinTypes_ =
+      new String[] {"RIGHT SEMI JOIN", "RIGHT ANTI JOIN"};
+
+  // All join types that take an ON or USING clause, i.e., all joins except CROSS JOIN.
+  private static final String[] joinTypes_;
+
+  // Same as joinTypes_, but excluding semi joins.
+  private static final String[] nonSemiJoinTypes_;
+
+  static {
+    // Exclude the NULL AWARE LEFT ANTI JOIN operator because it cannot
+    // be directly expressed via SQL.
+    joinTypes_ = new String[JoinOperator.values().length - 2];
+    int numNonSemiJoinTypes = JoinOperator.values().length - 2 -
+        leftSemiJoinTypes_.length - rightSemiJoinTypes_.length;
+    nonSemiJoinTypes_ = new String[numNonSemiJoinTypes];
+    int i = 0;
+    int j = 0;
+    for (JoinOperator op: JoinOperator.values()) {
+      if (op.isCrossJoin() || op.isNullAwareLeftAntiJoin()) continue;
+      joinTypes_[i++] = op.toString();
+      if (op.isSemiJoin()) continue;
+      nonSemiJoinTypes_[j++] = op.toString();
+    }
+  }
 
   private static AnalysisContext.AnalysisResult analyze(String query, String defaultDb) {
     try {
       AnalysisContext analysisCtx = new AnalysisContext(catalog_,
-          TestUtils.createQueryContext(defaultDb, System.getProperty("user.name")));
+          TestUtils.createQueryContext(defaultDb, System.getProperty("user.name")),
+          AuthorizationConfig.createAuthDisabledConfig());
       analysisCtx.analyze(query);
       AnalysisContext.AnalysisResult analysisResult = analysisCtx.getAnalysisResult();
       Preconditions.checkNotNull(analysisResult.getStmt());
@@ -51,14 +84,20 @@ public class ToSqlTest extends AnalyzerTest {
   }
 
   private void testToSql(String query, String defaultDb, String expected) {
-    AnalysisContext.AnalysisResult analysisResult = analyze(query, defaultDb);
-    String actual = analysisResult.getStmt().toSql();
-    if (!actual.equals(expected)) {
-      String msg = "Expected: " + expected + "\n  Actual: " + actual + "\n";
-      System.err.println(msg);
-      fail(msg);
+    String actual = null;
+    try {
+      ParseNode node = AnalyzesOk(query, createAnalyzer(defaultDb));
+      actual = node.toSql();
+      if (!actual.equals(expected)) {
+        String msg = "Expected: " + expected + "\n  Actual: " + actual + "\n";
+        System.err.println(msg);
+        fail(msg);
+      }
+    } catch (Exception e) {
+      e.printStackTrace();
+      fail("Failed to analyze query: " + query + "\n" + e.getMessage());
     }
-    // Try to parse and analyze the resulting SQL to ensure its validity.
+    // Parse and analyze the resulting SQL to ensure its validity.
     AnalyzesOk(actual, createAnalyzer(defaultDb));
   }
 
@@ -98,6 +137,61 @@ public class ToSqlTest extends AnalyzerTest {
         "from functional.alltypes",
         "SELECT NULL, 1234 < 5678, 1234.0 < 5678.0, 1234 < NULL " +
         "FROM functional.alltypes");
+  }
+
+  @Test
+  public void TestTableAliases() throws AnalysisException {
+    String[] tables = new String[] { "alltypes", "alltypes_view" };
+    String[] columns = new String[] { "int_col", "*" };
+
+    for (String tbl: tables) {
+      for (String col: columns) {
+        // Test implicit table aliases with unqualified table/view name.
+        // Unqualified table/view name is fully qualified in toSql().
+        // Regression tests for IMPALA-962.
+        testToSql(String.format("select %s from %s", col, tbl), "functional",
+            String.format("SELECT %s FROM functional.%s", col, tbl));
+        testToSql(String.format("select %s.%s from %s", tbl, col, tbl), "functional",
+            String.format("SELECT %s.%s FROM functional.%s", tbl, col, tbl));
+        testToSql(String.format("select functional.%s.%s from %s", tbl, col, tbl),
+            "functional",
+            String.format("SELECT functional.%s.%s FROM functional.%s", tbl, col, tbl));
+
+        // Test implicit table aliases with fully-qualified table/view name.
+        testToSql(String.format("select %s from functional.%s", col, tbl),
+            String.format("SELECT %s FROM functional.%s", col, tbl));
+        testToSql(String.format("select %s.%s from functional.%s", tbl, col, tbl),
+            String.format("SELECT %s.%s FROM functional.%s", tbl, col, tbl));
+        testToSql(String.format("select functional.%s.%s from functional.%s",
+            tbl, col, tbl),
+            String.format("SELECT functional.%s.%s FROM functional.%s", tbl, col, tbl));
+
+        // Explicit table alias.
+        testToSql(String.format("select %s from functional.%s a", col, tbl),
+            String.format("SELECT %s FROM functional.%s a", col, tbl));
+        testToSql(String.format("select a.%s from functional.%s a", col, tbl),
+            String.format("SELECT a.%s FROM functional.%s a", col, tbl));
+      }
+    }
+
+    for (String t1: tables) {
+      for (String t2: tables) {
+        if (t1 == t2) continue;
+        for (String col: columns) {
+          // Multiple implicit fully-qualified aliases work.
+          testToSql(String.format(
+              "select functional.%s.%s, functional.%s.%s " +
+                  "from functional.%s, functional.%s", t1, col, t2, col, t1, t2),
+              String.format("SELECT functional.%s.%s, functional.%s.%s " +
+                  "FROM functional.%s, functional.%s", t1, col, t2, col, t1, t2));
+        }
+      }
+    }
+
+    // Unqualified '*' is not ambiguous.
+    testToSql("select * from functional.alltypes " +
+        "cross join functional_parquet.alltypes",
+        "SELECT * FROM functional.alltypes CROSS JOIN functional_parquet.alltypes");
   }
 
   /**
@@ -160,33 +254,6 @@ public class ToSqlTest extends AnalyzerTest {
         "SELECT id FROM functional.alltypes WHERE 5 NOT IN (smallint_col, int_col)");
   }
 
-  @Test
-  public void tableRefTest() {
-    String db = "functional";
-    String[] tableRefs = new String[] {"alltypes", "alltypes_view"};
-    // Run tests on tables and catalog views.
-    for (String tbl: tableRefs) {
-      // Fully-qualified table/view ref without an alias.
-      testToSql(String.format("select * from %s.%s", db, tbl),
-          String.format("SELECT * FROM %s.%s", db, tbl));
-      // Fully-qualified table/view ref with alias.
-      testToSql(String.format("select * from %s.%s a", db, tbl),
-          String.format("SELECT * FROM %s.%s a", db, tbl));
-      // Fully-qualified table/view ref with an alias that needs quoting.
-      testToSql(String.format("select * from %s.%s `table`", db, tbl),
-          String.format("SELECT * FROM %s.%s `table`", db, tbl));
-      // Unqualified table/view name is fully qualified in toSql().
-      // Regression tests for IMPALA-962.
-      testToSql(String.format("select * from %s", tbl), db,
-          String.format("SELECT * FROM %s.%s", db, tbl));
-      testToSql(String.format("select * from (select * from %s) t", tbl), db,
-          String.format("SELECT * FROM (SELECT * FROM %s.%s) t", db, tbl));
-      testToSql(String.format("with t as (select * from %s) select * from t", tbl),
-          "functional",
-          String.format("WITH t AS (SELECT * FROM %s.%s) SELECT * FROM t", db, tbl));
-    }
-  }
-
   // Test the toSql() output of joins in a standalone select block.
   @Test
   public void joinTest() {
@@ -198,6 +265,55 @@ public class ToSqlTest extends AnalyzerTest {
     runTestTemplate("select * from functional.alltypes a %s functional.alltypes b %s",
         "SELECT * FROM functional.alltypes a %s functional.alltypes b %s",
         joinTypes_, joinConditions_);
+  }
+
+  /**
+   * Tests that the toSql() of plan hints use the end-of-line commented hint style
+   * (for view compatibility with Hive) regardless of what style was used in the
+   * original query.
+   */
+  @Test
+  public void planHintsTest() {
+    String[][] hintStyles = new String[][] {
+        new String[] { "/* +", "*/" }, // traditional commented hint
+        new String[] { "\n-- +", "\n" }, // eol commented hint
+        new String[] { "[", "]" } // legacy style
+    };
+    for (String[] hintStyle: hintStyles) {
+      String prefix = hintStyle[0];
+      String suffix = hintStyle[1];
+
+      // Join hint.
+      testToSql(String.format(
+          "select * from functional.alltypes a join %sbroadcast%s " +
+          "functional.alltypes b on a.id = b.id", prefix, suffix),
+          "SELECT * FROM functional.alltypes a INNER JOIN \n-- +broadcast\n " +
+          "functional.alltypes b ON a.id = b.id");
+
+      // Insert hint.
+      testToSql(String.format(
+          "insert into functional.alltypes(int_col, bool_col) " +
+          "partition(year, month) %snoshuffle%s " +
+          "select int_col, bool_col, year, month from functional.alltypes",
+          prefix, suffix),
+          "INSERT INTO TABLE functional.alltypes(int_col, bool_col) " +
+              "PARTITION (year, month) \n-- +noshuffle\n " +
+          "SELECT int_col, bool_col, year, month FROM functional.alltypes");
+
+      // Select-list hint. The legacy-style hint has no prefix and suffix.
+      if (prefix.contains("[")) {
+        prefix = "";
+        suffix = "";
+      }
+      // Comment-style select-list plan hint.
+      testToSql(String.format(
+          "select %sstraight_join%s * from functional.alltypes", prefix, suffix),
+          "SELECT \n-- +straight_join\n * FROM functional.alltypes");
+      testToSql(
+          String.format("select distinct %sstraight_join%s * from functional.alltypes",
+          prefix, suffix),
+          "SELECT DISTINCT \n-- +straight_join\n * FROM functional.alltypes");
+    }
   }
 
   // Test the toSql() output of aggregate and group by expressions.
@@ -285,10 +401,10 @@ public class ToSqlTest extends AnalyzerTest {
 
   @Test
   public void unionTest() {
-    testToSql("select bool_col, int_col from functional.alltypes " +
+    testToSql("select bool_col, rank() over(order by id) from functional.alltypes " +
         "union select bool_col, int_col from functional.alltypessmall " +
         "union select bool_col, bigint_col from functional.alltypes",
-        "SELECT bool_col, int_col FROM functional.alltypes " +
+        "SELECT bool_col, rank() OVER (ORDER BY id ASC) FROM functional.alltypes " +
         "UNION SELECT bool_col, int_col FROM functional.alltypessmall " +
         "UNION SELECT bool_col, bigint_col FROM functional.alltypes");
     testToSql("select bool_col, int_col from functional.alltypes " +
@@ -370,14 +486,24 @@ public class ToSqlTest extends AnalyzerTest {
     runTestTemplate("select t.* from (select a.* from functional.alltypes a %s " +
         "functional.alltypes b %s) t",
         "SELECT t.* FROM (SELECT a.* FROM functional.alltypes a %s " +
-        "functional.alltypes b %s) t", joinTypes_, joinConditions_);
+        "functional.alltypes b %s) t", nonSemiJoinTypes_, joinConditions_);
+    runTestTemplate("select t.* from (select a.* from functional.alltypes a %s " +
+        "functional.alltypes b %s) t",
+        "SELECT t.* FROM (SELECT a.* FROM functional.alltypes a %s " +
+        "functional.alltypes b %s) t", leftSemiJoinTypes_, joinConditions_);
+    runTestTemplate("select t.* from (select b.* from functional.alltypes a %s " +
+        "functional.alltypes b %s) t",
+        "SELECT t.* FROM (SELECT b.* FROM functional.alltypes a %s " +
+        "functional.alltypes b %s) t", rightSemiJoinTypes_, joinConditions_);
 
     // Test undoing expr substitution in select-list exprs and on clause.
     testToSql("select t1.int_col, t2.int_col from " +
-        "(select int_col from functional.alltypes) t1 inner join " +
+        "(select int_col, rank() over (order by int_col) from functional.alltypes) " +
+        "t1 inner join " +
         "(select int_col from functional.alltypes) t2 on (t1.int_col = t2.int_col)",
         "SELECT t1.int_col, t2.int_col FROM " +
-        "(SELECT int_col FROM functional.alltypes) t1 INNER JOIN " +
+        "(SELECT int_col, rank() OVER (ORDER BY int_col ASC) " +
+        "FROM functional.alltypes) t1 INNER JOIN " +
         "(SELECT int_col FROM functional.alltypes) t2 ON (t1.int_col = t2.int_col)");
     // Test undoing expr substitution in aggregates and group by and having clause.
     testToSql("select count(t1.string_col), sum(t2.float_col) from " +
@@ -408,11 +534,92 @@ public class ToSqlTest extends AnalyzerTest {
         "WHERE t1.id = t2.id AND t1.string_col = 'abc' AND t2.float_col < 10");
   }
 
+  /**
+   * Tests that toSql() properly handles subqueries in the where clause.
+   */
+  // TODO Fix testToSql to print the stmt after the first analysis phase and not
+  // after the rewrite.
+  @Ignore("Prints the rewritten statement")
+  @Test
+  public void subqueryTest() {
+    // Nested predicates
+    testToSql("select * from functional.alltypes where id in " +
+        "(select id from functional.alltypestiny)",
+        "SELECT * FROM functional.alltypes WHERE id IN " +
+        "(SELECT id FROM functional.alltypestiny)");
+    testToSql("select * from functional.alltypes where id not in " +
+        "(select id from functional.alltypestiny)",
+        "SELECT * FROM functional.alltypes WHERE id NOT IN " +
+        "(SELECT id FROM functional.alltypestiny)");
+    testToSql("select * from functional.alltypes where bigint_col = " +
+        "(select count(*) from functional.alltypestiny)",
+        "SELECT * FROM functional.alltypes WHERE bigint_col = " +
+        "(SELECT count(*) FROM functional.alltypestiny)");
+    testToSql("select * from functional.alltypes where exists " +
+        "(select * from functional.alltypestiny)",
+        "SELECT * FROM functional.alltypes WHERE EXISTS " +
+        "(SELECT * FROM functional.alltypestiny)");
+    testToSql("select * from functional.alltypes where not exists " +
+        "(select * from functional.alltypestiny)",
+        "SELECT * FROM functional.alltypes WHERE NOT EXISTS " +
+        "(SELECT * FROM functional.alltypestiny)");
+    // Multiple nested predicates in the WHERE clause
+    testToSql("select * from functional.alltypes where not (id < 10 and " +
+        "(int_col in (select int_col from functional.alltypestiny)) and " +
+        "(string_col = (select max(string_col) from functional.alltypestiny)))",
+        "SELECT * FROM functional.alltypes WHERE NOT (id < 10 AND " +
+        "(int_col IN (SELECT int_col FROM functional.alltypestiny)) AND " +
+        "(string_col = (SELECT max(string_col) FROM functional.alltypestiny)))");
+    // Multiple nesting levels
+    testToSql("select * from functional.alltypes where id in " +
+        "(select id from functional.alltypestiny where int_col = " +
+        "(select avg(int_col) from functional.alltypesagg))",
+        "SELECT * FROM functional.alltypes WHERE id IN " +
+        "(SELECT id FROM functional.alltypestiny WHERE int_col = " +
+        "(SELECT avg(int_col) FROM functional.alltypesagg))");
+    // Inline view with a subquery
+    testToSql("select * from (select id from functional.alltypes where " +
+        "int_col in (select int_col from functional.alltypestiny)) t where " +
+        "t.id < 10",
+        "SELECT * FROM (SELECT id FROM functional.alltypes WHERE " +
+        "int_col IN (SELECT int_col FROM functional.alltypestiny)) t WHERE " +
+        "t.id < 10");
+    // Subquery in a WITH clause
+    testToSql("with t as (select * from functional.alltypes where id in " +
+        "(select id from functional.alltypestiny)) select * from t",
+        "WITH t AS (SELECT * FROM functional.alltypes WHERE id IN " +
+        "(SELECT id FROM functional.alltypestiny)) SELECT * FROM t");
+    testToSql("with t as (select * from functional.alltypes s where id in " +
+        "(select id from functional.alltypestiny t where s.id = t.id)) " +
+        "select * from t t1, t t2 where t1.id = t2.id",
+        "WITH t AS (SELECT * FROM functional.alltypes s WHERE id IN " +
+        "(SELECT id FROM functional.alltypestiny t WHERE s.id = t.id)) " +
+        "SELECT * FROM t t1, t t2 WHERE t1.id = t2.id");
+  }
+
   @Test
   public void withClauseTest() {
     // WITH clause in select stmt.
     testToSql("with t as (select * from functional.alltypes) select * from t",
         "WITH t AS (SELECT * FROM functional.alltypes) SELECT * FROM t");
+    testToSql("with t as (select sum(int_col) over(partition by tinyint_col, " +
+        "bool_col order by float_col rows between unbounded preceding and " +
+        "current row) as x from functional.alltypes) " +
+        "select t1.x, t2.x from t t1 join t t2 on (t1.x = t2.x)",
+        "WITH t AS (SELECT sum(int_col) OVER (PARTITION BY tinyint_col, bool_col " +
+        "ORDER BY float_col ASC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) " +
+        "x FROM functional.alltypes) SELECT t1.x, t2.x FROM t t1 INNER JOIN t t2 ON " +
+        "(t1.x = t2.x)");
+    // WITH clause in select stmt with a join and an ON clause.
+    testToSql("with t as (select * from functional.alltypes) " +
+        "select * from t a inner join t b on (a.int_col = b.int_col)",
+        "WITH t AS (SELECT * FROM functional.alltypes) " +
+        "SELECT * FROM t a INNER JOIN t b ON (a.int_col = b.int_col)");
+    // WITH clause in select stmt with a join and a USING clause.
+    testToSql("with t as (select * from functional.alltypes) " +
+        "select * from t a inner join t b using(int_col)",
+        "WITH t AS (SELECT * FROM functional.alltypes) " +
+        "SELECT * FROM t a INNER JOIN t b USING (int_col)");
     // WITH clause in a union stmt.
     testToSql("with t1 as (select * from functional.alltypes)" +
         "select * from t1 union all select * from t1",
@@ -439,7 +646,17 @@ public class ToSqlTest extends AnalyzerTest {
     runTestTemplate("with t as (select a.* from functional.alltypes a %s " +
         "functional.alltypes b %s) select * from t",
         "WITH t AS (SELECT a.* FROM functional.alltypes a %s " +
-        "functional.alltypes b %s) SELECT * FROM t", joinTypes_, joinConditions_);
+        "functional.alltypes b %s) SELECT * FROM t", nonSemiJoinTypes_, joinConditions_);
+    runTestTemplate("with t as (select a.* from functional.alltypes a %s " +
+        "functional.alltypes b %s) select * from t",
+        "WITH t AS (SELECT a.* FROM functional.alltypes a %s " +
+        "functional.alltypes b %s) SELECT * FROM t",
+        leftSemiJoinTypes_, joinConditions_);
+    runTestTemplate("with t as (select b.* from functional.alltypes a %s " +
+        "functional.alltypes b %s) select * from t",
+        "WITH t AS (SELECT b.* FROM functional.alltypes a %s " +
+        "functional.alltypes b %s) SELECT * FROM t",
+        rightSemiJoinTypes_, joinConditions_);
     // WITH clause in complex query with joins and and order by + limit.
     testToSql("with t as (select int_col x, bigint_col y from functional.alltypestiny " +
         "order by id nulls first limit 2) " +
@@ -529,6 +746,15 @@ public class ToSqlTest extends AnalyzerTest {
         "PARTITION (year=2009, month) VALUES(1, 12)");
   }
 
+  @Test
+  public void testAnalyticExprs() {
+    testToSql(
+        "select sum(int_col) over (partition by id order by tinyint_col "
+          + "rows between unbounded preceding and current row) from functional.alltypes",
+        "SELECT sum(int_col) OVER (PARTITION BY id ORDER BY tinyint_col ASC ROWS "
+          + "BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM functional.alltypes");
+  }
+
   /**
    * Tests all expressions including whether their toSql() is properly
    * enclosed in parentheses.
@@ -568,6 +794,11 @@ public class ToSqlTest extends AnalyzerTest {
         "(case true when true then 1 when false then 2 else 3 end)",
         "SELECT CASE TRUE WHEN TRUE THEN 1 WHEN FALSE THEN 2 ELSE 3 END, " +
         "(CASE TRUE WHEN TRUE THEN 1 WHEN FALSE THEN 2 ELSE 3 END)");
+    // DECODE version of CaseExpr.
+    testToSql("select decode(1, 2, 3), (decode(4, 5, 6))",
+        "SELECT decode(1, 2, 3), (decode(4, 5, 6))");
+    testToSql("select decode(1, 2, 3, 4, 5, 6), (decode(1, 2, 3, 4, 5, 6))",
+        "SELECT decode(1, 2, 3, 4, 5, 6), (decode(1, 2, 3, 4, 5, 6))");
 
     // CastExpr.
     testToSql("select cast(NULL as INT), (cast(NULL as INT))",
@@ -652,5 +883,15 @@ public class ToSqlTest extends AnalyzerTest {
   @Test
   public void testDecimal() {
     testToSql("select cast(1 as decimal)", "SELECT CAST(1 AS DECIMAL(9,0))");
+  }
+
+  /**
+   * Tests set query option statements are output correctly.
+   */
+  @Test
+  public void testSet() {
+    testToSql("set a = 1", "SET a='1'");
+    testToSql("set `a b` = \"x y\"", "SET `a b`='x y'");
+    testToSql("set", "SET");
   }
 }

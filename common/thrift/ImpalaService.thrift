@@ -19,7 +19,7 @@ include "ExecStats.thrift"
 include "Status.thrift"
 include "Types.thrift"
 include "beeswax.thrift"
-include "cli_service.thrift"
+include "TCLIService.thrift"
 
 // ImpalaService accepts query execution options through beeswax.Query.configuration in
 // key:value form. For example, the list of strings could be:
@@ -93,10 +93,13 @@ enum TImpalaQueryOptions {
   // If true, raise an error when the DEFAULT_ORDER_BY_LIMIT has been reached.
   ABORT_ON_DEFAULT_LIMIT_EXCEEDED,
 
-  // Compression codec for parquet when inserting into parquet tables.
-  // Valid values are "snappy", "gzip" and "none"
+  // Compression codec when inserting into tables.
+  // Valid values are "snappy", "gzip", "bzip2" and "none"
   // Leave blank to use default.
-  PARQUET_COMPRESSION_CODEC,
+  COMPRESSION_CODEC,
+
+  // Mode for compressing sequence files; either BLOCK, RECORD, or DEFAULT
+  SEQ_COMPRESSION_MODE,
 
   // HBase scan query option. If set and > 0, HBASE_CACHING is the value for
   // "hbase.client.Scan.setCaching()" when querying HBase table. Otherwise, use backend
@@ -139,7 +142,29 @@ enum TImpalaQueryOptions {
   DISABLE_CACHED_READS,
 
   // Temporary testing flag
-  DISABLE_OUTERMOST_TOPN
+  DISABLE_OUTERMOST_TOPN,
+
+  // Size of initial memory reservation when RM is enabled
+  RM_INITIAL_MEM,
+
+  // Time, in s, before a query will be timed out if it is inactive. May not exceed
+  // --idle_query_timeout if that flag > 0.
+  QUERY_TIMEOUT_S
+
+  // Test hook for spill to disk operators
+  MAX_BLOCK_MGR_MEMORY,
+
+  // Transforms all count(distinct) aggregations into NDV()
+  APPX_COUNT_DISTINCT
+
+  // If true, allows Impala to internally disable spilling for potentially
+  // disastrous query plans. Impala will excercise this option if a query
+  // has no plan hints, and at least one table is missing relevant stats.
+  DISABLE_UNSAFE_SPILLS
+
+  // If the number of rows that are processed for a single query is below the
+  // threshold, it will be executed on the coordinator only with codegen disabled
+  EXEC_SINGLE_NODE_ROWS_THRESHOLD
 }
 
 // The summary of an insert.
@@ -205,5 +230,36 @@ service ImpalaService extends beeswax.BeeswaxService {
 }
 
 // Impala HiveServer2 service
-service ImpalaHiveServer2Service extends cli_service.TCLIService {
+
+struct TGetExecSummaryReq {
+  1: optional TCLIService.TOperationHandle operationHandle
+
+  2: optional TCLIService.TSessionHandle sessionHandle
+}
+
+struct TGetExecSummaryResp {
+  1: required TCLIService.TStatus status
+
+  2: optional ExecStats.TExecSummary summary
+}
+
+struct TGetRuntimeProfileReq {
+  1: optional TCLIService.TOperationHandle operationHandle
+
+  2: optional TCLIService.TSessionHandle sessionHandle
+}
+
+struct TGetRuntimeProfileResp {
+  1: required TCLIService.TStatus status
+
+  2: optional string profile
+}
+
+
+service ImpalaHiveServer2Service extends TCLIService.TCLIService {
+  // Returns the exec summary for the given query
+  TGetExecSummaryResp GetExecSummary(1:TGetExecSummaryReq req);
+
+  // Returns the runtime profile string for the given query
+  TGetRuntimeProfileResp GetRuntimeProfile(1:TGetRuntimeProfileReq req);
 }

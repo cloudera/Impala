@@ -273,11 +273,11 @@ STRING, STRING, STRING
 ---- QUERY
 show table stats like_view
 ---- LABELS
-#ROWS, #FILES, SIZE, BYTES CACHED, FORMAT
+#ROWS, #FILES, SIZE, BYTES CACHED, FORMAT, INCREMENTAL STATS
 ---- RESULTS
--1,0,'0B','NOT CACHED','TEXT'
+-1,0,'0B','NOT CACHED','TEXT','false'
 ---- TYPES
-BIGINT, BIGINT, STRING, STRING, STRING
+BIGINT, BIGINT, STRING, STRING, STRING, STRING
 ====
 ---- QUERY
 drop table like_view
@@ -290,11 +290,11 @@ create table like_view_parquet like functional.view_view stored as parquet
 ---- QUERY
 show table stats like_view_parquet
 ---- LABELS
-#ROWS, #FILES, SIZE, BYTES CACHED, FORMAT
+#ROWS, #FILES, SIZE, BYTES CACHED, FORMAT, INCREMENTAL STATS
 ---- RESULTS
--1,0,'0B','NOT CACHED','PARQUET'
+-1,0,'0B','NOT CACHED','PARQUET','false'
 ---- TYPES
-BIGINT, BIGINT, STRING, STRING, STRING
+BIGINT, BIGINT, STRING, STRING, STRING, STRING
 ====
 ---- QUERY
 drop table like_view_parquet
@@ -506,6 +506,97 @@ select * from ctas_join_limit0
 ---- RESULTS
 ---- TYPES
 BIGINT, STRING, INT, INT
+====
+---- QUERY
+create table allcomplextypes_clone like functional.allcomplextypes
+stored as parquet
+---- RESULTS
+====
+---- QUERY
+describe allcomplextypes_clone
+---- TYPES
+STRING, STRING, STRING
+---- RESULTS
+'id','int',''
+'int_array_col','array<int>',''
+'array_array_col','array<array<int>>',''
+'map_array_col','array<map<string,int>>',''
+'struct_array_col','array<struct<f1:bigint,f2:string>>',''
+'int_map_col','map<string,int>',''
+'array_map_col','map<string,array<int>>',''
+'map_map_col','map<string,map<string,int>>',''
+'struct_map_col','map<string,struct<f1:bigint,f2:string>>',''
+'int_struct_col','struct<f1:int,f2:int>',''
+'complex_struct_col','struct<f1:int,f2:array<int>,f3:map<string,int>>',''
+'nested_struct_col','struct<f1:int,f2:struct<f11:bigint,f12:struct<f21:bigint>>>',''
+'complex_nested_struct_col','struct<f1:int,f2:array<struct<f11:bigint,f12:map<string,struct<f21:bigint>>>>>',''
+'year','int',''
+'month','int',''
+====
+---- QUERY
+# Test creating an unpartitioned Avro table without column definitions.
+create table avro_alltypes_nopart
+with serdeproperties
+('avro.schema.url'='hdfs:///test-warehouse/avro_schemas/functional/alltypes.json')
+stored as avro
+---- RESULTS
+====
+---- QUERY
+describe avro_alltypes_nopart
+---- TYPES
+STRING, STRING, STRING
+---- RESULTS
+'bigint_col','bigint','from deserializer'
+'bool_col','boolean','from deserializer'
+'date_string_col','string','from deserializer'
+'double_col','double','from deserializer'
+'float_col','float','from deserializer'
+'id','int','from deserializer'
+'int_col','int','from deserializer'
+'smallint_col','int','from deserializer'
+'string_col','string','from deserializer'
+'timestamp_col','string','from deserializer'
+'tinyint_col','int','from deserializer'
+====
+---- QUERY
+# Test creating a partitioned Avro table without column definitions.
+create table avro_alltypes_part
+partitioned by (year int, month int)
+with serdeproperties
+('avro.schema.url'='hdfs:///test-warehouse/avro_schemas/functional/alltypes.json')
+stored as avro
+---- RESULTS
+====
+---- QUERY
+describe avro_alltypes_part
+---- TYPES
+STRING, STRING, STRING
+---- RESULTS
+'bigint_col','bigint','from deserializer'
+'bool_col','boolean','from deserializer'
+'date_string_col','string','from deserializer'
+'double_col','double','from deserializer'
+'float_col','float','from deserializer'
+'id','int','from deserializer'
+'int_col','int','from deserializer'
+'month','int',''
+'smallint_col','int','from deserializer'
+'string_col','string','from deserializer'
+'timestamp_col','string','from deserializer'
+'tinyint_col','int','from deserializer'
+'year','int',''
+====
+---- QUERY
+drop table avro_alltypes_part
+---- RESULTS
+====
+---- QUERY
+drop table avro_alltypes_nopart
+---- RESULTS
+====
+---- QUERY
+drop table allcomplextypes_clone
+---- RESULTS
 ====
 ---- QUERY
 drop table ctas_join

@@ -22,9 +22,13 @@
 #include <snappy.h>
 #include <lz4.h>
 
+#include <boost/crc.hpp>
+#include <gutil/strings/substitute.h>
+
 using namespace std;
 using namespace boost;
 using namespace impala;
+using namespace strings;
 
 GzipCompressor::GzipCompressor(Format format, MemPool* mem_pool, bool reuse_buffer)
   : Codec(mem_pool, reuse_buffer),
@@ -53,27 +57,42 @@ Status GzipCompressor::Init() {
   return Status::OK;
 }
 
-int GzipCompressor::MaxOutputLen(int input_len, const uint8_t* input) {
+int64_t GzipCompressor::MaxOutputLen(int64_t input_len, const uint8_t* input) {
 #if !defined ZLIB_VERNUM || ZLIB_VERNUM <= 0x1230
   if (UNLIKELY(input_len == 0 && format_ == GZIP)) {
     // zlib version 1.2.3 has a bug in deflateBound() that causes it to return too low a
     // bound for this case. Hardcode the value returned in zlib version 1.2.3.1+.
     return 23;
   }
-#endif
+  // There is a known issue that zlib 1.2.3 does not include the size of the
+  // gzip wrapper. This is has been fixed in zlib 1.2.3.1:
+  // http://www.zlib.net/ChangeLog.txt
+  // "Take into account wrapper variations in deflateBound()"
+  //
+  // Mark, maintainer of zlib, has stated that 12 needs to be added to result for gzip
+  // http://compgroups.net/comp.unix.programmer/gzip-compressing-an-in-memory-string-usi/54854
+  // To have a safe upper bound for "wrapper variations", we add 32 to estimate
+  return deflateBound(&stream_, input_len) + 32;
+#else
   return deflateBound(&stream_, input_len);
+#endif
 }
 
-Status GzipCompressor::Compress(int input_length, uint8_t* input,
-    int* output_length, uint8_t* output) {
+Status GzipCompressor::Compress(int64_t input_length, const uint8_t* input,
+    int64_t* output_length, uint8_t* output) {
   DCHECK_GE(*output_length, MaxOutputLen(input_length));
-  stream_.next_in = reinterpret_cast<Bytef*>(input);
+  stream_.next_in = const_cast<Bytef*>(reinterpret_cast<const Bytef*>(input));
   stream_.avail_in = input_length;
   stream_.next_out = reinterpret_cast<Bytef*>(output);
   stream_.avail_out = *output_length;
 
-  int ret = 0;
+  int64_t ret = 0;
   if ((ret = deflate(&stream_, Z_FINISH)) != Z_STREAM_END) {
+    if (ret == Z_OK) {
+      // will return Z_OK (and stream_.msg NOT set) if stream_.avail_out is too small
+      return Status(Substitute("zlib deflate failed: output buffer ($0) is too small.",
+                    output_length).c_str());
+    }
     stringstream ss;
     ss << "zlib deflate failed: " << stream_.msg;
     return Status(ss.str());
@@ -88,16 +107,18 @@ Status GzipCompressor::Compress(int input_length, uint8_t* input,
 }
 
 Status GzipCompressor::ProcessBlock(bool output_preallocated,
-    int input_length, uint8_t* input, int* output_length, uint8_t** output) {
-  int max_compressed_len = MaxOutputLen(input_length);
+    int64_t input_length, const uint8_t* input, int64_t* output_length,
+    uint8_t** output) {
+  DCHECK(!output_preallocated || (output_preallocated && *output_length > 0));
+  int64_t max_compressed_len = MaxOutputLen(input_length);
   if (!output_preallocated) {
     if (!reuse_buffer_ || buffer_length_ < max_compressed_len || out_buffer_ == NULL) {
       DCHECK(memory_pool_ != NULL) << "Can't allocate without passing in a mem pool";
       buffer_length_ = max_compressed_len;
       out_buffer_ = memory_pool_->Allocate(buffer_length_);
-      *output_length = buffer_length_;
     }
     *output = out_buffer_;
+    *output_length = buffer_length_;
   } else if (*output_length < max_compressed_len) {
     return Status("GzipCompressor::ProcessBlock: output length too small");
   }
@@ -110,13 +131,13 @@ BzipCompressor::BzipCompressor(MemPool* mem_pool, bool reuse_buffer)
   : Codec(mem_pool, reuse_buffer) {
 }
 
-int BzipCompressor::MaxOutputLen(int input_len, const uint8_t* input) {
+int64_t BzipCompressor::MaxOutputLen(int64_t input_len, const uint8_t* input) {
   // TODO: is it possible to get a bound with bzip.
   return -1;
 }
 
-Status BzipCompressor::ProcessBlock(bool output_preallocated,
-    int input_length, uint8_t* input, int *output_length, uint8_t** output) {
+Status BzipCompressor::ProcessBlock(bool output_preallocated, int64_t input_length,
+    const uint8_t* input, int64_t *output_length, uint8_t** output) {
   // The bz2 library does not allow input to be NULL, even when input_length is 0. This
   // should be OK because we do not write any file formats that support bzip compression.
   DCHECK(input != NULL);
@@ -141,7 +162,7 @@ Status BzipCompressor::ProcessBlock(bool output_preallocated,
     }
     outlen = static_cast<unsigned int>(buffer_length_);
     if ((ret = BZ2_bzBuffToBuffCompress(reinterpret_cast<char*>(out_buffer_), &outlen,
-        reinterpret_cast<char*>(input),
+        const_cast<char*>(reinterpret_cast<const char*>(input)),
         static_cast<unsigned int>(input_length), 5, 2, 0)) == BZ_OUTBUFF_FULL) {
       if (output_preallocated) {
         return Status("Too small buffer passed to BzipCompressor");
@@ -167,18 +188,19 @@ SnappyBlockCompressor::SnappyBlockCompressor(MemPool* mem_pool, bool reuse_buffe
   : Codec(mem_pool, reuse_buffer) {
 }
 
-int SnappyBlockCompressor::MaxOutputLen(int input_len, const uint8_t* input) {
+int64_t SnappyBlockCompressor::MaxOutputLen(int64_t input_len, const uint8_t* input) {
   // TODO: is it possible to get a bound on this?
   return -1;
 }
 
 Status SnappyBlockCompressor::ProcessBlock(bool output_preallocated,
-    int input_length, uint8_t* input, int *output_length, uint8_t** output) {
+    int64_t input_length, const uint8_t* input, int64_t *output_length,
+    uint8_t** output) {
   // Hadoop uses a block compression scheme on top of snappy.  First there is
   // an integer which is the size of the decompressed data followed by a
   // sequence of compressed blocks each preceded with an integer size.
   // For testing purposes we are going to generate two blocks.
-  int block_size = input_length / 2;
+  int64_t block_size = input_length / 2;
   size_t length = snappy::MaxCompressedLength(block_size) * 2;
   length += 3 * sizeof (int32_t);
   DCHECK(!output_preallocated || length <= *output_length);
@@ -219,13 +241,13 @@ SnappyCompressor::SnappyCompressor(MemPool* mem_pool, bool reuse_buffer)
   : Codec(mem_pool, reuse_buffer) {
 }
 
-int SnappyCompressor::MaxOutputLen(int input_len, const uint8_t* input) {
+int64_t SnappyCompressor::MaxOutputLen(int64_t input_len, const uint8_t* input) {
   return snappy::MaxCompressedLength(input_len);
 }
 
-Status SnappyCompressor::ProcessBlock(bool output_preallocated, int input_length,
-    uint8_t* input, int* output_length, uint8_t** output) {
-  int max_compressed_len = MaxOutputLen(input_length);
+Status SnappyCompressor::ProcessBlock(bool output_preallocated, int64_t input_length,
+    const uint8_t* input, int64_t* output_length, uint8_t** output) {
+  int64_t max_compressed_len = MaxOutputLen(input_length);
   if (output_preallocated && *output_length < max_compressed_len) {
     return Status("SnappyCompressor::ProcessBlock: output length too small");
   }
@@ -247,16 +269,24 @@ Status SnappyCompressor::ProcessBlock(bool output_preallocated, int input_length
   return Status::OK;
 }
 
+uint32_t SnappyCompressor::ComputeChecksum(int64_t input_len, const uint8_t* input) {
+  crc_32_type crc;
+  crc.process_bytes(reinterpret_cast<const char*>(input), input_len);
+  uint32_t chk = crc.checksum();
+  // Snappy requires the checksum to be masked.
+  return ((chk >> 15) | (chk << 17)) + 0xa282ead8;
+}
+
 Lz4Compressor::Lz4Compressor(MemPool* mem_pool, bool reuse_buffer)
   : Codec(mem_pool, reuse_buffer) {
 }
 
-int Lz4Compressor::MaxOutputLen(int input_len, const uint8_t* input) {
+int64_t Lz4Compressor::MaxOutputLen(int64_t input_len, const uint8_t* input) {
   return LZ4_compressBound(input_len);
 }
 
-Status Lz4Compressor::ProcessBlock(bool output_preallocated, int input_length,
-    uint8_t* input, int* output_length, uint8_t** output) {
+Status Lz4Compressor::ProcessBlock(bool output_preallocated, int64_t input_length,
+    const uint8_t* input, int64_t* output_length, uint8_t** output) {
   CHECK(output_preallocated) << "Output was not allocated for Lz4 Codec";
   if (input_length == 0) return Status::OK;
   *output_length = LZ4_compress(reinterpret_cast<const char*>(input),

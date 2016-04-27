@@ -14,7 +14,7 @@
 
 #include "exec/aggregation-node.h"
 
-#include "exec/hash-table.inline.h"
+#include "exec/old-hash-table.inline.h"
 #include "runtime/row-batch.h"
 #include "runtime/runtime-state.h"
 #include "runtime/tuple.h"
@@ -27,7 +27,7 @@ using namespace impala;
 
 void AggregationNode::ProcessRowBatchNoGrouping(RowBatch* batch) {
   for (int i = 0; i < batch->num_rows(); ++i) {
-    UpdateAggTuple(singleton_output_tuple_, batch->GetRow(i));
+    UpdateTuple(singleton_intermediate_tuple_, batch->GetRow(i));
   }
 }
 
@@ -35,14 +35,14 @@ void AggregationNode::ProcessRowBatchWithGrouping(RowBatch* batch) {
   for (int i = 0; i < batch->num_rows(); ++i) {
     TupleRow* row = batch->GetRow(i);
     Tuple* agg_tuple = NULL;
-    HashTable::Iterator it = hash_tbl_->Find(row);
+    OldHashTable::Iterator it = hash_tbl_->Find(row);
     if (it.AtEnd()) {
-      agg_tuple = ConstructAggTuple();
-      hash_tbl_->Insert(reinterpret_cast<TupleRow*>(&agg_tuple));
+      agg_tuple = ConstructIntermediateTuple();
+      hash_tbl_->Insert(agg_tuple);
     } else {
-      agg_tuple = it.GetRow()->GetTuple(0);
+      agg_tuple = it.GetTuple();
     }
-    UpdateAggTuple(agg_tuple, row);
+    UpdateTuple(agg_tuple, row);
   }
 }
 

@@ -23,6 +23,8 @@
 #include "runtime/mem-pool.h"
 #include "util/bit-util.h"
 
+DECLARE_bool(disable_mem_pools);
+
 namespace impala {
 
 // Implementation of a free pool to recycle allocations. The pool is broken
@@ -42,12 +44,17 @@ class FreePool {
  public:
   // C'tor, initializes the FreePool to be empty. All allocations come from the
   // 'mem_pool'.
-  FreePool(MemPool* mem_pool) : mem_pool_(mem_pool) {
+  FreePool(MemPool* mem_pool)
+    : mem_pool_(mem_pool),
+      net_allocations_(0) {
     memset(&lists_, 0, sizeof(lists_));
   }
 
   // Allocates a buffer of size.
   uint8_t* Allocate(int size) {
+    ++net_allocations_;
+    if (FLAGS_disable_mem_pools) return reinterpret_cast<uint8_t*>(malloc(size));
+
     // This is the typical malloc behavior. NULL is reserved for failures.
     if (size == 0) return reinterpret_cast<uint8_t*>(0x1);
 
@@ -73,11 +80,16 @@ class FreePool {
   }
 
   void Free(uint8_t* ptr) {
+    --net_allocations_;
+    if (FLAGS_disable_mem_pools) {
+      free(ptr);
+      return;
+    }
     if (ptr == NULL || reinterpret_cast<int64_t>(ptr) == 0x1) return;
     FreeListNode* node = reinterpret_cast<FreeListNode*>(ptr - sizeof(FreeListNode));
     FreeListNode* list = node->list;
 #ifndef NDEBUG
-    CheckValidAllocation(list);
+    CheckValidAllocation(list, ptr);
 #endif
     // Add node to front of list.
     node->next = list->next;
@@ -88,11 +100,14 @@ class FreePool {
   // backing 'ptr' is big enough, 'ptr' is returned. Otherwise a new one is
   // made and the contents of ptr are copied into it.
   uint8_t* Reallocate(uint8_t* ptr, int size) {
+    if (FLAGS_disable_mem_pools) {
+      return reinterpret_cast<uint8_t*>(realloc(reinterpret_cast<void*>(ptr), size));
+    }
     if (ptr == NULL || reinterpret_cast<int64_t>(ptr) == 0x1) return Allocate(size);
     FreeListNode* node = reinterpret_cast<FreeListNode*>(ptr - sizeof(FreeListNode));
     FreeListNode* list = node->list;
 #ifndef NDEBUG
-    CheckValidAllocation(list);
+    CheckValidAllocation(list, ptr);
 #endif
     int bucket_idx = (list - &lists_[0]);
     // This is the actual size of ptr.
@@ -110,6 +125,7 @@ class FreePool {
   }
 
   MemTracker* mem_tracker() { return mem_pool_->mem_tracker(); }
+  int64_t net_allocations() const { return net_allocations_; }
 
  private:
   static const int NUM_LISTS = 64;
@@ -122,13 +138,35 @@ class FreePool {
     };
   };
 
-  void CheckValidAllocation(FreeListNode* computed_list_ptr) {
+  void CheckValidAllocation(FreeListNode* computed_list_ptr, uint8_t* allocation) const {
     // On debug, check that list is valid.
     bool found = false;
     for (int i = 0; i < NUM_LISTS && !found; ++i) {
       if (computed_list_ptr == &lists_[i]) found = true;
     }
-    DCHECK(found);
+    DCHECK(found) << "Could not find list for ptr: "
+                  << reinterpret_cast<void*>(allocation)
+                  << ". Allocation could have already been freed." << std::endl
+                  << DebugString();
+  }
+
+  std::string DebugString() const {
+    std::stringstream ss;
+    ss << "FreePool: " << this << std::endl;
+    for (int i = 0; i < NUM_LISTS; ++i) {
+      FreeListNode* n = lists_[i].next;
+      if (n == NULL) continue;
+      ss << i << ": ";
+      while (n != NULL) {
+        uint8_t* ptr = reinterpret_cast<uint8_t*>(n);
+        ptr += sizeof(FreeListNode);
+        ss << reinterpret_cast<void*>(ptr);
+        n = n->next;
+        if (n != NULL) ss << "->";
+      }
+      ss << std::endl;
+    }
+    return ss.str();
   }
 
   // MemPool to allocate from. Unowned.
@@ -138,9 +176,11 @@ class FreePool {
   // While it doesn't make too much sense to use this for very small (e.g. 8 byte)
   // allocations, it makes the indexing easy.
   FreeListNode lists_[NUM_LISTS];
+
+  // Diagnostic counter that tracks (# Allocates - # Frees)
+  int64_t net_allocations_;
 };
 
 }
 
 #endif
-

@@ -17,19 +17,19 @@
 #include <dlfcn.h>
 #include <sstream>
 #include "runtime/exec-env.h"
-#include "util/fe-test-info.h"
+#include "util/test-info.h"
 
 using namespace std;
 
 namespace impala {
 
-Status DynamicLookup(void* handle, const char* symbol, void** fn_ptr) {
+Status DynamicLookup(void* handle, const char* symbol, void** fn_ptr, bool quiet) {
   *(void **) (fn_ptr) = dlsym(handle, symbol);
   char* error = dlerror();
   if (error != NULL) {
     stringstream ss;
     ss << "Unable to find " << symbol << "\ndlerror: " << error;
-    return Status(ss.str());
+    return Status(ss.str(), quiet);
   }
   return Status::OK;
 }
@@ -45,7 +45,7 @@ Status DynamicOpen(const char* library, void** handle) {
   // will prevent the FE tests from running the functions that cannot resolve
   // the symbols (e.g. planner tests with some UDFs).
   // TODO: this is to work around some build breaks. We need to fix this better.
-  if (FeTestInfo::is_fe_tests()) flags = RTLD_LAZY;
+  if (TestInfo::is_fe_test()) flags = RTLD_LAZY;
   *handle = dlopen(library, flags);
   if (*handle == NULL) {
     stringstream ss;

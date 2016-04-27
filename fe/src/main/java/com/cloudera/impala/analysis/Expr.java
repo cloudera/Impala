@@ -14,9 +14,7 @@
 
 package com.cloudera.impala.analysis;
 
-import java.io.PrintWriter;
-import java.io.StringWriter;
-import java.io.Writer;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -26,12 +24,12 @@ import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.cloudera.impala.catalog.AuthorizationException;
 import com.cloudera.impala.catalog.Catalog;
-import com.cloudera.impala.catalog.ColumnType;
 import com.cloudera.impala.catalog.Function;
 import com.cloudera.impala.catalog.Function.CompareMode;
 import com.cloudera.impala.catalog.PrimitiveType;
+import com.cloudera.impala.catalog.ScalarType;
+import com.cloudera.impala.catalog.Type;
 import com.cloudera.impala.common.AnalysisException;
 import com.cloudera.impala.common.TreeNode;
 import com.cloudera.impala.thrift.TExpr;
@@ -54,14 +52,80 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
   // values guard against crashes due to stack overflows (IMPALA-432) and were
   // experimentally determined to be safe.
   public final static int EXPR_CHILDREN_LIMIT = 10000;
-  public final static int EXPR_DEPTH_LIMIT = 2000;
+  // The expr depth limit is mostly due to our recursive implementation of clone().
+  public final static int EXPR_DEPTH_LIMIT = 1000;
 
-  // isAggregatePredicate_ is a Predicate that returns true if an Expr is an aggregate.
+  // Name of the function that needs to be implemented by every Expr that
+  // supports negation.
+  private final static String NEGATE_FN = "negate";
+
+  // to be used where we can't come up with a better estimate
+  protected static double DEFAULT_SELECTIVITY = 0.1;
+
+  // returns true if an Expr is a non-analytic aggregate.
   private final static com.google.common.base.Predicate<Expr> isAggregatePredicate_ =
       new com.google.common.base.Predicate<Expr>() {
         public boolean apply(Expr arg) {
           return arg instanceof FunctionCallExpr &&
               ((FunctionCallExpr)arg).isAggregateFunction();
+        }
+      };
+
+  // Returns true if an Expr is a NOT CompoundPredicate.
+  public final static com.google.common.base.Predicate<Expr> IS_NOT_PREDICATE =
+      new com.google.common.base.Predicate<Expr>() {
+        @Override
+        public boolean apply(Expr arg) {
+          return arg instanceof CompoundPredicate &&
+              ((CompoundPredicate)arg).getOp() == CompoundPredicate.Operator.NOT;
+        }
+      };
+
+  // Returns true if an Expr is an OR CompoundPredicate.
+  public final static com.google.common.base.Predicate<Expr> IS_OR_PREDICATE =
+      new com.google.common.base.Predicate<Expr>() {
+        @Override
+        public boolean apply(Expr arg) {
+          return arg instanceof CompoundPredicate &&
+              ((CompoundPredicate)arg).getOp() == CompoundPredicate.Operator.OR;
+        }
+      };
+
+  // Returns true if an Expr is a scalar subquery
+  public final static com.google.common.base.Predicate<Expr> IS_SCALAR_SUBQUERY =
+      new com.google.common.base.Predicate<Expr>() {
+        @Override
+        public boolean apply(Expr arg) {
+          return arg.isScalarSubquery();
+        }
+      };
+
+  // Returns true if an Expr is an aggregate function that returns non-null on
+  // an empty set (e.g. count).
+  public final static com.google.common.base.Predicate<Expr>
+      NON_NULL_EMPTY_AGG = new com.google.common.base.Predicate<Expr>() {
+        @Override
+        public boolean apply(Expr arg) {
+          return arg instanceof FunctionCallExpr &&
+              ((FunctionCallExpr)arg).returnsNonNullOnEmpty();
+        }
+      };
+
+  // Returns true if an Expr is a builtin aggregate function.
+  public final static com.google.common.base.Predicate<Expr> IS_BUILTIN_AGG_FN =
+      new com.google.common.base.Predicate<Expr>() {
+        @Override
+        public boolean apply(Expr arg) {
+          return arg instanceof FunctionCallExpr &&
+              ((FunctionCallExpr)arg).getFnName().isBuiltin();
+        }
+      };
+
+  public final static com.google.common.base.Predicate<Expr> IS_TRUE_LITERAL =
+      new com.google.common.base.Predicate<Expr>() {
+        @Override
+        public boolean apply(Expr arg) {
+          return arg instanceof BoolLiteral && ((BoolLiteral)arg).getValue();
         }
       };
 
@@ -75,9 +139,9 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
   // false if Expr originated with a query stmt directly
   private boolean isAuxExpr_ = false;
 
-  protected ColumnType type_;  // result of analysis
+  protected Type type_;  // result of analysis
   protected boolean isAnalyzed_;  // true after analyze() has been called
-  protected boolean isWhereClauseConjunct_;  // set by Analyzer
+  protected boolean isWhereClauseConjunct_; // set by analyzer
 
   // Flag to indicate whether to wrap this expr's toSql() in parenthesis. Set by parser.
   // Needed for properly capturing expr precedences in the SQL string.
@@ -87,9 +151,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
   // set during analysis;
   // between 0 and 1 if valid: invalid: -1
   protected double selectivity_;
-
-  // to be used where we can't come up with a better estimate
-  protected static double DEFAULT_SELECTIVITY = 0.1;
 
   // estimated number of distinct values produced by Expr; invalid: -1
   // set during analysis
@@ -101,41 +162,46 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
   protected Expr() {
     super();
-    type_ = ColumnType.INVALID;
+    type_ = Type.INVALID;
     selectivity_ = -1.0;
     numDistinctValues_ = -1;
   }
 
+  /**
+   * Copy c'tor used in clone().
+   */
+  protected Expr(Expr other) {
+    id_ = other.id_;
+    isAuxExpr_ = other.isAuxExpr_;
+    type_ = other.type_;
+    isAnalyzed_ = other.isAnalyzed_;
+    isWhereClauseConjunct_ = other.isWhereClauseConjunct_;
+    printSqlInParens_ = other.printSqlInParens_;
+    selectivity_ = other.selectivity_;
+    numDistinctValues_ = other.numDistinctValues_;
+    fn_ = other.fn_;
+    children_ = Expr.cloneList(other.children_);
+  }
+
   public ExprId getId() { return id_; }
   protected void setId(ExprId id) { this.id_ = id; }
-  public ColumnType getType() { return type_; }
+  public Type getType() { return type_; }
   public double getSelectivity() { return selectivity_; }
   public long getNumDistinctValues() { return numDistinctValues_; }
   public void setPrintSqlInParens(boolean b) { printSqlInParens_ = b; }
   public boolean isWhereClauseConjunct() { return isWhereClauseConjunct_; }
   public void setIsWhereClauseConjunct() { isWhereClauseConjunct_ = true; }
   public boolean isAuxExpr() { return isAuxExpr_; }
+  public boolean isRegisteredPredicate() { return id_ != null; }
   public void setIsAuxExpr() { isAuxExpr_ = true; }
+  public Function getFn() { return fn_; }
 
   /**
-   * Recursively set isAnalyzed to false for the entire Expr tree, except SlotRefs.
-   * TODO: clone() should do this automatically, but this blows up. Fix it.
-   */
-  public void unsetIsAnalyzed() {
-    // we don't want to re-analyze slotrefs
-    if (this instanceof SlotRef) return;
-    isAnalyzed_ = false;
-    for (Expr child: children_) {
-      child.unsetIsAnalyzed();
-    }
-  }
-
-  /** Perform semantic analysis of node and all of its children.
+   * Perform semantic analysis of node and all of its children.
    * Throws exception if any errors found.
    * @see com.cloudera.impala.parser.ParseNode#analyze(com.cloudera.impala.parser.Analyzer)
    */
-  public void analyze(Analyzer analyzer)
-      throws AnalysisException, AuthorizationException {
+  public void analyze(Analyzer analyzer) throws AnalysisException {
     // Check the expr child limit.
     if (children_.size() > EXPR_CHILDREN_LIMIT) {
       String sql = toSql();
@@ -151,7 +217,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
       // Check the expr depth limit. Do not print the toSql() to not overflow the stack.
       if (analyzer.getCallDepth() > EXPR_DEPTH_LIMIT) {
         throw new AnalysisException(String.format("Exceeded the maximum depth of an " +
-            "expresison tree (%s).", EXPR_DEPTH_LIMIT));
+            "expression tree (%s).", EXPR_DEPTH_LIMIT));
       }
     }
     for (Expr child: children_) {
@@ -164,21 +230,16 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
   }
 
   /**
-   * Calls unsetIsAnalyzed() and performs semantic analysis again. Re-analysis is useful
-   * after cloning and expr and/or substituting exprs to insert casts, etc, because the
-   * original expr will typically have been analyzed already.
+   * Helper function to analyze this expr and assert that the analysis was successful.
+   * TODO: This function could be used in many more places to clean up. Consider
+   * adding an IAnalyzable interface or similar to and move this helper into Analyzer
+   * such that non-Expr things can use the helper also.
    */
-  public void reanalyze(Analyzer analyzer)
-      throws AnalysisException, AuthorizationException {
-    unsetIsAnalyzed();
-    analyze(analyzer);
-  }
-
-  static public void reanalyze(List<Expr> exprs, Analyzer analyzer)
-      throws AnalysisException, AuthorizationException {
-    if (exprs == null) return;
-    for (Expr e: exprs) {
-      e.reanalyze(analyzer);
+  public void analyzeNoThrow(Analyzer analyzer) {
+    try {
+      analyze(analyzer);
+    } catch (AnalysisException e) {
+      throw new IllegalStateException(e);
     }
   }
 
@@ -202,8 +263,8 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
   /**
    * Collects the returns types of the child nodes in an array.
    */
-  protected ColumnType[] collectChildReturnTypes() {
-    ColumnType[] childTypes = new ColumnType[children_.size()];
+  protected Type[] collectChildReturnTypes() {
+    Type[] childTypes = new Type[children_.size()];
     for (int i = 0; i < children_.size(); ++i) {
       childTypes[i] = children_.get(i).type_;
     }
@@ -211,13 +272,25 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
   }
 
   /**
+   * Casts any child which is CHAR to a STRING.
+   */
+  public void castChildCharsToStrings(Analyzer analyzer) throws AnalysisException {
+    for (int i = 0; i < children_.size(); ++i) {
+      if (children_.get(i).getType().isScalarType(PrimitiveType.CHAR)) {
+        children_.set(i, children_.get(i).castTo(ScalarType.STRING));
+        children_.get(i).analyze(analyzer);
+      }
+    }
+  }
+
+  /**
    * Looks up in the catalog the builtin for 'name' and 'argTypes'.
    * Returns null if the function is not found.
    */
   protected Function getBuiltinFunction(Analyzer analyzer, String name,
-      ColumnType[] argTypes, CompareMode mode) throws AnalysisException {
+      Type[] argTypes, CompareMode mode) throws AnalysisException {
     FunctionName fnName = new FunctionName(Catalog.BUILTINS_DB, name);
-    Function searchDesc = new Function(fnName, argTypes, ColumnType.INVALID, false);
+    Function searchDesc = new Function(fnName, argTypes, Type.INVALID, false);
     return analyzer.getCatalog().getFunction(searchDesc, mode);
   }
 
@@ -226,21 +299,26 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
    * child(0) is cast to the function's first argument, child(1) to the second etc.
    * This does not do any validation and the casts are assumed to be safe.
    *
-   * If the function signature contains wildcard decimals, each wildcard child
-   * argument will be cast to the highest resolution that can contain all of
-   * the child wildcard arguments.
-   * e.g. cast(decimal(*), decimal(*))
-   *      called with cast(decimal(10,2), decimal(5,3))
+   * If ignoreWildcardDecimals is true, the function will not cast arguments that
+   * are wildcard decimals. This is used for builtins where the cast is done within
+   * the BE function.
+   * Otherwise, if the function signature contains wildcard decimals, each wildcard child
+   * argument will be cast to the highest resolution that can contain all of the child
+   * wildcard arguments.
+   * e.g. fn(decimal(*), decimal(*))
+   *      called with fn(decimal(10,2), decimal(5,3))
    * both children will be cast to (11, 3).
    */
-  protected void castForFunctionCall() throws AnalysisException {
+  protected void castForFunctionCall(boolean ignoreWildcardDecimals)
+      throws AnalysisException {
     Preconditions.checkState(fn_ != null);
-    ColumnType[] fnArgs = fn_.getArgs();
-    ColumnType resolvedWildcardType = getResolvedWildCardType();
+    Type[] fnArgs = fn_.getArgs();
+    Type resolvedWildcardType = getResolvedWildCardType();
     for (int i = 0; i < children_.size(); ++i) {
       // For varargs, we must compare with the last type in fnArgs.argTypes.
       int ix = Math.min(fnArgs.length - 1, i);
       if (fnArgs[ix].isWildcardDecimal()) {
+        if (children_.get(i).type_.isDecimal() && ignoreWildcardDecimals) continue;
         Preconditions.checkState(resolvedWildcardType != null);
         if (!children_.get(i).type_.equals(resolvedWildcardType)) {
           castChild(resolvedWildcardType, i);
@@ -255,24 +333,31 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
    * Returns the max resolution type of all the wild card decimal types.
    * Returns null if there are no wild card types.
    */
-  ColumnType getResolvedWildCardType() {
-    ColumnType result = null;
-    ColumnType[] fnArgs = fn_.getArgs();
+  Type getResolvedWildCardType() throws AnalysisException {
+    Type result = null;
+    Type[] fnArgs = fn_.getArgs();
     for (int i = 0; i < children_.size(); ++i) {
       // For varargs, we must compare with the last type in fnArgs.argTypes.
       int ix = Math.min(fnArgs.length - 1, i);
       if (!fnArgs[ix].isWildcardDecimal()) continue;
 
-      ColumnType childType = children_.get(i).type_;
+      Type childType = children_.get(i).type_;
       Preconditions.checkState(!childType.isWildcardDecimal(),
           "Child expr should have been resolved.");
+      Preconditions.checkState(childType.isScalarType(),
+          "Function should not have resolved with a non-scalar child type.");
+      ScalarType decimalType = (ScalarType) childType;
       if (result == null) {
-        result = childType.getMinResolutionDecimal();
+        result = decimalType.getMinResolutionDecimal();
       } else {
-        result = ColumnType.getAssignmentCompatibleType(result, childType);
+        result = Type.getAssignmentCompatibleType(result, childType);
       }
     }
     if (result != null) {
+      if (result.isNull()) {
+        throw new AnalysisException(
+            "Cannot resolve DECIMAL precision and scale from NULL type.");
+      }
       Preconditions.checkState(result.isDecimal() && !result.isWildcardDecimal());
     }
     return result;
@@ -288,19 +373,22 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
   }
 
   /**
-   * Converts DecimalLiterals in the tree rooted at child to targetType and
-   * reanalyzes that subtree.
+   * Returns a clone of child with all NumericLiterals in it explicitly
+   * cast to targetType.
    */
-  private void convertNumericLiteralsToFloat(Analyzer analyzer, Expr child,
-      ColumnType targetType) throws AnalysisException, AuthorizationException {
-    if (!targetType.isFloatingPointType() && !targetType.isIntegerType()) return;
-    if (targetType.isIntegerType()) targetType = ColumnType.DOUBLE;
-    List<DecimalLiteral> literals = Lists.newArrayList();
-    child.collectAll(Predicates.instanceOf(DecimalLiteral.class), literals);
-    for (DecimalLiteral l: literals) {
-      l.explicitlyCastToFloat(targetType);
+  private Expr convertNumericLiteralsToFloat(Analyzer analyzer, Expr child,
+      Type targetType) throws AnalysisException {
+    if (!targetType.isFloatingPointType() && !targetType.isIntegerType()) return child;
+    if (targetType.isIntegerType()) targetType = Type.DOUBLE;
+    List<NumericLiteral> literals = Lists.newArrayList();
+    child.collectAll(Predicates.instanceOf(NumericLiteral.class), literals);
+    ExprSubstitutionMap smap = new ExprSubstitutionMap();
+    for (NumericLiteral l: literals) {
+      NumericLiteral castLiteral = (NumericLiteral) l.clone();
+      castLiteral.explicitlyCastToFloat(targetType);
+      smap.put(l, castLiteral);
     }
-    child.reanalyze(analyzer);
+    return child.substitute(smap, analyzer, false);
   }
 
   /**
@@ -323,12 +411,12 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
    * TODO: another option is to do constant folding in the FE and then apply this rule.
    */
   protected void convertNumericLiteralsFromDecimal(Analyzer analyzer)
-      throws AnalysisException, AuthorizationException {
+      throws AnalysisException {
     Preconditions.checkState(this instanceof ArithmeticExpr ||
         this instanceof BinaryPredicate);
     Preconditions.checkState(children_.size() == 2);
-    ColumnType t0 = getChild(0).getType();
-    ColumnType t1 = getChild(1).getType();
+    Type t0 = getChild(0).getType();
+    Type t1 = getChild(1).getType();
     boolean c0IsConstantDecimal = getChild(0).isConstant() && t0.isDecimal();
     boolean c1IsConstantDecimal = getChild(1).isConstant() && t1.isDecimal();
     if (c0IsConstantDecimal && c1IsConstantDecimal) return;
@@ -337,10 +425,12 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     // Only child(0) or child(1) is a const decimal. See if we can cast it to
     // the type of the other child.
     if (c0IsConstantDecimal && !isExplicitCastToDecimal(getChild(0))) {
-      convertNumericLiteralsToFloat(analyzer, getChild(0), t1);
+      Expr c0 = convertNumericLiteralsToFloat(analyzer, getChild(0), t1);
+      setChild(0, c0);
     }
     if (c1IsConstantDecimal && !isExplicitCastToDecimal(getChild(1))) {
-      convertNumericLiteralsToFloat(analyzer, getChild(1), t0);
+      Expr c1 = convertNumericLiteralsToFloat(analyzer, getChild(1), t0);
+      setChild(1, c1);
     }
   }
 
@@ -348,7 +438,8 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
    * Helper function: analyze list of exprs
    */
   public static void analyze(List<? extends Expr> exprs, Analyzer analyzer)
-      throws AnalysisException, AuthorizationException {
+      throws AnalysisException {
+    if (exprs == null) return;
     for (Expr expr: exprs) {
       expr.analyze(analyzer);
     }
@@ -367,6 +458,13 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
   // Convert this expr, including all children, to its Thrift representation.
   public TExpr treeToThrift() {
+    if (type_.isNull()) {
+      // Hack to ensure BE never sees TYPE_NULL. If an expr makes it this far without
+      // being cast to a non-NULL type, the type doesn't matter and we can cast it
+      // arbitrarily.
+      Preconditions.checkState(this instanceof NullLiteral || this instanceof SlotRef);
+      return NullLiteral.create(ScalarType.BOOLEAN).treeToThrift();
+    }
     TExpr result = new TExpr();
     treeToThriftHelper(result);
     return result;
@@ -377,6 +475,8 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     Preconditions.checkState(isAnalyzed_,
         "Must be analyzed before serializing to thrift. %s", this);
     Preconditions.checkState(!type_.isWildcardDecimal());
+    // The BE should never see TYPE_NULL
+    Preconditions.checkState(!type_.isNull(), "Expr has type null!");
     TExprNode msg = new TExprNode();
     msg.type = type_.toThrift();
     msg.num_children = children_.size();
@@ -400,6 +500,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
    * the exprs have an invalid number of distinct values.
    */
   public static long getNumDistinctValues(List<Expr> exprs) {
+    if (exprs == null || exprs.isEmpty()) return 0;
     long numDistinctValues = 1;
     for (Expr expr: exprs) {
       if (expr.getNumDistinctValues() == -1) {
@@ -419,11 +520,12 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     return result;
   }
 
-  /*
-   * Return a predicate to test if an Expr object is an aggregate.
-   */
   public static com.google.common.base.Predicate<Expr> isAggregatePredicate() {
     return isAggregatePredicate_;
+  }
+
+  public boolean isAggregate() {
+    return isAggregatePredicate_.apply(this);
   }
 
   public List<String> childrenToSql() {
@@ -444,7 +546,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     for (Expr expr: exprs) {
       strings.add(expr.debugString());
     }
-    return "(" + Joiner.on(" ").join(strings) + ")";
+    return Joiner.on(" ").join(strings);
   }
 
   public static String toSql(List<? extends Expr> exprs) {
@@ -453,29 +555,13 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     for (Expr expr: exprs) {
       strings.add(expr.toSql());
     }
-    return "(" + Joiner.on(", ").join(strings) + ")";
+    return Joiner.on(", ").join(strings);
   }
 
   /**
-   * Creates a shallow copy of this Expr. If a deep copy is desired, use clone(null)
-   * instead of this method.
-   * This clone method takes advantage of having Java generate the field-by-field copy
-   * c'tors for the Expr subclasses.
-   * @see java.lang.Object#clone()
+   * Returns true if two expressions are equal. The equality comparison works on analyzed
+   * as well as unanalyzed exprs by ignoring implicit casts (see CastExpr.equals()).
    */
-  @Override
-  public Expr clone() {
-    try {
-      return (Expr) super.clone();
-    } catch (CloneNotSupportedException e) {
-      // all Expr subclasses should implement Cloneable
-      Writer w = new StringWriter();
-      PrintWriter pw = new PrintWriter(w);
-      e.printStackTrace(pw);
-      throw new UnsupportedOperationException(w.toString());
-    }
-  }
-
   @Override
   public boolean equals(Object obj) {
     if (obj == null) return false;
@@ -522,6 +608,43 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     return l2.containsAll(l1);
   }
 
+  /**
+   * Return the intersection of l1 and l2.599
+   */
+  public static <C extends Expr> List<C> intersect(List<C> l1, List<C> l2) {
+    List<C> result = new ArrayList<C>();
+    for (C element: l1) {
+      if (l2.contains(element)) result.add(element);
+    }
+    return result;
+  }
+
+  /**
+   * Compute the intersection of l1 and l2, given the smap, and
+   * return the intersecting l1 elements in i1 and the intersecting l2 elements in i2.
+   */
+  public static void intersect(Analyzer analyzer,
+      List<Expr> l1, List<Expr> l2, ExprSubstitutionMap smap,
+      List<Expr> i1, List<Expr> i2) {
+    i1.clear();
+    i2.clear();
+    List<Expr> s1List = Expr.substituteList(l1, smap, analyzer, false);
+    Preconditions.checkState(s1List.size() == l1.size());
+    List<Expr> s2List = Expr.substituteList(l2, smap, analyzer, false);
+    Preconditions.checkState(s2List.size() == l2.size());
+    for (int i = 0; i < s1List.size(); ++i) {
+      Expr s1 = s1List.get(i);
+      for (int j = 0; j < s2List.size(); ++j) {
+        Expr s2 = s2List.get(j);
+        if (s1.equals(s2)) {
+          i1.add(l1.get(i));
+          i2.add(l2.get(j));
+          break;
+        }
+      }
+    }
+  }
+
   @Override
   public int hashCode() {
     if (id_ == null) {
@@ -555,162 +678,118 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
   }
 
   /**
-   * Map of expression substitutions (lhs[i] gets substituted with rhs[i]).
-   *
+   * Returns an analyzed clone of 'this' with exprs substituted according to smap.
+   * Removes implicit casts and analysis state while cloning/substituting exprs within
+   * this tree, such that the returned result has minimal implicit casts and types.
+   * Throws if analyzing the post-substitution expr tree failed.
+   * If smap is null, this function is equivalent to clone().
+   * If preserveRootType is true, the resulting expr tree will be cast if necessary to
+   * the type of 'this'.
    */
-  static public class SubstitutionMap {
-    private ArrayList<Expr> lhs;  // left-hand side
-    private ArrayList<Expr> rhs;  // right-hand side
-
-    public SubstitutionMap() {
-      this.lhs = Lists.newArrayList();
-      this.rhs = Lists.newArrayList();
-    }
-
-    ArrayList<Expr> getLhs() { return lhs; }
-    ArrayList<Expr> getRhs() { return rhs; }
-
-    public int size() { return lhs.size(); }
-
-    public void addMapping(Expr lhsExpr, Expr rhsExpr) {
-      lhs.add(lhsExpr);
-      rhs.add(rhsExpr);
-    }
-
-    /**
-     * Returns true if the smap contains a mapping for lhsExpr.
-     */
-    public boolean containsMappingFor(Expr lhsExpr) {
-      return lhs.contains(lhsExpr);
-    }
-
-    public String debugString() {
-      Preconditions.checkState(lhs.size() == rhs.size());
-      List<String> output = Lists.newArrayList();
-      for (int i = 0; i < lhs.size(); ++i) {
-        output.add(lhs.get(i).toSql() + ":" + rhs.get(i).toSql());
-        output.add("(" + lhs.get(i).debugString() + ":" + rhs.get(i).debugString() + ")");
-      }
-      return "smap(" + Joiner.on(" ").join(output) + ")";
-    }
-
-    /**
-     * Return a map  which is equivalent to applying f followed by g,
-     * i.e., g(f()).
-     * Always returns a non-null map.
-     */
-    public static SubstitutionMap compose(SubstitutionMap f, SubstitutionMap g) {
-      if (f == null && g == null) return new SubstitutionMap();
-      if (f == null) return g;
-      if (g == null) return f;
-      SubstitutionMap result = new SubstitutionMap();
-      // f's substitution targets need to be substituted via g
-      result.lhs = Expr.cloneList(f.lhs);
-      result.rhs = Expr.cloneList(f.rhs, g);
-      // substitution maps are cumulative: the combined map contains all
-      // substitutions from f and g.
-      for (int i = 0; i < g.lhs.size(); i++) {
-        // If f contains expr1->fn(expr2) and g contains expr2->expr3,
-        // then result must contain expr1->fn(expr3).
-        // The check before adding to result.lhs is to ensure that cases
-        // where expr2.equals(expr1) are handled correctly.
-        // For example f: count(*) -> zeroifnull(count(*))
-        // and g: count(*) -> slotref
-        // result.lhs must only have: count(*) -> zeroifnull(slotref) from f above,
-        // and not count(*) -> slotref from g as well.
-        if (!result.lhs.contains(g.lhs.get(i))) {
-          result.lhs.add(g.lhs.get(i).clone(null));
-          result.rhs.add(g.rhs.get(i).clone(null));
-        }
-      }
-
-      result.verify();
-      return result;
-    }
-
-    /**
-     * Create the union of f and g.
-     * Always returns a non-null map.
-     */
-    public static SubstitutionMap combine(SubstitutionMap f, SubstitutionMap g) {
-      if (f == null && g == null) return new SubstitutionMap();
-      if (f == null) return g;
-      if (g == null) return f;
-      SubstitutionMap result = new SubstitutionMap();
-      result.lhs = Lists.newArrayList(f.lhs);
-      result.lhs.addAll(g.lhs);
-      result.rhs = Lists.newArrayList(f.rhs);
-      result.rhs.addAll(g.rhs);
-      result.verify();
-      return result;
-    }
-
-    public void substituteLhs(SubstitutionMap lhsSmap) {
-      Expr.substituteList(lhs, lhsSmap);
-    }
-
-    private void verify() {
-      // check that we don't have duplicate entries, ie, that all lhs entries are
-      // unique
-      for (int i = 0; i < lhs.size(); ++i) {
-        for (int j = i + 1; j < lhs.size(); ++j) {
-          if (lhs.get(i).equals(lhs.get(j))) {
-            LOG.info("verify: smap=" + this.debugString());
-            Preconditions.checkState(false);
-          }
-        }
-      }
-    }
-
-    public void clear() {
-      lhs.clear();
-      rhs.clear();
-    }
-  }
-
-  /**
-   * Create a deep copy of 'this'. If smap is non-null,
-   * use it to substitute 'this' or its subnodes.
-   *
-   * Expr subclasses that add non-value-type members must override this.
-   */
-  public Expr clone(SubstitutionMap smap) {
-    if (smap != null) {
-      for (int i = 0; i < smap.lhs.size(); ++i) {
-        if (this.equals(smap.lhs.get(i))) {
-          return smap.rhs.get(i).clone(null);
-        }
-      }
-    }
-    Expr result = (Expr) this.clone();
-    result.children_ = Lists.newArrayList();
-    result.selectivity_ = selectivity_;
-    // the new expr hasn't been analyzed
-    // TODO: this blows up, fix it
-    //result.isAnalyzed = false;
-    result.isAnalyzed_ = isAnalyzed_;
-    result.isWhereClauseConjunct_ = isWhereClauseConjunct_;
-    result.numDistinctValues_ = numDistinctValues_;
-    for (Expr child: children_) {
-      result.children_.add(((Expr) child).clone(smap));
-    }
+  public Expr trySubstitute(ExprSubstitutionMap smap, Analyzer analyzer,
+      boolean preserveRootType)
+      throws AnalysisException {
+    Expr result = clone();
+    // Return clone to avoid removing casts.
+    if (smap == null) return result;
+    result = result.substituteImpl(smap, analyzer);
+    result.analyze(analyzer);
+    if (preserveRootType && !type_.equals(result.getType())) result = result.castTo(type_);
     return result;
   }
 
   /**
-   * Create a deep copy of 'l'. Use smap to substitute the elements of l.
-   * The elements of the returned list are of type Expr (different from the
-   * elements of 'l' due to substitution).
+   * Returns an analyzed clone of 'this' with exprs substituted according to smap.
+   * Removes implicit casts and analysis state while cloning/substituting exprs within
+   * this tree, such that the returned result has minimal implicit casts and types.
+   * Expects the analysis of the post-substitution expr to succeed.
+   * If smap is null, this function is equivalent to clone().
+   * If preserveRootType is true, the resulting expr tree will be cast if necessary to
+   * the type of 'this'.
    */
-  public static ArrayList<Expr> cloneList(
-      Iterable<? extends Expr> l, SubstitutionMap smap) {
-    Preconditions.checkNotNull(l);
+  public Expr substitute(ExprSubstitutionMap smap, Analyzer analyzer,
+      boolean preserveRootType) {
+    try {
+      return trySubstitute(smap, analyzer, preserveRootType);
+    } catch (Exception e) {
+      throw new IllegalStateException("Failed analysis after expr substitution.", e);
+    }
+  }
+
+  public static ArrayList<Expr> trySubstituteList(Iterable<? extends Expr> exprs,
+      ExprSubstitutionMap smap, Analyzer analyzer, boolean preserveRootTypes)
+          throws AnalysisException {
+    if (exprs == null) return null;
     ArrayList<Expr> result = new ArrayList<Expr>();
-    for (Expr element: l) {
-      result.add(element.clone(smap));
+    for (Expr e: exprs) {
+      result.add(e.trySubstitute(smap, analyzer, preserveRootTypes));
     }
     return result;
   }
+
+  public static ArrayList<Expr> substituteList(Iterable<? extends Expr> exprs,
+      ExprSubstitutionMap smap, Analyzer analyzer, boolean preserveRootTypes) {
+    try {
+      return trySubstituteList(exprs, smap, analyzer, preserveRootTypes);
+    } catch (Exception e) {
+      throw new IllegalStateException("Failed analysis after expr substitution.", e);
+    }
+  }
+
+  /**
+   * Recursive method that performs the actual substitution for try/substitute() while
+   * removing implicit casts. Resets the analysis state in all non-SlotRef expressions.
+   * Exprs that have non-child exprs which should be affected by substitutions must
+   * override this method and apply the substitution to such exprs as well.
+   */
+  protected Expr substituteImpl(ExprSubstitutionMap smap, Analyzer analyzer)
+      throws AnalysisException {
+    if (isImplicitCast()) return getChild(0).substituteImpl(smap, analyzer);
+    if (smap != null) {
+      Expr substExpr = smap.get(this);
+      if (substExpr != null) return substExpr.clone();
+    }
+    for (int i = 0; i < children_.size(); ++i) {
+      children_.set(i, children_.get(i).substituteImpl(smap, analyzer));
+    }
+    // SlotRefs must remain analyzed to support substitution across query blocks. All
+    // other exprs must be analyzed again after the substitution to add implicit casts
+    // and for resolving their correct function signature.
+    if (!(this instanceof SlotRef)) resetAnalysisState();
+    return this;
+  }
+
+  /**
+   * Resets the internal state of this expr produced by analyze().
+   * Only modifies this expr, and not its child exprs.
+   */
+  protected void resetAnalysisState() { isAnalyzed_ = false; }
+
+  /**
+   * Resets the internal analysis state of this expr tree. Removes implicit casts.
+   */
+  public Expr reset() {
+    if (isImplicitCast()) return getChild(0).reset();
+    for (int i = 0; i < children_.size(); ++i) {
+      children_.set(i, children_.get(i).reset());
+    }
+    resetAnalysisState();
+    return this;
+  }
+
+  public static ArrayList<Expr> resetList(ArrayList<Expr> l) {
+    for (int i = 0; i < l.size(); ++i) {
+      l.set(i, l.get(i).reset());
+    }
+    return l;
+  }
+
+  /**
+   * Creates a deep copy of this expr including its analysis state. The method is
+   * abstract in this class to force new Exprs to implement it.
+   */
+  @Override
+  public abstract Expr clone();
 
   /**
    * Create a deep copy of 'l'. The elements of the returned list are of the same
@@ -720,43 +799,9 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     Preconditions.checkNotNull(l);
     ArrayList<C> result = new ArrayList<C>();
     for (Expr element: l) {
-      result.add((C) element.clone(null));
+      result.add((C) element.clone());
     }
     return result;
-  }
-
-  /**
-   * Returns true if the list contains an aggregate expr.
-   */
-  /**
-   * Return 'this' with all sub-exprs substituted according to
-   * smap. Ids of 'this' and its children are retained.
-   */
-  public Expr substitute(SubstitutionMap smap) {
-    Preconditions.checkNotNull(smap);
-    for (int i = 0; i < smap.lhs.size(); ++i) {
-      if (this.equals(smap.lhs.get(i))) {
-        Expr result = smap.rhs.get(i).clone(null);
-        if (id_ != null) result.id_ = id_;
-        return result;
-      }
-    }
-    for (int i = 0; i < children_.size(); ++i) {
-      children_.set(i, children_.get(i).substitute(smap));
-    }
-    return this;
-  }
-
-  /**
-   * Substitute sub-exprs in the input list according to smap.
-   */
-  public static void substituteList(
-      List<Expr> l, SubstitutionMap smap) {
-    if (l == null || smap == null) return;
-    ListIterator<Expr> it = l.listIterator();
-    while (it.hasNext()) {
-      it.set(it.next().substitute(smap));
-    }
   }
 
   /**
@@ -867,10 +912,11 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
   /**
    * @return true if this expr can be evaluated with Expr::GetValue(NULL),
    * ie, if it doesn't contain any references to runtime variables (which
-   * at the moment are only slotrefs).
+   * at the moment are only slotrefs and subqueries).
    */
   public boolean isConstant() {
-    return !contains(Predicates.instanceOf(SlotRef.class));
+    return !contains(Predicates.instanceOf(SlotRef.class)) &&
+           !contains(Predicates.instanceOf(Subquery.class));
   }
 
   /**
@@ -882,6 +928,14 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     if (!(this instanceof CastExpr)) return false;
     Preconditions.checkState(children_.size() == 1);
     return children_.get(0).isNullLiteral();
+  }
+
+  /**
+   * Return true if this expr is a scalar subquery.
+   */
+  public boolean isScalarSubquery() {
+    Preconditions.checkState(isAnalyzed_);
+    return this instanceof Subquery && getType().isScalarType();
   }
 
   /**
@@ -912,8 +966,8 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
    *           when an invalid cast is asked for, for example,
    *           failure to convert a string literal to a date literal
    */
-  public final Expr castTo(ColumnType targetType) throws AnalysisException {
-    ColumnType type = ColumnType.getAssignmentCompatibleType(this.type_, targetType);
+  public final Expr castTo(Type targetType) throws AnalysisException {
+    Type type = Type.getAssignmentCompatibleType(this.type_, targetType);
     Preconditions.checkState(type.isValid(), "cast %s to %s", this.type_, targetType);
     // If the targetType is NULL_TYPE then ignore the cast because NULL_TYPE
     // is compatible with all types and no cast is necessary.
@@ -921,7 +975,8 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     if (!targetType.isDecimal()) {
       // requested cast must be to assignment-compatible type
       // (which implies no loss of precision)
-      Preconditions.checkArgument(targetType.equals(type));
+      Preconditions.checkArgument(targetType.equals(type),
+          "targetType=" + targetType + " type=" + type);
     }
     return uncheckedCastTo(targetType);
   }
@@ -939,7 +994,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
    *           when an invalid cast is asked for, for example,
    *           failure to convert a string literal to a date literal
    */
-  protected Expr uncheckedCastTo(ColumnType targetType) throws AnalysisException {
+  protected Expr uncheckedCastTo(Type targetType) throws AnalysisException {
     return new CastExpr(targetType, this, true);
   }
 
@@ -952,9 +1007,26 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
    * @param childIndex
    *          index of child to be cast
    */
-  public void castChild(ColumnType targetType, int childIndex) throws AnalysisException {
+  public void castChild(Type targetType, int childIndex) throws AnalysisException {
     Expr child = getChild(childIndex);
     Expr newChild = child.castTo(targetType);
+    setChild(childIndex, newChild);
+  }
+
+
+  /**
+   * Convert child to to targetType, possibly by inserting an implicit cast, or by
+   * returning an altogether new expression, or by returning 'this' with a modified
+   * return type'.
+   * @param targetType
+   *          type to be cast to
+   * @param childIndex
+   *          index of child to be cast
+   */
+  protected void uncheckedCastChild(Type targetType, int childIndex)
+      throws AnalysisException {
+    Expr child = getChild(childIndex);
+    Expr newChild = child.uncheckedCastTo(targetType);
     setChild(childIndex, newChild);
   }
 
@@ -962,11 +1034,15 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
    * Returns child expr if this expr is an implicit cast, otherwise returns 'this'.
    */
   public Expr ignoreImplicitCast() {
-    if (this instanceof CastExpr) {
-      CastExpr cast = (CastExpr) this;
-      if (cast.isImplicit()) return cast.getChild(0).ignoreImplicitCast();
-    }
+    if (isImplicitCast()) return getChild(0).ignoreImplicitCast();
     return this;
+  }
+
+  /**
+   * Returns true if 'this' is an implicit cast expr.
+   */
+  public boolean isImplicitCast() {
+    return this instanceof CastExpr && ((CastExpr) this).isImplicit();
   }
 
   @Override
@@ -996,10 +1072,52 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
   }
 
   /**
+   * Pushes negation to the individual operands of a predicate
+   * tree rooted at 'root'.
+   */
+  public static Expr pushNegationToOperands(Expr root) {
+    Preconditions.checkNotNull(root);
+    if (Expr.IS_NOT_PREDICATE.apply(root)) {
+      try {
+        // Make sure we call function 'negate' only on classes that support it,
+        // otherwise we may recurse infinitely.
+        Method m = root.getChild(0).getClass().getDeclaredMethod(NEGATE_FN);
+        return pushNegationToOperands(root.getChild(0).negate());
+      } catch (NoSuchMethodException e) {
+        // The 'negate' function is not implemented. Break the recursion.
+        return root;
+      }
+    }
+
+    if (root instanceof CompoundPredicate) {
+      Expr left = pushNegationToOperands(root.getChild(0));
+      Expr right = pushNegationToOperands(root.getChild(1));
+      return new CompoundPredicate(((CompoundPredicate)root).getOp(), left, right);
+    }
+
+    return root;
+  }
+
+  /**
    * Negates a boolean Expr.
    */
   public Expr negate() {
     Preconditions.checkState(type_.getPrimitiveType() == PrimitiveType.BOOLEAN);
     return new CompoundPredicate(CompoundPredicate.Operator.NOT, this, null);
+  }
+
+  /**
+   * Returns the subquery of an expr. Returns null if this expr does not contain
+   * a subquery.
+   *
+   * TODO: Support predicates with more that one subqueries when we implement
+   * the independent subquery evaluation.
+   */
+  public Subquery getSubquery() {
+    if (!contains(Subquery.class)) return null;
+    List<Subquery> subqueries = Lists.newArrayList();
+    collect(Subquery.class, subqueries);
+    Preconditions.checkState(subqueries.size() == 1);
+    return subqueries.get(0);
   }
 }

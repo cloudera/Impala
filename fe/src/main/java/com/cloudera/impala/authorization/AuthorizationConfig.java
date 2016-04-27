@@ -14,23 +14,56 @@
 
 package com.cloudera.impala.authorization;
 
+import org.apache.sentry.provider.file.HadoopGroupResourceAuthorizationProvider;
 import org.apache.sentry.provider.file.ResourceAuthorizationProvider;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 
 /*
  * Class that contains configuration details for Impala authorization.
  */
 public class AuthorizationConfig {
   private final String serverName_;
+  // Set only if the policy provider is file-based.
   private final String policyFile_;
+  private final SentryConfig sentryConfig_;
   private final String policyProviderClassName_;
 
+  /**
+   * Creates a new authorization configuration object.
+   * @param serverName - The name of this Impala server.
+   * @param policyFile - The path to the authorization policy file or null if
+   *                     the policy engine is not file based.
+   * @param sentryConfigFile - Absolute path and file name of the sentry service.
+   * @param policyProviderClassName - Class name of the policy provider to use.
+   */
   public AuthorizationConfig(String serverName, String policyFile,
-      String policyProviderClassName) {
+      String sentryConfigFile, String policyProviderClassName) {
     serverName_ = serverName;
     policyFile_ = policyFile;
+    sentryConfig_ = new SentryConfig(sentryConfigFile);
+    if (!Strings.isNullOrEmpty(policyProviderClassName)) {
+      policyProviderClassName = policyProviderClassName.trim();
+    }
     policyProviderClassName_ = policyProviderClassName;
+  }
+
+  /**
+   * Returns an AuthorizationConfig object that has authorization disabled.
+   */
+  public static AuthorizationConfig createAuthDisabledConfig() {
+    return new AuthorizationConfig(null, null, null, null);
+  }
+
+  /**
+   * Returns an AuthorizationConfig object configured to use Hadoop user->group mappings
+   * for the authorization provider.
+   */
+  public static AuthorizationConfig createHadoopGroupAuthConfig(String serverName,
+      String policyFile, String sentryConfigFile) {
+    return new AuthorizationConfig(serverName, policyFile, sentryConfigFile,
+        HadoopGroupResourceAuthorizationProvider.class.getName());
   }
 
   /*
@@ -39,25 +72,25 @@ public class AuthorizationConfig {
    */
   public void validateConfig() throws IllegalArgumentException {
     // If authorization is not enabled, config checks are skipped.
-    if (!isEnabled()) {
-      return;
+    if (!isEnabled()) return;
+
+    // Only load the sentry configuration if a sentry-site.xml configuration file was
+    // specified. It is optional for impalad.
+    if (!Strings.isNullOrEmpty(sentryConfig_.getConfigFile())) {
+      sentryConfig_.loadConfig();
     }
 
-    if (serverName_ == null || serverName_.isEmpty()) {
-      throw new IllegalArgumentException("Authorization is enabled but the server name" +
-          " is null or empty. Set the server name using the impalad --server_name flag."
-          );
+    if (Strings.isNullOrEmpty(serverName_)) {
+      throw new IllegalArgumentException(
+          "Authorization is enabled but the server name is null or empty. Set the " +
+          "server name using the impalad --server_name flag.");
     }
-    if (policyFile_ == null || policyFile_.isEmpty()) {
-      throw new IllegalArgumentException("Authorization is enabled but the policy file" +
-          " path was null or empty. Set the policy file using the " +
-          "--authorization_policy_file impalad flag.");
-    }
-    if (policyProviderClassName_ == null || policyProviderClassName_.isEmpty()) {
+    if (Strings.isNullOrEmpty(policyProviderClassName_)) {
       throw new IllegalArgumentException("Authorization is enabled but the " +
           "authorization policy provider class name is null or empty. Set the class " +
           "name using the --authorization_policy_provider_class impalad flag.");
     }
+
     Class<?> providerClass = null;
     try {
       // Get the Class object without performing any initialization.
@@ -76,36 +109,36 @@ public class AuthorizationConfig {
     }
   }
 
-  /*
+  /**
    * Returns true if authorization is enabled.
-   * If either serverName or policyFile is set (not null or empty), authorization
-   * is considered enabled.
+   * If either serverName, policyFile, or sentryServiceConfig_ file is set (not null
+   * or empty), authorization is considered enabled.
    */
   public boolean isEnabled() {
-    return (serverName_ != null && !serverName_.isEmpty()) ||
-           (policyFile_ != null && !policyFile_.isEmpty());
+    return !Strings.isNullOrEmpty(serverName_) || !Strings.isNullOrEmpty(policyFile_) ||
+        !Strings.isNullOrEmpty(sentryConfig_.getConfigFile());
   }
 
-  /*
-   * Returns an AuthorizationConfig object that has authorization disabled.
+  /**
+   * Returns true if using an authorization policy from a file in HDFS. If false,
+   * uses an authorization policy based on cached metadata sent from the catalog server
+   * via the statestore.
    */
-  public static AuthorizationConfig createAuthDisabledConfig() {
-    return new AuthorizationConfig(null, null, null);
-  }
+  public boolean isFileBasedPolicy() { return !Strings.isNullOrEmpty(policyFile_); }
 
-  /*
+  /**
    * The server name to secure.
    */
   public String getServerName() { return serverName_; }
 
-  /*
+  /**
    * The policy file path.
    */
   public String getPolicyFile() { return policyFile_; }
 
-  /*
-   * The full class name of the authorization policy provider. For example:
-   * org.apache.sentry.provider.file.HadoopGroupResourceAuthorizationProvider.
+  /**
+   * The Sentry configuration.
    */
+  public SentryConfig getSentryConfig() { return sentryConfig_; }
   public String getPolicyProviderClassName() { return policyProviderClassName_; }
 }

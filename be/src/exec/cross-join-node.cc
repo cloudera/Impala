@@ -56,7 +56,7 @@ Status CrossJoinNode::ConstructBuildSide(RuntimeState* state) {
     RowBatch* batch = build_batch_pool_->Add(
         new RowBatch(child(1)->row_desc(), state->batch_size(), mem_tracker()));
     RETURN_IF_CANCELLED(state);
-    RETURN_IF_ERROR(state->CheckQueryState());
+    RETURN_IF_ERROR(QueryMaintenance(state));
     bool eos;
     RETURN_IF_ERROR(child(1)->GetNext(state, batch, &eos));
     DCHECK_EQ(batch->num_io_buffers(), 0) << "Build batch should be compact.";
@@ -70,29 +70,32 @@ Status CrossJoinNode::ConstructBuildSide(RuntimeState* state) {
   return Status::OK;
 }
 
-void CrossJoinNode::InitGetNext(TupleRow* first_left_row) {
+Status CrossJoinNode::InitGetNext(TupleRow* first_left_row) {
   current_build_row_ = build_batches_.Iterator();
+  return Status::OK;
 }
 
 Status CrossJoinNode::GetNext(RuntimeState* state, RowBatch* output_batch, bool* eos) {
   RETURN_IF_ERROR(ExecDebugAction(TExecNodePhase::GETNEXT, state));
-  RETURN_IF_CANCELLED(state);
-  RETURN_IF_ERROR(state->CheckQueryState());
   SCOPED_TIMER(runtime_profile_->total_time_counter());
   if (ReachedLimit() || eos_) {
     *eos = true;
     return Status::OK;
   }
+  *eos = false;
 
-  ScopedTimer<MonotonicStopWatch> timer(left_child_timer_);
+  ScopedTimer<MonotonicStopWatch> timer(probe_timer_);
   while (!eos_) {
+    RETURN_IF_CANCELLED(state);
+    RETURN_IF_ERROR(QueryMaintenance(state));
+
     // Compute max rows that should be added to output_batch
     int64_t max_added_rows = output_batch->capacity() - output_batch->num_rows();
     if (limit() != -1) max_added_rows = min(max_added_rows, limit() - rows_returned());
 
     // Continue processing this row batch
     num_rows_returned_ +=
-        ProcessLeftChildBatch(output_batch, left_batch_.get(), max_added_rows);
+        ProcessLeftChildBatch(output_batch, probe_batch_.get(), max_added_rows);
     COUNTER_SET(rows_returned_counter_, num_rows_returned_);
 
     if (ReachedLimit() || output_batch->AtCapacity()) {
@@ -101,18 +104,18 @@ Status CrossJoinNode::GetNext(RuntimeState* state, RowBatch* output_batch, bool*
     }
 
     // Check to see if we're done processing the current left child batch
-    if (current_build_row_.AtEnd() && left_batch_pos_ == left_batch_->num_rows()) {
-      left_batch_->TransferResourceOwnership(output_batch);
-      left_batch_pos_ = 0;
+    if (current_build_row_.AtEnd() && probe_batch_pos_ == probe_batch_->num_rows()) {
+      probe_batch_->TransferResourceOwnership(output_batch);
+      probe_batch_pos_ = 0;
       if (output_batch->AtCapacity()) break;
-      if (left_side_eos_) {
+      if (probe_side_eos_) {
         *eos = eos_ = true;
         break;
       } else {
         timer.Stop();
-        RETURN_IF_ERROR(child(0)->GetNext(state, left_batch_.get(), &left_side_eos_));
+        RETURN_IF_ERROR(child(0)->GetNext(state, probe_batch_.get(), &probe_side_eos_));
         timer.Start();
-        COUNTER_UPDATE(left_child_row_counter_, left_batch_->num_rows());
+        COUNTER_ADD(probe_row_counter_, probe_batch_->num_rows());
       }
     }
   }
@@ -137,14 +140,14 @@ int CrossJoinNode::ProcessLeftChildBatch(RowBatch* output_batch, RowBatch* batch
   TupleRow* output_row = reinterpret_cast<TupleRow*>(output_row_mem);
 
   int rows_returned = 0;
-  Expr* const* conjuncts = &conjuncts_[0];
+  ExprContext* const* ctxs = &conjunct_ctxs_[0];
 
   while (true) {
     while (!current_build_row_.AtEnd()) {
-      CreateOutputRow(output_row, current_left_child_row_, current_build_row_.GetRow());
+      CreateOutputRow(output_row, current_probe_row_, current_build_row_.GetRow());
       current_build_row_.Next();
 
-      if (!EvalConjuncts(conjuncts, conjuncts_.size(), output_row)) continue;
+      if (!EvalConjuncts(ctxs, conjunct_ctxs_.size(), output_row)) continue;
       ++rows_returned;
       // Filled up out batch or hit limit
       if (UNLIKELY(rows_returned == max_added_rows)) goto end;
@@ -155,8 +158,8 @@ int CrossJoinNode::ProcessLeftChildBatch(RowBatch* output_batch, RowBatch* batch
 
     DCHECK(current_build_row_.AtEnd());
     // Advance to the next row in the left child batch
-    if (UNLIKELY(left_batch_pos_ == batch->num_rows())) goto end;
-    current_left_child_row_ = batch->GetRow(left_batch_pos_++);
+    if (UNLIKELY(probe_batch_pos_ == batch->num_rows())) goto end;
+    current_probe_row_ = batch->GetRow(probe_batch_pos_++);
     current_build_row_ = build_batches_.Iterator();
   }
 

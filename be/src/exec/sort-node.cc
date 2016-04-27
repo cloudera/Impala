@@ -20,9 +20,6 @@
 
 using namespace std;
 
-DEFINE_int64(max_sort_memory, 1532 * 1024 * 1024,
-    "Maximum sort memory to use if no query/process limit is specified.");
-
 namespace impala {
 
 SortNode::SortNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
@@ -45,7 +42,9 @@ Status SortNode::Init(const TPlanNode& tnode) {
 Status SortNode::Prepare(RuntimeState* state) {
   SCOPED_TIMER(runtime_profile_->total_time_counter());
   RETURN_IF_ERROR(ExecNode::Prepare(state));
-  RETURN_IF_ERROR(sort_exec_exprs_.Prepare(state, child(0)->row_desc(), row_descriptor_));
+  RETURN_IF_ERROR(sort_exec_exprs_.Prepare(
+      state, child(0)->row_desc(), row_descriptor_, expr_mem_tracker()));
+  AddExprCtxsToFree(sort_exec_exprs_);
   return Status::OK;
 }
 
@@ -54,15 +53,15 @@ Status SortNode::Open(RuntimeState* state) {
   RETURN_IF_ERROR(ExecNode::Open(state));
   RETURN_IF_ERROR(sort_exec_exprs_.Open(state));
   RETURN_IF_CANCELLED(state);
-  RETURN_IF_ERROR(state->CheckQueryState());
+  RETURN_IF_ERROR(QueryMaintenance(state));
   RETURN_IF_ERROR(child(0)->Open(state));
 
-  RETURN_IF_ERROR(CreateBlockMgr(state));
-  TupleRowComparator less_than(sort_exec_exprs_.lhs_ordering_exprs(),
-      sort_exec_exprs_.rhs_ordering_exprs(), is_asc_order_, nulls_first_);
-  sorter_.reset(new Sorter(less_than, sort_exec_exprs_.sort_tuple_slot_exprs(),
-      block_mgr_.get(), &row_descriptor_, mem_tracker(), runtime_profile(),
-      state));
+  TupleRowComparator less_than(
+      sort_exec_exprs_.lhs_ordering_expr_ctxs(), sort_exec_exprs_.rhs_ordering_expr_ctxs(),
+      is_asc_order_, nulls_first_);
+  sorter_.reset(new Sorter(
+      less_than, sort_exec_exprs_.sort_tuple_slot_expr_ctxs(),
+      &row_descriptor_, mem_tracker(), runtime_profile(), state));
 
   // The child has been opened and the sorter created. Sort the input.
   // The final merge is done on-demand as rows are requested in GetNext().
@@ -77,7 +76,7 @@ Status SortNode::GetNext(RuntimeState* state, RowBatch* row_batch, bool* eos) {
   SCOPED_TIMER(runtime_profile_->total_time_counter());
   RETURN_IF_ERROR(ExecDebugAction(TExecNodePhase::GETNEXT, state));
   RETURN_IF_CANCELLED(state);
-  RETURN_IF_ERROR(state->CheckQueryState());
+  RETURN_IF_ERROR(QueryMaintenance(state));
 
   if (ReachedLimit()) {
     *eos = true;
@@ -116,8 +115,6 @@ Status SortNode::GetNext(RuntimeState* state, RowBatch* row_batch, bool* eos) {
 void SortNode::Close(RuntimeState* state) {
   if (is_closed()) return;
   sort_exec_exprs_.Close(state);
-  if (block_mgr_.get() != NULL) block_mgr_->Close();
-  block_mgr_.reset();
   sorter_.reset();
   ExecNode::Close(state);
 }
@@ -125,7 +122,7 @@ void SortNode::Close(RuntimeState* state) {
 void SortNode::DebugString(int indentation_level, stringstream* out) const {
   *out << string(indentation_level * 2, ' ');
   *out << "SortNode("
-       << Expr::DebugString(sort_exec_exprs_.lhs_ordering_exprs());
+       << Expr::DebugString(sort_exec_exprs_.lhs_ordering_expr_ctxs());
   for (int i = 0; i < is_asc_order_.size(); ++i) {
     *out << (i > 0 ? " " : "")
          << (is_asc_order_[i] ? "asc" : "desc")
@@ -142,49 +139,11 @@ Status SortNode::SortInput(RuntimeState* state) {
     batch.Reset();
     RETURN_IF_ERROR(child(0)->GetNext(state, &batch, &eos));
     RETURN_IF_ERROR(sorter_->AddBatch(&batch));
-    RETURN_IF_ERROR(state->CheckQueryState());
+    RETURN_IF_CANCELLED(state);
+    RETURN_IF_ERROR(QueryMaintenance(state));
   } while(!eos);
 
   RETURN_IF_ERROR(sorter_->InputDone());
-  return Status::OK;
-}
-
-Status SortNode::CreateBlockMgr(RuntimeState* state) {
-  int64_t mem_remaining = mem_tracker()->SpareCapacity();
-  int min_blocks_required = BufferedBlockMgr::GetNumReservedBlocks() +
-      Sorter::MinBuffersRequired(&row_descriptor_);
-  int block_size = state->io_mgr()->max_read_buffer_size();
-  int64_t block_mgr_limit;
-  if (mem_remaining > FLAGS_max_sort_memory &&
-      !state->query_mem_tracker()->has_limit()) {
-    block_mgr_limit = FLAGS_max_sort_memory;
-  } else if (mem_remaining < 0) {
-    return state->SetMemLimitExceeded(mem_tracker());
-  } else {
-    // Estimate the memory overhead for a merge based on the available memory and block
-    // size, and subtract it from the block manager's budget.
-    uint64_t max_merge_mem = Sorter::EstimateMergeMem(mem_remaining / block_size,
-        &row_descriptor_, state->batch_size());
-    uint64_t min_mem_required = max_merge_mem + (block_size * min_blocks_required);
-    if (mem_remaining < min_mem_required) {
-      stringstream ss;
-      ss << "Sort Memory " << mem_remaining << " bytes is less than minimum "
-         << "required memory " << min_mem_required << " bytes."
-         << " block size = " << block_size << " bytes.";
-      state->LogError(ss.str());
-      return state->SetMemLimitExceeded(mem_tracker(), min_mem_required);
-    } else {
-      mem_remaining = min<int64_t>(SORT_MEM_FRACTION * mem_remaining,
-          mem_remaining - SORT_MEM_UNUSED);
-      mem_remaining = max<int64_t>(mem_remaining, min_mem_required);
-    }
-
-    mem_remaining -= max_merge_mem;
-    block_mgr_limit = mem_remaining;
-  }
-  block_mgr_.reset(BufferedBlockMgr::Create(state, mem_tracker(), runtime_profile(),
-      block_mgr_limit, block_size, min_blocks_required));
-
   return Status::OK;
 }
 

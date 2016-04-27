@@ -14,11 +14,17 @@
 
 package com.cloudera.impala.analysis;
 
-import com.cloudera.impala.catalog.AuthorizationException;
-import com.cloudera.impala.catalog.ColumnType;
+import java.util.ArrayList;
+import java.util.List;
+
+import com.cloudera.impala.catalog.Type;
 import com.cloudera.impala.common.AnalysisException;
 import com.cloudera.impala.common.Pair;
 import com.cloudera.impala.common.Reference;
+
+import com.google.common.base.Preconditions;
+import com.google.common.base.Predicates;
+import com.google.common.collect.Lists;
 
 public abstract class Predicate extends Expr {
   protected boolean isEqJoinConjunct_;
@@ -28,15 +34,22 @@ public abstract class Predicate extends Expr {
     this.isEqJoinConjunct_ = false;
   }
 
+  /**
+   * Copy c'tor used in clone().
+   */
+  protected Predicate(Predicate other) {
+    super(other);
+    isEqJoinConjunct_ = other.isEqJoinConjunct_;
+  }
+
   public boolean isEqJoinConjunct() { return isEqJoinConjunct_; }
   public void setIsEqJoinConjunct(boolean v) { isEqJoinConjunct_ = v; }
 
   @Override
-  public void analyze(Analyzer analyzer) throws AnalysisException,
-      AuthorizationException {
+  public void analyze(Analyzer analyzer) throws AnalysisException {
     if (isAnalyzed_) return;
     super.analyze(analyzer);
-    type_ = ColumnType.BOOLEAN;
+    type_ = Type.BOOLEAN;
     // values: true/false/null
     numDistinctValues_ = 3;
   }
@@ -74,14 +87,10 @@ public abstract class Predicate extends Expr {
    * If predicate is of the form "<slotref> = <slotref>", returns both SlotRefs,
    * otherwise returns null.
    */
-  public Pair<SlotId, SlotId> getEqSlots() {
-    return null;
-  }
+  public Pair<SlotId, SlotId> getEqSlots() { return null; }
 
   /**
    * Returns the SlotRef bound by this Predicate.
    */
-  public SlotRef getBoundSlot() {
-    return null;
-  }
+  public SlotRef getBoundSlot() { return null; }
 }

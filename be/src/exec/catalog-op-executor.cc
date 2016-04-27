@@ -16,25 +16,33 @@
 
 #include <sstream>
 
+#include "exec/incr-stats-util.h"
 #include "common/status.h"
 #include "runtime/lib-cache.h"
 #include "service/impala-server.h"
+#include "service/hs2-util.h"
 #include "util/string-parser.h"
-#include <thrift/protocol/TDebugProtocol.h>
 #include "gen-cpp/CatalogService.h"
 #include "gen-cpp/CatalogService_types.h"
+#include "gen-cpp/CatalogObjects_types.h"
 
 #include <thrift/protocol/TDebugProtocol.h>
+#include <thrift/Thrift.h>
 
+using namespace boost;
 using namespace std;
 using namespace impala;
 using namespace apache::hive::service::cli::thrift;
+using namespace apache::thrift;
 
 DECLARE_int32(catalog_service_port);
 DECLARE_string(catalog_service_host);
 
 Status CatalogOpExecutor::Exec(const TCatalogOpRequest& request) {
   Status status;
+  DCHECK_NOTNULL(profile_);
+  RuntimeProfile::Counter* exec_timer = ADD_TIMER(profile_, "CatalogOpExecTimer");
+  SCOPED_TIMER(exec_timer);
   const TNetworkAddress& address =
       MakeNetworkAddress(FLAGS_catalog_service_host, FLAGS_catalog_service_port);
   CatalogServiceConnection client(env_->catalogd_client_cache(), address, &status);
@@ -45,7 +53,12 @@ Status CatalogOpExecutor::Exec(const TCatalogOpRequest& request) {
       DCHECK(request.ddl_params.ddl_type != TDdlType::COMPUTE_STATS);
 
       exec_response_.reset(new TDdlExecResponse());
-      client->ExecDdl(*exec_response_.get(), request.ddl_params);
+      try {
+        client->ExecDdl(*exec_response_.get(), request.ddl_params);
+      } catch (const TException& e) {
+        RETURN_IF_ERROR(client.Reopen());
+        client->ExecDdl(*exec_response_.get(), request.ddl_params);
+      }
       catalog_update_result_.reset(
           new TCatalogUpdateResult(exec_response_.get()->result));
       Status status(exec_response_->result.status);
@@ -60,7 +73,12 @@ Status CatalogOpExecutor::Exec(const TCatalogOpRequest& request) {
     }
     case TCatalogOpType::RESET_METADATA: {
       TResetMetadataResponse response;
-      client->ResetMetadata(response, request.reset_metadata_params);
+      try {
+        client->ResetMetadata(response, request.reset_metadata_params);
+      } catch (const TException& e) {
+        RETURN_IF_ERROR(client.Reopen());
+        client->ResetMetadata(response, request.reset_metadata_params);
+      }
       catalog_update_result_.reset(new TCatalogUpdateResult(response.result));
       return Status(response.result.status);
     }
@@ -91,12 +109,26 @@ Status CatalogOpExecutor::ExecComputeStats(
   update_stats_req.alter_table_params.__set_table_name(compute_stats_params.table_name);
   update_stats_req.alter_table_params.__isset.update_stats_params = true;
   update_stats_params.__set_table_name(compute_stats_params.table_name);
+  update_stats_params.__set_expect_all_partitions(
+      compute_stats_params.expect_all_partitions);
+  update_stats_params.__set_is_incremental(compute_stats_params.is_incremental);
 
   // Fill the alteration request based on the child-query results.
-  SetTableStats(tbl_stats_schema, tbl_stats_data, &update_stats_params);
+  SetTableStats(tbl_stats_schema, tbl_stats_data,
+      compute_stats_params.existing_part_stats, &update_stats_params);
   // col_stats_schema and col_stats_data will be empty if there was no column stats query.
   if (!col_stats_schema.columns.empty()) {
-    SetColumnStats(col_stats_schema, col_stats_data, &update_stats_params);
+    if (compute_stats_params.is_incremental) {
+      RuntimeProfile::Counter* incremental_finalize_timer =
+          ADD_TIMER(profile_, "FinalizeIncrementalStatsTimer");
+      SCOPED_TIMER(incremental_finalize_timer);
+      FinalizePartitionedColumnStats(col_stats_schema,
+          compute_stats_params.existing_part_stats,
+          compute_stats_params.expected_partitions,
+          col_stats_data, compute_stats_params.num_partition_cols, &update_stats_params);
+    } else {
+      SetColumnStats(col_stats_schema, col_stats_data, &update_stats_params);
+    }
   }
 
   // Execute the 'alter table update stats' request.
@@ -165,7 +197,8 @@ void CatalogOpExecutor::HandleDropDataSource(const TDropDataSourceParams& reques
 }
 
 void CatalogOpExecutor::SetTableStats(const TTableSchema& tbl_stats_schema,
-    const TRowSet& tbl_stats_data, TAlterTableUpdateStatsParams* params) {
+    const TRowSet& tbl_stats_data, const vector<TPartitionStats>& existing_part_stats,
+    TAlterTableUpdateStatsParams* params) {
   // Accumulate total number of rows in the table.
   long total_num_rows = 0;
   // Set per-partition stats.
@@ -178,13 +211,18 @@ void CatalogOpExecutor::SetTableStats(const TTableSchema& tbl_stats_schema,
     vector<string> partition_key_vals;
     partition_key_vals.reserve(row.colVals.size());
     for (int j = 1; j < row.colVals.size(); ++j) {
-      // The partition-key values have been explicitly cast to string in the select list.
-      DCHECK(row.colVals[j].__isset.stringVal);
-      partition_key_vals.push_back(row.colVals[j].stringVal.value);
+      stringstream ss;
+      PrintTColumnValue(row.colVals[j], &ss);
+      partition_key_vals.push_back(ss.str());
     }
-    params->partition_stats[partition_key_vals].__set_num_rows(num_rows);
+    params->partition_stats[partition_key_vals].stats.__set_num_rows(num_rows);
     total_num_rows += num_rows;
   }
+
+  BOOST_FOREACH(const TPartitionStats& existing_stats, existing_part_stats) {
+    total_num_rows += existing_stats.stats.num_rows;
+  }
+
   params->__isset.partition_stats = true;
 
   // Set per-table stats.
@@ -203,15 +241,8 @@ void CatalogOpExecutor::SetColumnStats(const TTableSchema& col_stats_schema,
   // col_stats_row, respectively. Positions i + 2 and i + 3 contain the max/avg
   // length for string columns, and -1 for non-string columns.
   for (int i = 0; i < col_stats_row.colVals.size(); i += 4) {
-    // The NDVs are written as a string column by the estimation function.
-    StringParser::ParseResult parse_result;
-    const string& ndvs_str = col_stats_row.colVals[i].stringVal.value;
-    int64_t ndvs = StringParser::StringToInt<int64_t>(ndvs_str.data(),
-        ndvs_str.size(), &parse_result);
-    DCHECK_EQ(StringParser::PARSE_SUCCESS, parse_result);
-
     TColumnStats col_stats;
-    col_stats.__set_num_distinct_values(ndvs);
+    col_stats.__set_num_distinct_values(col_stats_row.colVals[i].i64Val.value);
     col_stats.__set_num_nulls(col_stats_row.colVals[i + 1].i64Val.value);
     col_stats.__set_max_size(col_stats_row.colVals[i + 2].i32Val.value);
     col_stats.__set_avg_size(col_stats_row.colVals[i + 3].doubleVal.value);
@@ -232,7 +263,12 @@ Status CatalogOpExecutor::GetCatalogObject(const TCatalogObject& object_desc,
   request.__set_object_desc(object_desc);
 
   TGetCatalogObjectResponse response;
-  client->GetCatalogObject(response, request);
+  try {
+    client->GetCatalogObject(response, request);
+  } catch (const TException& e) {
+    RETURN_IF_ERROR(client.Reopen());
+    client->GetCatalogObject(response, request);
+  }
   *result = response.catalog_object;
   return Status::OK;
 }
@@ -244,6 +280,27 @@ Status CatalogOpExecutor::PrioritizeLoad(const TPrioritizeLoadRequest& req,
   Status status;
   CatalogServiceConnection client(env_->catalogd_client_cache(), address, &status);
   RETURN_IF_ERROR(status);
-  client->PrioritizeLoad(*result, req);
+  try {
+    client->PrioritizeLoad(*result, req);
+  } catch (const TException& e) {
+    RETURN_IF_ERROR(client.Reopen());
+    client->PrioritizeLoad(*result, req);
+  }
   return Status::OK;
+}
+
+Status CatalogOpExecutor::SentryAdminCheck(const TSentryAdminCheckRequest& req) {
+  const TNetworkAddress& address =
+      MakeNetworkAddress(FLAGS_catalog_service_host, FLAGS_catalog_service_port);
+  Status cnxn_status;
+  CatalogServiceConnection client(env_->catalogd_client_cache(), address, &cnxn_status);
+  RETURN_IF_ERROR(cnxn_status);
+  TSentryAdminCheckResponse resp;
+  try {
+    client->SentryAdminCheck(resp, req);
+  } catch (const TException& e) {
+    RETURN_IF_ERROR(client.Reopen());
+    client->SentryAdminCheck(resp, req);
+  }
+  return Status(resp.status);
 }

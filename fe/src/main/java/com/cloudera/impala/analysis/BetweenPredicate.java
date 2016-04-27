@@ -14,9 +14,9 @@
 
 package com.cloudera.impala.analysis;
 
+import java.util.ArrayList;
 import java.util.List;
 
-import com.cloudera.impala.catalog.AuthorizationException;
 import com.cloudera.impala.common.AnalysisException;
 import com.cloudera.impala.thrift.TExprNode;
 import com.google.common.base.Preconditions;
@@ -37,7 +37,7 @@ public class BetweenPredicate extends Predicate {
 
   // Children of the BetweenPredicate, since this.children should hold the children
   // of the rewritten predicate to make sure toThrift() picks up the right ones.
-  private List<Expr> originalChildren_ = Lists.newArrayList();
+  private ArrayList<Expr> originalChildren_ = Lists.newArrayList();
 
   // First child is the comparison expr which should be in [lowerBound, upperBound].
   public BetweenPredicate(Expr compareExpr, Expr lowerBound, Expr upperBound,
@@ -48,13 +48,34 @@ public class BetweenPredicate extends Predicate {
     this.isNotBetween_ = isNotBetween;
   }
 
+  /**
+   * Copy c'tor used in clone().
+   */
+  protected BetweenPredicate(BetweenPredicate other) {
+    super(other);
+    isNotBetween_ = other.isNotBetween_;
+    originalChildren_ = Expr.cloneList(other.originalChildren_);
+    if (other.rewrittenPredicate_ != null) {
+      rewrittenPredicate_ = (CompoundPredicate) other.rewrittenPredicate_.clone();
+    }
+  }
+
+  public CompoundPredicate getRewrittenPredicate() {
+    Preconditions.checkState(isAnalyzed_);
+    return rewrittenPredicate_;
+  }
+
   @Override
-  public void analyze(Analyzer analyzer) throws AnalysisException,
-      AuthorizationException {
+  public void analyze(Analyzer analyzer) throws AnalysisException {
     if (isAnalyzed_) return;
     super.analyze(analyzer);
+    if (originalChildren_.get(0) instanceof Subquery &&
+        (originalChildren_.get(1) instanceof Subquery ||
+         originalChildren_.get(2) instanceof Subquery)) {
+      throw new AnalysisException("Comparison between subqueries is not " +
+          "supported in a between predicate: " + toSqlImpl());
+    }
     analyzer.castAllToCompatibleType(originalChildren_);
-
     // TODO: improve with histograms
     selectivity_ = Expr.DEFAULT_SELECTIVITY;
 
@@ -87,6 +108,7 @@ public class BetweenPredicate extends Predicate {
 
     // Make sure toThrift() picks up the children of the rewritten predicate.
     children_ = rewrittenPredicate_.getChildren();
+    isAnalyzed_ = true;
   }
 
   @Override
@@ -110,9 +132,22 @@ public class BetweenPredicate extends Predicate {
    * Also substitute the exprs in originalChildren when cloning.
    */
   @Override
-  public Expr clone(SubstitutionMap sMap) {
-    BetweenPredicate clone = (BetweenPredicate) super.clone(sMap);
-    clone.originalChildren_ = Expr.cloneList(originalChildren_, sMap);
+  protected Expr substituteImpl(ExprSubstitutionMap smap, Analyzer analyzer)
+      throws AnalysisException {
+    BetweenPredicate clone = (BetweenPredicate) super.substituteImpl(smap, analyzer);
+    Preconditions.checkNotNull(clone);
+    clone.originalChildren_ =
+        Expr.substituteList(originalChildren_, smap, analyzer, false);
     return clone;
+  }
+
+  @Override
+  public Expr clone() { return new BetweenPredicate(this); }
+
+  @Override
+  public Expr reset() {
+    super.reset();
+    originalChildren_ = Expr.resetList(originalChildren_);
+    return this;
   }
 }

@@ -16,12 +16,14 @@ package com.cloudera.impala.analysis;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Set;
 
-import com.cloudera.impala.catalog.AuthorizationException;
 import com.cloudera.impala.catalog.Column;
 import com.cloudera.impala.catalog.ColumnStats;
+import com.cloudera.impala.catalog.Type;
 import com.cloudera.impala.common.AnalysisException;
+import com.cloudera.impala.common.InternalException;
 import com.cloudera.impala.common.TreeNode;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
@@ -42,7 +44,7 @@ public abstract class QueryStmt extends StatementBase {
   protected WithClause withClause_;
 
   protected ArrayList<OrderByElement> orderByElements_;
-  protected final LimitElement limitElement_;
+  protected LimitElement limitElement_;
 
   // For a select statment:
   // original list of exprs in select clause (star-expanded, ordinals and
@@ -59,7 +61,7 @@ public abstract class QueryStmt extends StatementBase {
    * Map of expression substitutions for replacing aliases
    * in "order by" or "group by" clauses with their corresponding result expr.
    */
-  protected final Expr.SubstitutionMap aliasSmap_ = new Expr.SubstitutionMap();
+  protected final ExprSubstitutionMap aliasSmap_ = new ExprSubstitutionMap();
 
   /**
    * Select list item alias does not have to be unique.
@@ -80,6 +82,8 @@ public abstract class QueryStmt extends StatementBase {
   // Analyzer that was used to analyze this query statement.
   protected Analyzer analyzer_;
 
+  public Analyzer getAnalyzer() { return analyzer_; }
+
   QueryStmt(ArrayList<OrderByElement> orderByElements, LimitElement limitElement) {
     orderByElements_ = orderByElements;
     sortInfo_ = null;
@@ -87,16 +91,14 @@ public abstract class QueryStmt extends StatementBase {
   }
 
   @Override
-  public void analyze(Analyzer analyzer) throws AnalysisException,
-      AuthorizationException {
+  public void analyze(Analyzer analyzer) throws AnalysisException {
     super.analyze(analyzer);
     this.analyzer_ = analyzer;
     analyzeLimit(analyzer);
     if (hasWithClause()) withClause_.analyze(analyzer);
   }
 
-  private void analyzeLimit(Analyzer analyzer) throws AnalysisException,
-      AuthorizationException {
+  private void analyzeLimit(Analyzer analyzer) throws AnalysisException {
     if (limitElement_.getOffsetExpr() != null && !hasOrderByClause()) {
       throw new AnalysisException("OFFSET requires an ORDER BY clause: " +
           limitElement_.toSql().trim());
@@ -112,8 +114,7 @@ public abstract class QueryStmt extends StatementBase {
    * Sets evaluateOrderBy_ to false for ignored order-by w/o limit/offset in nested
    * queries.
    */
-  protected void createSortInfo(Analyzer analyzer) throws AnalysisException,
-      AuthorizationException {
+  protected void createSortInfo(Analyzer analyzer) throws AnalysisException {
     // not computing order by
     if (orderByElements_ == null) {
       evaluateOrderBy_ = false;
@@ -126,20 +127,23 @@ public abstract class QueryStmt extends StatementBase {
 
     // extract exprs
     for (OrderByElement orderByElement: orderByElements_) {
+      if (orderByElement.getExpr().contains(Predicates.instanceOf(Subquery.class))) {
+        throw new AnalysisException(
+            "Subqueries are not supported in the ORDER BY clause.");
+      }
       // create copies, we don't want to modify the original parse node, in case
       // we need to print it
-      orderingExprs.add(orderByElement.getExpr().clone(null));
-      isAscOrder.add(Boolean.valueOf(orderByElement.getIsAsc()));
+      orderingExprs.add(orderByElement.getExpr().clone());
+      isAscOrder.add(Boolean.valueOf(orderByElement.isAsc()));
       nullsFirstParams.add(orderByElement.getNullsFirstParam());
     }
-    substituteOrdinals(orderingExprs, "ORDER BY");
+    substituteOrdinals(orderingExprs, "ORDER BY", analyzer);
     Expr ambiguousAlias = getFirstAmbiguousAlias(orderingExprs);
     if (ambiguousAlias != null) {
-      throw new AnalysisException("Column " + ambiguousAlias.toSql() +
-          " in order clause is ambiguous");
+      throw new AnalysisException("Column '" + ambiguousAlias.toSql() +
+          "' in ORDER BY clause is ambiguous");
     }
-    Expr.substituteList(orderingExprs, aliasSmap_);
-    Expr.analyze(orderingExprs, analyzer);
+    orderingExprs = Expr.trySubstituteList(orderingExprs, aliasSmap_, analyzer, false);
 
     if (!analyzer.isRootAnalyzer() && hasOffset() && !hasLimit()) {
       throw new AnalysisException("Order-by with offset without limit not supported" +
@@ -149,24 +153,19 @@ public abstract class QueryStmt extends StatementBase {
     sortInfo_ = new SortInfo(orderingExprs, isAscOrder, nullsFirstParams);
     // order by w/o limit and offset in inline views, union operands and insert statements
     // are ignored.
-    if (!hasLimit() && !hasOffset() &&
-        (!analyzer.isRootAnalyzer() || analyzer.isInsertStmt())) {
+    if (!hasLimit() && !hasOffset() && !analyzer.isRootAnalyzer()) {
       evaluateOrderBy_ = false;
-      // Return a warning of the form:
-      // Ignoring order by ... <reason>: <order by clause>
+      // Return a warning that the order by was ignored.
       StringBuilder strBuilder = new StringBuilder();
-      strBuilder.append("Ignoring ORDER BY clause without LIMIT or OFFSET ");
-      if (!analyzer.isRootAnalyzer()) {
-        strBuilder.append("in nested query, view or union operand");
-      } else {
-        Preconditions.checkState(analyzer.isInsertStmt());
-        strBuilder.append("in INSERT/CTAS");
-      }
-      strBuilder.append(": ORDER BY ");
+      strBuilder.append("Ignoring ORDER BY clause without LIMIT or OFFSET: ");
+      strBuilder.append("ORDER BY ");
       strBuilder.append(orderByElements_.get(0).toSql());
       for (int i = 1; i < orderByElements_.size(); ++i) {
         strBuilder.append(", ").append(orderByElements_.get(i).toSql());
       }
+      strBuilder.append(".\nAn ORDER BY without a LIMIT or OFFSET appearing in ");
+      strBuilder.append("an (inline) view, union operand or an INSERT/CTAS statement ");
+      strBuilder.append("has no effect on the query result.");
       analyzer.addWarning(strBuilder.toString());
     } else {
       evaluateOrderBy_ = true;
@@ -184,8 +183,7 @@ public abstract class QueryStmt extends StatementBase {
    * TODO: We could do something more sophisticated than simply copying input
    * slotrefs - e.g. compute some order-by expressions.
    */
-  protected void createSortTupleInfo(Analyzer analyzer) throws AnalysisException,
-      AuthorizationException {
+  protected void createSortTupleInfo(Analyzer analyzer) {
     Preconditions.checkState(evaluateOrderBy_);
 
     // sourceSlots contains the slots from the input row to materialize.
@@ -194,12 +192,12 @@ public abstract class QueryStmt extends StatementBase {
     TreeNode.collect(sortInfo_.getOrderingExprs(), Predicates.instanceOf(SlotRef.class),
         sourceSlots);
 
-    TupleDescriptor sortTupleDesc = analyzer.getDescTbl().createTupleDescriptor();
+    TupleDescriptor sortTupleDesc = analyzer.getDescTbl().createTupleDescriptor("sort");
     List<Expr> sortTupleExprs = Lists.newArrayList();
     sortTupleDesc.setIsMaterialized(true);
     // substOrderBy is the mapping from slot refs in the input row to slot refs in the
     // materialized sort tuple.
-    Expr.SubstitutionMap substOrderBy = new Expr.SubstitutionMap();
+    ExprSubstitutionMap substOrderBy = new ExprSubstitutionMap();
     for (SlotRef origSlotRef: sourceSlots) {
       SlotDescriptor origSlotDesc = origSlotRef.getDesc();
       SlotDescriptor materializedDesc = analyzer.addSlotDescriptor(sortTupleDesc);
@@ -212,14 +210,13 @@ public abstract class QueryStmt extends StatementBase {
       materializedDesc.setLabel(origSlotDesc.getLabel());
       materializedDesc.setStats(ColumnStats.fromExpr(origSlotRef));
       SlotRef cloneRef = new SlotRef(materializedDesc);
-      substOrderBy.addMapping(origSlotRef, cloneRef);
+      substOrderBy.put(origSlotRef, cloneRef);
       analyzer.createAuxEquivPredicate(cloneRef, origSlotRef);
       sortTupleExprs.add(origSlotRef);
     }
 
-    Expr.substituteList(resultExprs_, substOrderBy);
-    Expr.substituteList(sortInfo_.getOrderingExprs(), substOrderBy);
-
+    resultExprs_ = Expr.substituteList(resultExprs_, substOrderBy, analyzer, false);
+    sortInfo_.substituteOrderingExprs(substOrderBy, analyzer);
     sortInfo_.setMaterializedTupleInfo(sortTupleDesc, sortTupleExprs);
   }
 
@@ -229,9 +226,7 @@ public abstract class QueryStmt extends StatementBase {
    */
   protected Expr getFirstAmbiguousAlias(List<Expr> exprs) {
     for (Expr exp: exprs) {
-      if (ambiguousAliasList_.contains(exp)) {
-        return exp;
-      }
+      if (ambiguousAliasList_.contains(exp)) return exp;
     }
     return null;
   }
@@ -240,8 +235,29 @@ public abstract class QueryStmt extends StatementBase {
    * Substitute exprs of the form "<number>"  with the corresponding
    * expressions.
    */
-  protected abstract void substituteOrdinals(List<Expr> exprs, String errorPrefix)
-      throws AnalysisException;
+  protected void substituteOrdinals(List<Expr> exprs, String errorPrefix,
+      Analyzer analyzer) throws AnalysisException {
+    // Substitute ordinals.
+    ListIterator<Expr> i = exprs.listIterator();
+    while (i.hasNext()) {
+      Expr expr = i.next();
+      if (!(expr instanceof NumericLiteral)) continue;
+      expr.analyze(analyzer);
+      if (!expr.getType().isIntegerType()) continue;
+      long pos = ((NumericLiteral) expr).getLongValue();
+      if (pos < 1) {
+        throw new AnalysisException(
+            errorPrefix + ": ordinal must be >= 1: " + expr.toSql());
+      }
+      if (pos > resultExprs_.size()) {
+        throw new AnalysisException(
+            errorPrefix + ": ordinal exceeds number of items in select list: "
+            + expr.toSql());
+      }
+      // Create copy to protect against accidentally shared state.
+      i.set(resultExprs_.get((int) pos - 1).clone());
+    }
+  }
 
   /**
    * UnionStmt and SelectStmt have different implementations.
@@ -253,6 +269,8 @@ public abstract class QueryStmt extends StatementBase {
    * Used in case this stmt is part of an @InlineViewRef,
    * since we need to know the materialized tupls ids of a TableRef.
    * This call must be idempotent because it may be called more than once for Union stmt.
+   * TODO: The name of this function has become outdated due to analytics
+   * producing logical (non-materialized) tuples. Re-think and clean up.
    */
   public abstract void getMaterializedTupleIds(ArrayList<TupleId> tupleIdList);
 
@@ -268,6 +286,12 @@ public abstract class QueryStmt extends StatementBase {
   public boolean evaluateOrderBy() { return evaluateOrderBy_; }
   public ArrayList<Expr> getResultExprs() { return resultExprs_; }
   public ArrayList<Expr> getBaseTblResultExprs() { return baseTblResultExprs_; }
+  public void setLimit(long limit) throws AnalysisException {
+    Preconditions.checkState(limit >= 0);
+    long newLimit = hasLimit() ? Math.min(limit, getLimit()) : limit;
+    limitElement_ = new LimitElement(new NumericLiteral(Long.toString(newLimit),
+        Type.BIGINT), null);
+  }
 
   /**
    * Mark all slots that need to be materialized for the execution of this stmt.
@@ -278,7 +302,8 @@ public abstract class QueryStmt extends StatementBase {
    * This is called prior to plan tree generation and allows tuple-materializing
    * PlanNodes to compute their tuple's mem layout.
    */
-  public abstract void materializeRequiredSlots(Analyzer analyzer);
+  public abstract void materializeRequiredSlots(Analyzer analyzer)
+      throws InternalException;
 
   /**
    * Mark slots referenced in exprs as materialized.

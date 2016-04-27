@@ -47,7 +47,6 @@ enum TTableType {
 
 enum THdfsFileFormat {
   TEXT,
-  LZO_TEXT,
   RC_FILE,
   SEQUENCE_FILE,
   AVRO,
@@ -61,9 +60,14 @@ enum THdfsCompression {
   DEFLATE,
   BZIP2,
   SNAPPY,
-  SNAPPY_BLOCKED, // Used by sequence and rc files but not stored in the metadata.
+  SNAPPY_BLOCKED,
   LZO,
   LZ4
+}
+
+enum THdfsSeqCompressionMode {
+  RECORD,
+  BLOCK
 }
 
 // The table property type.
@@ -128,6 +132,39 @@ struct TColumnStats {
   4: required i64 num_nulls
 }
 
+// Intermediate state for the computation of per-column stats. Impala can aggregate these
+// structures together to produce final stats for a column.
+struct TIntermediateColumnStats {
+  // One byte for each bucket of the NDV HLL computation
+  1: optional binary intermediate_ndv
+
+  // If true, intermediate_ndv is RLE-compressed
+  2: optional bool is_ndv_encoded
+
+  // Number of nulls seen so far (or -1 if nulls are not counted)
+  3: optional i64 num_nulls
+
+  // The maximum width, in bytes, of the column
+  4: optional i32 max_width
+
+  // The average width (in bytes) of the column
+  5: optional double avg_width
+
+  // The number of rows counted, needed to compute NDVs from intermediate_ndv
+  6: optional i64 num_rows
+}
+
+// Per-partition statistics
+struct TPartitionStats {
+  // Number of rows gathered per-partition by non-incremental stats.
+  // TODO: This can probably be removed in favour of the intermediate_col_stats, but doing
+  // so would interfere with the non-incremental stats path
+  1: required TTableStats stats
+
+  // Intermediate state for incremental statistics, one entry per column name.
+  2: optional map<string, TIntermediateColumnStats> intermediate_col_stats
+}
+
 struct TColumn {
   1: required string columnName
   2: required Types.TColumnType columnType
@@ -190,23 +227,25 @@ struct THdfsPartition {
   6: required THdfsFileFormat fileFormat
   7: list<Exprs.TExpr> partitionKeyExprs
   8: required i32 blockSize
-  9: required THdfsCompression compression
-  10: optional list<THdfsFileDesc> file_desc
-  11: optional string location
+  9: optional list<THdfsFileDesc> file_desc
+  10: optional string location
 
   // The access level Impala has on this partition (READ_WRITE, READ_ONLY, etc).
-  12: optional TAccessLevel access_level
+  11: optional TAccessLevel access_level
 
   // Statistics on this partition, e.g., number of rows in this partition.
-  13: optional TTableStats stats
+  12: optional TTableStats stats
 
   // True if this partition has been marked as cached (does not necessarily mean the
   // underlying data is cached).
-  14: optional bool is_marked_cached
+  13: optional bool is_marked_cached
 
   // Unique (in this table) id of this partition. If -1, the partition does not currently
   // exist.
-  15: optional i64 id
+  14: optional i64 id
+
+  // (key,value) pairs stored in the Hive Metastore.
+  15: optional map<string, string> hms_parameters
 }
 
 struct THdfsTable {
@@ -231,6 +270,10 @@ struct THdfsTable {
   // Used so that each THdfsFileBlock can just reference an index in this list rather
   // than duplicate the list of network address, which helps reduce memory usage.
   7: optional list<Types.TNetworkAddress> network_addresses
+
+  // Indicates that this table's partitions reside on more than one filesystem.
+  // TODO: remove once INSERT across filesystems is supported.
+  8: optional bool multiple_filesystems
 }
 
 struct THBaseTable {
@@ -344,18 +387,54 @@ enum TPrivilegeScope {
   TABLE,
 }
 
-// Represents a privilege granted to a role in an authorization policy.
+// The privilege level allowed.
+enum TPrivilegeLevel {
+  ALL,
+  INSERT,
+  SELECT
+}
+
+// Represents a privilege in an authorization policy. Privileges contain the level
+// of access, the scope and role the privilege applies to, and details on what
+// catalog object the privilege is securing. Objects are hierarchical, so a privilege
+// corresponding to a table must also specify all the parent objects (database name
+// and server name).
 struct TPrivilege {
-  // The Sentry defined name of this privilege. Will be in the form of:
-  // [ServerName]->[DbName]->[TableName]->[Action Granted] and may contain wildcard/"*"
-  // characters. The combination of role_id + privilege_name is guaranteed to be unique.
+  // A human readable name for this privilege. The combination of role_id +
+  // privilege_name is guaranteed to be unique. Stored in a form that can be passed
+  // to Sentry: [ServerName]->[DbName]->[TableName]->[Action Granted].
   1: required string privilege_name
 
+  // The level of access this privilege provides.
+  2: required TPrivilegeLevel privilege_level
+
   // The scope of the privilege: SERVER, DATABASE, URI, or TABLE
-  2: required TPrivilegeScope scope
+  3: required TPrivilegeScope scope
+
+  // If true, GRANT OPTION was specified. For a GRANT privilege statement, everyone
+  // granted this role should be able to issue GRANT/REVOKE privilege statements even if
+  // they are not an admin. For REVOKE privilege statements, the privilege should be
+  // retainined and the existing GRANT OPTION (if it was set) on the privilege should be
+  // removed.
+  4: required bool has_grant_opt
 
   // The ID of the role this privilege belongs to.
-  3: required i32 role_id
+  5: optional i32 role_id
+
+  // Set if scope is SERVER, URI, DATABASE, or TABLE
+  6: optional string server_name
+
+  // Set if scope is DATABASE or TABLE
+  7: optional string db_name
+
+  // Unqualified table name. Set if scope is TABLE.
+  8: optional string table_name
+
+  // Set if scope is URI
+  9: optional string uri
+
+  // Time this privilege was created (in milliseconds since epoch).
+  10: optional i64 create_time_ms
 }
 
 // Thrift representation of an HdfsCachePool.

@@ -4,21 +4,21 @@ avg(tinyint_col)
 from functional.alltypesagg
 ---- PLAN
 01:AGGREGATE [FINALIZE]
-|  output: count(*), count(tinyint_col), min(tinyint_col), max(tinyint_col), sum(tinyint_col)
+|  output: count(*), count(tinyint_col), min(tinyint_col), max(tinyint_col), sum(tinyint_col), avg(tinyint_col)
 |
 00:SCAN HDFS [functional.alltypesagg]
-   partitions=10/10 size=743.67KB
+   partitions=11/11 files=11 size=814.73KB
 ---- DISTRIBUTEDPLAN
-03:AGGREGATE [MERGE FINALIZE]
-|  output: sum(count(*)), sum(count(tinyint_col)), min(min(tinyint_col)), max(max(tinyint_col)), sum(sum(tinyint_col))
+03:AGGREGATE [FINALIZE]
+|  output: count:merge(*), count:merge(tinyint_col), min:merge(tinyint_col), max:merge(tinyint_col), sum:merge(tinyint_col), avg:merge(tinyint_col)
 |
 02:EXCHANGE [UNPARTITIONED]
 |
 01:AGGREGATE
-|  output: count(*), count(tinyint_col), min(tinyint_col), max(tinyint_col), sum(tinyint_col)
+|  output: count(*), count(tinyint_col), min(tinyint_col), max(tinyint_col), sum(tinyint_col), avg(tinyint_col)
 |
 00:SCAN HDFS [functional.alltypesagg]
-   partitions=10/10 size=743.67KB
+   partitions=11/11 files=11 size=814.73KB
 ====
 # with grouping
 select tinyint_col, bigint_col, count(*), min(tinyint_col), max(tinyint_col), sum(tinyint_col),
@@ -27,38 +27,26 @@ from functional.alltypesagg
 group by 2, 1
 ---- PLAN
 01:AGGREGATE [FINALIZE]
-|  output: count(*), min(tinyint_col), max(tinyint_col), sum(tinyint_col), count(tinyint_col)
+|  output: count(*), min(tinyint_col), max(tinyint_col), sum(tinyint_col), avg(tinyint_col)
 |  group by: bigint_col, tinyint_col
 |
 00:SCAN HDFS [functional.alltypesagg]
-   partitions=10/10 size=743.67KB
----- SCANRANGELOCATIONS
-NODE 0:
-  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypesagg/year=2010/month=1/day=1/100101.txt 0:75153
-  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypesagg/year=2010/month=1/day=10/100110.txt 0:76263
-  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypesagg/year=2010/month=1/day=2/100102.txt 0:76263
-  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypesagg/year=2010/month=1/day=3/100103.txt 0:76263
-  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypesagg/year=2010/month=1/day=4/100104.txt 0:76263
-  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypesagg/year=2010/month=1/day=5/100105.txt 0:76263
-  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypesagg/year=2010/month=1/day=6/100106.txt 0:76263
-  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypesagg/year=2010/month=1/day=7/100107.txt 0:76263
-  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypesagg/year=2010/month=1/day=8/100108.txt 0:76263
-  HDFS SPLIT hdfs://localhost:20500/test-warehouse/alltypesagg/year=2010/month=1/day=9/100109.txt 0:76263
+   partitions=11/11 files=11 size=814.73KB
 ---- DISTRIBUTEDPLAN
 04:EXCHANGE [UNPARTITIONED]
 |
-03:AGGREGATE [MERGE FINALIZE]
-|  output: sum(count(*)), min(min(tinyint_col)), max(max(tinyint_col)), sum(sum(tinyint_col)), sum(count(tinyint_col))
+03:AGGREGATE [FINALIZE]
+|  output: count:merge(*), min:merge(tinyint_col), max:merge(tinyint_col), sum:merge(tinyint_col), avg:merge(tinyint_col)
 |  group by: bigint_col, tinyint_col
 |
 02:EXCHANGE [HASH(bigint_col,tinyint_col)]
 |
 01:AGGREGATE
-|  output: count(*), min(tinyint_col), max(tinyint_col), sum(tinyint_col), count(tinyint_col)
+|  output: count(*), min(tinyint_col), max(tinyint_col), sum(tinyint_col), avg(tinyint_col)
 |  group by: bigint_col, tinyint_col
 |
 00:SCAN HDFS [functional.alltypesagg]
-   partitions=10/10 size=743.67KB
+   partitions=11/11 files=11 size=814.73KB
 ====
 # avg substitution
 select avg(id)
@@ -67,29 +55,29 @@ having count(id) > 0
 order by avg(zip) limit 10
 ---- PLAN
 02:TOP-N [LIMIT=10]
-|  order by: sum(zip) / count(zip) ASC
+|  order by: avg(zip) ASC
 |
 01:AGGREGATE [FINALIZE]
-|  output: sum(id), count(id), sum(zip), count(zip)
+|  output: avg(id), count(id), avg(zip)
 |  having: count(id) > 0
 |
 00:SCAN HDFS [functional.testtbl]
-   partitions=1/1 size=0B
+   partitions=1/1 files=0 size=0B
 ---- DISTRIBUTEDPLAN
 02:TOP-N [LIMIT=10]
-|  order by: sum(zip) / count(zip) ASC
+|  order by: avg(zip) ASC
 |
-04:AGGREGATE [MERGE FINALIZE]
-|  output: sum(sum(id)), sum(count(id)), sum(sum(zip)), sum(count(zip))
+04:AGGREGATE [FINALIZE]
+|  output: avg:merge(id), count:merge(id), avg:merge(zip)
 |  having: count(id) > 0
 |
 03:EXCHANGE [UNPARTITIONED]
 |
 01:AGGREGATE
-|  output: sum(id), count(id), sum(zip), count(zip)
+|  output: avg(id), count(id), avg(zip)
 |
 00:SCAN HDFS [functional.testtbl]
-   partitions=1/1 size=0B
+   partitions=1/1 files=0 size=0B
 ====
 # Test correct removal of redundant group-by expressions (IMPALA-817)
 select int_col + int_col, int_col * int_col
@@ -103,12 +91,12 @@ having (int_col * int_col) < 0 limit 10
 |  limit: 10
 |
 00:SCAN HDFS [functional.alltypesagg]
-   partitions=10/10 size=743.67KB
+   partitions=11/11 files=11 size=814.73KB
 ---- DISTRIBUTEDPLAN
 04:EXCHANGE [UNPARTITIONED]
 |  limit: 10
 |
-03:AGGREGATE [MERGE FINALIZE]
+03:AGGREGATE [FINALIZE]
 |  group by: int_col + int_col, int_col * int_col
 |  having: int_col * int_col < 0
 |  limit: 10
@@ -119,7 +107,7 @@ having (int_col * int_col) < 0 limit 10
 |  group by: int_col + int_col, int_col * int_col
 |
 00:SCAN HDFS [functional.alltypesagg]
-   partitions=10/10 size=743.67KB
+   partitions=11/11 files=11 size=814.73KB
 ====
 # Tests that a having predicate triggers slot materialization (IMPALA-846).
 select count(*) from
@@ -137,10 +125,10 @@ having count(t2.int_col) = count(t1.bigint_col)
 |  hash predicates: t1.smallint_col = t2.smallint_col
 |
 |--01:SCAN HDFS [functional.alltypestiny t2]
-|     partitions=4/4 size=460B compact
+|     partitions=4/4 files=4 size=460B
 |
 00:SCAN HDFS [functional.alltypes t1]
-   partitions=24/24 size=478.45KB
+   partitions=24/24 files=24 size=478.45KB
 ====
 # Tests proper slot materialization of agg-tuple slots for avg (IMP-1271).
 # 't.x > 10' is picked up as an unassigned conjunct, and not as a binding
@@ -152,12 +140,12 @@ select 1 from
 where t.x > 10
 ---- PLAN
 01:AGGREGATE [FINALIZE]
-|  output: sum(bigint_col), count(bigint_col)
+|  output: avg(bigint_col)
 |  group by: int_col
-|  having: sum(bigint_col) / count(bigint_col) > 10
+|  having: avg(bigint_col) > 10
 |
 00:SCAN HDFS [functional.alltypes]
-   partitions=24/24 size=478.45KB
+   partitions=24/24 files=24 size=478.45KB
 ====
 # test distributed aggregation over unions (IMPALA-831)
 # non-distinct agg without grouping over a union
@@ -174,13 +162,13 @@ limit 10
 00:UNION
 |
 |--02:SCAN HDFS [functional.alltypessmall]
-|     partitions=4/4 size=6.32KB
+|     partitions=4/4 files=4 size=6.32KB
 |
 01:SCAN HDFS [functional.alltypes]
-   partitions=24/24 size=478.45KB
+   partitions=24/24 files=24 size=478.45KB
 ---- DISTRIBUTEDPLAN
-05:AGGREGATE [MERGE FINALIZE]
-|  output: sum(count(*))
+05:AGGREGATE [FINALIZE]
+|  output: count:merge(*)
 |  limit: 10
 |
 04:EXCHANGE [UNPARTITIONED]
@@ -191,10 +179,10 @@ limit 10
 00:UNION
 |
 |--02:SCAN HDFS [functional.alltypessmall]
-|     partitions=4/4 size=6.32KB
+|     partitions=4/4 files=4 size=6.32KB
 |
 01:SCAN HDFS [functional.alltypes]
-   partitions=24/24 size=478.45KB
+   partitions=24/24 files=24 size=478.45KB
 ====
 # non-distinct agg with grouping over a union
 select count(*) from
@@ -212,16 +200,16 @@ limit 10
 00:UNION
 |
 |--02:SCAN HDFS [functional.alltypessmall]
-|     partitions=4/4 size=6.32KB
+|     partitions=4/4 files=4 size=6.32KB
 |
 01:SCAN HDFS [functional.alltypes]
-   partitions=24/24 size=478.45KB
+   partitions=24/24 files=24 size=478.45KB
 ---- DISTRIBUTEDPLAN
 06:EXCHANGE [UNPARTITIONED]
 |  limit: 10
 |
-05:AGGREGATE [MERGE FINALIZE]
-|  output: sum(count(*))
+05:AGGREGATE [FINALIZE]
+|  output: count:merge(*)
 |  group by: t.bigint_col
 |  limit: 10
 |
@@ -234,10 +222,10 @@ limit 10
 00:UNION
 |
 |--02:SCAN HDFS [functional.alltypessmall]
-|     partitions=4/4 size=6.32KB
+|     partitions=4/4 files=4 size=6.32KB
 |
 01:SCAN HDFS [functional.alltypes]
-   partitions=24/24 size=478.45KB
+   partitions=24/24 files=24 size=478.45KB
 ====
 # distinct agg without grouping over a union
 select count(distinct int_col)
@@ -247,7 +235,7 @@ from
    select * from functional.alltypessmall) t
 limit 10
 ---- PLAN
-04:AGGREGATE [MERGE FINALIZE]
+04:AGGREGATE [FINALIZE]
 |  output: count(int_col)
 |  limit: 10
 |
@@ -257,22 +245,22 @@ limit 10
 00:UNION
 |
 |--02:SCAN HDFS [functional.alltypessmall]
-|     partitions=4/4 size=6.32KB
+|     partitions=4/4 files=4 size=6.32KB
 |
 01:SCAN HDFS [functional.alltypes]
-   partitions=24/24 size=478.45KB
+   partitions=24/24 files=24 size=478.45KB
 ---- DISTRIBUTEDPLAN
-08:AGGREGATE [MERGE FINALIZE]
-|  output: sum(count(int_col))
+08:AGGREGATE [FINALIZE]
+|  output: count:merge(int_col)
 |
 07:EXCHANGE [UNPARTITIONED]
 |  limit: 10
 |
-04:AGGREGATE [MERGE]
+04:AGGREGATE
 |  output: count(int_col)
 |  limit: 10
 |
-06:AGGREGATE [MERGE]
+06:AGGREGATE
 |  group by: int_col
 |
 05:EXCHANGE [HASH(int_col)]
@@ -283,10 +271,10 @@ limit 10
 00:UNION
 |
 |--02:SCAN HDFS [functional.alltypessmall]
-|     partitions=4/4 size=6.32KB
+|     partitions=4/4 files=4 size=6.32KB
 |
 01:SCAN HDFS [functional.alltypes]
-   partitions=24/24 size=478.45KB
+   partitions=24/24 files=24 size=478.45KB
 ====
 # distinct agg with grouping over a union
 select count(distinct int_col)
@@ -297,7 +285,7 @@ from
 group by t.bigint_col
 limit 10
 ---- PLAN
-04:AGGREGATE [MERGE FINALIZE]
+04:AGGREGATE [FINALIZE]
 |  output: count(int_col)
 |  group by: t.bigint_col
 |  limit: 10
@@ -308,20 +296,20 @@ limit 10
 00:UNION
 |
 |--02:SCAN HDFS [functional.alltypessmall]
-|     partitions=4/4 size=6.32KB
+|     partitions=4/4 files=4 size=6.32KB
 |
 01:SCAN HDFS [functional.alltypes]
-   partitions=24/24 size=478.45KB
+   partitions=24/24 files=24 size=478.45KB
 ---- DISTRIBUTEDPLAN
 07:EXCHANGE [UNPARTITIONED]
 |  limit: 10
 |
-04:AGGREGATE [MERGE FINALIZE]
+04:AGGREGATE [FINALIZE]
 |  output: count(int_col)
 |  group by: t.bigint_col
 |  limit: 10
 |
-06:AGGREGATE [MERGE]
+06:AGGREGATE
 |  group by: t.bigint_col, int_col
 |
 05:EXCHANGE [HASH(t.bigint_col)]
@@ -332,10 +320,10 @@ limit 10
 00:UNION
 |
 |--02:SCAN HDFS [functional.alltypessmall]
-|     partitions=4/4 size=6.32KB
+|     partitions=4/4 files=4 size=6.32KB
 |
 01:SCAN HDFS [functional.alltypes]
-   partitions=24/24 size=478.45KB
+   partitions=24/24 files=24 size=478.45KB
 ====
 # mixed distinct and non-distinct agg without grouping over a union
 select count(smallint_col), count(distinct int_col)
@@ -345,8 +333,8 @@ from
    select * from functional.alltypessmall) t
 limit 10
 ---- PLAN
-04:AGGREGATE [MERGE FINALIZE]
-|  output: count(int_col), sum(count(smallint_col))
+04:AGGREGATE [FINALIZE]
+|  output: count(int_col), count:merge(smallint_col)
 |  limit: 10
 |
 03:AGGREGATE
@@ -356,23 +344,23 @@ limit 10
 00:UNION
 |
 |--02:SCAN HDFS [functional.alltypessmall]
-|     partitions=4/4 size=6.32KB
+|     partitions=4/4 files=4 size=6.32KB
 |
 01:SCAN HDFS [functional.alltypes]
-   partitions=24/24 size=478.45KB
+   partitions=24/24 files=24 size=478.45KB
 ---- DISTRIBUTEDPLAN
-08:AGGREGATE [MERGE FINALIZE]
-|  output: sum(count(int_col)), sum(sum(count(smallint_col)))
+08:AGGREGATE [FINALIZE]
+|  output: count:merge(int_col), count:merge(smallint_col)
 |
 07:EXCHANGE [UNPARTITIONED]
 |  limit: 10
 |
-04:AGGREGATE [MERGE]
-|  output: count(int_col), sum(count(smallint_col))
+04:AGGREGATE
+|  output: count(int_col), count:merge(smallint_col)
 |  limit: 10
 |
-06:AGGREGATE [MERGE]
-|  output: sum(count(smallint_col))
+06:AGGREGATE
+|  output: count:merge(smallint_col)
 |  group by: int_col
 |
 05:EXCHANGE [HASH(int_col)]
@@ -384,10 +372,10 @@ limit 10
 00:UNION
 |
 |--02:SCAN HDFS [functional.alltypessmall]
-|     partitions=4/4 size=6.32KB
+|     partitions=4/4 files=4 size=6.32KB
 |
 01:SCAN HDFS [functional.alltypes]
-   partitions=24/24 size=478.45KB
+   partitions=24/24 files=24 size=478.45KB
 ====
 # mixed distinct and non-distinct agg with grouping over a union
 select count(smallint_col), count(distinct int_col)
@@ -398,8 +386,8 @@ from
 group by t.bigint_col
 limit 10
 ---- PLAN
-04:AGGREGATE [MERGE FINALIZE]
-|  output: count(int_col), sum(count(smallint_col))
+04:AGGREGATE [FINALIZE]
+|  output: count(int_col), count:merge(smallint_col)
 |  group by: t.bigint_col
 |  limit: 10
 |
@@ -410,21 +398,21 @@ limit 10
 00:UNION
 |
 |--02:SCAN HDFS [functional.alltypessmall]
-|     partitions=4/4 size=6.32KB
+|     partitions=4/4 files=4 size=6.32KB
 |
 01:SCAN HDFS [functional.alltypes]
-   partitions=24/24 size=478.45KB
+   partitions=24/24 files=24 size=478.45KB
 ---- DISTRIBUTEDPLAN
 07:EXCHANGE [UNPARTITIONED]
 |  limit: 10
 |
-04:AGGREGATE [MERGE FINALIZE]
-|  output: count(int_col), sum(count(smallint_col))
+04:AGGREGATE [FINALIZE]
+|  output: count(int_col), count:merge(smallint_col)
 |  group by: t.bigint_col
 |  limit: 10
 |
-06:AGGREGATE [MERGE]
-|  output: sum(count(smallint_col))
+06:AGGREGATE
+|  output: count:merge(smallint_col)
 |  group by: t.bigint_col, int_col
 |
 05:EXCHANGE [HASH(t.bigint_col)]
@@ -436,10 +424,10 @@ limit 10
 00:UNION
 |
 |--02:SCAN HDFS [functional.alltypessmall]
-|     partitions=4/4 size=6.32KB
+|     partitions=4/4 files=4 size=6.32KB
 |
 01:SCAN HDFS [functional.alltypes]
-   partitions=24/24 size=478.45KB
+   partitions=24/24 files=24 size=478.45KB
 ====
 # mixed distinct and non-distinct agg with grouping over a union distinct
 select count(smallint_col), count(distinct int_col)
@@ -450,8 +438,8 @@ from
 group by t.bigint_col
 limit 10
 ---- PLAN
-05:AGGREGATE [MERGE FINALIZE]
-|  output: count(int_col), sum(count(smallint_col))
+05:AGGREGATE [FINALIZE]
+|  output: count(int_col), count:merge(smallint_col)
 |  group by: t.bigint_col
 |  limit: 10
 |
@@ -465,21 +453,21 @@ limit 10
 00:UNION
 |
 |--02:SCAN HDFS [functional.alltypessmall]
-|     partitions=4/4 size=6.32KB
+|     partitions=4/4 files=4 size=6.32KB
 |
 01:SCAN HDFS [functional.alltypes]
-   partitions=24/24 size=478.45KB
+   partitions=24/24 files=24 size=478.45KB
 ---- DISTRIBUTEDPLAN
 10:EXCHANGE [UNPARTITIONED]
 |  limit: 10
 |
-05:AGGREGATE [MERGE FINALIZE]
-|  output: count(int_col), sum(count(smallint_col))
+05:AGGREGATE [FINALIZE]
+|  output: count(int_col), count:merge(smallint_col)
 |  group by: t.bigint_col
 |  limit: 10
 |
-09:AGGREGATE [MERGE]
-|  output: sum(count(smallint_col))
+09:AGGREGATE
+|  output: count:merge(smallint_col)
 |  group by: t.bigint_col, int_col
 |
 08:EXCHANGE [HASH(t.bigint_col)]
@@ -488,7 +476,7 @@ limit 10
 |  output: count(smallint_col)
 |  group by: bigint_col, int_col
 |
-07:AGGREGATE [MERGE FINALIZE]
+07:AGGREGATE [FINALIZE]
 |  group by: id, bool_col, tinyint_col, smallint_col, int_col, bigint_col, float_col, double_col, date_string_col, string_col, timestamp_col, year, month
 |
 06:EXCHANGE [HASH(id,bool_col,tinyint_col,smallint_col,int_col,bigint_col,float_col,double_col,date_string_col,string_col,timestamp_col,year,month)]
@@ -499,10 +487,10 @@ limit 10
 00:UNION
 |
 |--02:SCAN HDFS [functional.alltypessmall]
-|     partitions=4/4 size=6.32KB
+|     partitions=4/4 files=4 size=6.32KB
 |
 01:SCAN HDFS [functional.alltypes]
-   partitions=24/24 size=478.45KB
+   partitions=24/24 files=24 size=478.45KB
 ====
 # test that aggregations are not placed below an unpartitioned exchange with a limit
 select count(*) from (select * from functional.alltypes limit 10) t
@@ -511,7 +499,7 @@ select count(*) from (select * from functional.alltypes limit 10) t
 |  output: count(*)
 |
 00:SCAN HDFS [functional.alltypes]
-   partitions=24/24 size=478.45KB
+   partitions=24/24 files=24 size=478.45KB
    limit: 10
 ---- DISTRIBUTEDPLAN
 01:AGGREGATE [FINALIZE]
@@ -521,7 +509,7 @@ select count(*) from (select * from functional.alltypes limit 10) t
 |  limit: 10
 |
 00:SCAN HDFS [functional.alltypes]
-   partitions=24/24 size=478.45KB
+   partitions=24/24 files=24 size=478.45KB
    limit: 10
 ====
 # test that aggregations are not placed below an unpartitioned exchange with a limit
@@ -537,10 +525,10 @@ select count(*) from
 |  limit: 10
 |
 |--02:SCAN HDFS [functional.alltypessmall]
-|     partitions=4/4 size=6.32KB
+|     partitions=4/4 files=4 size=6.32KB
 |
 01:SCAN HDFS [functional.alltypes]
-   partitions=24/24 size=478.45KB
+   partitions=24/24 files=24 size=478.45KB
 ---- DISTRIBUTEDPLAN
 03:AGGREGATE [FINALIZE]
 |  output: count(*)
@@ -552,8 +540,8 @@ select count(*) from
 |  limit: 10
 |
 |--02:SCAN HDFS [functional.alltypessmall]
-|     partitions=4/4 size=6.32KB
+|     partitions=4/4 files=4 size=6.32KB
 |
 01:SCAN HDFS [functional.alltypes]
-   partitions=24/24 size=478.45KB
+   partitions=24/24 files=24 size=478.45KB
 ====

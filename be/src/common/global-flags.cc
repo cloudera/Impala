@@ -34,6 +34,9 @@ DEFINE_string(principal, "", "Kerberos principal. If set, both client and backen
 DEFINE_string(be_principal, "", "Kerberos principal for backend network connections only,"
     "overriding --principal if set.");
 DEFINE_string(keytab_file, "", "Absolute path to Kerberos keytab file");
+DEFINE_string(krb5_conf, "", "Absolute path to Kerberos krb5.conf if in a non-standard "
+    "location. Does not normally need to be set.");
+DEFINE_string(krb5_debug_file, "", "Turn on Kerberos debugging and output to this file");
 
 DEFINE_string(mem_limit, "80%", "Process memory limit specified as number of bytes "
               "('<int>[bB]?'), megabytes ('<float>[mM]'), gigabytes ('<float>[gG]'), "
@@ -51,3 +54,10 @@ DEFINE_string(heap_profile_dir, "", "Output directory to store heap profiles. If
 DEFINE_bool(abort_on_config_error, true, "Abort Impala startup if there are improper "
     "configs or running on unsupported hardware.");
 
+DEFINE_bool(disable_mem_pools, false, "Set to true to disable memory pooling. "
+    "This can be used to help diagnose memory corruption issues.");
+
+DEFINE_bool(compact_catalog_topic, false, "If true, catalog updates sent via the "
+    "statestore are compacted before transmission. This saves network bandwidth at the"
+    " cost of a small quantity of CPU time. Enable this option in cluster with large"
+    " catalogs. It must be enabled on both the catalog service, and all Impala demons.");

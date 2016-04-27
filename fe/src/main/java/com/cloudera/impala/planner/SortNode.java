@@ -21,7 +21,9 @@ import org.slf4j.LoggerFactory;
 
 import com.cloudera.impala.analysis.Analyzer;
 import com.cloudera.impala.analysis.Expr;
+import com.cloudera.impala.analysis.ExprSubstitutionMap;
 import com.cloudera.impala.analysis.SlotDescriptor;
+import com.cloudera.impala.analysis.SlotRef;
 import com.cloudera.impala.analysis.SortInfo;
 import com.cloudera.impala.common.InternalException;
 import com.cloudera.impala.service.BackendConfig;
@@ -45,11 +47,17 @@ import com.google.common.collect.Lists;
 public class SortNode extends PlanNode {
   private final static Logger LOG = LoggerFactory.getLogger(SortNode.class);
 
-  // The sort information produced in analysis.
   private final SortInfo info_;
-  // info_.sortTupleSlotExprs_ substituted with the baseTblSmap_ for materialized slots
+
+  // if set, this SortNode requires its input to have this data partition
+  private DataPartition inputPartition_;
+
+  // if true, the output of this node feeds an AnalyticNode
+  private boolean isAnalyticSort_;
+
+  // info_.sortTupleSlotExprs_ substituted with the outputSmap_ for materialized slots
   // in init().
-  List<Expr> baseTblMaterializedTupleExprs_;
+  private List<Expr> resolvedTupleExprs_;
   private final boolean useTopN_;
   // The offset of the first row to return.
   protected long offset_;
@@ -67,13 +75,14 @@ public class SortNode extends PlanNode {
   public long getOffset() { return offset_; }
   public void setOffset(long offset) { offset_ = offset; }
   public boolean hasOffset() { return offset_ > 0; }
-
   public boolean useTopN() { return useTopN_; }
-
   public SortInfo getSortInfo() { return info_; }
-
-  @Override
-  public void setCompactData(boolean on) { compactData_ = on; }
+  public void setInputPartition(DataPartition inputPartition) {
+    inputPartition_ = inputPartition;
+  }
+  public DataPartition getInputPartition() { return inputPartition_; }
+  public boolean isAnalyticSort() { return isAnalyticSort_; }
+  public void setIsAnalyticSort(boolean v) { isAnalyticSort_ = v; }
 
   @Override
   public boolean isBlockingNode() { return true; }
@@ -84,16 +93,32 @@ public class SortNode extends PlanNode {
     // Compute the memory layout for the generated tuple.
     computeMemLayout(analyzer);
     computeStats(analyzer);
-    createDefaultSmap();
+
+    // populate resolvedTupleExprs_ and outputSmap_
     List<SlotDescriptor> sortTupleSlots = info_.getSortTupleDescriptor().getSlots();
     List<Expr> slotExprs = info_.getSortTupleSlotExprs();
     Preconditions.checkState(sortTupleSlots.size() == slotExprs.size());
-    baseTblMaterializedTupleExprs_ = Lists.newArrayList();
+    resolvedTupleExprs_ = Lists.newArrayList();
+    outputSmap_ = new ExprSubstitutionMap();
     for (int i = 0; i < slotExprs.size(); ++i) {
-      if (sortTupleSlots.get(i).isMaterialized()) {
-        baseTblMaterializedTupleExprs_.add(slotExprs.get(i).clone(baseTblSmap_));
-      }
+      if (!sortTupleSlots.get(i).isMaterialized()) continue;
+      resolvedTupleExprs_.add(slotExprs.get(i));
+      outputSmap_.put(slotExprs.get(i), new SlotRef(sortTupleSlots.get(i)));
     }
+    ExprSubstitutionMap childSmap = getCombinedChildSmap();
+    resolvedTupleExprs_ = Expr.substituteList(resolvedTupleExprs_, childSmap, analyzer, false);
+
+    // Remap the ordering exprs to the tuple materialized by this sort node. The mapping
+    // is a composition of the childSmap and the outputSmap_ because the child node may
+    // have also remapped its input (e.g., as in a a series of (sort->analytic)* nodes).
+    // Parent nodes have have to do the same so set the composition as the outputSmap_.
+    outputSmap_ = ExprSubstitutionMap.compose(childSmap, outputSmap_, analyzer);
+    info_.substituteOrderingExprs(outputSmap_, analyzer);
+    info_.checkConsistency();
+
+    LOG.trace("sort id " + tupleIds_.get(0).toString() + " smap: "
+        + outputSmap_.debugString());
+    LOG.trace("sort input exprs: " + Expr.debugString(resolvedTupleExprs_));
   }
 
   @Override
@@ -125,7 +150,7 @@ public class SortNode extends PlanNode {
         info_.getIsAscOrder(), info_.getNullsFirst());
     Preconditions.checkState(tupleIds_.size() == 1,
         "Incorrect size for tupleIds_ in SortNode");
-    sort_info.sort_tuple_slot_exprs = Expr.treesToThrift(baseTblMaterializedTupleExprs_);
+    sort_info.sort_tuple_slot_exprs = Expr.treesToThrift(resolvedTupleExprs_);
     TSortNode sort_node = new TSortNode(sort_info, useTopN_);
     sort_node.setOffset(offset_);
     msg.sort_node = sort_node;

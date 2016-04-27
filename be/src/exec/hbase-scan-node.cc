@@ -121,7 +121,7 @@ Status HBaseScanNode::Prepare(RuntimeState* state) {
 Status HBaseScanNode::Open(RuntimeState* state) {
   RETURN_IF_ERROR(ExecNode::Open(state));
   RETURN_IF_CANCELLED(state);
-  RETURN_IF_ERROR(state->CheckQueryState());
+  RETURN_IF_ERROR(QueryMaintenance(state));
   SCOPED_TIMER(runtime_profile_->total_time_counter());
   JNIEnv* env = getJNIEnv();
 
@@ -151,7 +151,7 @@ void HBaseScanNode::WriteTextSlot(
 Status HBaseScanNode::GetNext(RuntimeState* state, RowBatch* row_batch, bool* eos) {
   RETURN_IF_ERROR(ExecDebugAction(TExecNodePhase::GETNEXT, state));
   RETURN_IF_CANCELLED(state);
-  RETURN_IF_ERROR(state->CheckQueryState());
+  RETURN_IF_ERROR(QueryMaintenance(state));
   // For GetNext, most of the time is spent in HBaseTableScanner::ResultScanner_next,
   // but there's still some considerable time inside here.
   // TODO: need to understand how the time is spent inside this function.
@@ -162,9 +162,10 @@ Status HBaseScanNode::GetNext(RuntimeState* state, RowBatch* row_batch, bool* eo
     *eos = true;
     return Status::OK;
   }
+  *eos = false;
 
-  // create new tuple buffer for row_batch
-  tuple_buffer_size_ = row_batch->capacity() * tuple_desc_->byte_size();
+  // Create new tuple buffer for row_batch.
+  tuple_buffer_size_ = row_batch->MaxTupleBufferSize();
   tuple_ = Tuple::Create(tuple_buffer_size_, tuple_pool_.get());
 
   // Indicates whether the current row has conversion errors. Used for error reporting.
@@ -175,9 +176,8 @@ Status HBaseScanNode::GetNext(RuntimeState* state, RowBatch* row_batch, bool* eo
   bool has_next = false;
   while (true) {
     RETURN_IF_CANCELLED(state);
-    RETURN_IF_ERROR(state->CheckQueryState());
-    if (ReachedLimit() || row_batch->AtCapacity() ||
-        tuple_pool_->total_allocated_bytes() > RowBatch::AT_CAPACITY_MEM_USAGE) {
+    RETURN_IF_ERROR(QueryMaintenance(state));
+    if (ReachedLimit() || row_batch->AtCapacity(tuple_pool_.get())) {
       // hang on to last allocated chunk in pool, we'll keep writing into it in the
       // next GetNext() call
       row_batch->tuple_data_pool()->AcquireData(tuple_pool_.get(), !ReachedLimit());
@@ -255,7 +255,7 @@ Status HBaseScanNode::GetNext(RuntimeState* state, RowBatch* row_batch, bool* eo
       }
     }
 
-    if (EvalConjuncts(&conjuncts_[0], conjuncts_.size(), row)) {
+    if (EvalConjuncts(&conjunct_ctxs_[0], conjunct_ctxs_.size(), row)) {
       row_batch->CommitLastRow();
       ++num_rows_returned_;
       COUNTER_SET(rows_returned_counter_, num_rows_returned_);
@@ -267,7 +267,7 @@ Status HBaseScanNode::GetNext(RuntimeState* state, RowBatch* row_batch, bool* eo
       // the tuple assembled for the previous row
       tuple_->Init(tuple_desc_->byte_size());
     }
-    COUNTER_UPDATE(rows_read_counter_, 1);
+    COUNTER_ADD(rows_read_counter_, 1);
   }
 
   return Status::OK;

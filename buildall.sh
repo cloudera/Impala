@@ -30,6 +30,7 @@ FORMAT_METASTORE=0
 TARGET_BUILD_TYPE=Debug
 EXPLORATION_STRATEGY=core
 SNAPSHOT_FILE=
+MAKE_IMPALA_ARGS=""
 
 # Exit on reference to uninitialized variable
 set -u
@@ -55,11 +56,15 @@ do
       ;;
     -testdata)
       TESTDATA_ACTION=1
-      FORMAT_CLUSTER=1
-      FORMAT_METASTORE=1
       ;;
     -skiptests)
       TESTS_ACTION=0
+      ;;
+    -build_shared_libs)
+      ;;
+    -so)
+      MAKE_IMPALA_ARGS="${MAKE_IMPALA_ARGS} -build_shared_libs"
+      shift
       ;;
     -notests)
       TESTS_ACTION=0
@@ -95,7 +100,8 @@ do
       ;;
     -help|*)
       echo "buildall.sh - Builds Impala and runs all tests."
-      echo "[-noclean] : Omits cleaning all packages before building"
+      echo "[-noclean] : Omits cleaning all packages before building. Will not kill"\
+           "running Hadoop services unless any -format* is True"
       echo "[-format] : Format the minicluster and metastore db [Default: False]"
       echo "[-format_cluster] : Format the minicluster [Default: False]"
       echo "[-format_metastore] : Format the metastore db [Default: False]"
@@ -111,6 +117,7 @@ do
       echo "[-testdata] : Loads test data. Implied as true if -snapshot_file is "\
            "specified. If -snapshot_file is not specified, data will be regenerated."
       echo "[-snapshot_file <file name>] : Load test data from a snapshot file"
+      echo "[-so|-build_shared_libs] : Dynamically link executables (default is static)"
       echo "-----------------------------------------------------------------------------
 Examples of common tasks:
 
@@ -120,14 +127,15 @@ Examples of common tasks:
   # Build and skip tests
   ./buildall.sh -skiptests
 
-  # Incrementally rebuild and skip tests
+  # Incrementally rebuild and skip tests. Keeps existing Hadoop services running.
   ./buildall.sh -skiptests -noclean
 
   # Build, load a snapshot file, run tests
   ./buildall.sh -snapshot_file <file>
 
-  # Build, generate and load test data without formatting the mini-cluster (reuses
-  # existing data in HDFS if it exists). Can be faster than loading from a snapshot.
+  # Build, generate, and incrementally load test data without formatting the mini-cluster
+  # (reuses existing data in HDFS if it exists). Can be faster than loading from a
+  # snapshot.
   ./buildall.sh -testdata
 
   # Build, format mini-cluster and metastore, load all test data, run tests
@@ -158,6 +166,18 @@ then
     $IMPALA_HOME/thirdparty/hadoop-${IMPALA_HADOOP_VERSION}/lib/native/
 else
   echo "No hadoop-lzo found"
+fi
+
+# Stop any running Impala services.
+${IMPALA_HOME}/bin/start-impala-cluster.py --kill --force
+
+if [ $CLEAN_ACTION -eq 1 ] || [ $FORMAT_METASTORE -eq 1 ] || [ $FORMAT_CLUSTER -eq 1 ]
+then
+  # Kill any processes that may be accessing postgres metastore. To be safe, this is done
+  # before we make any changes to the config files.
+  set +e
+  ${IMPALA_HOME}/testdata/bin/kill-all.sh
+  set -e
 fi
 
 # option to clean everything first
@@ -191,13 +211,6 @@ then
   rm -f $IMPALA_HOME/be/generated-sources/impala-ir/*
 fi
 
-# Kill any processes that may be accessing postgres metastore
-# TODO: figure out how to make postgres ignore other users
-# Disable error on exit for kill-all.sh
-set +e
-${IMPALA_HOME}/testdata/bin/kill-all.sh
-set -e
-
 # Generate the Hadoop configs needed by Impala
 if [ $FORMAT_METASTORE -eq 1 ]; then
   ${IMPALA_HOME}/bin/create-test-configuration.sh -create_metastore
@@ -205,14 +218,10 @@ else
   ${IMPALA_HOME}/bin/create-test-configuration.sh
 fi
 
-
-# Generate all the make files from root.
-cd ${IMPALA_HOME}
-rm -f CMakeCache.txt
-cmake -DCMAKE_BUILD_TYPE=$TARGET_BUILD_TYPE .
-
 # build common and backend
-$IMPALA_HOME/bin/make_impala.sh $*
+MAKE_IMPALA_ARGS="${MAKE_IMPALA_ARGS} -build_type=${TARGET_BUILD_TYPE} $*"
+echo "Calling make_impala.sh ${MAKE_IMPALA_ARGS}"
+$IMPALA_HOME/bin/make_impala.sh ${MAKE_IMPALA_ARGS}
 
 if [ -e $IMPALA_LZO ]
 then
@@ -231,6 +240,9 @@ mvn package -DskipTests=true
 # Build the shell tarball
 echo "Creating shell tarball"
 ${IMPALA_HOME}/shell/make_shell_tarball.sh
+
+echo "Creating test tarball"
+${IMPALA_HOME}/tests/make_test_tarball.sh
 
 # Create subdirectories for the test and data loading impalad logs.
 mkdir -p ${IMPALA_TEST_CLUSTER_LOG_DIR}/query_tests

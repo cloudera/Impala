@@ -14,6 +14,9 @@
 
 package com.cloudera.impala.planner;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 
 import org.slf4j.Logger;
@@ -24,6 +27,7 @@ import com.cloudera.impala.analysis.Expr;
 import com.cloudera.impala.analysis.SlotDescriptor;
 import com.cloudera.impala.analysis.TupleId;
 import com.cloudera.impala.common.InternalException;
+import com.cloudera.impala.common.Pair;
 import com.cloudera.impala.thrift.TExplainLevel;
 import com.cloudera.impala.thrift.TExpr;
 import com.cloudera.impala.thrift.TPlanNode;
@@ -48,7 +52,8 @@ public class UnionNode extends PlanNode {
   // We keep them separate from the regular expr lists to avoid null children.
   protected List<List<Expr>> constExprLists_ = Lists.newArrayList();
 
-  // Materialized result/const exprs corresponding to materialized slots. Set in init().
+  // Materialized result/const exprs corresponding to materialized slots.
+  // Set in init() and substituted against the corresponding child's output smap.
   protected List<List<Expr>> materializedResultExprLists_ = Lists.newArrayList();
   protected List<List<Expr>> materializedConstExprLists_ = Lists.newArrayList();
 
@@ -56,7 +61,6 @@ public class UnionNode extends PlanNode {
 
   protected UnionNode(PlanNodeId id, TupleId tupleId) {
     super(id, Lists.newArrayList(tupleId), "UNION");
-    rowTupleIds_.add(tupleId);
     tupleId_ = tupleId;
   }
 
@@ -71,7 +75,7 @@ public class UnionNode extends PlanNode {
     if (baseTblResultExprs != null) {
       // if we're materializing output, we can only do that into a single
       // output tuple
-      Preconditions.checkState(tupleIds_.size() == 1);
+      Preconditions.checkState(tupleIds_.size() == 1, tupleIds_.size());
     }
   }
 
@@ -83,7 +87,7 @@ public class UnionNode extends PlanNode {
       // ignore missing child cardinality info in the hope it won't matter enough
       // to change the planning outcome
       if (child.cardinality_ > 0) {
-        cardinality_ += child.cardinality_;
+        cardinality_ = addCardinalities(cardinality_, child.cardinality_);
       }
     }
     // The number of nodes of a union node is -1 (invalid) if all the referenced tables
@@ -95,24 +99,65 @@ public class UnionNode extends PlanNode {
   }
 
   /**
+   * Re-order the union's operands descending by their estimated per-host memory,
+   * such that parent nodes can gauge the peak memory consumption of this MergeNode after
+   * opening it during execution (a MergeNode opens its first operand in Open()).
+   * Scan nodes are always ordered last because they can dynamically scale down their
+   * memory usage, whereas many other nodes cannot (e.g., joins, aggregations).
+   * One goal is to decrease the likelihood of a SortNode parent claiming too much
+   * memory in its Open(), possibly causing the mem limit to be hit when subsequent
+   * union operands are executed.
+   * Can only be called on a fragmented plan because this function calls computeCosts()
+   * on this node's children.
+   * TODO: Come up with a good way of handing memory out to individual operators so that
+   * they don't trip each other up. Then remove this function.
+   */
+  public void reorderOperands(Analyzer analyzer) {
+    Preconditions.checkNotNull(fragment_,
+        "Operands can only be reordered on the fragmented plan.");
+
+    // List of estimated per-host memory consumption (first) by child index (second).
+    List<Pair<Long, Integer>> memByChildIdx = Lists.newArrayList();
+    for (int i = 0; i < children_.size(); ++i) {
+      PlanNode child = children_.get(i);
+      child.computeCosts(analyzer.getQueryCtx().request.getQuery_options());
+      memByChildIdx.add(new Pair<Long, Integer>(child.getPerHostMemCost(), i));
+    }
+
+    Collections.sort(memByChildIdx,
+        new Comparator<Pair<Long, Integer>>() {
+      public int compare(Pair<Long, Integer> a, Pair<Long, Integer> b) {
+        PlanNode aNode = children_.get(a.second);
+        PlanNode bNode = children_.get(b.second);
+        // Order scan nodes last because they can dynamically scale down their mem.
+        if (bNode instanceof ScanNode && !(aNode instanceof ScanNode)) return -1;
+        if (aNode instanceof ScanNode && !(bNode instanceof ScanNode)) return 1;
+        long diff = b.first - a.first;
+        return (diff < 0 ? -1 : (diff > 0 ? 1 : 0));
+      }
+    });
+
+    List<List<Expr>> newResultExprLists = Lists.newArrayList();
+    ArrayList<PlanNode> newChildren = Lists.newArrayList();
+    for (Pair<Long, Integer> p: memByChildIdx) {
+      newResultExprLists.add(resultExprLists_.get(p.second));
+      newChildren.add(children_.get(p.second));
+    }
+    resultExprLists_ = newResultExprLists;
+    children_ = newChildren;
+  }
+
+  /**
    * Must be called after addChild()/addConstExprList(). Computes the materialized
    * result/const expr lists based on the materialized slots of this UnionNode's
    * produced tuple. The UnionNode doesn't need an smap: like a ScanNode, it
    * materializes an original tuple.
+   * There is no need to call assignConjuncts() because all non-constant conjuncts
+   * have already been assigned to the union operands, and all constant conjuncts have
+   * been evaluated during registration to set analyzer.hasEmptyResultSet_.
    */
   @Override
   public void init(Analyzer analyzer) throws InternalException {
-    assignConjuncts(analyzer);
-    // All non-constant conjuncts should have been assigned to children.
-    // This requirement is important to guarantee that conjuncts do not trigger
-    // materialization of slots in this UnionNode's tuple.
-    // TODO: It's possible to get constant conjuncts if a union operand
-    // consists of a select stmt on a constant inline view. We should
-    // drop the operand in such cases.
-    for (Expr conjunct: conjuncts_) {
-      Preconditions.checkState(conjunct.isConstant());
-    }
-
     computeMemLayout(analyzer);
     computeStats(analyzer);
 
@@ -121,12 +166,14 @@ public class UnionNode extends PlanNode {
     materializedResultExprLists_.clear();
     Preconditions.checkState(resultExprLists_.size() == children_.size());
     List<SlotDescriptor> slots = analyzer.getDescTbl().getTupleDesc(tupleId_).getSlots();
-    for (List<Expr> exprList: resultExprLists_) {
+    for (int i = 0; i < resultExprLists_.size(); ++i) {
+      List<Expr> exprList = resultExprLists_.get(i);
       List<Expr> newExprList = Lists.newArrayList();
-      for (int i = 0; i < exprList.size(); ++i) {
-        if (slots.get(i).isMaterialized()) newExprList.add(exprList.get(i));
+      for (int j = 0; j < exprList.size(); ++j) {
+        if (slots.get(j).isMaterialized()) newExprList.add(exprList.get(j));
       }
-      materializedResultExprLists_.add(newExprList);
+      materializedResultExprLists_.add(
+          Expr.substituteList(newExprList, getChild(i).getOutputSmap(), analyzer, true));
     }
     Preconditions.checkState(
         materializedResultExprLists_.size() == getChildren().size());
@@ -143,6 +190,7 @@ public class UnionNode extends PlanNode {
 
   @Override
   protected void toThrift(TPlanNode msg) {
+    Preconditions.checkState(materializedResultExprLists_.size() == children_.size());
     List<List<TExpr>> texprLists = Lists.newArrayList();
     for (List<Expr> exprList: materializedResultExprLists_) {
       texprLists.add(Expr.treesToThrift(exprList));

@@ -20,6 +20,7 @@
 
 #include "common/logging.h"
 #include "exprs/expr.h"
+#include "exprs/expr-context.h"
 #include "runtime/descriptors.h"
 #include "runtime/tuple-row.h"
 #include "runtime/row-batch.h"
@@ -367,8 +368,8 @@ DataStreamSender::DataStreamSender(ObjectPool* pool, int sender_id,
   if (sink.output_partition.type == TPartitionType::HASH_PARTITIONED) {
     // TODO: move this to Init()? would need to save 'sink' somewhere
     Status status =
-        Expr::CreateExprTrees(
-          pool, sink.output_partition.partition_exprs, &partition_exprs_);
+        Expr::CreateExprTrees(pool, sink.output_partition.partition_exprs,
+                              &partition_expr_ctxs_);
     DCHECK(status.ok());
   }
 }
@@ -389,10 +390,11 @@ Status DataStreamSender::Prepare(RuntimeState* state) {
   profile_ = pool_->Add(new RuntimeProfile(pool_, title.str()));
   SCOPED_TIMER(profile_->total_time_counter());
 
-  RETURN_IF_ERROR(Expr::Prepare(partition_exprs_, state, row_desc_));
+  mem_tracker_.reset(new MemTracker(profile(), -1, -1, "DataStreamSender",
+      state->instance_mem_tracker()));
+  RETURN_IF_ERROR(
+      Expr::Prepare(partition_expr_ctxs_, state, row_desc_, mem_tracker_.get()));
 
-  mem_tracker_.reset(
-      new MemTracker(profile(), -1, "DataStreamSender", state->instance_mem_tracker()));
   bytes_sent_counter_ =
       ADD_COUNTER(profile(), "BytesSent", TCounterType::BYTES);
   uncompressed_bytes_counter_ =
@@ -416,16 +418,19 @@ Status DataStreamSender::Prepare(RuntimeState* state) {
 }
 
 Status DataStreamSender::Open(RuntimeState* state) {
-  return Expr::Open(partition_exprs_, state);
+  return Expr::Open(partition_expr_ctxs_, state);
 }
 
 Status DataStreamSender::Send(RuntimeState* state, RowBatch* batch, bool eos) {
   SCOPED_TIMER(profile_->total_time_counter());
+  ExprContext::FreeLocalAllocations(partition_expr_ctxs_);
+  RETURN_IF_ERROR(state->CheckQueryState());
   DCHECK(!closed_);
+
   if (broadcast_ || channels_.size() == 1) {
     // current_thrift_batch_ is *not* the one that was written by the last call
     // to Serialize()
-    SerializeBatch(batch, current_thrift_batch_);
+    SerializeBatch(batch, current_thrift_batch_, channels_.size());
     // SendBatch() will block if there are still in-flight rpcs (and those will
     // reference the previously written thrift batch)
     for (int i = 0; i < channels_.size(); ++i) {
@@ -447,15 +452,15 @@ Status DataStreamSender::Send(RuntimeState* state, RowBatch* batch, bool eos) {
     for (int i = 0; i < batch->num_rows(); ++i) {
       TupleRow* row = batch->GetRow(i);
       uint32_t hash_val = HashUtil::FNV_SEED;
-      for (vector<Expr*>::iterator expr = partition_exprs_.begin();
-           expr != partition_exprs_.end(); ++expr) {
-        void* partition_val = (*expr)->GetValue(row);
+      for (int i = 0; i < partition_expr_ctxs_.size(); ++i) {
+        ExprContext* ctx = partition_expr_ctxs_[i];
+        void* partition_val = ctx->GetValue(row);
         // We can't use the crc hash function here because it does not result
         // in uncorrelated hashes with different seeds.  Instead we must use
         // fnv hash.
         // TODO: fix crc hash/GetHashValue()
         hash_val =
-            RawValue::GetHashValueFnv(partition_val, (*expr)->type(), hash_val);
+            RawValue::GetHashValueFnv(partition_val, ctx->root()->type(), hash_val);
       }
 
       RETURN_IF_ERROR(channels_[hash_val % num_channels]->AddRow(row));
@@ -469,17 +474,17 @@ void DataStreamSender::Close(RuntimeState* state) {
   for (int i = 0; i < channels_.size(); ++i) {
     channels_[i]->Close(state);
   }
-  Expr::Close(partition_exprs_, state);
+  Expr::Close(partition_expr_ctxs_, state);
   closed_ = true;
 }
 
-void DataStreamSender::SerializeBatch(RowBatch* src, TRowBatch* dest) {
+void DataStreamSender::SerializeBatch(RowBatch* src, TRowBatch* dest, int num_receivers) {
   VLOG_ROW << "serializing " << src->num_rows() << " rows";
   {
     SCOPED_TIMER(serialize_batch_timer_);
     int uncompressed_bytes = src->Serialize(dest);
-    COUNTER_UPDATE(bytes_sent_counter_, RowBatch::GetBatchSize(*dest));
-    COUNTER_UPDATE(uncompressed_bytes_counter_, uncompressed_bytes);
+    COUNTER_ADD(bytes_sent_counter_, RowBatch::GetBatchSize(*dest) * num_receivers);
+    COUNTER_ADD(uncompressed_bytes_counter_, uncompressed_bytes * num_receivers);
   }
 }
 

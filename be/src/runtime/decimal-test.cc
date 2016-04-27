@@ -81,7 +81,6 @@ TEST(IntToDecimal, Basic) {
 
   // Smaller decimal types can't overflow here since the FE should never generate
   // that.
-  //NONG
 }
 
 TEST(DoubleToDecimal, Basic) {
@@ -424,6 +423,23 @@ TEST(DecimalTest, Overflow) {
   result = d3.Add<int128_t>(t1, one, t2, 1, &overflow);
   EXPECT_FALSE(overflow);
   EXPECT_EQ(result.value(), DecimalUtil::MAX_UNSCALED_DECIMAL - 8);
+
+  // Mod
+  overflow = false;
+  bool is_nan;
+  ColumnType t3 = ColumnType::CreateDecimalType(38, 20);
+  result = d3.Mod<int128_t>(t1, d3, t3, 20, &is_nan, &overflow);
+  EXPECT_TRUE(overflow);
+  EXPECT_FALSE(is_nan);
+
+  overflow = false;
+  result = d3.Mod<int128_t>(t1, two, t1, 0, &is_nan, &overflow);
+  EXPECT_FALSE(overflow);
+  EXPECT_FALSE(is_nan);
+  EXPECT_EQ(result.value(), DecimalUtil::MAX_UNSCALED_DECIMAL % 2);
+
+  result = d3.Mod<int128_t>(t1, zero, t2, 1, &is_nan, &overflow);
+  EXPECT_TRUE(is_nan);
 }
 
 // Overflow cases only need to test with Decimal16Value with max precision. In
@@ -472,7 +488,7 @@ ColumnType GetResultType(const ColumnType& t1, const ColumnType& t2, Op op) {
           max(t1.scale, t2.scale));
     case MULTIPLY:
       return ColumnType::CreateDecimalType(
-          t1.precision + t2.precision + 1, t1.scale + t2.scale);
+          t1.precision + t2.precision, t1.scale + t2.scale);
     case DIVIDE:
       return ColumnType::CreateDecimalType(
           min(38,

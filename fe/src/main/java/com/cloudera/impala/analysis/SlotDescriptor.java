@@ -16,14 +16,14 @@ package com.cloudera.impala.analysis;
 
 import com.cloudera.impala.catalog.Column;
 import com.cloudera.impala.catalog.ColumnStats;
-import com.cloudera.impala.catalog.ColumnType;
+import com.cloudera.impala.catalog.Type;
 import com.cloudera.impala.thrift.TSlotDescriptor;
 import com.google.common.base.Objects;
 
 public class SlotDescriptor {
   private final SlotId id_;
   private final TupleDescriptor parent_;
-  private ColumnType type_;
+  private Type type_;
   private Column column_;  // underlying column, if there is one
   private String label_;  // for SlotRef.toSql() in absence of column name
 
@@ -44,9 +44,25 @@ public class SlotDescriptor {
   private ColumnStats stats_;  // only set if 'column' isn't set
 
   SlotDescriptor(SlotId id, TupleDescriptor parent) {
-    this.id_ = id;
-    this.parent_ = parent;
-    this.byteOffset_ = -1;  // invalid
+    id_ = id;
+    parent_ = parent;
+    byteOffset_ = -1;  // invalid
+  }
+
+  SlotDescriptor(SlotId id, TupleDescriptor parent, SlotDescriptor src) {
+    id_ = id;
+    parent_ = parent;
+    type_ = src.type_;
+    column_ = src.column_;
+    label_ = src.label_;
+    isMaterialized_ = src.isMaterialized_;
+    isNullable_ = src.isNullable_;
+    byteSize_ = src.byteSize_;
+    byteOffset_ = src.byteOffset_;
+    nullIndicatorByte_ = src.nullIndicatorByte_;
+    nullIndicatorBit_ = src.nullIndicatorBit_;
+    slotIdx_ = src.slotIdx_;
+    stats_ = src.stats_;
   }
 
   public int getNullIndicatorByte() { return nullIndicatorByte_; }
@@ -59,8 +75,8 @@ public class SlotDescriptor {
   }
   public SlotId getId() { return id_; }
   public TupleDescriptor getParent() { return parent_; }
-  public ColumnType getType() { return type_; }
-  public void setType(ColumnType type) { this.type_ = type; }
+  public Type getType() { return type_; }
+  public void setType(Type type) { this.type_ = type; }
   public Column getColumn() { return column_; }
   public void setColumn(Column column) {
     this.column_ = column;

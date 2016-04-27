@@ -23,7 +23,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 
 import com.cloudera.impala.authorization.Privilege;
-import com.cloudera.impala.catalog.AuthorizationException;
+import com.cloudera.impala.catalog.HdfsFileFormat;
 import com.cloudera.impala.catalog.HdfsPartition;
 import com.cloudera.impala.catalog.HdfsTable;
 import com.cloudera.impala.catalog.Table;
@@ -91,8 +91,7 @@ public class LoadDataStmt extends StatementBase {
   }
 
   @Override
-  public void analyze(Analyzer analyzer) throws AnalysisException,
-      AuthorizationException {
+  public void analyze(Analyzer analyzer) throws AnalysisException {
     dbName_ = analyzer.getTargetDbName(tableName_);
     Table table = analyzer.getTable(tableName_, Privilege.INSERT);
     if (!(table instanceof HdfsTable)) {
@@ -116,7 +115,7 @@ public class LoadDataStmt extends StatementBase {
   }
 
   private void analyzePaths(Analyzer analyzer, HdfsTable hdfsTable)
-      throws AnalysisException, AuthorizationException {
+      throws AnalysisException {
     // The user must have permission to access the source location. Since the files will
     // be moved from this location, the user needs to have all permission.
     sourceDataPath_.analyze(analyzer, Privilege.ALL);
@@ -124,6 +123,8 @@ public class LoadDataStmt extends StatementBase {
     try {
       Path source = sourceDataPath_.getPath();
       FileSystem fs = source.getFileSystem(FileSystemUtil.getConfiguration());
+      // sourceDataPath_.analyze() ensured that path is on an HDFS filesystem.
+      Preconditions.checkState(fs instanceof DistributedFileSystem);
       DistributedFileSystem dfs = (DistributedFileSystem) fs;
       if (!dfs.exists(source)) {
         throw new AnalysisException(String.format(
@@ -152,27 +153,41 @@ public class LoadDataStmt extends StatementBase {
           "location: ", hdfsTable.getFullName());
 
       HdfsPartition partition;
+      String location;
       if (partitionSpec_ != null) {
         partition = hdfsTable.getPartition(partitionSpec_.getPartitionSpecKeyValues());
+        location = partition.getLocation();
         if (!TAccessLevelUtil.impliesWriteAccess(partition.getAccessLevel())) {
           throw new AnalysisException(noWriteAccessErrorMsg + partition.getLocation());
         }
       } else {
         // "default" partition
         partition = hdfsTable.getPartitions().get(0);
+        location = hdfsTable.getLocation();
         if (!hdfsTable.hasWriteAccess()) {
           throw new AnalysisException(noWriteAccessErrorMsg + hdfsTable.getLocation());
         }
       }
       Preconditions.checkNotNull(partition);
 
+      // Until Frontend.loadTableData() can handle cross-filesystem and filesystems
+      // that aren't HDFS, require that source and dest are on the same HDFS.
+      if (!FileSystemUtil.isPathOnFileSystem(new Path(location), fs)) {
+        throw new AnalysisException(String.format(
+            "Unable to LOAD DATA into target table (%s) because source path (%s) and " +
+            "destination %s (%s) are on different file-systems.",
+            hdfsTable.getFullName(),
+            source, partitionSpec_ == null ? "table" : "partition",
+            partition.getLocation()));
+      }
       // Verify the files being loaded are supported.
       for (FileStatus fStatus: fs.listStatus(source)) {
         if (fs.isDirectory(fStatus.getPath())) continue;
-        String result = partition.checkFileCompressionTypeSupported(
-            fStatus.getPath().toString());
-        if (!result.isEmpty()) {
-          throw new AnalysisException(result);
+        StringBuilder errorMsg = new StringBuilder();
+        HdfsFileFormat fileFormat = partition.getInputFormatDescriptor().getFileFormat();
+        if (!fileFormat.isFileCompressionTypeSupported(fStatus.getPath().toString(),
+          errorMsg)) {
+          throw new AnalysisException(errorMsg.toString());
         }
       }
     } catch (FileNotFoundException e) {

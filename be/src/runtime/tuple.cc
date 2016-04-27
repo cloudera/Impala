@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "exprs/expr.h"
+#include "exprs/expr-context.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem-pool.h"
 #include "runtime/raw-value.h"
@@ -42,7 +43,7 @@ void Tuple::DeepCopy(Tuple* dst, const TupleDescriptor& desc, MemPool* pool,
   // allocate in the same pool and then copy all non-null string slots
   for (vector<SlotDescriptor*>::const_iterator i = desc.string_slots().begin();
        i != desc.string_slots().end(); ++i) {
-    DCHECK_EQ((*i)->type(), TYPE_STRING);
+    DCHECK((*i)->type().IsVarLen());
     if (!dst->IsNull((*i)->null_indicator_offset())) {
       StringValue* string_v = dst->GetStringSlot((*i)->tuple_offset());
       int offset = pool->GetCurrentOffset();
@@ -61,7 +62,7 @@ void Tuple::DeepCopy(const TupleDescriptor& desc, char** data, int* offset,
   *offset += desc.byte_size();
   for (vector<SlotDescriptor*>::const_iterator i = desc.string_slots().begin();
        i != desc.string_slots().end(); ++i) {
-    DCHECK_EQ((*i)->type(), TYPE_STRING);
+    DCHECK((*i)->type().IsVarLen());
     if (!dst->IsNull((*i)->null_indicator_offset())) {
       StringValue* string_v = dst->GetStringSlot((*i)->tuple_offset());
       memcpy(*data, string_v->ptr, string_v->len);
@@ -73,8 +74,9 @@ void Tuple::DeepCopy(const TupleDescriptor& desc, char** data, int* offset,
 }
 
 template <bool collect_string_vals>
-void Tuple::MaterializeExprs(TupleRow* row, const TupleDescriptor& desc,
-    const vector<Expr*>& materialize_exprs, MemPool* pool,
+void Tuple::MaterializeExprs(
+    TupleRow* row, const TupleDescriptor& desc,
+    const vector<ExprContext*>& materialize_expr_ctxs, MemPool* pool,
     vector<StringValue*>* non_null_var_len_values, int* total_var_len) {
   if (collect_string_vals) {
     non_null_var_len_values->clear();
@@ -86,12 +88,16 @@ void Tuple::MaterializeExprs(TupleRow* row, const TupleDescriptor& desc,
   for (int i = 0; i < desc.slots().size(); ++i) {
     SlotDescriptor* slot_desc = desc.slots()[i];
     if (!slot_desc->is_materialized()) continue;
-    DCHECK_EQ(slot_desc->type(), materialize_exprs[mat_expr_index]->type());
-    void* src = materialize_exprs[mat_expr_index]->GetValue(row);
+    // The FE ensures we don't get any TYPE_NULL expressions by picking an arbitrary type
+    // when necessary, but does not do this for slot descs.
+    // TODO: revisit this logic in the FE
+    DCHECK(slot_desc->type().type == TYPE_NULL ||
+           slot_desc->type() == materialize_expr_ctxs[mat_expr_index]->root()->type());
+    void* src = materialize_expr_ctxs[mat_expr_index]->GetValue(row);
     if (src != NULL) {
       void* dst = GetSlot(slot_desc->tuple_offset());
       RawValue::Write(src, dst, slot_desc->type(), pool);
-      if (collect_string_vals && slot_desc->type() == TYPE_STRING) {
+      if (collect_string_vals && slot_desc->type().IsVarLen()) {
         StringValue* string_val = reinterpret_cast<StringValue*>(dst);
         non_null_var_len_values->push_back(string_val);
         *total_var_len += string_val->len;
@@ -102,14 +108,14 @@ void Tuple::MaterializeExprs(TupleRow* row, const TupleDescriptor& desc,
     ++mat_expr_index;
   }
 
-  DCHECK_EQ(mat_expr_index, materialize_exprs.size());
+  DCHECK_EQ(mat_expr_index, materialize_expr_ctxs.size());
 }
 
 template void Tuple::MaterializeExprs<false>(TupleRow* row, const TupleDescriptor& desc,
-    const vector<Expr*>& materialize_exprs, MemPool* pool,
+    const vector<ExprContext*>& materialize_expr_ctxs, MemPool* pool,
     vector<StringValue*>* non_null_var_values, int* total_var_len);
 
 template void Tuple::MaterializeExprs<true>(TupleRow* row, const TupleDescriptor& desc,
-    const vector<Expr*>& materialize_exprs, MemPool* pool,
+    const vector<ExprContext*>& materialize_expr_ctxs, MemPool* pool,
     vector<StringValue*>* non_null_var_values, int* total_var_len);
 }
