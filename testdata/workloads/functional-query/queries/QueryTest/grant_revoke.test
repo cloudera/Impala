@@ -666,10 +666,38 @@ scope, database, table, column, uri, privilege, grant_option, create_time
 STRING, STRING, STRING, STRING, STRING, STRING, BOOLEAN, STRING
 ====
 ---- QUERY
+create role grant_revoke_test_ALL_SERVER1
+---- RESULTS
+====
+---- QUERY
+grant all on server to grant_revoke_test_ALL_SERVER1
+====
+---- QUERY
+show grant role grant_revoke_test_ALL_SERVER1
+---- RESULTS: VERIFY_IS_EQUAL_SORTED
+'SERVER','','','','','ALL',FALSE,regex:.+
+---- LABELS
+scope, database, table, column, uri, privilege, grant_option, create_time
+---- TYPES
+STRING, STRING, STRING, STRING, STRING, STRING, BOOLEAN, STRING
+====
+---- QUERY
+revoke all on server from grant_revoke_test_ALL_SERVER1
+====
+---- QUERY
+show grant role grant_revoke_test_ALL_SERVER1
+---- RESULTS: VERIFY_IS_EQUAL_SORTED
+---- LABELS
+scope, database, table, column, uri, privilege, grant_option, create_time
+---- TYPES
+STRING, STRING, STRING, STRING, STRING, STRING, BOOLEAN, STRING
+====
+---- QUERY
 # Cleanup test roles
 drop role grant_revoke_test_ALL_SERVER;
 drop role grant_revoke_test_SELECT_INSERT_TEST_TBL;
 drop role grant_revoke_test_ALL_URI;
 drop role grant_revoke_test_ROOT;
+drop role grant_revoke_test_ALL_SERVER1;
 ---- RESULTS
 ====
