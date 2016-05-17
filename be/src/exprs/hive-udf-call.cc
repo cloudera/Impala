@@ -244,7 +244,7 @@ void HiveUdfCall::Close(RuntimeState* state, ExprContext* ctx,
     JNIEnv* env = getJNIEnv();
     if (jni_ctx->executor != NULL) {
       env->CallNonvirtualVoidMethodA(
-          jni_ctx->executor, executor_cl_, executor_evaluate_id_, NULL);
+          jni_ctx->executor, executor_cl_, executor_close_id_, NULL);
       Status status = JniUtil::FreeGlobalRef(env, jni_ctx->executor);
       if (!status.ok()) LOG(ERROR) << status.GetDetail();
     }
