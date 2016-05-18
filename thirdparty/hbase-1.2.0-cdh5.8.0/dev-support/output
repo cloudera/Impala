@@ -1,0 +1,97 @@
+JDiff evaluation beginning:
+Determining if this is a local directory or a git repo.
+/home/jon/proj/hbase-cdh5/ is a local directory
+Determining if this is a local directory or a git repo.
+/home/jon/proj/hbase-cdh4 is a local directory
+We are going to compare source 1 which is a local_directory and source 2, which is a local_directory
+JDIFF_WORKING_DIRECTORY not set. That's not an issue. We will default it to ./jidff
+HBASE_1_HOME set to /home/jon/proj/hbase-cdh5/
+In HBASE_1_HOME, we have
+total 1420
+drwxr-xr-x  24 jon jon   4096 2014-02-06 16:24 .
+drwxr-xr-x 100 jon jon   4096 2014-01-23 10:10 ..
+-rw-r--r--   1 jon jon 157779 2013-12-20 14:58 0001-HBASE-8369-MapReduce-over-snapshot-files.patch
+-rw-r--r--   1 jon jon 369389 2013-10-22 17:08 3months
+-rw-r--r--   1 jon jon    395 2013-10-03 15:43 .arcconfig
+drwxr-xr-x   4 jon jon   4096 2014-01-02 16:59 bin
+-rw-r--r--   1 jon jon 391468 2014-01-02 16:59 CHANGES.txt
+drwxr-xr-x   2 jon jon   4096 2013-10-03 15:43 conf
+drwxr-xr-x   3 jon jon   4096 2014-02-06 16:37 dev-support
+drwxr-xr-x   8 jon jon   4096 2014-02-06 16:37 .git
+-rw-r--r--   1 jon jon   1015 2013-10-03 15:43 .gitattributes
+-rw-r--r--   1 jon jon    147 2013-10-03 15:43 .gitignore
+-rw-r--r--   1 jon jon 154744 2013-12-20 15:00 hbase-8369.patch
+-rw-r--r--   1 jon jon 154904 2013-12-20 15:00 hbase-8369.patch2
+drwxr-xr-x   4 jon jon   4096 2014-02-06 16:24 hbase-assembly
+drwxr-xr-x   5 jon jon   4096 2014-02-06 16:24 hbase-client
+drwxr-xr-x   5 jon jon   4096 2014-02-06 16:24 hbase-common
+drwxr-xr-x   5 jon jon   4096 2014-02-06 16:24 hbase-examples
+drwxr-xr-x   5 jon jon   4096 2014-02-06 16:24 hbase-hadoop1-compat
+drwxr-xr-x   5 jon jon   4096 2014-02-06 16:24 hbase-hadoop2-compat
+drwxr-xr-x   5 jon jon   4096 2014-02-06 16:24 hbase-hadoop-compat
+drwxr-xr-x   5 jon jon   4096 2014-02-06 16:24 hbase-it
+drwxr-xr-x   5 jon jon   4096 2014-02-06 16:24 hbase-prefix-tree
+drwxr-xr-x   5 jon jon   4096 2014-02-06 16:24 hbase-protocol
+drwxr-xr-x   5 jon jon   4096 2014-02-06 16:24 hbase-server
+drwxr-xr-x   5 jon jon   4096 2014-02-06 16:24 hbase-shell
+drwxr-xr-x   3 jon jon   4096 2014-02-06 16:24 hbase-testing-util
+drwxr-xr-x   5 jon jon   4096 2014-02-06 16:24 hbase-thrift
+-rw-r--r--   1 jon jon  11358 2013-08-06 11:30 LICENSE.txt
+drwxr-xr-x   2 jon jon   4096 2014-01-24 09:29 logs
+-rw-r--r--   1 jon jon    897 2013-08-06 11:30 NOTICE.txt
+-rw-r--r--   1 jon jon  81698 2014-02-06 16:24 pom.xml
+-rw-r--r--   1 jon jon    382 2013-12-20 13:20 .project
+-rw-r--r--   1 jon jon   1377 2013-10-03 15:43 README.txt
+drwxr-xr-x   2 jon jon   4096 2013-12-20 13:20 .settings
+drwxr-xr-x   3 jon jon   4096 2013-10-03 15:43 src
+drwxr-xr-x   2 jon jon   4096 2014-02-04 11:50 target
+HBASE_2_HOME set to /home/jon/proj/hbase-cdh4
+In HBASE_2_HOME, we have
+total 3240
+drwxr-xr-x  11 jon jon    4096 2014-02-06 16:28 .
+drwxr-xr-x 100 jon jon    4096 2014-01-23 10:10 ..
+-rw-r--r--   1 jon jon     332 2013-05-01 22:50 .arcconfig
+drwxr-xr-x   3 jon jon    4096 2014-02-06 16:28 bin
+-rw-r--r--   1 jon jon  338462 2014-02-06 16:28 CHANGES.txt
+-rw-r--r--   1 jon jon    1163 2013-09-04 10:28 .classpath
+drwxr-xr-x   2 jon jon    4096 2014-02-06 16:28 conf
+drwxr-xr-x   2 jon jon    4096 2014-02-06 16:28 dev-support
+drwxr-xr-x   8 jon jon    4096 2014-02-06 16:28 .git
+-rw-r--r--   1 jon jon     116 2013-05-01 22:50 .gitignore
+-rw-r--r--   1 jon jon    1473 2014-01-22 11:55 hbase-10400.94.patch
+-rw-r--r--   1 jon jon    9616 2014-01-22 12:15 hbase-10401.patch
+-rw-r--r--   1 jon jon  100352 2014-01-07 01:54 hbck.txt
+-rw-r--r--   1 jon jon   11358 2012-03-11 09:39 LICENSE.txt
+-rw-r--r--   1 jon jon    1662 2014-01-09 14:06 list
+drwxr-xr-x   2 jon jon    4096 2014-01-27 13:08 logs
+-rw-r--r--   1 jon jon    1139 2014-01-07 15:24 mergetest
+-rw-r--r--   1 jon jon     119 2014-01-06 23:58 mergetest~
+-rw-r--r--   1 jon jon     897 2014-02-06 16:28 NOTICE.txt
+-rw-r--r--   1 jon jon   98517 2014-02-06 16:28 pom.xml
+-rw-r--r--   1 jon jon     555 2013-09-04 10:28 .project
+-rw-r--r--   1 jon jon    1358 2013-05-01 22:50 README.txt
+drwxr-xr-x   3 jon jon    4096 2013-05-01 22:50 security
+drwxr-xr-x   2 jon jon    4096 2013-09-04 10:28 .settings
+drwxr-xr-x   9 jon jon    4096 2014-02-06 16:28 src
+drwxr-xr-x  12 jon jon    4096 2014-01-28 13:54 target
+-rw-r--r--   1 jon jon 1951875 2013-09-04 10:38 tatus
+-rw-r--r--   1 jon jon  707083 2014-01-07 01:58 test
+Determining if directory /home/jon/proj/hbase-cdh5/ is of the 0.94 and before OR 0.95 and after versions
+First, check that /home/jon/proj/hbase-cdh5/ exists
+Directory /home/jon/proj/hbase-cdh5/ exists
+The directory /home/jon/proj/hbase-cdh5//hbase-server exists so this is of the new format
+Determining if directory /home/jon/proj/hbase-cdh4 is of the 0.94 and before OR 0.95 and after versions
+First, check that /home/jon/proj/hbase-cdh4 exists
+Directory /home/jon/proj/hbase-cdh4 exists
+The directory /home/jon/proj/hbase-cdh4/hbase-server does not exist. Therefore, this is of the old format
+Both formats are using the 94 and earlier style directory format. We'll be using template /home/jon/proj/hbase-cdh5/dev-support/hbase_jdiff_template.xml
+Configuring the jdiff script
+Running jdiff
+total 1376
+drwxr-xr-x  4 jon  jon    4096 2014-02-06 16:37 .
+drwxrwxrwt 23 root root 552960 2014-02-06 16:35 ..
+-rw-r--r--  1 jon  jon    1905 2014-02-06 16:37 hbase_jdiff_p-cdh5b2-c-cdh4.5.0.xml
+drwxr-xr-x  2 jon  jon    4096 2014-02-06 16:32 hbase_jdiff_report-p-cdh5b2-c-cdh4.5.0
+drwxr-xr-x  2 jon  jon    4096 2011-01-19 16:35 jdiff-1.1.1-with-incompatible-option
+-rw-r--r--  1 jon  jon  832765 2014-02-06 16:30 jdiff-1.1.1-with-incompatible-option.zip
+Buildfile: /tmp/jdiff/hbase_jdiff_p-cdh5b2-c-cdh4.5.0.xml
