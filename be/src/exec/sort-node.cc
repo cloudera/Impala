@@ -130,6 +130,7 @@ Status SortNode::Reset(RuntimeState* state) {
 void SortNode::Close(RuntimeState* state) {
   if (is_closed()) return;
   sort_exec_exprs_.Close(state);
+  if (sorter_ != NULL) sorter_->Close();
   sorter_.reset();
   ExecNode::Close(state);
 }
