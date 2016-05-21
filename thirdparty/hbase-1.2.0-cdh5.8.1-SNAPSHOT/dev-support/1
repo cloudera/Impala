@@ -1,0 +1,15 @@
+++ dirname ./jdiffHBasePublicAPI.sh
++ scriptDirectory=.
+++ echo .
+++ sed 's{\.{{g'
++ x=
+++ pwd
++ DEV_SUPPORT_HOME=/home/jon/proj/hbase-cdh5/dev-support
++ . ./jdiffHBasePublicAPI_common.sh
++ EXPECTED_ARGS=4
++ [[ 6 -ne 4 ]]
++ echo 'This tool expects 4 arguments, but received 6. Please check your command and try again.'
+This tool expects 4 arguments, but received 6. Please check your command and try again.
++ echo 'Usage: ./jdiffHBasePublicAPI.sh <repoUrl or local source directory 1> <branch or source name 1> <repoUrl or local source directory 2> <branch or source name 2>'
+Usage: ./jdiffHBasePublicAPI.sh <repoUrl or local source directory 1> <branch or source name 1> <repoUrl or local source directory 2> <branch or source name 2>
++ exit 1
