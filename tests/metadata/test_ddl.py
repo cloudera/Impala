@@ -23,7 +23,7 @@ from subprocess import call
 from tests.common.test_vector import *
 from tests.common.test_dimensions import ALL_NODES_ONLY
 from tests.common.impala_test_suite import *
-from tests.common.skip import SkipIfS3, SkipIfIsilon, SkipIfLocal, SkipIfOldAggsJoins
+from tests.common.skip import SkipIf, SkipIfS3, SkipIfIsilon, SkipIfLocal, SkipIfOldAggsJoins
 from tests.util.filesystem_utils import WAREHOUSE, IS_LOCAL
 
 # Validates DDL statements (create, drop)
@@ -295,6 +295,14 @@ class TestDdlStatements(ImpalaTestSuite):
     self._create_db('alter_table_test_db', sync=True)
     self._create_db('alter_table_test_db2', sync=True)
     self.run_test_case('QueryTest/alter-table', vector, use_db='alter_table_test_db',
+        multiple_impalad=self._use_multiple_impalad(vector))
+
+  @pytest.mark.execute_serially
+  @SkipIf.not_default_fs
+  def test_alter_set_column_stats(self, vector):
+    self._create_db('alter_table_test_db', sync=True)
+    self.run_test_case('QueryTest/alter-table-set-column-stats',
+        vector, use_db='alter_table_test_db',
         multiple_impalad=self._use_multiple_impalad(vector))
 
   @SkipIfS3.hdfs_client # S3: missing coverage: alter table drop partition
