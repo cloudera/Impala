@@ -306,6 +306,13 @@ class TestDdlStatements(ImpalaTestSuite):
     self.run_test_case('QueryTest/alter-table', vector, use_db='alter_table_test_db',
         multiple_impalad=self._use_multiple_impalad(vector))
 
+  @pytest.mark.execute_serially
+  def test_alter_set_column_stats(self, vector):
+    self._create_db('alter_table_test_db', sync=True)
+    self.run_test_case('QueryTest/alter-table-set-column-stats',
+        vector, use_db='alter_table_test_db',
+        multiple_impalad=self._use_multiple_impalad(vector))
+
   @SkipIfS3.hdfs_client # S3: missing coverage: alter table drop partition
   @pytest.mark.execute_serially
   def test_alter_table_drop_partition_with_purge(self, vector):

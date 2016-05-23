@@ -70,7 +70,8 @@ public abstract class AlterTableStmt extends StatementBase {
       throw new AnalysisException(String.format(
           "ALTER TABLE not allowed on a view: %s", table_.getFullName()));
     }
-    if (table_ instanceof DataSourceTable) {
+    if (table_ instanceof DataSourceTable
+        && !(this instanceof AlterTableSetColumnStats)) {
       throw new AnalysisException(String.format(
           "ALTER TABLE not allowed on a table produced by a data source: %s",
           table_.getFullName()));

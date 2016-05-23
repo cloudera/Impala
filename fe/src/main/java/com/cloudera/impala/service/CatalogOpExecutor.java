@@ -418,12 +418,19 @@ public class CatalogOpExecutor {
   }
 
   /**
-   * Alters an existing table's table and column statistics. Partitions are updated
+   * Alters an existing table's table and/or column statistics. Partitions are updated
    * in batches of size 'MAX_PARTITION_UPDATES_PER_RPC'.
    */
   private void alterTableUpdateStats(TAlterTableUpdateStatsParams params,
       TDdlExecResponse resp) throws ImpalaException {
-    Preconditions.checkState(params.isSetPartition_stats() && params.isSetTable_stats());
+    if (params.isSetTable_stats()) {
+      // Updating table and column stats via COMPUTE STATS.
+      Preconditions.checkState(
+          params.isSetPartition_stats() && params.isSetTable_stats());
+    } else {
+      // Only changing column stats via ALTER TABLE SET COLUMN STATS.
+      Preconditions.checkState(params.isSetColumn_stats());
+    }
 
     TableName tableName = TableName.fromThrift(params.getTable_name());
     Preconditions.checkState(tableName != null && tableName.isFullyQualified());
@@ -444,13 +451,15 @@ public class CatalogOpExecutor {
     }
 
     MetaStoreClient msClient = catalog_.getMetaStoreClient();
-    int numTargetedPartitions;
+    int numTargetedPartitions = 0;
     int numUpdatedColumns = 0;
     try {
       // Update the table and partition row counts based on the query results.
       List<HdfsPartition> modifiedParts = Lists.newArrayList();
-      numTargetedPartitions = updateTableStats(table, params, msTbl, partitions,
-          modifiedParts);
+      if (params.isSetTable_stats()) {
+        numTargetedPartitions = updateTableStats(table, params, msTbl, partitions,
+            modifiedParts);
+      }
 
       ColumnStatistics colStats = null;
       if (params.isSetColumn_stats()) {
