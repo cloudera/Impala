@@ -64,61 +64,8 @@ export IMPALA_CXX_COMPILER
 export ENABLE_IMPALA_IR_DEBUG_INFO
 export IS_OSX=$(if [[ "$OSTYPE" == "darwin"* ]]; then echo true; else echo false; fi)
 
-# To use a local build of Kudu, set KUDU_BUILD_DIR to the path Kudu was built in and
-# set KUDU_CLIENT_DIR to the path KUDU was installed in.
-# Example:
-#   git clone https://github.com/cloudera/kudu.git
-#   ...build 3rd party etc...
-#   mkdir -p $KUDU_BUILD_DIR
-#   cd $KUDU_BUILD_DIR
-#   cmake <path to Kudu source dir>
-#   make
-#   DESTDIR=$KUDU_CLIENT_DIR make install
-: ${KUDU_BUILD_DIR=}
-: ${KUDU_CLIENT_DIR=}
-export KUDU_BUILD_DIR
-export KUDU_CLIENT_DIR
-if [[ -n $KUDU_BUILD_DIR && -z $KUDU_CLIENT_DIR ]]; then
-  echo When KUDU_BUILD_DIR is set KUDU_CLIENT_DIR must also be set. 1>&2
-  return 1
-fi
-if [[ -z $KUDU_BUILD_DIR && -n $KUDU_CLIENT_DIR ]]; then
-  echo When KUDU_CLIENT_DIR is set KUDU_BUILD_DIR must also be set. 1>&2
-  return 1
-fi
-
-: ${USE_KUDU_DEBUG_BUILD=false}   # Only applies when using Kudu from the toolchain
-export USE_KUDU_DEBUG_BUILD
-
-# Kudu doesn't compile on some old Linux distros. KUDU_IS_SUPPORTED enables building Kudu
-# into the backend. The frontend build is OS independent since it is Java.
-if [[ -z "${KUDU_IS_SUPPORTED-}" ]]; then
-  KUDU_IS_SUPPORTED=true
-  if [[ -z $KUDU_BUILD_DIR ]]; then
-    if [[ $DISABLE_IMPALA_TOOLCHAIN -eq 1 ]]; then
-      KUDU_IS_SUPPORTED=false
-    elif ! $IS_OSX; then
-      if ! which lsb_release &>/dev/null; then
-        echo Unable to find the 'lsb_release' command. \
-            Please ensure it is available in your PATH. 1>&2
-        return 1
-      fi
-      DISTRO_VERSION=$(lsb_release -sir 2>&1)
-      if [[ $? -ne 0 ]]; then
-        echo lsb_release cammond failed, output was: "$DISTRO_VERSION" 1>&2
-        return 1
-      fi
-      # Remove spaces, trim minor versions, and convert to lowercase.
-      DISTRO_VERSION=$(tr -d ' \n' <<< "$DISTRO_VERSION" | cut -d. -f1 | tr "A-Z" "a-z")
-      case "$DISTRO_VERSION" in
-        # "enterprise" is Oracle
-        centos5 | debian* | enterprise*5 | redhat*5 | suse* | ubuntu*12)
-            KUDU_IS_SUPPORTED=false;;
-      esac
-    fi
-  fi
-fi
-export KUDU_IS_SUPPORTED
+# Kudu is disabled on the release branch (because it's not stable enough yet).
+export KUDU_IS_SUPPORTED=false
 
 export CDH_MAJOR_VERSION=5
 export HADOOP_LZO=${HADOOP_LZO-$IMPALA_HOME/../hadoop-lzo}

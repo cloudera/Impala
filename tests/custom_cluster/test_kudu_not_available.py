@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import pytest
 from impala.dbapi import connect
-
 from tests.common.custom_cluster_test_suite import CustomClusterTestSuite
 
+# Kudu is disabled on the release branch (because it's not stable enough yet).
+@pytest.skip("Enable/disable Kudu flag is not available.")
 class TestKuduNotAvailable(CustomClusterTestSuite):
   """Check that when Impala is started without Kudu support, statements that use Kudu
      fail with the expected error message.
