@@ -56,6 +56,19 @@ shared_ptr<TProcessor> MakeProcessor() {
   return shared_ptr<TProcessor>(new StatestoreServiceProcessor(service));
 }
 
+TEST(ThriftServer, Connectivity) {
+  ThriftClient<StatestoreServiceClient> wrong_port_client("localhost",
+      FLAGS_state_store_port + 5, "", NULL, false);
+  ASSERT_FALSE(wrong_port_client.Open().ok());
+
+  ThriftServer* server = new ThriftServer("DummyStatestore", MakeProcessor(),
+      FLAGS_state_store_port + 5, NULL, NULL, 5);
+  EXPECT_TRUE(server->Start().ok());
+
+  // Test that client recovers from failure to connect.
+  EXPECT_TRUE(wrong_port_client.Open().ok());
+}
+
 TEST(SslTest, Connectivity) {
   // Start a server using SSL and confirm that an SSL client can connect, while a non-SSL
   // client cannot.
@@ -81,6 +94,21 @@ TEST(SslTest, Connectivity) {
   EXPECT_TRUE(ssl_client.Open().ok());
   EXPECT_THROW(non_ssl_client.iface()->RegisterSubscriber(
       resp, TRegisterSubscriberRequest()), TTransportException);
+}
+
+TEST(SslTest, BadCertificate) {
+  FLAGS_ssl_client_ca_certificate = "unknown";
+  ThriftClient<StatestoreServiceClient> ssl_client("localhost",
+      FLAGS_state_store_port + 6, "", NULL, true);
+  ASSERT_FALSE(ssl_client.Open().ok());
+
+  ThriftServer* server = new ThriftServer("DummyStatestore", MakeProcessor(),
+      FLAGS_state_store_port + 6, NULL, NULL, 5);
+  EXPECT_TRUE(server->EnableSsl(SERVER_CERT, PRIVATE_KEY, "echo password").ok());
+  EXPECT_TRUE(server->Start().ok());
+
+  // Check that client does not recover from failure to create socket.
+  ASSERT_FALSE(ssl_client.Open().ok());
 }
 
 TEST(PasswordProtectedPemFile, CorrectOperation) {
@@ -121,12 +149,11 @@ TEST(PasswordProtectedPemFile, BadCommand) {
 TEST(SslTest, ClientBeforeServer) {
   // Instantiate a thrift client before a thrift server and test if it works (IMPALA-2747)
   FLAGS_ssl_client_ca_certificate = SERVER_CERT;
-  ThriftClient<StatestoreServiceClient> ssl_client(
-      "localhost", FLAGS_state_store_port + 6, "", NULL, true);
+  ThriftClient<StatestoreServiceClient> ssl_client("localhost",
+      FLAGS_state_store_port + 7, "", NULL, true);
   ThriftServer* server = new ThriftServer("DummyStatestore", MakeProcessor(),
-      FLAGS_state_store_port + 6, NULL, NULL, 5);
-  EXPECT_TRUE(
-      server->EnableSsl(SERVER_CERT, PRIVATE_KEY).ok());
+      FLAGS_state_store_port + 7, NULL, NULL, 5);
+  EXPECT_TRUE(server->EnableSsl(SERVER_CERT, PRIVATE_KEY).ok());
   EXPECT_TRUE(server->Start().ok());
 
   EXPECT_TRUE(ssl_client.Open().ok());
