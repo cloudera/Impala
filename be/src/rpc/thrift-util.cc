@@ -172,8 +172,8 @@ bool TNetworkAddressComparator(const TNetworkAddress& a, const TNetworkAddress& 
   return false;
 }
 
-bool IsTimeoutTException(const TException& e) {
-  // String taken from Thrift's TSocket.cpp
+bool IsRecvTimeoutTException(const TException& e) {
+  // String taken from Thrift's TSocket.cpp, this only happens in TSocket::read()
   return strstr(e.what(), "EAGAIN (timed out)") != NULL;
 }
 

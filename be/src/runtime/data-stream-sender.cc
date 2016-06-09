@@ -65,7 +65,6 @@ class DataStreamSender::Channel {
           PlanNodeId dest_node_id, int buffer_size)
     : parent_(parent),
       buffer_size_(buffer_size),
-      client_cache_(NULL),
       row_desc_(row_desc),
       address_(MakeNetworkAddress(destination.hostname, destination.port)),
       fragment_instance_id_(fragment_instance_id),
@@ -110,8 +109,6 @@ class DataStreamSender::Channel {
   DataStreamSender* parent_;
   int buffer_size_;
 
-  ImpalaInternalServiceClientCache* client_cache_;
-
   const RowDescriptor& row_desc_;
   TNetworkAddress address_;
   TUniqueId fragment_instance_id_;
@@ -136,20 +133,25 @@ class DataStreamSender::Channel {
   bool rpc_in_flight_;  // true if the rpc_thread_ is busy sending.
 
   Status rpc_status_;  // status of most recently finished TransmitData rpc
+  RuntimeState* runtime_state_;
 
   // Serialize batch_ into thrift_batch_ and send via SendBatch().
   // Returns SendBatch() status.
   Status SendCurrentBatch();
 
-  // Synchronously call TransmitData() on a client from client_cache_ and update
-  // rpc_status_ based on return value (or set to error if RPC failed).
+  // Synchronously call TransmitData() on a client from impalad_client_cache and
+  // update rpc_status_ based on return value (or set to error if RPC failed).
   // Called from a thread from the rpc_thread_ pool.
   void TransmitData(int thread_id, const TRowBatch*);
   void TransmitDataHelper(const TRowBatch*);
+
+  // Send RPC and retry waiting for response if get RPC timeout error.
+  Status DoTransmitDataRpc(ImpalaInternalServiceConnection* client,
+      const TTransmitDataParams& params, TTransmitDataResult* res);
 };
 
 Status DataStreamSender::Channel::Init(RuntimeState* state) {
-  client_cache_ = state->impalad_client_cache();
+  runtime_state_ = state;
   // TODO: figure out how to size batch_
   int capacity = max(1, buffer_size_ / max(row_desc_.GetRowSize(), 1));
   batch_.reset(new RowBatch(row_desc_, capacity, parent_->mem_tracker_.get()));
@@ -196,14 +198,14 @@ void DataStreamSender::Channel::TransmitDataHelper(const TRowBatch* batch) {
   params.__set_eos(false);
   params.__set_sender_id(parent_->sender_id_);
 
-  ImpalaInternalServiceConnection client(client_cache_, address_, &rpc_status_);
+  ImpalaInternalServiceConnection client(runtime_state_->impalad_client_cache(),
+      address_, &rpc_status_);
   if (!rpc_status_.ok()) return;
 
   TTransmitDataResult res;
   {
     SCOPED_TIMER(parent_->thrift_transmit_timer_);
-    rpc_status_ =
-        client.DoRpc(&ImpalaInternalServiceClient::TransmitData, params, &res);
+    rpc_status_ = DoTransmitDataRpc(&client, params, &res);
     if (!rpc_status_.ok()) return;
   }
 
@@ -214,6 +216,16 @@ void DataStreamSender::Channel::TransmitDataHelper(const TRowBatch* batch) {
     VLOG_ROW << "incremented #data_bytes_sent="
              << num_data_bytes_sent_;
   }
+}
+
+Status DataStreamSender::Channel::DoTransmitDataRpc(ImpalaInternalServiceConnection* client,
+    const TTransmitDataParams& params, TTransmitDataResult* res) {
+  Status status = client->DoRpc(&ImpalaInternalServiceClient::TransmitData, params, res);
+  while (status.code() == TErrorCode::RPC_RECV_TIMEOUT &&
+      !runtime_state_->is_cancelled()) {
+    status = client->RetryRpcRecv(&ImpalaInternalServiceClient::recv_TransmitData, res);
+  }
+  return status;
 }
 
 void DataStreamSender::Channel::WaitForRpc() {
@@ -283,7 +295,8 @@ Status DataStreamSender::Channel::FlushAndSendEos(RuntimeState* state) {
   RETURN_IF_ERROR(GetSendStatus());
 
   Status client_cnxn_status;
-  ImpalaInternalServiceConnection client(client_cache_, address_, &client_cnxn_status);
+  ImpalaInternalServiceConnection client(runtime_state_->impalad_client_cache(),
+      address_, &client_cnxn_status);
   RETURN_IF_ERROR(client_cnxn_status);
 
   TTransmitDataParams params;
@@ -295,7 +308,7 @@ Status DataStreamSender::Channel::FlushAndSendEos(RuntimeState* state) {
   TTransmitDataResult res;
 
   VLOG_RPC << "calling TransmitData(eos=true) to terminate channel.";
-  rpc_status_ = client.DoRpc(&ImpalaInternalServiceClient::TransmitData, params, &res);
+  rpc_status_ = DoTransmitDataRpc(&client, params, &res);
   if (!rpc_status_.ok()) {
     stringstream msg;
     msg << "TransmitData(eos=true) to " << address_ << " failed:\n" << rpc_status_.msg().msg();

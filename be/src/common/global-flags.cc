@@ -66,3 +66,11 @@ DEFINE_string(redaction_rules_file, "", "Absolute path to sensitive data redacti
     "rules. The rules will be applied to all log messages and query text shown in the "
     "Web UI and audit records. Query results will not be affected. Refer to the "
     "documentation for the rule file format.");
+
+#ifndef NDEBUG
+DEFINE_int32(fault_injection_rpc_delay_ms, 0, "A fault injection option that causes "
+    "rpc server handling to be delayed to trigger an RPC timeout on the caller side. "
+    "Effective in debug builds only.");
+DEFINE_int32(fault_injection_rpc_type, 0, "A fault injection option that specifies "
+    "which rpc call will be injected with the delay. Effective in debug builds only.");
+#endif

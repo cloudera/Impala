@@ -103,19 +103,20 @@ void FragmentMgr::FragmentExecState::ReportStatusCb(
 
   TReportExecStatusResult res;
   Status rpc_status;
+  bool retry_is_safe;
   // Try to send the RPC 3 times before failing.
   for (int i = 0; i < 3; ++i) {
-    rpc_status =
-        coord.DoRpc(&ImpalaInternalServiceClient::ReportExecStatus, params, &res);
+    rpc_status = coord.DoRpc(&ImpalaInternalServiceClient::ReportExecStatus, params, &res,
+        &retry_is_safe);
     if (rpc_status.ok()) {
       rpc_status = Status(res.status);
       break;
     }
+    if (!retry_is_safe) break;
     if (i < 2) SleepForMs(100);
   }
   if (!rpc_status.ok()) {
     UpdateStatus(rpc_status);
-    // we need to cancel the execution of this fragment
     executor_.Cancel();
   }
 }

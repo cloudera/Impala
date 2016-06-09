@@ -21,6 +21,7 @@
 #include "gen-cpp/ImpalaInternalService_types.h"
 #include "service/impala-server.h"
 #include "service/fragment-mgr.h"
+#include "testutil/fault-injection-util.h"
 
 namespace impala {
 
@@ -34,16 +35,19 @@ class ImpalaInternalService : public ImpalaInternalServiceIf {
 
   virtual void ExecPlanFragment(TExecPlanFragmentResult& return_val,
       const TExecPlanFragmentParams& params) {
+    FAULT_INJECTION_RPC_DELAY(RPC_EXECPLANFRAGMENT);
     fragment_mgr_->ExecPlanFragment(params).SetTStatus(&return_val);
   }
 
   virtual void CancelPlanFragment(TCancelPlanFragmentResult& return_val,
       const TCancelPlanFragmentParams& params) {
+    FAULT_INJECTION_RPC_DELAY(RPC_CANCELPLANFRAGMENT);
     fragment_mgr_->CancelPlanFragment(return_val, params);
   }
 
   virtual void ReportExecStatus(TReportExecStatusResult& return_val,
       const TReportExecStatusParams& params) {
+    FAULT_INJECTION_RPC_DELAY(RPC_REPORTEXECSTATUS);
     impala_server_->ReportExecStatus(return_val, params);
   }
 
@@ -57,6 +61,7 @@ class ImpalaInternalService : public ImpalaInternalServiceIf {
     // TransmitData() to set the return_val.
     boost::shared_ptr<FragmentMgr::FragmentExecState> fragment_exec_state
         = fragment_mgr_->GetFragmentExecState(params.dest_fragment_instance_id);
+    FAULT_INJECTION_RPC_DELAY(RPC_TRANSMITDATA);
     impala_server_->TransmitData(return_val, params);
   }
 
