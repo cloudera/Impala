@@ -201,7 +201,67 @@ error_codes = (
   ("AVRO_BAD_VERSION_HEADER", 64, "File '$0' has an invalid version header: $1\\n"
    "Make sure the file is an Avro data file."),
 
-  ("UDF_MEM_LIMIT_EXCEEDED", 65, "$0's allocations exceeded memory limits.")
+  ("UDF_MEM_LIMIT_EXCEEDED", 65, "$0's allocations exceeded memory limits."),
+
+  ("BTS_BLOCK_OVERFLOW", 66, "Cannot process row that is bigger than the IO size "
+   "(row_size=$0, null_indicators_size=$1). To run this query, increase the IO size "
+   "(--read_size option)."),
+
+  ("COMPRESSED_FILE_MULTIPLE_BLOCKS", 67,
+   "For better performance, snappy-, gzip-, and bzip-compressed files "
+   "should not be split into multiple HDFS blocks. file=$0 offset $1"),
+
+  ("COMPRESSED_FILE_BLOCK_CORRUPTED", 68,
+   "$0 Data error, likely data corrupted in this block."),
+
+  ("COMPRESSED_FILE_DECOMPRESSOR_ERROR", 69, "$0 Decompressor error at $1, code=$2"),
+
+  ("COMPRESSED_FILE_DECOMPRESSOR_NO_PROGRESS", 70,
+   "Decompression failed to make progress, but end of input is not reached. "
+   "File appears corrupted. file=$0"),
+
+  ("COMPRESSED_FILE_TRUNCATED", 71,
+   "Unexpected end of compressed file. File may be truncated. file=$0"),
+
+  ("DATASTREAM_SENDER_TIMEOUT", 72, "Sender timed out waiting for receiver fragment "
+   "instance: $0"),
+
+  ("KUDU_IMPALA_TYPE_MISSING", 73, "Kudu type $0 is not available in Impala."),
+
+  ("IMPALA_KUDU_TYPE_MISSING", 74, "Impala type $0 is not available in Kudu."),
+
+  ("KUDU_NOT_SUPPORTED_ON_OS", 75, "Kudu is not supported on this operating system."),
+
+  ("KUDU_NOT_ENABLED", 76, "Kudu features are disabled by the startup flag "
+   "--disable_kudu."),
+
+  ("PARTITIONED_HASH_JOIN_REPARTITION_FAILS", 77, "Cannot perform hash join at node with "
+   "id $0. Repartitioning did not reduce the size of a spilled partition. Repartitioning "
+   "level $1. Number of rows $2."),
+
+  ("PARTITIONED_AGG_REPARTITION_FAILS", 78,  "Cannot perform aggregation at node with "
+   "id $0. Repartitioning did not reduce the size of a spilled partition. Repartitioning "
+   "level $1. Number of rows $2."),
+
+  ("AVRO_TRUNCATED_BLOCK", 79, "File '$0' is corrupt: truncated data block at offset $1"),
+
+  ("AVRO_INVALID_UNION", 80, "File '$0' is corrupt: invalid union value $1 at offset $2"),
+
+  ("AVRO_INVALID_BOOLEAN", 81, "File '$0' is corrupt: invalid boolean value $1 at offset "
+   "$2"),
+
+  ("AVRO_INVALID_LENGTH", 82, "File '$0' is corrupt: invalid length $1 at offset $2"),
+
+  ("SCANNER_INVALID_INT", 83, "File '$0' is corrupt: invalid encoded integer at offset $1"),
+
+  ("AVRO_INVALID_RECORD_COUNT", 84, "File '$0' is corrupt: invalid record count $1 at "
+   "offset $2"),
+
+  ("AVRO_INVALID_COMPRESSED_SIZE", 85, "File '$0' is corrupt: invalid compressed block "
+   "size $1 at offset $2"),
+
+  ("AVRO_INVALID_METADATA_COUNT", 86, "File '$0' is corrupt: invalid metadata count $1 "
+   "at offset $2"),
 )
 
 import sys
