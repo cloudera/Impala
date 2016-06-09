@@ -79,4 +79,9 @@ DEFINE_int32(stress_free_pool_alloc, 0, "A stress option which causes memory all
     "debug builds only.");
 DEFINE_int32(stress_datastream_recvr_delay_ms, 0, "A stress option that causes data "
     "stream receiver registration to be delayed. Effective in debug builds only.");
+DEFINE_int32(fault_injection_rpc_delay_ms, 0, "A fault injection option that causes "
+    "rpc server handling to be delayed to trigger an RPC timeout on the caller side. "
+    "Effective in debug builds only.");
+DEFINE_int32(fault_injection_rpc_type, 0, "A fault injection option that specifies "
+    "which rpc call will be injected with the delay. Effective in debug builds only.");
 #endif
