@@ -65,6 +65,7 @@ class TestS3AAccess(CustomClusterTestSuite):
     which should have the correct keys.
     TODO: We don't have the test infrastructure in place yet to check if the keys do work
     in a custom cluster test. (See IMPALA-3422)'''
+    pytest.xfail("IMPALA-3664: Feature unsupported in this branch")
     client = self._get_impala_client()
     self.execute_query_expect_success(client,
         "create external table if not exists tinytable_s3 like functional.tinytable \
