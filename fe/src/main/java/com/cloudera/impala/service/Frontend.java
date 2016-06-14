@@ -569,18 +569,18 @@ public class Frontend {
   }
 
   /**
-   * Returns all tables that match the specified database and pattern that are accessible
-   * to the given user. If pattern is null, matches all tables. If db is null, all
-   * databases are searched for matches.
+   * Returns all tables in database 'dbName' that match the pattern of 'matcher' and are
+   * accessible to 'user'.
    */
-  public List<String> getTableNames(String dbName, String tablePattern, User user)
-      throws ImpalaException {
-    List<String> tblNames = impaladCatalog_.getTableNames(dbName, tablePattern);
+  public List<String> getTableNames(String dbName, PatternMatcher matcher,
+      User user) throws ImpalaException {
+    List<String> tblNames = impaladCatalog_.getTableNames(dbName, matcher);
     if (authzConfig_.isEnabled()) {
       Iterator<String> iter = tblNames.iterator();
       while (iter.hasNext()) {
+        String tblName = iter.next();
         PrivilegeRequest privilegeRequest = new PrivilegeRequestBuilder()
-            .any().onAnyColumn(dbName, iter.next()).toRequest();
+            .any().onAnyColumn(dbName, tblName).toRequest();
         if (!authzChecker_.get().hasAccess(user, privilegeRequest)) {
           iter.remove();
         }
@@ -590,16 +590,17 @@ public class Frontend {
   }
 
   /**
-   * Returns all columns of a table that match a pattern and are accessible to
-   * the given user. If pattern is null, it matches all columns.
+   * Returns a list of columns of a table using 'matcher' and are accessible
+   * to the given user.
    */
-  public List<Column> getColumns(Table table, PatternMatcher columnPattern,
+  public List<Column> getColumns(Table table, PatternMatcher matcher,
       User user) {
     Preconditions.checkNotNull(table);
+    Preconditions.checkNotNull(matcher);
     List<Column> columns = Lists.newArrayList();
     for (Column column: table.getColumnsInHiveOrder()) {
       String colName = column.getName();
-      if (!columnPattern.matches(colName)) continue;
+      if (!matcher.matches(colName)) continue;
       if (authzConfig_.isEnabled()) {
         PrivilegeRequest privilegeRequest = new PrivilegeRequestBuilder()
             .any().onColumn(table.getTableName().getDb(), table.getTableName().getTbl(),
@@ -612,11 +613,11 @@ public class Frontend {
   }
 
   /**
-   * Returns all database names that match the pattern and
-   * are accessible to the given user. If pattern is null, matches all dbs.
+   * Returns all databases in catalog cache that match the pattern of 'matcher' and are
+   * accessible to 'user'.
    */
-  public List<String> getDbNames(String dbPattern, User user) {
-    List<String> dbNames = impaladCatalog_.getDbNames(dbPattern);
+  public List<String> getDbNames(PatternMatcher matcher, User user) {
+    List<String> dbNames = impaladCatalog_.getDbNames(matcher);
     // If authorization is enabled, filter out the databases the user does not
     // have permissions on.
     if (authzConfig_.isEnabled()) {
@@ -640,7 +641,8 @@ public class Frontend {
    * matches all data sources.
    */
   public List<DataSource> getDataSrcs(String pattern) {
-    return impaladCatalog_.getDataSources(pattern);
+    return impaladCatalog_.getDataSources(
+        PatternMatcher.createHivePatternMatcher(pattern));
   }
 
   /**

@@ -20,6 +20,7 @@ import static org.junit.Assert.fail;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
@@ -61,6 +62,7 @@ import com.cloudera.impala.thrift.TPrivilegeScope;
 import com.cloudera.impala.thrift.TQueryCtx;
 import com.cloudera.impala.thrift.TResultSet;
 import com.cloudera.impala.thrift.TSessionState;
+import com.cloudera.impala.util.PatternMatcher;
 import com.cloudera.impala.util.SentryPolicyService;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
@@ -1456,11 +1458,27 @@ public class AuthorizationTest {
     List<String> expectedDbs = Lists.newArrayList("default", "functional",
         "functional_parquet", "functional_seq_snap", "tpcds", "tpch");
 
-    List<String> dbs = fe_.getDbNames("*", USER);
-    Assert.assertEquals(expectedDbs, dbs);
+    List<String> dbs = fe_.getDbNames(PatternMatcher.createHivePatternMatcher("*"), USER);
+    assertEquals(expectedDbs, dbs);
 
-    dbs = fe_.getDbNames(null, USER);
-    Assert.assertEquals(expectedDbs, dbs);
+    dbs = fe_.getDbNames(PatternMatcher.MATCHER_MATCH_ALL, USER);
+    assertEquals(expectedDbs, dbs);
+
+    dbs = fe_.getDbNames(PatternMatcher.createHivePatternMatcher(null), USER);
+    assertEquals(expectedDbs, dbs);
+
+    dbs = fe_.getDbNames(PatternMatcher.MATCHER_MATCH_NONE, USER);
+    assertEquals(Collections.emptyList(), dbs);
+
+    dbs = fe_.getDbNames(PatternMatcher.createHivePatternMatcher(""), USER);
+    assertEquals(Collections.emptyList(), dbs);
+
+    dbs = fe_.getDbNames(PatternMatcher.createHivePatternMatcher("functional_rc"), USER);
+    assertEquals(Collections.emptyList(), dbs);
+
+    dbs = fe_.getDbNames(PatternMatcher.createHivePatternMatcher("tp*|de*"), USER);
+    expectedDbs = Lists.newArrayList("default", "tpcds", "tpch");
+    assertEquals(expectedDbs, dbs);
   }
 
   @Test
@@ -1470,11 +1488,31 @@ public class AuthorizationTest {
         "alltypesagg", "alltypessmall", "alltypestiny", "complex_view",
         "view_view");
 
-    List<String> tables = fe_.getTableNames("functional", "*", USER);
+    List<String> tables = fe_.getTableNames("functional",
+        PatternMatcher.createHivePatternMatcher("*"), USER);
     Assert.assertEquals(expectedTbls, tables);
 
-    tables = fe_.getTableNames("functional", null, USER);
+    tables = fe_.getTableNames("functional",
+        PatternMatcher.MATCHER_MATCH_ALL, USER);
     Assert.assertEquals(expectedTbls, tables);
+
+    tables = fe_.getTableNames("functional",
+        PatternMatcher.createHivePatternMatcher(null), USER);
+    Assert.assertEquals(expectedTbls, tables);
+
+    tables = fe_.getTableNames("functional",
+        PatternMatcher.MATCHER_MATCH_NONE, USER);
+    Assert.assertEquals(Collections.emptyList(), tables);
+
+    tables = fe_.getTableNames("functional",
+        PatternMatcher.createHivePatternMatcher(""), USER);
+    Assert.assertEquals(Collections.emptyList(), tables);
+
+    tables = fe_.getTableNames("functional",
+        PatternMatcher.createHivePatternMatcher("alltypes*|view_view"), USER);
+    List<String> expectedTables = Lists.newArrayList(
+        "alltypes", "alltypesagg", "alltypessmall", "alltypestiny", "view_view");
+    Assert.assertEquals(expectedTables, tables);
   }
 
   @Test
@@ -1506,22 +1544,57 @@ public class AuthorizationTest {
     req.opcode = TMetadataOpcode.GET_TABLES;
     req.get_tables_req = new TGetTablesReq();
     req.get_tables_req.setSchemaName("functional");
+    List<String> FUNCTIONAL_VISIBLE_TABLES = Lists.newArrayList("allcomplextypes",
+        "alltypes", "alltypesagg", "alltypessmall", "alltypestiny", "complex_view",
+        "view_view");
     // Get all tables
     req.get_tables_req.setTableName("%");
     TResultSet resp = fe_.execHiveServer2MetadataOp(req);
-    assertEquals(7, resp.rows.size());
-    assertEquals("allcomplextypes",
-        resp.rows.get(0).colVals.get(2).string_val.toLowerCase());
-    assertEquals("alltypes", resp.rows.get(1).colVals.get(2).string_val.toLowerCase());
-    assertEquals("alltypesagg",
-        resp.rows.get(2).colVals.get(2).string_val.toLowerCase());
-    assertEquals("alltypessmall",
-        resp.rows.get(3).colVals.get(2).string_val.toLowerCase());
-    assertEquals("alltypestiny",
-        resp.rows.get(4).colVals.get(2).string_val.toLowerCase());
-    assertEquals("complex_view",
-        resp.rows.get(5).colVals.get(2).string_val.toLowerCase());
-    assertEquals("view_view", resp.rows.get(6).colVals.get(2).string_val.toLowerCase());
+    assertEquals(FUNCTIONAL_VISIBLE_TABLES.size(), resp.rows.size());
+    for (int i = 0; i < resp.rows.size(); ++i) {
+      assertEquals(FUNCTIONAL_VISIBLE_TABLES.get(i),
+          resp.rows.get(i).colVals.get(2).string_val.toLowerCase());
+    }
+    // Pattern "" and null is the same as "%" to match all
+    req.get_tables_req.setTableName("");
+    resp = fe_.execHiveServer2MetadataOp(req);
+    assertEquals(FUNCTIONAL_VISIBLE_TABLES.size(), resp.rows.size());
+    for (int i = 0; i < resp.rows.size(); ++i) {
+      assertEquals(FUNCTIONAL_VISIBLE_TABLES.get(i),
+          resp.rows.get(i).colVals.get(2).string_val.toLowerCase());
+    }
+    req.get_tables_req.setTableName(null);
+    resp = fe_.execHiveServer2MetadataOp(req);
+    assertEquals(FUNCTIONAL_VISIBLE_TABLES.size(), resp.rows.size());
+    for (int i = 0; i < resp.rows.size(); ++i) {
+      assertEquals(FUNCTIONAL_VISIBLE_TABLES.get(i),
+          resp.rows.get(i).colVals.get(2).string_val.toLowerCase());
+    }
+    // Pattern ".*" matches all and "." is a wildcard that matches any single character
+    req.get_tables_req.setTableName(".*");
+    resp = fe_.execHiveServer2MetadataOp(req);
+    assertEquals(FUNCTIONAL_VISIBLE_TABLES.size(), resp.rows.size());
+    for (int i = 0; i < resp.rows.size(); ++i) {
+      assertEquals(FUNCTIONAL_VISIBLE_TABLES.get(i),
+          resp.rows.get(i).colVals.get(2).string_val.toLowerCase());
+    }
+    req.get_tables_req.setTableName("alltypesag.");
+    resp = fe_.execHiveServer2MetadataOp(req);
+    List<String> expectedTblNames = Lists.newArrayList("alltypesagg");
+    assertEquals(expectedTblNames.size(), resp.rows.size());
+    for (int i = 0; i < resp.rows.size(); ++i) {
+      assertEquals(expectedTblNames.get(i),
+          resp.rows.get(i).colVals.get(2).string_val.toLowerCase());
+    }
+    // "_" is a wildcard for a single character
+    req.get_tables_req.setTableName("alltypesag_");
+    resp = fe_.execHiveServer2MetadataOp(req);
+    expectedTblNames = Lists.newArrayList("alltypesagg");
+    assertEquals(expectedTblNames.size(), resp.rows.size());
+    for (int i = 0; i < resp.rows.size(); ++i) {
+      assertEquals(expectedTblNames.get(i),
+          resp.rows.get(i).colVals.get(2).string_val.toLowerCase());
+    }
 
     // Get all tables of tpcds
     req.get_tables_req.setSchemaName("tpcds");
@@ -1541,6 +1614,46 @@ public class AuthorizationTest {
     TResultSet resp = fe_.execHiveServer2MetadataOp(req);
     List<String> expectedDbs = Lists.newArrayList("default", "functional",
         "functional_parquet", "functional_seq_snap", "tpcds", "tpch");
+    assertEquals(expectedDbs.size(), resp.rows.size());
+    for (int i = 0; i < resp.rows.size(); ++i) {
+      assertEquals(expectedDbs.get(i),
+          resp.rows.get(i).colVals.get(0).string_val.toLowerCase());
+    }
+    // Pattern "" and null is the same as "%" to match all
+    req.get_schemas_req.setSchemaName("");
+    resp = fe_.execHiveServer2MetadataOp(req);
+    assertEquals(expectedDbs.size(), resp.rows.size());
+    for (int i = 0; i < resp.rows.size(); ++i) {
+      assertEquals(expectedDbs.get(i),
+          resp.rows.get(i).colVals.get(0).string_val.toLowerCase());
+    }
+    req.get_schemas_req.setSchemaName(null);
+    resp = fe_.execHiveServer2MetadataOp(req);
+    assertEquals(expectedDbs.size(), resp.rows.size());
+    for (int i = 0; i < resp.rows.size(); ++i) {
+      assertEquals(expectedDbs.get(i),
+          resp.rows.get(i).colVals.get(0).string_val.toLowerCase());
+    }
+    // Pattern ".*" matches all and "." is a wildcard that matches any single character
+    req.get_schemas_req.setSchemaName(".*");
+    resp = fe_.execHiveServer2MetadataOp(req);
+    assertEquals(expectedDbs.size(), resp.rows.size());
+    for (int i = 0; i < resp.rows.size(); ++i) {
+      assertEquals(expectedDbs.get(i),
+          resp.rows.get(i).colVals.get(0).string_val.toLowerCase());
+    }
+    req.get_schemas_req.setSchemaName("defaul.");
+    resp = fe_.execHiveServer2MetadataOp(req);
+    expectedDbs = Lists.newArrayList("default");
+    assertEquals(expectedDbs.size(), resp.rows.size());
+    for (int i = 0; i < resp.rows.size(); ++i) {
+      assertEquals(expectedDbs.get(i),
+          resp.rows.get(i).colVals.get(0).string_val.toLowerCase());
+    }
+    // "_" is a wildcard that matches any single character
+    req.get_schemas_req.setSchemaName("defaul_");
+    resp = fe_.execHiveServer2MetadataOp(req);
+    expectedDbs = Lists.newArrayList("default");
     assertEquals(expectedDbs.size(), resp.rows.size());
     for (int i = 0; i < resp.rows.size(); ++i) {
       assertEquals(expectedDbs.get(i),

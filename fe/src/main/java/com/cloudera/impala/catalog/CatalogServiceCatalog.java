@@ -218,7 +218,7 @@ public class CatalogServiceCatalog extends Catalog {
     // of all items in the catalog.
     catalogLock_.readLock().lock();
     try {
-      for (String dbName: getDbNames(null)) {
+      for (String dbName: getDbNames(PatternMatcher.MATCHER_MATCH_ALL)) {
         Db db = getDb(dbName);
         if (db == null) {
           LOG.error("Database: " + dbName + " was expected to be in the catalog " +

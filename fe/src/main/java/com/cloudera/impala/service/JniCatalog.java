@@ -49,6 +49,7 @@ import com.cloudera.impala.thrift.TSentryAdminCheckRequest;
 import com.cloudera.impala.thrift.TUniqueId;
 import com.cloudera.impala.thrift.TUpdateCatalogRequest;
 import com.cloudera.impala.util.GlogAppender;
+import com.cloudera.impala.util.PatternMatcher;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 
@@ -152,7 +153,7 @@ public class JniCatalog {
     TGetDbsParams params = new TGetDbsParams();
     JniUtil.deserializeThrift(protocolFactory_, params, thriftGetTablesParams);
     TGetDbsResult result = new TGetDbsResult();
-    result.setDbs(catalog_.getDbNames(null));
+    result.setDbs(catalog_.getDbNames(PatternMatcher.MATCHER_MATCH_ALL));
     TSerializer serializer = new TSerializer(protocolFactory_);
     return serializer.serialize(result);
   }
@@ -166,7 +167,8 @@ public class JniCatalog {
       TException {
     TGetTablesParams params = new TGetTablesParams();
     JniUtil.deserializeThrift(protocolFactory_, params, thriftGetTablesParams);
-    List<String> tables = catalog_.getTableNames(params.db, params.pattern);
+    List<String> tables = catalog_.getTableNames(params.db,
+        PatternMatcher.createHivePatternMatcher(params.pattern));
     TGetTablesResult result = new TGetTablesResult();
     result.setTables(tables);
     TSerializer serializer = new TSerializer(protocolFactory_);
