@@ -1,0 +1,9 @@
+====
+---- QUERY
+select * from bad_rle_counts
+---- TYPES
+bigint
+---- RESULTS
+---- ERRORS
+row_regex: .*File '.*/bad_rle_repeat_count.parquet' is corrupt: error decoding dictionary-encoded value of type BIGINT at offset 55.*
+====
