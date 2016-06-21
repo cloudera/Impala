@@ -1640,13 +1640,6 @@ bool HdfsParquetScanner::AssembleRows(const TupleDescriptor* tuple_desc,
           ++num_to_commit;
         }
       }
-
-      // Exit this loop early if the batch gets big due to varlen data. We need to
-      // materialize nested collections in full, regardless of size.
-      if (UNLIKELY(!MATERIALIZING_COLLECTION && batch_->AtCapacity())) {
-        ++row_idx;
-        break;
-      }
     }
 
     rows_read += row_idx;
