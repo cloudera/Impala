@@ -57,7 +57,8 @@ HdfsTableSink::HdfsTableSink(const RowDescriptor& row_desc,
        table_id_(tsink.table_sink.target_table_id),
        select_list_texprs_(select_list_texprs),
        partition_key_texprs_(tsink.table_sink.hdfs_table_sink.partition_key_exprs),
-       overwrite_(tsink.table_sink.hdfs_table_sink.overwrite) {
+       overwrite_(tsink.table_sink.hdfs_table_sink.overwrite),
+       has_empty_input_batch_(false) {
   DCHECK(tsink.__isset.table_sink);
 }
 
@@ -321,7 +322,7 @@ Status HdfsTableSink::CreateNewTmpFile(RuntimeState* state,
 
 Status HdfsTableSink::InitOutputPartition(RuntimeState* state,
     const HdfsPartitionDescriptor& partition_descriptor,
-    OutputPartition* output_partition, bool empty_partition) {
+    OutputPartition* output_partition) {
   // Build the unique name for this partition from the partition keys, e.g. "j=1/f=foo/"
   // etc.
   stringstream partition_name_ss;
@@ -384,7 +385,7 @@ Status HdfsTableSink::InitOutputPartition(RuntimeState* state,
 
   // It is incorrect to initialize a writer if there are no rows to feed it. The writer
   // could incorrectly create an empty file or empty partition.
-  if (empty_partition) return Status::OK;
+  if (has_empty_input_batch_) return Status::OK;
 
   switch (partition_descriptor.file_format()) {
     case THdfsFileFormat::TEXT:
@@ -441,8 +442,8 @@ void HdfsTableSink::GetHashTblKey(const vector<ExprContext*>& ctxs, string* key)
   *key = hash_table_key.str();
 }
 
-inline Status HdfsTableSink::GetOutputPartition(RuntimeState* state,
-    const string& key, PartitionPair** partition_pair, bool no_more_rows) {
+inline Status HdfsTableSink::GetOutputPartition(
+   RuntimeState* state, const string& key, PartitionPair** partition_pair) {
   PartitionMap::iterator existing_partition;
   existing_partition = partition_keys_to_output_partitions_.find(key);
   if (existing_partition == partition_keys_to_output_partitions_.end()) {
@@ -455,8 +456,7 @@ inline Status HdfsTableSink::GetOutputPartition(RuntimeState* state,
     }
 
     OutputPartition* partition = state->obj_pool()->Add(new OutputPartition());
-    Status status = InitOutputPartition(state, *partition_descriptor, partition,
-        no_more_rows);
+    Status status = InitOutputPartition(state, *partition_descriptor, partition);
     if (!status.ok()) {
       // We failed to create the output partition successfully. Clean it up now
       // as it is not added to partition_keys_to_output_partitions_ so won't be
@@ -476,7 +476,7 @@ inline Status HdfsTableSink::GetOutputPartition(RuntimeState* state,
     state->per_partition_status()->insert(
         make_pair(partition->partition_name, partition_status));
 
-    if (!no_more_rows) {
+    if (!has_empty_input_batch_) {
       // Indicate that temporary directory is to be deleted after execution
       (*state->hdfs_files_to_move())[partition->tmp_hdfs_dir_name] = "";
     }
@@ -495,20 +495,17 @@ Status HdfsTableSink::Send(RuntimeState* state, RowBatch* batch, bool eos) {
   ExprContext::FreeLocalAllocations(output_expr_ctxs_);
   ExprContext::FreeLocalAllocations(partition_key_expr_ctxs_);
   RETURN_IF_ERROR(state->CheckQueryState());
-  bool empty_input_batch = batch->num_rows() == 0;
-  // We don't do any work for an empty batch aside from end of stream finalization.
-  if (empty_input_batch && !eos) return Status::OK;
+  DCHECK(eos || batch->num_rows() > 0);
+  has_empty_input_batch_ = batch->num_rows() == 0 && eos;
 
   // If there are no partition keys then just pass the whole batch to one partition.
   if (dynamic_partition_key_expr_ctxs_.empty()) {
     // If there are no dynamic keys just use an empty key.
     PartitionPair* partition_pair;
     // Populate the partition_pair even if the input is empty because we need it to
-    // delete the existing data for 'insert overwrite'. We need to handle empty input
-    // batches carefully so that empty partitions are correctly created at eos.
-    RETURN_IF_ERROR(GetOutputPartition(state, ROOT_PARTITION_KEY, &partition_pair,
-        empty_input_batch));
-    if (!empty_input_batch) {
+    // delete the existing data for 'insert overwrite'.
+    RETURN_IF_ERROR(GetOutputPartition(state, ROOT_PARTITION_KEY, &partition_pair));
+    if (!has_empty_input_batch_) {
       // Pass the row batch to the writer. If new_file is returned true then the current
       // file is finalized and a new file is opened.
       // The writer tracks where it is in the batch when it returns with new_file set.
@@ -530,7 +527,7 @@ Status HdfsTableSink::Send(RuntimeState* state, RowBatch* batch, bool eos) {
       string key;
       GetHashTblKey(dynamic_partition_key_expr_ctxs_, &key);
       PartitionPair* partition_pair = NULL;
-      RETURN_IF_ERROR(GetOutputPartition(state, key, &partition_pair, false));
+      RETURN_IF_ERROR(GetOutputPartition(state, key, &partition_pair));
       partition_pair->second.push_back(i);
     }
     for (PartitionMap::iterator partition = partition_keys_to_output_partitions_.begin();

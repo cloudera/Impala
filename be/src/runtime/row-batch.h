@@ -128,7 +128,8 @@ class RowBatch {
   // the tuple pool does not accumulate excessive memory.
   bool AtCapacity(MemPool* tuple_pool) {
     DCHECK(tuple_pool != NULL);
-    return AtCapacity() || tuple_pool->total_allocated_bytes() > AT_CAPACITY_MEM_USAGE;
+    return AtCapacity() ||
+        (tuple_pool->total_allocated_bytes() > AT_CAPACITY_MEM_USAGE && num_rows_ > 0);
   }
 
   // The total size of all data represented in this row batch (tuples and referenced

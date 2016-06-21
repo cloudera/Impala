@@ -866,14 +866,6 @@ Status HdfsParquetScanner::AssembleRows(int row_group_idx) {
           tuple = next_tuple(tuple);
           ++num_to_commit;
         }
-        // Exit this loop early if the batch exceeds memory usage capacity
-        if (pool->total_allocated_bytes() >= RowBatch::AT_CAPACITY_MEM_USAGE) {
-          // Update num_rows read and break
-          num_rows = i + 1;
-          break;
-        }
-        // Ensure that above check is sufficient to ensure we don't go over capacity.
-        DCHECK(!batch_->AtCapacity(pool));
       }
     } else {
       // Special case when there is no data for the accessed column(s) in the file.
