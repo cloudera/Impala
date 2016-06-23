@@ -390,10 +390,7 @@ public abstract class Table implements CatalogObject {
    */
   public ArrayList<Column> getColumnsInHiveOrder() {
     ArrayList<Column> columns = Lists.newArrayList(getNonClusteringColumns());
-
-    for (Column column: colsByPos_.subList(0, numClusteringCols_)) {
-      columns.add(column);
-    }
+    columns.addAll(getClusteringColumns());
     return columns;
   }
 
@@ -406,6 +403,13 @@ public abstract class Table implements CatalogObject {
       fields.add(new StructField(col.getName(), col.getType(), col.getComment()));
     }
     return new StructType(fields);
+  }
+
+  /**
+   * Returns the list of all partition columns.
+   */
+  public List<Column> getClusteringColumns() {
+    return colsByPos_.subList(0, numClusteringCols_);
   }
 
   /**
