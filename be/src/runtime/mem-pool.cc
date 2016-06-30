@@ -24,13 +24,15 @@
 #include "common/names.h"
 
 using namespace impala;
-
+#define MEM_POOL_POISON (0x66aa77bb)
 DECLARE_bool(disable_mem_pools);
 
 const int MemPool::INITIAL_CHUNK_SIZE;
 const int MemPool::MAX_CHUNK_SIZE;
 
 const char* MemPool::LLVM_CLASS_NAME = "class.impala::MemPool";
+
+uint32_t MemPool::zero_length_region_ = MEM_POOL_POISON;
 
 MemPool::MemPool(MemTracker* mem_tracker)
   : current_chunk_idx_(-1),

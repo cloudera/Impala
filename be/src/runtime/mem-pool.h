@@ -87,7 +87,7 @@ class MemPool {
   /// Allocates 8-byte aligned section of memory of 'size' bytes at the end
   /// of the the current chunk. Creates a new chunk if there aren't any chunks
   /// with enough capacity.
-  uint8_t* Allocate(int size) {
+  uint8_t* Allocate(int64_t size) {
     return Allocate<false>(size);
   }
 
@@ -95,20 +95,25 @@ class MemPool {
   /// this call will fail (returns NULL) if it does.
   /// The caller must handle the NULL case. This should be used for allocations
   /// where the size can be very big to bound the amount by which we exceed mem limits.
-  uint8_t* TryAllocate(int size) {
+  uint8_t* TryAllocate(int64_t size) {
     return Allocate<true>(size);
   }
 
   /// Returns 'byte_size' to the current chunk back to the mem pool. This can
   /// only be used to return either all or part of the previous allocation returned
   /// by Allocate().
-  void ReturnPartialAllocation(int byte_size) {
+  void ReturnPartialAllocation(int64_t byte_size) {
     DCHECK_GE(byte_size, 0);
     DCHECK(current_chunk_idx_ != -1);
     ChunkInfo& info = chunks_[current_chunk_idx_];
     DCHECK_GE(info.allocated_bytes, byte_size);
     info.allocated_bytes -= byte_size;
     total_allocated_bytes_ -= byte_size;
+  }
+
+  /// Return a dummy pointer for zero-length allocations.
+  static uint8_t* EmptyAllocPtr() {
+    return reinterpret_cast<uint8_t*>(&zero_length_region_);
   }
 
   /// Makes all allocated chunks available for re-use, but doesn't delete any chunks.
@@ -160,6 +165,10 @@ class MemPool {
         allocated_bytes(0) {}
   };
 
+  /// A static field used as non-NULL pointer for zero length allocations.
+  /// NULL is reserved for allocation failures.
+  static uint32_t zero_length_region_;
+
   /// chunk from which we served the last Allocate() call;
   /// always points to the last chunk that contains allocated data;
   /// chunks 0..current_chunk_idx_ are guaranteed to contain data
@@ -198,14 +207,15 @@ class MemPool {
   bool CheckIntegrity(bool current_chunk_empty);
 
   /// Return offset to unoccpied space in current chunk.
-  int GetFreeOffset() const {
+  int64_t GetFreeOffset() const {
     if (current_chunk_idx_ == -1) return 0;
     return chunks_[current_chunk_idx_].allocated_bytes;
   }
 
   template <bool CHECK_LIMIT_FIRST>
-  uint8_t* Allocate(int size) {
-    if (size == 0) return NULL;
+  uint8_t* Allocate(int64_t size) {
+    DCHECK_GE(size, 0);
+    if (UNLIKELY(size == 0)) return reinterpret_cast<uint8_t *>(&zero_length_region_);
 
     int64_t num_bytes = BitUtil::RoundUp(size, 8);
     if (current_chunk_idx_ == -1

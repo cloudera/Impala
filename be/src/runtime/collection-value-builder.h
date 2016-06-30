@@ -29,7 +29,7 @@ class CollectionValueBuilder {
   static const int DEFAULT_INITIAL_TUPLE_CAPACITY = 4;
 
   CollectionValueBuilder(CollectionValue* coll_value, const TupleDescriptor& tuple_desc,
-      MemPool* pool, int initial_tuple_capacity = DEFAULT_INITIAL_TUPLE_CAPACITY)
+      MemPool* pool, int64_t initial_tuple_capacity = DEFAULT_INITIAL_TUPLE_CAPACITY)
     : coll_value_(coll_value),
       tuple_desc_(tuple_desc),
       pool_(pool) {
