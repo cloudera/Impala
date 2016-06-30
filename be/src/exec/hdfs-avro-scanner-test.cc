@@ -443,7 +443,7 @@ TEST_F(HdfsAvroScannerTest, DecimalTest) {
   TestReadAvroDecimal(data, 4, d16v, -1, TErrorCode::AVRO_TRUNCATED_BLOCK);
 
   bool overflow;
-  d16v = Decimal16Value::FromDouble(38, 0, .1e38d, &overflow);
+  d16v = Decimal16Value::FromDouble(38, 0, .1e38, &overflow);
   DCHECK(!overflow);
   data[0] = 32; // decodes to 16
 #if __BYTE_ORDER == __LITTLE_ENDIAN
