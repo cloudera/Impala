@@ -14,6 +14,8 @@
 
 package com.cloudera.impala.analysis;
 
+import com.cloudera.impala.catalog.HdfsTable;
+import com.cloudera.impala.catalog.Table;
 import com.cloudera.impala.common.AnalysisException;
 import com.google.common.base.Preconditions;
 
@@ -23,10 +25,16 @@ import com.google.common.base.Preconditions;
  * of a SelectStmt.
  */
 public class BaseTableRef extends TableRef {
-  public BaseTableRef(TableRef tableRef) {
+
+  /**
+   * Create a BaseTableRef from the original unresolved table ref as well as
+   * its resolved path. Sets table aliases and join-related attributes.
+   */
+  public BaseTableRef(TableRef tableRef, Path resolvedPath) {
     super(tableRef);
-    Preconditions.checkState(resolvedPath_.isResolved());
-    Preconditions.checkState(resolvedPath_.isRootedAtTable());
+    Preconditions.checkState(resolvedPath.isResolved());
+    Preconditions.checkState(resolvedPath.isRootedAtTable());
+    resolvedPath_ = resolvedPath;
     // Set implicit aliases if no explicit one was given.
     if (hasExplicitAlias()) return;
     aliases_ = new String[] {
@@ -46,7 +54,8 @@ public class BaseTableRef extends TableRef {
    */
   @Override
   public void analyze(Analyzer analyzer) throws AnalysisException {
-    Preconditions.checkNotNull(getPrivilegeRequirement());
+    if (isAnalyzed_) return;
+    analyzer.registerAuthAndAuditEvent(resolvedPath_.getRootTable(), analyzer);
     desc_ = analyzer.registerTableRef(this);
     isAnalyzed_ = true;
     analyzeJoin(analyzer);
