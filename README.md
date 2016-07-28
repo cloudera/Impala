@@ -19,8 +19,8 @@ you analyze, transform and combine data from a variety of data sources:
 ## More about Impala
 
 To learn more about Impala as a business user, or to try Impala live or in a VM, please
-visit the [Impala homepage](http://impala.io/index.html).
+visit the [Impala homepage](https://impala.apache.org).
 
 If you are interested in contributing to Impala as a developer, or learning more about
 Impala's internals and architecture, visit the
-[Impala wiki](https://github.com/cloudera/Impala/wiki).
+[Impala wiki](https://cwiki.apache.org/confluence/display/IMPALA/Impala+Home).
