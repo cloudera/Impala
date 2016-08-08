@@ -12,7 +12,7 @@ select
   avg(l_discount) as avg_disc,
   count(*) as count_order
 from
-  tpch.lineitem
+  lineitem
 where
   l_shipdate <= '1998-09-02'
 group by
@@ -65,11 +65,11 @@ select
   s_phone,
   s_comment
 from
-  tpch.part,
-  tpch.supplier,
-  tpch.partsupp,
-  tpch.nation,
-  tpch.region
+  part,
+  supplier,
+  partsupp,
+  nation,
+  region
 where
   p_partkey = ps_partkey
   and s_suppkey = ps_suppkey
@@ -286,9 +286,9 @@ select
   o_orderdate,
   o_shippriority
 from
-  tpch.customer,
-  tpch.orders,
-  tpch.lineitem
+  customer,
+  orders,
+  lineitem
 where
   c_mktsegment = 'BUILDING'
   and c_custkey = o_custkey
@@ -382,7 +382,7 @@ select
   o_orderpriority,
   count(*) as order_count
 from
-  tpch.orders
+  orders
 where
   o_orderdate >= '1993-07-01'
   and o_orderdate < '1993-10-01'
@@ -390,7 +390,7 @@ where
     select
       *
     from
-      tpch.lineitem
+      lineitem
     where
       l_orderkey = o_orderkey
       and l_commitdate < l_receiptdate
@@ -459,12 +459,12 @@ select
   n_name,
   sum(l_extendedprice * (1 - l_discount)) as revenue
 from
-  tpch.customer,
-  tpch.orders,
-  tpch.lineitem,
-  tpch.supplier,
-  tpch.nation,
-  tpch.region
+  customer,
+  orders,
+  lineitem,
+  supplier,
+  nation,
+  region
 where
   c_custkey = o_custkey
   and l_orderkey = o_orderkey
@@ -646,12 +646,12 @@ from (
     year(l_shipdate) as l_year,
     l_extendedprice * (1 - l_discount) as volume
   from
-    tpch.supplier,
-    tpch.lineitem,
-    tpch.orders,
-    tpch.customer,
-    tpch.nation n1,
-    tpch.nation n2
+    supplier,
+    lineitem,
+    orders,
+    customer,
+    nation n1,
+    nation n2
   where
     s_suppkey = l_suppkey
     and o_orderkey = l_orderkey
@@ -811,14 +811,14 @@ from (
     l_extendedprice * (1 - l_discount) as volume,
     n2.n_name as nation
   from
-    tpch.part,
-    tpch.supplier,
-    tpch.lineitem,
-    tpch.orders,
-    tpch.customer,
-    tpch.nation n1,
-    tpch.nation n2,
-    tpch.region
+    part,
+    supplier,
+    lineitem,
+    orders,
+    customer,
+    nation n1,
+    nation n2,
+    region
   where
     p_partkey = l_partkey
     and s_suppkey = l_suppkey
@@ -1009,12 +1009,12 @@ from(
     year(o_orderdate) as o_year,
     l_extendedprice * (1 - l_discount) - ps_supplycost * l_quantity as amount
   from
-    tpch.part,
-    tpch.supplier,
-    tpch.lineitem,
-    tpch.partsupp,
-    tpch.orders,
-    tpch.nation
+    part,
+    supplier,
+    lineitem,
+    partsupp,
+    orders,
+    nation
   where
     s_suppkey = l_suppkey
     and ps_suppkey = l_suppkey
@@ -1161,10 +1161,10 @@ select
   c_phone,
   c_comment
 from
-  tpch.customer,
-  tpch.orders,
-  tpch.lineitem,
-  tpch.nation
+  customer,
+  orders,
+  lineitem,
+  nation
 where
   c_custkey = o_custkey
   and l_orderkey = o_orderkey
@@ -1284,9 +1284,9 @@ from (
     ps_partkey,
     sum(ps_supplycost * ps_availqty) as value
   from
-    tpch.partsupp,
-    tpch.supplier,
-    tpch.nation
+    partsupp,
+    supplier,
+    nation
   where
     ps_suppkey = s_suppkey
     and s_nationkey = n_nationkey
@@ -1299,9 +1299,9 @@ where
     select
       sum(ps_supplycost * ps_availqty) * 0.0001
     from
-      tpch.partsupp,
-      tpch.supplier,
-      tpch.nation
+      partsupp,
+      supplier,
+      nation
     where
       ps_suppkey = s_suppkey
       and s_nationkey = n_nationkey
@@ -1457,8 +1457,8 @@ select
     else 0
   end) as low_line_count
 from
-  tpch.orders,
-  tpch.lineitem
+  orders,
+  lineitem
 where
   o_orderkey = l_orderkey
   and l_shipmode in ('MAIL', 'SHIP')
@@ -1530,7 +1530,7 @@ from (
     c_custkey,
     count(o_orderkey) as c_count
   from
-    tpch.customer left outer join tpch.orders on (
+    customer left outer join tpch.orders on (
       c_custkey = o_custkey
       and o_comment not like '%special%requests%'
     )
@@ -1611,8 +1611,8 @@ select
     else 0.0
     end) / sum(l_extendedprice * (1 - l_discount)) as promo_revenue
 from
-  tpch.lineitem,
-  tpch.part
+  lineitem,
+  part
 where
   l_partkey = p_partkey
   and l_shipdate >= '1995-09-01'
@@ -1662,7 +1662,7 @@ with revenue_view as (
     l_suppkey as supplier_no,
     sum(l_extendedprice * (1 - l_discount)) as total_revenue
   from
-    tpch.lineitem
+    lineitem
   where
     l_shipdate >= '1996-01-01'
     and l_shipdate < '1996-04-01'
@@ -1675,7 +1675,7 @@ select
   s_phone,
   total_revenue
 from
-  tpch.supplier,
+  supplier,
   revenue_view
 where
   s_suppkey = supplier_no
@@ -1786,8 +1786,8 @@ select
   p_size,
   count(distinct ps_suppkey) as supplier_cnt
 from
-  tpch.partsupp,
-  tpch.part
+  partsupp,
+  part
 where
   p_partkey = ps_partkey
   and p_brand <> 'Brand#45'
@@ -1797,7 +1797,7 @@ where
     select
       s_suppkey
     from
-      tpch.supplier
+      supplier
     where
       s_comment like '%Customer%Complaints%'
   )
@@ -1886,8 +1886,8 @@ order by
 select
   sum(l_extendedprice) / 7.0 as avg_yearly
 from
-  tpch.lineitem,
-  tpch.part
+  lineitem,
+  part
 where
   p_partkey = l_partkey
   and p_brand = 'Brand#23'
@@ -1896,7 +1896,7 @@ where
     select
       0.2 * avg(l_quantity)
     from
-      tpch.lineitem
+      lineitem
     where
       l_partkey = p_partkey
   )
@@ -1982,15 +1982,15 @@ select
   o_totalprice,
   sum(l_quantity)
 from
-  tpch.customer,
-  tpch.orders,
-  tpch.lineitem
+  customer,
+  orders,
+  lineitem
 where
   o_orderkey in (
     select
       l_orderkey
     from
-      tpch.lineitem
+      lineitem
     group by
       l_orderkey
     having
@@ -2112,8 +2112,8 @@ limit 100
 select
   sum(l_extendedprice * (1 - l_discount)) as revenue
 from
-  tpch.lineitem,
-  tpch.part
+  lineitem,
+  part
 where
   p_partkey = l_partkey
   and (
@@ -2188,20 +2188,20 @@ select
   s_name,
   s_address
 from
-  tpch.supplier,
-  tpch.nation
+  supplier,
+  nation
 where
   s_suppkey in (
     select
       ps_suppkey
     from
-      tpch.partsupp
+      partsupp
     where
       ps_partkey in (
         select
           p_partkey
         from
-          tpch.part
+          part
         where
           p_name like 'forest%'
         )
@@ -2209,7 +2209,7 @@ where
         select
           0.5 * sum(l_quantity)
         from
-          tpch.lineitem
+          lineitem
         where
           l_partkey = ps_partkey
           and l_suppkey = ps_suppkey
@@ -2337,9 +2337,9 @@ select
   s_name,
   count(*) as numwait
 from
-  tpch.supplier,
-  tpch.lineitem l1,
-  tpch.orders,
+  supplier,
+  lineitem l1,
+  orders,
   tpch.nation
 where
   s_suppkey = l1.l_suppkey
@@ -2350,7 +2350,7 @@ where
     select
       *
     from
-      tpch.lineitem l2
+      lineitem l2
     where
       l2.l_orderkey = l1.l_orderkey
       and l2.l_suppkey <> l1.l_suppkey
@@ -2359,7 +2359,7 @@ where
     select
       *
     from
-      tpch.lineitem l3
+      lineitem l3
     where
       l3.l_orderkey = l1.l_orderkey
       and l3.l_suppkey <> l1.l_suppkey
@@ -2513,14 +2513,14 @@ from (
     substr(c_phone, 1, 2) as cntrycode,
     c_acctbal
   from
-    tpch.customer
+    customer
   where
     substr(c_phone, 1, 2) in ('13', '31', '23', '29', '30', '18', '17')
     and c_acctbal > (
       select
         avg(c_acctbal)
       from
-        tpch.customer
+        customer
       where
         c_acctbal > 0.00
         and substr(c_phone, 1, 2) in ('13', '31', '23', '29', '30', '18', '17')
@@ -2529,7 +2529,7 @@ from (
       select
         *
       from
-        tpch.orders
+        orders
       where
         o_custkey = c_custkey
     )

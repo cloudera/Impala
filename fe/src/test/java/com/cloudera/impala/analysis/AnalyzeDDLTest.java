@@ -43,12 +43,13 @@ import com.cloudera.impala.catalog.StructType;
 import com.cloudera.impala.catalog.Type;
 import com.cloudera.impala.common.AnalysisException;
 import com.cloudera.impala.common.FileSystemUtil;
+import com.cloudera.impala.common.FrontendTestBase;
 import com.cloudera.impala.util.MetaStoreUtil;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 
-public class AnalyzeDDLTest extends AnalyzerTest {
+public class AnalyzeDDLTest extends FrontendTestBase {
 
   @Test
   public void TestAlterTableAddDropPartition() throws CatalogException {

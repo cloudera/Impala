@@ -36,13 +36,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.cloudera.impala.analysis.ColumnLineageGraph;
-import com.cloudera.impala.authorization.AuthorizationConfig;
 import com.cloudera.impala.catalog.CatalogException;
+import com.cloudera.impala.common.FrontendTestBase;
 import com.cloudera.impala.common.ImpalaException;
 import com.cloudera.impala.common.NotImplementedException;
 import com.cloudera.impala.common.RuntimeEnv;
-import com.cloudera.impala.service.Frontend;
-import com.cloudera.impala.testutil.ImpaladTestCatalog;
 import com.cloudera.impala.testutil.TestFileParser;
 import com.cloudera.impala.testutil.TestFileParser.Section;
 import com.cloudera.impala.testutil.TestFileParser.TestCase;
@@ -74,11 +72,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 
-public class PlannerTestBase {
+public class PlannerTestBase extends FrontendTestBase {
   private final static Logger LOG = LoggerFactory.getLogger(PlannerTest.class);
   private final static boolean GENERATE_OUTPUT_FILE = true;
-  private static Frontend frontend_ = new Frontend(
-      AuthorizationConfig.createAuthDisabledConfig(), new ImpaladTestCatalog());
   private final String testDir_ = "functional-planner/queries/PlannerTest";
   private final String outDir_ = "/tmp/PlannerTest/";
 
