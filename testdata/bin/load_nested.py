@@ -241,6 +241,7 @@ def load():
 
         CREATE TABLE customer
         STORED AS PARQUET
+        TBLPROPERTIES('parquet.compression'='SNAPPY')
         AS SELECT * FROM tmp_customer;
 
         DROP TABLE tmp_orders_string;
@@ -249,6 +250,7 @@ def load():
 
         CREATE TABLE region
         STORED AS PARQUET
+        TBLPROPERTIES('parquet.compression'='SNAPPY')
         AS SELECT * FROM tmp_region;
 
         DROP TABLE tmp_region_string;
@@ -256,6 +258,7 @@ def load():
 
         CREATE TABLE supplier
         STORED AS PARQUET
+        TBLPROPERTIES('parquet.compression'='SNAPPY')
         AS SELECT * FROM tmp_supplier;
 
         DROP TABLE tmp_supplier;
