@@ -1,7 +1,7 @@
 From c6bece5e3175123bd8290624706b1b1824234b39 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Wed, 27 Apr 2016 13:42:28 -0700
-Subject: [PATCH 141/193] HBASE-15707 ImportTSV bulk output does not support
+Subject: [PATCH 141/194] HBASE-15707 ImportTSV bulk output does not support
  tags with hfile.format.version=3 (huaxiang sun)
 
 Reason: Bug

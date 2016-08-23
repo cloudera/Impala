@@ -1,7 +1,7 @@
 From 7a44cc324ef437bfb684a289ae98554085b4c860 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Wed, 28 Oct 2015 15:43:26 -0700
-Subject: [PATCH 121/193] HBASE-12769 Replication fails to delete all
+Subject: [PATCH 121/194] HBASE-12769 Replication fails to delete all
  corresponding zk nodes when peer is removed
  (Jianwei Cui)
 

@@ -1,7 +1,7 @@
 From adb209e5bf3e3a64e1d50c4152c95ce25c8c1644 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Sat, 19 Mar 2016 21:15:07 -0700
-Subject: [PATCH 135/193] HBASE-15479 No more garbage or beware of autoboxing
+Subject: [PATCH 135/194] HBASE-15479 No more garbage or beware of autoboxing
  (Vladimir Rodionov)
 
 Change-Id: Ib23907e5e31fdb8adde5743134db0bf386f2c251

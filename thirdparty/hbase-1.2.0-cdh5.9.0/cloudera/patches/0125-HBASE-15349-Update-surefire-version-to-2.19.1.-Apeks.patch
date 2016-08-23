@@ -1,7 +1,7 @@
 From 57292fa192a9fc79e7a30f41d4fde35911fe2dbf Mon Sep 17 00:00:00 2001
 From: Apekshit <apeksharma@gmail.com>
 Date: Fri, 26 Feb 2016 12:01:08 -0800
-Subject: [PATCH 125/193] HBASE-15349 Update surefire version to 2.19.1.
+Subject: [PATCH 125/194] HBASE-15349 Update surefire version to 2.19.1.
  (Apekshit)
 
 Signed-off-by: stack <stack@apache.org>

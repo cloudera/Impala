@@ -1,7 +1,7 @@
 From 546d77ed5c6728fa17b4969c0359c8a7fd9e57f6 Mon Sep 17 00:00:00 2001
 From: Apekshit <apeksharma@gmail.com>
 Date: Wed, 13 Apr 2016 12:27:21 -0700
-Subject: [PATCH 136/193] HBASE-15405 Fix PE logging and wrong defaults in
+Subject: [PATCH 136/194] HBASE-15405 Fix PE logging and wrong defaults in
  help message. (Apekshit)
 
 Author:Apekshit Sharma

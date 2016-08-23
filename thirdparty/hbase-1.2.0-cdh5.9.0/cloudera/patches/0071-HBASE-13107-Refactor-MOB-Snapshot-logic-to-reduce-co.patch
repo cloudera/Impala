@@ -1,7 +1,7 @@
 From 64ba3507aedd5c38efb6046b66b7614f09f61a75 Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Thu, 5 Mar 2015 11:29:21 -0800
-Subject: [PATCH 071/193] HBASE-13107 Refactor MOB Snapshot logic to reduce
+Subject: [PATCH 071/194] HBASE-13107 Refactor MOB Snapshot logic to reduce
  code duplication (Jingcheng Du)
 
 Change-Id: I3a66cb01e0e80ac10ef96f3092eec57f188ffe29

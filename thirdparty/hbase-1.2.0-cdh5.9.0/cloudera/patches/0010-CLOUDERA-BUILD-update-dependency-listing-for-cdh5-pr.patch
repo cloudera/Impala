@@ -1,7 +1,7 @@
 From b5f583e72aa480c544e13622d86f8a45bb90a528 Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@cloudera.com>
 Date: Mon, 7 Dec 2015 15:52:14 -0800
-Subject: [PATCH 010/193] CLOUDERA-BUILD update dependency listing for cdh5
+Subject: [PATCH 010/194] CLOUDERA-BUILD update dependency listing for cdh5
  profile.
 
 * move some dep scopes back to compile from test

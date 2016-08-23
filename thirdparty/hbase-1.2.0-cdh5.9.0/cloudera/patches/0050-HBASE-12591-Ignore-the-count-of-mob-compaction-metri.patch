@@ -1,7 +1,7 @@
 From de2ee1989d5e1564eea5e71d76f5d1d87c612e8c Mon Sep 17 00:00:00 2001
 From: anoopsjohn <anoopsamjohn@gmail.com>
 Date: Tue, 2 Dec 2014 07:14:39 +0530
-Subject: [PATCH 050/193] HBASE-12591 Ignore the count of mob compaction
+Subject: [PATCH 050/194] HBASE-12591 Ignore the count of mob compaction
  metrics when there is issue.(Jiajia Li)
 
 Reason: Bug

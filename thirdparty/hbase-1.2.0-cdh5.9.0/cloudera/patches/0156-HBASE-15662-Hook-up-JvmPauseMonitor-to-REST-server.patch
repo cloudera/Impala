@@ -1,7 +1,7 @@
 From 0d75f5b64ff7b46bc7cb99df37910d65e676f06e Mon Sep 17 00:00:00 2001
 From: Andrew Purtell <apurtell@apache.org>
 Date: Mon, 18 Apr 2016 14:06:17 -0700
-Subject: [PATCH 156/193] HBASE-15662 Hook up JvmPauseMonitor to REST server
+Subject: [PATCH 156/194] HBASE-15662 Hook up JvmPauseMonitor to REST server
 
 Change-Id: I5c15f2b64e0d3587fed315000ca9f929df8f1ead
 Reason: Improvement

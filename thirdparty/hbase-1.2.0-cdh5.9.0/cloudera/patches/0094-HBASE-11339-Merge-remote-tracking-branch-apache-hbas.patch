@@ -1,7 +1,7 @@
 From 7542c6397a33d8b0122e83568ead5cfb0d1dbc46 Mon Sep 17 00:00:00 2001
 From: Huaxiang Sun <hsun@cloudera.com>
 Date: Fri, 8 Jan 2016 18:54:02 -0800
-Subject: [PATCH 094/193] HBASE-11339 Merge remote-tracking branch
+Subject: [PATCH 094/194] HBASE-11339 Merge remote-tracking branch
  'apache/hbase-11339' (Jingcheng Du) (addendum)
 
 Reason: New Feature

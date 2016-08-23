@@ -1,7 +1,7 @@
 From b7b5a8f51be3ee020fc2a68151d8385c2adf3311 Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@cloudera.com>
 Date: Thu, 26 May 2016 10:46:10 -0700
-Subject: [PATCH 158/193] CDH-39296 remove detritus that causes apache-rat to
+Subject: [PATCH 158/194] CDH-39296 remove detritus that causes apache-rat to
  fail.
 
 Change-Id: I1693fd1f72ed5571139a37827b4302be8b61961d

@@ -1,3 +1,29 @@
+commit 523753f53f21b4c26ad2687c818636fd70883f12
+Author: Esteban Gutierrez <esteban@apache.org>
+Date:   Mon Aug 22 19:53:29 2016 -0700
+
+    HBASE-16450 Shell tool to dump replication queues
+    
+    New tool to dump existing replication peers, configurations and
+    queues when using HBase Replication. The tool provides two flags:
+    
+     --distributed  This flag will poll each RS for information about
+                    the replication queues being processed on this RS.
+                    By default this is not enabled and the information
+                    about the replication queues and configuration will
+                    be obtained from ZooKeeper.
+     --hdfs         When --distributed is used, this flag will attempt
+                    to calculate the total size of the WAL files used
+                    by the replication queues. Since its possible that
+                    multiple peers can be configured this value can be
+                    overestimated.
+    
+    Change-Id: Ie896a3a145a4a30989f77da7cdb95eb572858625
+    Reason: Improvement
+    Author: Esteban Gutierrez
+    Ref: CDH-38942
+    (cherry picked from commit 6b7ab630c9242f106b9cfca72438776a109ab2a0)
+
 commit 9f7d4f1f7f9f18a673b74e119fafc496f4cb26aa
 Author: Jenkins <dev-kitchen@cloudera.com>
 Date:   Thu Aug 18 12:40:08 2016 -0700

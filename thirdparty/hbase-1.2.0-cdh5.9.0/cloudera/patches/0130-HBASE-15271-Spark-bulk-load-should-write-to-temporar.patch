@@ -1,7 +1,7 @@
 From 0a9af401b331d38dbd98234f9a48c648dc0e4704 Mon Sep 17 00:00:00 2001
 From: Ted Malaska <ted.malaska@cloudera.com>
 Date: Tue, 8 Mar 2016 17:26:29 -0800
-Subject: [PATCH 130/193] HBASE-15271 Spark bulk load should write to
+Subject: [PATCH 130/194] HBASE-15271 Spark bulk load should write to
  temporary location and then rename on success.
 
 Signed-off-by: Ted Yu <tedyu@apache.org>

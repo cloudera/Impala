@@ -1,7 +1,7 @@
 From 4372719369cb81eb13230f84a974252233b9a360 Mon Sep 17 00:00:00 2001
 From: anoopsjohn <anoopsamjohn@gmail.com>
 Date: Sat, 6 Sep 2014 09:59:55 +0530
-Subject: [PATCH 033/193] HBASE-11901 Improve the value size of the reference
+Subject: [PATCH 033/194] HBASE-11901 Improve the value size of the reference
  cell in mob column.(Jingcheng Du)
 
 Reason: MOB Feature

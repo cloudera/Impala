@@ -1,7 +1,7 @@
 From cc02b6ad579f5fc5f2b50f3a591d047749db8cb2 Mon Sep 17 00:00:00 2001
 From: Ted Malaska <ted.malaska@cloudera.com>
 Date: Tue, 28 Jul 2015 11:10:37 -0500
-Subject: [PATCH 098/193] HBASE-13992 Integrate SparkOnHBase into HBase
+Subject: [PATCH 098/194] HBASE-13992 Integrate SparkOnHBase into HBase
 
 Signed-off-by: Sean Busbey <busbey@cloudera.com>
 

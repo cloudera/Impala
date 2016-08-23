@@ -1,7 +1,7 @@
 From 69c62a4d2884886e37652b563c39d6304ee99e59 Mon Sep 17 00:00:00 2001
 From: Vrishal Kulkarni <vrishal@fb.com>
 Date: Fri, 20 Nov 2015 06:57:18 -0800
-Subject: [PATCH 122/193] HBASE-14719 Add metrics for master WAL count
+Subject: [PATCH 122/194] HBASE-14719 Add metrics for master WAL count
  (numMasterWALs). Metric numMasterWALs appears as
  follows in metrics dump
 

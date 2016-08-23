@@ -1,7 +1,7 @@
 From b8c49cedcd8d8d2845ba914d3ed7dcec6a90e6c7 Mon Sep 17 00:00:00 2001
 From: Huaxiang Sun <hsun@cloudera.com>
 Date: Fri, 8 Jan 2016 17:43:48 -0800
-Subject: [PATCH 086/193] HBASE-14098 Allow dropping caches behind compactions
+Subject: [PATCH 086/194] HBASE-14098 Allow dropping caches behind compactions
  (addendum) Summary: On large compactions drop the
  OS level fs cache behind reads and writes.
 

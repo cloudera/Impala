@@ -1,7 +1,7 @@
 From b1b5b6639a2bd86942bf0b9bf4d2fad17af845a8 Mon Sep 17 00:00:00 2001
 From: Sean Mackrory <mackrorysd@apache.org>
 Date: Wed, 25 May 2016 07:49:01 -0600
-Subject: [PATCH 163/193] HBASE-15889. String case conversions are
+Subject: [PATCH 163/194] HBASE-15889. String case conversions are
  locale-sensitive, used without locale
 
 Reason: Bug

@@ -1,7 +1,7 @@
 From a712057afe7d3ea14d615aed51166bccd6a16f0d Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@cloudera.com>
 Date: Thu, 5 Mar 2015 20:54:06 -0800
-Subject: [PATCH 015/193] CLOUDERA-BUILD Enable HFileV2 by default
+Subject: [PATCH 015/194] CLOUDERA-BUILD Enable HFileV2 by default
 
 Change-Id: I3acfb80b120dc2ced55a9dea6a187db6354e4ec5
 Author: Esteban Gutierrez

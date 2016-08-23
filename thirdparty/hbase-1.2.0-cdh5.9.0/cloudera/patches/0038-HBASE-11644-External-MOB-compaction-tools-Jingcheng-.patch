@@ -1,7 +1,7 @@
 From 4e2d85271e6d4a7df5ffacac9a6247d0af5852f4 Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Fri, 19 Sep 2014 03:02:06 -0700
-Subject: [PATCH 038/193] HBASE-11644 External MOB compaction tools (Jingcheng
+Subject: [PATCH 038/194] HBASE-11644 External MOB compaction tools (Jingcheng
  Du)
 
 Change-Id: I9d63f772e8c2a4477bef06e69644407029ef8bdb
