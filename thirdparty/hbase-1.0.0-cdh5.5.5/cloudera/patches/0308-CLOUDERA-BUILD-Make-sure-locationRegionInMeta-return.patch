@@ -1,0 +1,40 @@
+From 1993a013c2c3ee755781c836d238afea84038a4f Mon Sep 17 00:00:00 2001
+From: Huaxiang Sun <hsun@cloudera.com>
+Date: Sun, 6 Mar 2016 22:52:43 -0800
+Subject: [PATCH 308/335] CLOUDERA-BUILD Make sure locationRegionInMeta()
+ returns locations with the region for the input
+ replicaId exists
+
+Reason: Bug
+Author: Huaxiang Sun
+Ref: CDH-37968
+Change-Id: Ie5de4a268dd7fb9e8e199a3c24c8ad5f742137d6
+---
+ .../hadoop/hbase/client/ConnectionManager.java     |    4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ConnectionManager.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ConnectionManager.java
+index 9267339..918c36f 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ConnectionManager.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ConnectionManager.java
+@@ -1272,7 +1272,7 @@ class ConnectionManager {
+               // Check the cache again for a hit in case some other thread made the
+               // same query while we were waiting on the lock.
+               locations = getCachedLocation(tableName, row);
+-              if (locations != null) {
++              if (locations != null && locations.getRegionLocation(replicaId) != null) {
+                 return locations;
+               }
+               // If the parent table is META, we may want to pre-fetch some
+@@ -1280,7 +1280,7 @@ class ConnectionManager {
+               prefetchRegionCache(tableName, row);
+             }
+             locations = getCachedLocation(tableName, row);
+-            if (locations != null) {
++            if (locations != null && locations.getRegionLocation(replicaId) != null) {
+               return locations;
+             }
+           } else {
+-- 
+1.7.9.5
+

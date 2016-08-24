@@ -1,0 +1,367 @@
+From ebe2be97e1584aad53d65e352615a8c9ad4d9f96 Mon Sep 17 00:00:00 2001
+From: stack <stack@duboce.net>
+Date: Tue, 29 Dec 2015 10:46:02 -0800
+Subject: [PATCH 288/335] HBASE-14205 RegionCoprocessorHost System.nanoTime()
+ performance bottleneck Reason: Partner request;
+ ngdata Author: Andrew Purtell Ref: CDH-35116
+
+Change-Id: I708e46097b2fdffaff350219327e5698a807fef3
+---
+ .../hbase/regionserver/MetricsRegionWrapper.java   |    9 ---
+ .../regionserver/MetricsRegionSourceImpl.java      |   30 ---------
+ .../regionserver/TestMetricsRegionSourceImpl.java  |    5 --
+ .../hbase/tmpl/regionserver/RegionListTmpl.jamon   |   69 +-------------------
+ .../regionserver/MetricsRegionWrapperImpl.java     |   12 ----
+ .../hbase/regionserver/RegionCoprocessorHost.java  |   33 ----------
+ .../regionserver/MetricsRegionWrapperStub.java     |   10 ---
+ 7 files changed, 1 insertion(+), 167 deletions(-)
+
+diff --git a/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionWrapper.java b/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionWrapper.java
+index 7d61f81..27be767 100644
+--- a/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionWrapper.java
++++ b/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionWrapper.java
+@@ -18,10 +18,6 @@
+ 
+ package org.apache.hadoop.hbase.regionserver;
+ 
+-import java.util.Map;
+-
+-import org.apache.commons.math.stat.descriptive.DescriptiveStatistics;
+-
+ /**
+  * Interface of class that will wrap an HRegion and export numbers so they can be
+  * used in MetricsRegionSource
+@@ -83,9 +79,4 @@ public interface MetricsRegionWrapper {
+   long getNumBytesCompacted();
+ 
+   long getNumCompactionsCompleted();
+-
+-  /**
+-   * Get the time spent by coprocessors in this region.
+-   */
+-  Map<String, DescriptiveStatistics> getCoprocessorExecutionStatistics();
+ }
+diff --git a/hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionSourceImpl.java b/hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionSourceImpl.java
+index df23942..b0e8ad7 100644
+--- a/hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionSourceImpl.java
++++ b/hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionSourceImpl.java
+@@ -18,11 +18,8 @@
+ 
+ package org.apache.hadoop.hbase.regionserver;
+ 
+-import java.util.Map;
+-
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+-import org.apache.commons.math.stat.descriptive.DescriptiveStatistics;
+ import org.apache.hadoop.hbase.classification.InterfaceAudience;
+ import org.apache.hadoop.metrics2.MetricsRecordBuilder;
+ import org.apache.hadoop.metrics2.impl.JmxCacheBuster;
+@@ -197,32 +194,5 @@ public class MetricsRegionSourceImpl implements MetricsRegionSource {
+     mrb.addCounter(Interns.info(regionNamePrefix + MetricsRegionSource.NUM_FILES_COMPACTED_COUNT,
+         MetricsRegionSource.NUM_FILES_COMPACTED_DESC),
+         this.regionWrapper.getNumFilesCompacted());
+-    for (Map.Entry<String, DescriptiveStatistics> entry : this.regionWrapper
+-        .getCoprocessorExecutionStatistics()
+-        .entrySet()) {
+-      DescriptiveStatistics ds = entry.getValue();
+-      mrb.addGauge(Interns.info(regionNamePrefix + " " + entry.getKey() + " "
+-          + MetricsRegionSource.COPROCESSOR_EXECUTION_STATISTICS,
+-        MetricsRegionSource.COPROCESSOR_EXECUTION_STATISTICS_DESC + "Min: "), ds.getMin() / 1000);
+-      mrb.addGauge(Interns.info(regionNamePrefix + " " + entry.getKey() + " "
+-          + MetricsRegionSource.COPROCESSOR_EXECUTION_STATISTICS,
+-        MetricsRegionSource.COPROCESSOR_EXECUTION_STATISTICS_DESC + "Mean: "), ds.getMean() / 1000);
+-      mrb.addGauge(Interns.info(regionNamePrefix + " " + entry.getKey() + " "
+-          + MetricsRegionSource.COPROCESSOR_EXECUTION_STATISTICS,
+-        MetricsRegionSource.COPROCESSOR_EXECUTION_STATISTICS_DESC + "Max: "), ds.getMax() / 1000);
+-      mrb.addGauge(Interns.info(regionNamePrefix + " " + entry.getKey() + " "
+-          + MetricsRegionSource.COPROCESSOR_EXECUTION_STATISTICS,
+-        MetricsRegionSource.COPROCESSOR_EXECUTION_STATISTICS_DESC + "90th percentile: "), ds
+-          .getPercentile(90d) / 1000);
+-      mrb.addGauge(Interns.info(regionNamePrefix + " " + entry.getKey() + " "
+-          + MetricsRegionSource.COPROCESSOR_EXECUTION_STATISTICS,
+-        MetricsRegionSource.COPROCESSOR_EXECUTION_STATISTICS_DESC + "95th percentile: "), ds
+-          .getPercentile(95d) / 1000);
+-      mrb.addGauge(Interns.info(regionNamePrefix + " " + entry.getKey() + " "
+-          + MetricsRegionSource.COPROCESSOR_EXECUTION_STATISTICS,
+-        MetricsRegionSource.COPROCESSOR_EXECUTION_STATISTICS_DESC + "99th percentile: "), ds
+-          .getPercentile(99d) / 1000);
+-    }
+-
+   }
+ }
+diff --git a/hbase-hadoop2-compat/src/test/java/org/apache/hadoop/hbase/regionserver/TestMetricsRegionSourceImpl.java b/hbase-hadoop2-compat/src/test/java/org/apache/hadoop/hbase/regionserver/TestMetricsRegionSourceImpl.java
+index 4be8905..95d1cb8 100644
+--- a/hbase-hadoop2-compat/src/test/java/org/apache/hadoop/hbase/regionserver/TestMetricsRegionSourceImpl.java
++++ b/hbase-hadoop2-compat/src/test/java/org/apache/hadoop/hbase/regionserver/TestMetricsRegionSourceImpl.java
+@@ -123,10 +123,5 @@ public class TestMetricsRegionSourceImpl {
+     public long getNumCompactionsCompleted() {
+       return 0;
+     }
+-
+-    @Override
+-    public Map<String, DescriptiveStatistics> getCoprocessorExecutionStatistics() {
+-      return null;
+-    }
+   }
+ }
+diff --git a/hbase-server/src/main/jamon/org/apache/hadoop/hbase/tmpl/regionserver/RegionListTmpl.jamon b/hbase-server/src/main/jamon/org/apache/hadoop/hbase/tmpl/regionserver/RegionListTmpl.jamon
+index 40fe757..738cf3c 100644
+--- a/hbase-server/src/main/jamon/org/apache/hadoop/hbase/tmpl/regionserver/RegionListTmpl.jamon
++++ b/hbase-server/src/main/jamon/org/apache/hadoop/hbase/tmpl/regionserver/RegionListTmpl.jamon
+@@ -22,7 +22,6 @@
+ </%args>
+ <%import>
+         java.util.*;
+-        org.apache.commons.math.stat.descriptive.DescriptiveStatistics;
+         org.apache.hadoop.hbase.regionserver.HRegionServer;
+         org.apache.hadoop.hbase.util.Bytes;
+         org.apache.hadoop.hbase.HRegionInfo;
+@@ -48,7 +47,6 @@
+             <li class=""><a href="#tab_regionStoreStats" data-toggle="tab">Storefile Metrics</a></li>
+             <li class=""><a href="#tab_regionMemstoreStats" data-toggle="tab">Memstore Metrics</a></li>
+             <li class=""><a href="#tab_regionCompactStats" data-toggle="tab">Compaction Metrics</a></li>
+-            <li class=""><a href="#tab_coprocessorStats" data-toggle="tab">Coprocessor Metrics</a></li>
+         </ul>
+         <div class="tab-content" style="padding-bottom: 9px; border-bottom: 1px solid #ddd;">
+             <div class="tab-pane active" id="tab_regionBaseInfo">
+@@ -66,9 +64,6 @@
+             <div class="tab-pane" id="tab_regionCompactStats">
+                 <& compactStats; onlineRegions = onlineRegions; &>
+             </div>
+-            <div class="tab-pane" id="tab_coprocessorStats">
+-                <& coprocessorStats; onlineRegions = onlineRegions; &>
+-            </div>
+         </div>
+     </div>
+     <p>Region names are made of the containing table's name, a comma,
+@@ -232,66 +227,4 @@
+         </tr>
+         </%for>
+     </table>
+-</%def>
+-
+-<%def coprocessorStats>
+-<%args>
+-    List<HRegionInfo> onlineRegions;
+-</%args>
+-    <table class="table table-striped">
+-        <tr>
+-            <th>Region Name</th>
+-            <th>Coprocessor</th>
+-            <th>Execution Time Statistics</th>
+-        </tr>
+-
+-        <%for HRegionInfo r: onlineRegions %>
+-        <%java>    
+-            HRegion region = regionServer.getFromOnlineRegions(r.getEncodedName());
+-            MetricsRegionWrapper mWrap = region == null ? null: region.getMetrics().getRegionWrapper();
+-        </%java>
+-        
+-        <%if mWrap != null %>
+-
+-            <%for Map.Entry<String, DescriptiveStatistics> entry: mWrap.getCoprocessorExecutionStatistics().entrySet() %>
+-            <tr>
+-                <%java>
+-                    String coprocessorName = entry.getKey();
+-                    DescriptiveStatistics ds = entry.getValue();
+-                </%java>
+-                <td><% r.getRegionNameAsString() %></td>
+-                <td><% coprocessorName %></td>
+-                <td>
+-                <table class="table-condensed">
+-                <tr>
+-                    <td>Min Time </td>
+-                    <td><% String.format("%.3f%n", ds.getMin()/1000/1000) %>ms</td>
+-                </tr>
+-                <tr>
+-                    <td>Avg Time </td>
+-                    <td><% String.format("%.3f%n", ds.getMean()/1000/1000) %>ms</td>
+-                </tr>
+-                <tr>
+-                    <td>Max Time </td>
+-                    <td><% String.format("%.3f%n", ds.getMax()/1000/1000) %>ms</td>
+-                </tr>
+-                <tr>
+-                    <td>90th percentile </td>
+-                    <td><% String.format("%.3f%n", ds.getPercentile(90d)/1000/1000) %>ms</td>
+-                </tr>
+-                <tr>
+-                    <td>95th percentile </td>
+-                    <td><% String.format("%.3f%n", ds.getPercentile(95d)/1000/1000) %>ms</td>
+-                </tr>
+-                <tr>
+-                    <td>99th percentile </td>
+-                    <td><% String.format("%.3f%n", ds.getPercentile(99d)/1000/1000) %>ms</td>
+-                </tr>
+-                </table>
+-                </td>
+-            </tr>
+-            </%for>
+-        </%if>
+-        </%for>
+-    </table>
+-</%def>
++ </%def>
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionWrapperImpl.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionWrapperImpl.java
+index be05f3e..b76b07e 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionWrapperImpl.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionWrapperImpl.java
+@@ -20,13 +20,11 @@ package org.apache.hadoop.hbase.regionserver;
+ 
+ import java.io.Closeable;
+ import java.io.IOException;
+-import java.util.HashMap;
+ import java.util.Map;
+ import java.util.concurrent.ScheduledExecutorService;
+ import java.util.concurrent.ScheduledFuture;
+ import java.util.concurrent.TimeUnit;
+ 
+-import org.apache.commons.math.stat.descriptive.DescriptiveStatistics;
+ import org.apache.hadoop.hbase.classification.InterfaceAudience;
+ import org.apache.hadoop.hbase.CompatibilitySingletonFactory;
+ import org.apache.hadoop.hbase.HRegionInfo;
+@@ -45,7 +43,6 @@ public class MetricsRegionWrapperImpl implements MetricsRegionWrapper, Closeable
+   private long numStoreFiles;
+   private long memstoreSize;
+   private long storeFileSize;
+-  private Map<String, DescriptiveStatistics> coprocessorTimes;
+ 
+   private ScheduledFuture<?> regionMetricsUpdateTask;
+ 
+@@ -55,7 +52,6 @@ public class MetricsRegionWrapperImpl implements MetricsRegionWrapper, Closeable
+     this.runnable = new HRegionMetricsWrapperRunnable();
+     this.regionMetricsUpdateTask = this.executor.scheduleWithFixedDelay(this.runnable, PERIOD,
+       PERIOD, TimeUnit.SECONDS);
+-    this.coprocessorTimes = new HashMap<String, DescriptiveStatistics>();
+   }
+ 
+   @Override
+@@ -154,8 +150,6 @@ public class MetricsRegionWrapperImpl implements MetricsRegionWrapper, Closeable
+       numStoreFiles = tempNumStoreFiles;
+       memstoreSize = tempMemstoreSize;
+       storeFileSize = tempStoreFileSize;
+-      coprocessorTimes = region.getCoprocessorHost().getCoprocessorExecutionStatistics();
+-
+     }
+   }
+ 
+@@ -163,10 +157,4 @@ public class MetricsRegionWrapperImpl implements MetricsRegionWrapper, Closeable
+   public void close() throws IOException {
+     regionMetricsUpdateTask.cancel(true);
+   }
+-
+-  @Override
+-  public Map<String, DescriptiveStatistics> getCoprocessorExecutionStatistics() {
+-    return coprocessorTimes;
+-  }
+-
+ }
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/RegionCoprocessorHost.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/RegionCoprocessorHost.java
+index ae0d95e..081ee5a 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/RegionCoprocessorHost.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/RegionCoprocessorHost.java
+@@ -21,8 +21,6 @@ package org.apache.hadoop.hbase.regionserver;
+ 
+ import java.io.IOException;
+ import java.util.ArrayList;
+-import java.util.Collection;
+-import java.util.HashMap;
+ import java.util.List;
+ import java.util.Map;
+ import java.util.NavigableSet;
+@@ -35,7 +33,6 @@ import org.apache.commons.collections.map.AbstractReferenceMap;
+ import org.apache.commons.collections.map.ReferenceMap;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+-import org.apache.commons.math.stat.descriptive.DescriptiveStatistics;
+ import org.apache.hadoop.hbase.classification.InterfaceAudience;
+ import org.apache.hadoop.hbase.classification.InterfaceStability;
+ import org.apache.hadoop.conf.Configuration;
+@@ -159,16 +156,6 @@ public class RegionCoprocessorHost
+       return sharedData;
+     }
+ 
+-    public void offerExecutionLatency(long latencyNanos) {
+-      coprocessorTimeNanos.offer(latencyNanos);
+-    }
+-
+-    public Collection<Long> getExecutionLatenciesNanos() {
+-      final List<Long> latencies = Lists.newArrayListWithCapacity(coprocessorTimeNanos.size());
+-      coprocessorTimeNanos.drainTo(latencies);
+-      return latencies;
+-    }
+-
+     @Override
+     public HRegionInfo getRegionInfo() {
+       return region.getRegionInfo();
+@@ -1624,24 +1611,6 @@ public class RegionCoprocessorHost
+     });
+   }
+ 
+-  public Map<String, DescriptiveStatistics> getCoprocessorExecutionStatistics() {
+-    Map<String, DescriptiveStatistics> results = new HashMap<String, DescriptiveStatistics>();
+-    for (RegionEnvironment env : coprocessors) {
+-      DescriptiveStatistics ds = new DescriptiveStatistics();
+-      if (env.getInstance() instanceof RegionObserver) {
+-        for (Long time : env.getExecutionLatenciesNanos()) {
+-          ds.addValue(time);
+-        }
+-        // Ensures that web ui circumvents the display of NaN values when there are zero samples.
+-        if (ds.getN() == 0) {
+-          ds.addValue(0);
+-        }
+-        results.put(env.getInstance().getClass().getSimpleName(), ds);
+-      }
+-    }
+-    return results;
+-  }
+-
+   private static abstract class CoprocessorOperation
+       extends ObserverContext<RegionCoprocessorEnvironment> {
+     public abstract void call(Coprocessor observer,
+@@ -1729,7 +1698,6 @@ public class RegionCoprocessorHost
+     for (RegionEnvironment env: coprocessors) {
+       Coprocessor observer = env.getInstance();
+       if (ctx.hasCall(observer)) {
+-        long startTime = System.nanoTime();
+         ctx.prepare(env);
+         Thread currentThread = Thread.currentThread();
+         ClassLoader cl = currentThread.getContextClassLoader();
+@@ -1741,7 +1709,6 @@ public class RegionCoprocessorHost
+         } finally {
+           currentThread.setContextClassLoader(cl);
+         }
+-        env.offerExecutionLatency(System.nanoTime() - startTime);
+         bypass |= ctx.shouldBypass();
+         if (earlyExit && ctx.shouldComplete()) {
+           break;
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/MetricsRegionWrapperStub.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/MetricsRegionWrapperStub.java
+index 2658c0a..c8ad44a 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/MetricsRegionWrapperStub.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/MetricsRegionWrapperStub.java
+@@ -18,11 +18,6 @@
+ 
+ package org.apache.hadoop.hbase.regionserver;
+ 
+-import java.util.HashMap;
+-import java.util.Map;
+-
+-import org.apache.commons.math.stat.descriptive.DescriptiveStatistics;
+-
+ public class MetricsRegionWrapperStub implements MetricsRegionWrapper {
+ 
+   @Override
+@@ -84,9 +79,4 @@ public class MetricsRegionWrapperStub implements MetricsRegionWrapper {
+   public long getNumCompactionsCompleted() {
+     return 0;
+   }
+-
+-  @Override
+-  public Map<String, DescriptiveStatistics> getCoprocessorExecutionStatistics() {
+-    return new HashMap<String, DescriptiveStatistics>();
+-  }
+ }
+-- 
+1.7.9.5
+

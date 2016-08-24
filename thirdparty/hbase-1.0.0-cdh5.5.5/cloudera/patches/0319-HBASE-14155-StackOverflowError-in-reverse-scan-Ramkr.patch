@@ -1,0 +1,268 @@
+From b721d724919f5d37e59fd3ea02fcce14eb7a3332 Mon Sep 17 00:00:00 2001
+From: Andrew Purtell <apurtell@apache.org>
+Date: Wed, 29 Jul 2015 18:22:55 -0700
+Subject: [PATCH 319/335] HBASE-14155 StackOverflowError in reverse scan
+ (Ramkrishna S. Vasudevan and Ted Yu)
+
+Reason: Bug
+Author: Ramkrishna s. Vasudevan and Ted Yu
+Ref: CDH-39950
+Change-Id: I927a621d974af8dd93d5c6386936294f1bbb8fcc
+---
+ .../io/encoding/BufferedDataBlockEncoder.java      |    1 +
+ .../apache/hadoop/hbase/HBaseTestingUtility.java   |   51 ++++++-
+ .../io/encoding/TestSeekBeforeWithReverseScan.java |  147 ++++++++++++++++++++
+ 3 files changed, 198 insertions(+), 1 deletion(-)
+ create mode 100644 hbase-server/src/test/java/org/apache/hadoop/hbase/io/encoding/TestSeekBeforeWithReverseScan.java
+
+diff --git a/hbase-common/src/main/java/org/apache/hadoop/hbase/io/encoding/BufferedDataBlockEncoder.java b/hbase-common/src/main/java/org/apache/hadoop/hbase/io/encoding/BufferedDataBlockEncoder.java
+index 93fd3a4..cb2f5a7 100644
+--- a/hbase-common/src/main/java/org/apache/hadoop/hbase/io/encoding/BufferedDataBlockEncoder.java
++++ b/hbase-common/src/main/java/org/apache/hadoop/hbase/io/encoding/BufferedDataBlockEncoder.java
+@@ -827,6 +827,7 @@ abstract class BufferedDataBlockEncoder implements DataBlockEncoder {
+       current.tagsBuffer = previous.tagsBuffer;
+       current.tagsCompressedLength = previous.tagsCompressedLength;
+       current.uncompressTags = false;
++      current.setKey(current.keyBuffer, current.memstoreTS);
+       previous.invalidate();
+     }
+ 
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/HBaseTestingUtility.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/HBaseTestingUtility.java
+index 483c8aa..5a8b994 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/HBaseTestingUtility.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/HBaseTestingUtility.java
+@@ -45,6 +45,7 @@ import java.util.TreeSet;
+ import java.util.UUID;
+ import java.util.concurrent.TimeUnit;
+ 
++import org.apache.commons.lang.RandomStringUtils;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.commons.logging.impl.Jdk14Logger;
+@@ -91,7 +92,8 @@ import org.apache.hadoop.hbase.regionserver.HStore;
+ import org.apache.hadoop.hbase.regionserver.InternalScanner;
+ import org.apache.hadoop.hbase.regionserver.RegionServerServices;
+ import org.apache.hadoop.hbase.regionserver.RegionServerStoppedException;
+-import org.apache.hadoop.hbase.wal.WAL;
++import org.apache.hadoop.hbase.regionserver.wal.MetricsWAL;
++import org.apache.hadoop.hbase.regionserver.wal.WALActionsListener;
+ import org.apache.hadoop.hbase.security.User;
+ import org.apache.hadoop.hbase.tool.Canary;
+ import org.apache.hadoop.hbase.util.Bytes;
+@@ -104,6 +106,8 @@ import org.apache.hadoop.hbase.util.Pair;
+ import org.apache.hadoop.hbase.util.RegionSplitter;
+ import org.apache.hadoop.hbase.util.RetryCounter;
+ import org.apache.hadoop.hbase.util.Threads;
++import org.apache.hadoop.hbase.wal.WAL;
++import org.apache.hadoop.hbase.wal.WALFactory;
+ import org.apache.hadoop.hbase.zookeeper.EmptyWatcher;
+ import org.apache.hadoop.hbase.zookeeper.MiniZooKeeperCluster;
+ import org.apache.hadoop.hbase.zookeeper.ZKAssign;
+@@ -1603,6 +1607,51 @@ public class HBaseTestingUtility extends HBaseCommonTestingUtility {
+   }
+ 
+   /**
++   * Create an unmanaged WAL. Be sure to close it when you're through.
++   */
++  public static WAL createWal(final Configuration conf, final Path rootDir, final HRegionInfo hri)
++      throws IOException {
++    // The WAL subsystem will use the default rootDir rather than the passed in rootDir
++    // unless I pass along via the conf.
++    Configuration confForWAL = new Configuration(conf);
++    confForWAL.set(HConstants.HBASE_DIR, rootDir.toString());
++    return (new WALFactory(confForWAL,
++        Collections.<WALActionsListener>singletonList(new MetricsWAL()),
++        "hregion-" + RandomStringUtils.randomNumeric(8))).
++        getWAL(hri.getEncodedNameAsBytes());
++  }
++
++  /**
++   * Create a region with it's own WAL. Be sure to call
++   * {@link HBaseTestingUtility#closeRegionAndWAL(HRegion)} to clean up all resources.
++   */
++  public static HRegion createRegionAndWAL(final HRegionInfo info, final Path rootDir,
++      final Configuration conf, final HTableDescriptor htd) throws IOException {
++    return createRegionAndWAL(info, rootDir, conf, htd, true);
++  }
++
++  /**
++   * Create a region with it's own WAL. Be sure to call
++   * {@link HBaseTestingUtility#closeRegionAndWAL(HRegion)} to clean up all resources.
++   */
++  public static HRegion createRegionAndWAL(final HRegionInfo info, final Path rootDir,
++      final Configuration conf, final HTableDescriptor htd, boolean initialize)
++      throws IOException {
++    WAL wal = createWal(conf, rootDir, info);
++    return HRegion.createHRegion(info, rootDir, conf, htd, wal, initialize);
++  }
++
++  /**
++   * Close both the HRegion {@code r} and it's underlying WAL. For use in tests.
++   */
++  public static void closeRegionAndWAL(final HRegion r) throws IOException {
++    if (r == null) return;
++    r.close();
++    if (r.getWAL() == null) return;
++    r.getWAL().close();
++  }
++
++  /**
+    * Modify a table, synchronous. Waiting logic similar to that of {@code admin.rb#alter_status}.
+    */
+   @SuppressWarnings("serial")
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/io/encoding/TestSeekBeforeWithReverseScan.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/io/encoding/TestSeekBeforeWithReverseScan.java
+new file mode 100644
+index 0000000..b06a647
+--- /dev/null
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/io/encoding/TestSeekBeforeWithReverseScan.java
+@@ -0,0 +1,147 @@
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ * http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hbase.io.encoding;
++
++import static org.junit.Assert.assertEquals;
++
++import java.util.ArrayList;
++import java.util.Arrays;
++import java.util.List;
++
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.hbase.Cell;
++import org.apache.hadoop.hbase.HBaseTestingUtility;
++import org.apache.hadoop.hbase.HColumnDescriptor;
++import org.apache.hadoop.hbase.HConstants;
++import org.apache.hadoop.hbase.HRegionInfo;
++import org.apache.hadoop.hbase.HTableDescriptor;
++import org.apache.hadoop.hbase.TableName;
++import org.apache.hadoop.hbase.client.Put;
++import org.apache.hadoop.hbase.client.Scan;
++import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
++import org.apache.hadoop.hbase.regionserver.HRegion;
++import org.apache.hadoop.hbase.regionserver.RegionScanner;
++import org.apache.hadoop.hbase.testclassification.SmallTests;
++import org.apache.hadoop.hbase.util.Bytes;
++import org.junit.After;
++import org.junit.Before;
++import org.junit.Test;
++import org.junit.experimental.categories.Category;
++
++@Category({ SmallTests.class })
++public class TestSeekBeforeWithReverseScan {
++  private final HBaseTestingUtility testUtil = new HBaseTestingUtility();
++
++  private HRegion region;
++
++  private byte[] cfName = Bytes.toBytes("a");
++  private byte[] cqName = Bytes.toBytes("b");
++
++  @Before
++  public void setUp() throws Exception {
++    TableName tableName = TableName.valueOf(getClass().getSimpleName());
++    HTableDescriptor htd = new HTableDescriptor(tableName);
++    htd.addFamily(new HColumnDescriptor(cfName).setDataBlockEncoding(DataBlockEncoding.FAST_DIFF));
++    HRegionInfo info = new HRegionInfo(tableName, null, null, false);
++    Path path = testUtil.getDataTestDir(getClass().getSimpleName());
++    region = HBaseTestingUtility.createRegionAndWAL(info, path, testUtil.getConfiguration(), htd);
++  }
++
++  @After
++  public void tearDown() throws Exception {
++    HBaseTestingUtility.closeRegionAndWAL(region);
++    testUtil.cleanupTestDir();
++  }
++
++  @Test
++  public void testReverseScanWithoutPadding() throws Exception {
++    byte[] row1 = Bytes.toBytes("a");
++    byte[] row2 = Bytes.toBytes("ab");
++    byte[] row3 = Bytes.toBytes("b");
++
++    Put put1 = new Put(row1);
++    put1.addColumn(cfName, cqName, HConstants.EMPTY_BYTE_ARRAY);
++    Put put2 = new Put(row2);
++    put2.addColumn(cfName, cqName, HConstants.EMPTY_BYTE_ARRAY);
++    Put put3 = new Put(row3);
++    put3.addColumn(cfName, cqName, HConstants.EMPTY_BYTE_ARRAY);
++
++    region.put(put1);
++    region.put(put2);
++    region.put(put3);
++    region.flushcache(true);
++    Scan scan = new Scan();
++    scan.setCacheBlocks(false);
++    scan.setReversed(true);
++    scan.setFilter(new FirstKeyOnlyFilter());
++    scan.addFamily(cfName);
++    RegionScanner scanner = region.getScanner(scan);
++    List<Cell> res = new ArrayList<Cell>();
++    int count = 1;
++    while (scanner.next(res)) {
++      count++;
++    }
++    assertEquals(Bytes.toString(res.get(0).getRowArray(), res.get(0).getRowOffset(), res.get(0)
++        .getRowLength()), "b");
++    assertEquals(Bytes.toString(res.get(1).getRowArray(), res.get(1).getRowOffset(), res.get(1)
++        .getRowLength()), "ab");
++    assertEquals(Bytes.toString(res.get(2).getRowArray(), res.get(2).getRowOffset(), res.get(2)
++        .getRowLength()), "a");
++    assertEquals(3, count);
++  }
++
++  @Test
++  public void testReverseScanWithPadding() throws Exception {
++    byte[] terminator = new byte[] { -1 };
++    byte[] row1 = Bytes.add(invert(Bytes.toBytes("a")), terminator);
++    byte[] row2 = Bytes.add(invert(Bytes.toBytes("ab")), terminator);
++    byte[] row3 = Bytes.add(invert(Bytes.toBytes("b")), terminator);
++
++    Put put1 = new Put(row1);
++    put1.addColumn(cfName, cqName, HConstants.EMPTY_BYTE_ARRAY);
++    Put put2 = new Put(row2);
++    put2.addColumn(cfName, cqName, HConstants.EMPTY_BYTE_ARRAY);
++    Put put3 = new Put(row3);
++    put3.addColumn(cfName, cqName, HConstants.EMPTY_BYTE_ARRAY);
++
++    region.put(put1);
++    region.put(put2);
++    region.put(put3);
++    region.flushcache(true);
++    Scan scan = new Scan();
++    scan.setCacheBlocks(false);
++    scan.setReversed(true);
++    scan.setFilter(new FirstKeyOnlyFilter());
++    scan.addFamily(cfName);
++    RegionScanner scanner = region.getScanner(scan);
++    List<Cell> res = new ArrayList<Cell>();
++    int count = 1;
++    while (scanner.next(res)) {
++      count++;
++    }
++    assertEquals(3, count);
++  }
++
++  private byte[] invert(byte[] bytes) {
++    byte[] newBytes = Arrays.copyOf(bytes, bytes.length);
++    for (int i = 0; i < newBytes.length; i++) {
++      newBytes[i] = (byte) (newBytes[i] ^ 0xFF);
++    }
++    return newBytes;
++  }
++}
+-- 
+1.7.9.5
+

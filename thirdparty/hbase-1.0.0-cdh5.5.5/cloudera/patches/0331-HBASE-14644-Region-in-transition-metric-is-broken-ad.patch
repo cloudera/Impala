@@ -1,0 +1,60 @@
+From 2cc15690845912b0f4add80dacf1d37250121d22 Mon Sep 17 00:00:00 2001
+From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
+Date: Mon, 20 Jun 2016 10:42:32 -0700
+Subject: [PATCH 331/335] HBASE-14644 Region in transition metric is broken --
+ addendum (Huaxiang Sun)
+
+Reason: Bug
+Author: Huaxiang Sun
+Ref: CDH-41444
+
+Change-Id: I5f31bef2f6fee96ef37428329570010dceb3e715
+---
+ .../org/apache/hadoop/hbase/master/HMaster.java    |    8 ++++----
+ .../hbase/master/TestAssignmentManagerMetrics.java |    4 ++--
+ 2 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
+index 0ca20b0..e58e800 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
+@@ -408,10 +408,6 @@ public class HMaster extends HRegionServer implements MasterServices, Server {
+     activeMasterManager = new ActiveMasterManager(zooKeeper, this.serverName, this);
+     int infoPort = putUpJettyServer();
+     startActiveMasterManager(infoPort);
+-
+-    // Do Metrics periodically
+-    periodicDoMetricsChore = new PeriodicDoMetrics(msgInterval, this);
+-    getChoreService().scheduleChore(periodicDoMetricsChore);
+   }
+ 
+   // return the actual infoPort, -1 means disable info server.
+@@ -754,6 +750,10 @@ public class HMaster extends HRegionServer implements MasterServices, Server {
+     this.catalogJanitorChore = new CatalogJanitor(this, this);
+     getChoreService().scheduleChore(catalogJanitorChore);
+ 
++    // Do Metrics periodically
++    periodicDoMetricsChore = new PeriodicDoMetrics(msgInterval, this);
++    getChoreService().scheduleChore(periodicDoMetricsChore);
++
+     status.setStatus("Starting namespace manager");
+     initNamespace();
+ 
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/TestAssignmentManagerMetrics.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/TestAssignmentManagerMetrics.java
+index 4817457..5ca2cbd 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/TestAssignmentManagerMetrics.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/TestAssignmentManagerMetrics.java
+@@ -116,8 +116,8 @@ public class TestAssignmentManagerMetrics {
+ 
+       htd.addFamily(hcd);
+ 
+-      String spec = "hdfs:///foo.jar|com.foo.FooRegionObserver|1001|arg1=1,arg2=2";
+-      htd.addCoprocessorWithSpec(spec);
++      // Add a coprocessor
++      htd.setValue("coprocessor$1", "hdfs:///foo.jar|com.foo.FooRegionObserver|1001|arg1=1,arg2=2");
+ 
+       TEST_UTIL.getHBaseAdmin().modifyTable(TABLENAME, htd);
+ 
+-- 
+1.7.9.5
+
