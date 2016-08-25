@@ -80,10 +80,9 @@ public class AvroSchemaUtils {
         Path path = new Path(url);
         FileSystem fs = null;
         fs = path.getFileSystem(FileSystemUtil.getConfiguration());
-        StringBuilder errorMsg = new StringBuilder();
-        if (!FileSystemUtil.isPathReachable(path, fs, errorMsg)) {
+        if (!fs.exists(path)) {
           throw new AnalysisException(String.format(
-              "Invalid avro.schema.url: %s. %s", url, errorMsg));
+              "Invalid avro.schema.url: %s. Path does not exist.", url));
         }
         schema = FileSystemUtil.readFile(path);
       }
