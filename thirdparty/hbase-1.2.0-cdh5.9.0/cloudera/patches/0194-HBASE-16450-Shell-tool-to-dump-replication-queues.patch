@@ -1,7 +1,7 @@
 From 523753f53f21b4c26ad2687c818636fd70883f12 Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@apache.org>
 Date: Mon, 22 Aug 2016 19:53:29 -0700
-Subject: [PATCH 194/194] HBASE-16450 Shell tool to dump replication queues
+Subject: [PATCH 194/195] HBASE-16450 Shell tool to dump replication queues
 
 New tool to dump existing replication peers, configurations and
 queues when using HBase Replication. The tool provides two flags:

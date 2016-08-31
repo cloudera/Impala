@@ -1,7 +1,7 @@
 From fed3598195de553980b498e4a1205bf7c4dbae2b Mon Sep 17 00:00:00 2001
 From: anoopsjohn <anoopsamjohn@gmail.com>
 Date: Thu, 25 Sep 2014 09:47:57 +0530
-Subject: [PATCH 041/194] HBASE-12030 Wrong compaction report and assert when
+Subject: [PATCH 041/195] HBASE-12030 Wrong compaction report and assert when
  MOB compaction switches to minor.
 
 Conflicts:

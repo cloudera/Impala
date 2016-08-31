@@ -1,7 +1,7 @@
 From 2616f6da7fc9c29cfd032ee123c33417ed49e7ce Mon Sep 17 00:00:00 2001
 From: Apekshit <apeksharma@gmail.com>
 Date: Tue, 19 Apr 2016 16:59:19 -0700
-Subject: [PATCH 140/194] HBASE-15673 Fix latency metrics for multiGet. - Also
+Subject: [PATCH 140/195] HBASE-15673 Fix latency metrics for multiGet. - Also
  fixes some stuff in help text. (Apekshit)
 
 Change-Id: I95cfa2be74605efab0368417d59c50b94af0facb

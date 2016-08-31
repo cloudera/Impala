@@ -1,7 +1,7 @@
 From 4de69af8d596ccbb05d3f102a458508eed47c642 Mon Sep 17 00:00:00 2001
 From: Srikanth Srungarapu <ssrungarapu@cloudera.com>
 Date: Thu, 12 Mar 2015 19:28:08 -0700
-Subject: [PATCH 022/194] CLOUDERA-BUILD Bringing back the old methods removed
+Subject: [PATCH 022/195] CLOUDERA-BUILD Bringing back the old methods removed
  by HBASE-12363
 
 Change-Id: I30b8d433aa01ed138bc36bcfc970da5e179e7c36

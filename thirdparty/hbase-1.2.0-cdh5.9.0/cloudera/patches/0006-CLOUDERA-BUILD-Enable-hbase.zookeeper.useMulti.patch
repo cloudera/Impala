@@ -1,7 +1,7 @@
 From 2fe9a0d75737a5c424929e03622753f64e2585fd Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@cloudera.com>
 Date: Fri, 3 Oct 2014 16:54:26 -0700
-Subject: [PATCH 006/194] CLOUDERA-BUILD Enable hbase.zookeeper.useMulti
+Subject: [PATCH 006/195] CLOUDERA-BUILD Enable hbase.zookeeper.useMulti
 
 Ref: CDH-22176
 Reason: Backwards compatibility

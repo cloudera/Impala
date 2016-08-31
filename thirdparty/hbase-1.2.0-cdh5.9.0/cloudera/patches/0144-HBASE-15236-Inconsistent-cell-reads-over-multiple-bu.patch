@@ -1,7 +1,7 @@
 From 98538aebb0b6e4e441cd67928e7a94bbe567865e Mon Sep 17 00:00:00 2001
 From: Apekshit <apeksharma@gmail.com>
 Date: Tue, 23 Feb 2016 00:31:18 -0800
-Subject: [PATCH 144/194] HBASE-15236 Inconsistent cell reads over multiple
+Subject: [PATCH 144/195] HBASE-15236 Inconsistent cell reads over multiple
  bulk-loaded HFiles. In KeyValueHeap, if two cells
  are same i.e. have same key and timestamp, then
  instead of directly using seq id to determine newer

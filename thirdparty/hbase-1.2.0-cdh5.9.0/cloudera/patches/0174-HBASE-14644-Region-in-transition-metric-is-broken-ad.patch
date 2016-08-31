@@ -1,7 +1,7 @@
 From 1d2bf3c486a170e30a6691eef633d0b8260bf5a8 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Mon, 20 Jun 2016 10:42:32 -0700
-Subject: [PATCH 174/194] HBASE-14644 Region in transition metric is broken --
+Subject: [PATCH 174/195] HBASE-14644 Region in transition metric is broken --
  addendum (Huaxiang Sun)
 
 Reason: Bug

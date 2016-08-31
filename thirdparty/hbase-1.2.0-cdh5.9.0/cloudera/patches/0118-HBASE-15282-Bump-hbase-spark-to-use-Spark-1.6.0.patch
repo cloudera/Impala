@@ -1,7 +1,7 @@
 From bac489acc23c9cdf59e66e993ddffeef100ca796 Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Thu, 18 Feb 2016 17:31:42 -0800
-Subject: [PATCH 118/194] HBASE-15282 Bump hbase-spark to use Spark 1.6.0
+Subject: [PATCH 118/195] HBASE-15282 Bump hbase-spark to use Spark 1.6.0
 
 Conflicts:
 	hbase-spark/pom.xml

@@ -1,7 +1,7 @@
 From effd1054b5f9cae3c76d61b1b2760072a7c95f13 Mon Sep 17 00:00:00 2001
 From: zhangduo <zhangduo@apache.org>
 Date: Mon, 4 Jul 2016 20:05:57 +0800
-Subject: [PATCH 189/194] HBASE-16135 PeerClusterZnode under rs of removed
+Subject: [PATCH 189/195] HBASE-16135 PeerClusterZnode under rs of removed
  peer may never be deleted
 
 Change-Id: I21838dee382cf39f6d12ae986840898115c2039a

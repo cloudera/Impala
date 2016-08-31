@@ -1,7 +1,7 @@
 From a881067311215edebb343462d590f4c6875ee084 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Tue, 19 Jan 2016 13:08:24 -0800
-Subject: [PATCH 097/194] HBASE-14865 Support passing multiple QOPs to
+Subject: [PATCH 097/195] HBASE-14865 Support passing multiple QOPs to
  SaslClient/Server via hbase.rpc.protection (Appy)
 
 Reason: Customer support

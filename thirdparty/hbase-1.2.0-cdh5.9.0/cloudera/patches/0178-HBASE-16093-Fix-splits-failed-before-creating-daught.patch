@@ -1,7 +1,7 @@
 From 8d85aff8e420b5beac1015eff66826f6025dff70 Mon Sep 17 00:00:00 2001
 From: Elliott Clark <eclark@apache.org>
 Date: Thu, 23 Jun 2016 11:27:44 -0700
-Subject: [PATCH 178/194] HBASE-16093 Fix splits failed before creating
+Subject: [PATCH 178/195] HBASE-16093 Fix splits failed before creating
  daughter regions leave meta inconsistent
 
 (cherry picked from commit deea804ae84f4783837bc8498990562147d72cb0)

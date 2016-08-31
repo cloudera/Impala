@@ -1,7 +1,7 @@
 From d4ee06d4e0e93bd8d748b0da89d87c0915e6956b Mon Sep 17 00:00:00 2001
 From: Samir Ahmic <samir@personal.com>
 Date: Wed, 24 Feb 2016 16:05:24 +0100
-Subject: [PATCH 124/194] HBASE-15144 Procedure v2 - Web UI displaying Store
+Subject: [PATCH 124/195] HBASE-15144 Procedure v2 - Web UI displaying Store
  state
 
 Change-Id: Ia0ecc9e6a28406a41767b77880363a5b8cc3eb09

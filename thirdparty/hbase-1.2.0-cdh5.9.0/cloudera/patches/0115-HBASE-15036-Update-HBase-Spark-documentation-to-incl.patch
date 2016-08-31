@@ -1,7 +1,7 @@
 From a12e7983c679f5149f8794538eb5095e3e517273 Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Tue, 26 Jan 2016 11:02:48 -0800
-Subject: [PATCH 115/194] HBASE-15036 Update HBase Spark documentation to
+Subject: [PATCH 115/195] HBASE-15036 Update HBase Spark documentation to
  include bulk load with thin records (Ted Malaska)
 
 Change-Id: I8658f30e769f07e3ae6ff33b82c9a6f01c0603b1

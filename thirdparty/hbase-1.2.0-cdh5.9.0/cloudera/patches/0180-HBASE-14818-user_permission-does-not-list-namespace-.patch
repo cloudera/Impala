@@ -1,7 +1,7 @@
 From 8f86658ddc2bbec171c3cac4cfb6753eb88f78b3 Mon Sep 17 00:00:00 2001
 From: Jerry He <jerryjch@apache.org>
 Date: Sat, 21 May 2016 20:32:20 -0700
-Subject: [PATCH 180/194] HBASE-14818 user_permission does not list namespace
+Subject: [PATCH 180/195] HBASE-14818 user_permission does not list namespace
  permissions (li xiang)
 
 Reason: Bug

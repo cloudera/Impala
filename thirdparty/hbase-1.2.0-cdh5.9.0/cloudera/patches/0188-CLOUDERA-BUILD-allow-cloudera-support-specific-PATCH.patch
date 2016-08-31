@@ -1,7 +1,7 @@
 From 004cbebfacf2c178007fc239ba7f7e4b231a713f Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@cloudera.com>
 Date: Fri, 5 Aug 2016 16:19:20 -0500
-Subject: [PATCH 188/194] CLOUDERA-BUILD allow cloudera support specific PATCH
+Subject: [PATCH 188/195] CLOUDERA-BUILD allow cloudera support specific PATCH
  files past the rat plugin.
 
 Change-Id: I9f6084aa8659fe4376ff8cdc8bedf0141da11678

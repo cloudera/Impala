@@ -1,7 +1,7 @@
 From b894033706d98b82f7771be354903af16afc01c0 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Tue, 23 Feb 2016 16:52:13 -0800
-Subject: [PATCH 120/194] HBASE-15184 SparkSQL Scan operation doesn't work on
+Subject: [PATCH 120/195] HBASE-15184 SparkSQL Scan operation doesn't work on
  kerberos cluster (Ted Malaska)
 
 Change-Id: If696acdbed7b78d622f1f7f171056c08ba4fbceb

@@ -1,7 +1,7 @@
 From 6f89246d3179b70c554e7c24314e8e1132f8940a Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Thu, 5 Mar 2015 11:48:09 -0800
-Subject: [PATCH 072/194] HBASE-13151 IllegalArgumentException in compaction
+Subject: [PATCH 072/195] HBASE-13151 IllegalArgumentException in compaction
  when table has a namespace (Jingcheng Du)
 
 Conflicts:

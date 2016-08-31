@@ -1,7 +1,7 @@
 From 2ae0b28dd3994560891a0e091b82fa0fcd0acf1e Mon Sep 17 00:00:00 2001
 From: Huaxiang Sun <hsun@cloudera.com>
 Date: Fri, 4 Mar 2016 19:55:43 -0800
-Subject: [PATCH 126/194] CLOUDERA-BUILD Make sure locationRegionInMeta()
+Subject: [PATCH 126/195] CLOUDERA-BUILD Make sure locationRegionInMeta()
  returns locations with the region for the input
  replicaId exists
 

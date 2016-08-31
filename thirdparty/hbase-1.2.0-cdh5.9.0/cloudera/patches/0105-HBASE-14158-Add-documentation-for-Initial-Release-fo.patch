@@ -1,7 +1,7 @@
 From f9fa8e515d906ee4e66c89a3d6fa728e22579ba5 Mon Sep 17 00:00:00 2001
 From: ted malaska <ted.malaska@cloudera.com>
 Date: Mon, 12 Oct 2015 11:23:16 -0400
-Subject: [PATCH 105/194] HBASE-14158 Add documentation for Initial Release
+Subject: [PATCH 105/195] HBASE-14158 Add documentation for Initial Release
  for HBase-Spark Module integration
 
 Signed-off-by: Misty Stanley-Jones <mstanleyjones@cloudera.com>

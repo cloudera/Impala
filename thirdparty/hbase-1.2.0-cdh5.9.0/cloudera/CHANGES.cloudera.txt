@@ -1,3 +1,16 @@
+commit 71b6a8a477df84f11f291eb0e95569b30fea3bb9
+Author: Jerry He <jerryjch@apache.org>
+Date:   Tue Aug 2 11:40:47 2016 -0700
+
+    HBASE-16284 Unauthorized client can shutdown the cluster (Deokwoo Han)
+    
+    (cherry picked from commit db3b27f6b5b79fe147754d8c51c0303f1967f549)
+    
+    Change-Id: I585839cd3e50362834dcb33d3447b706061ffc50
+    Reason: Security
+    Author: Deokwoo Han
+    Ref: CDH-43411
+
 commit 523753f53f21b4c26ad2687c818636fd70883f12
 Author: Esteban Gutierrez <esteban@apache.org>
 Date:   Mon Aug 22 19:53:29 2016 -0700

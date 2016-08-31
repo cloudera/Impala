@@ -1,7 +1,7 @@
 From 4719ff7551a0b74ee4b62c5d1cca6480b0e3e8f4 Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Thu, 17 Dec 2015 14:19:36 -0800
-Subject: [PATCH 110/194] HBASE-14991 Fix the '-feature' warning in scala
+Subject: [PATCH 110/195] HBASE-14991 Fix the '-feature' warning in scala
  build (Zhan Zhang)
 
 Change-Id: Ia412fd123ac9b7b5c263a3bb968f71461564c688

@@ -1,7 +1,7 @@
 From 3477902596e82719cc8d04d75ecc486b68ea7b28 Mon Sep 17 00:00:00 2001
 From: Jerry He <jerryjch@apache.org>
 Date: Mon, 8 Feb 2016 14:13:46 -0800
-Subject: [PATCH 114/194] HBASE-15201 Add hbase-spark to hbase assembly
+Subject: [PATCH 114/195] HBASE-15201 Add hbase-spark to hbase assembly
 
 Change-Id: I01a343a20f37bed07987e3de96e96d3a2c06fcd4
 Reason: New Feature

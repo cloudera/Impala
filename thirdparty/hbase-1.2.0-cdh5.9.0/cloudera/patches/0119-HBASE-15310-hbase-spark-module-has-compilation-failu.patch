@@ -1,7 +1,7 @@
 From 23ed388215e6ff2ed53974ded60f2a7165affe21 Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jon@cloudera.com>
 Date: Wed, 24 Feb 2016 10:20:59 -0800
-Subject: [PATCH 119/194] HBASE-15310 hbase-spark module has compilation
+Subject: [PATCH 119/195] HBASE-15310 hbase-spark module has compilation
  failures with clover profile
 
 Change-Id: Ib127a4e6de1690130c70b24f99acedd4093aa8f4

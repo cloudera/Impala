@@ -1,7 +1,7 @@
 From 93098448902fdcdfa82e91838707d2a2cff5fc6e Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@cloudera.com>
 Date: Mon, 7 Sep 2015 09:51:47 -0500
-Subject: [PATCH 102/194] HBASE-14377 JavaHBaseContextSuite isn't being run.
+Subject: [PATCH 102/195] HBASE-14377 JavaHBaseContextSuite isn't being run.
 
 Change-Id: I742f14f4a0bab7ab57ab8a3902221f6a7d1216c3
 Reason: New Feature

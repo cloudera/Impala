@@ -1,7 +1,7 @@
 From 85af75cb2caf9578be8be653012a978c9c07e05d Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Sun, 13 Dec 2015 18:26:54 -0800
-Subject: [PATCH 109/194] HBASE-14795 Enhance the spark-hbase scan operations
+Subject: [PATCH 109/195] HBASE-14795 Enhance the spark-hbase scan operations
  (Zhan Zhang)
 
 Change-Id: Ia2fb2d5edbde6cad53610eaacb0f2eb83d5db9c6

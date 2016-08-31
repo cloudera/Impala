@@ -1,7 +1,7 @@
 From 0cf993c18f9755a939754a384c99558d99790a7e Mon Sep 17 00:00:00 2001
 From: Ramkrishna <ramkrishna.s.vasudevan@intel.com>
 Date: Fri, 31 Oct 2014 15:00:17 +0530
-Subject: [PATCH 048/194] HBASE-12391 Correct a typo in the mob metrics
+Subject: [PATCH 048/195] HBASE-12391 Correct a typo in the mob metrics
  (Jingcheng Du)
 
 Change-Id: I57f7d5467831009f0cf54537fdfcb2754e65c06c

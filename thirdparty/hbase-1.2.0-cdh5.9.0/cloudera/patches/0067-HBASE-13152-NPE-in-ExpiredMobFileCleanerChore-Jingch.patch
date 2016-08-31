@@ -1,7 +1,7 @@
 From 48d523f250b8ab7911e03cba0d327edbcb874008 Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Wed, 4 Mar 2015 07:18:52 -0800
-Subject: [PATCH 067/194] HBASE-13152 NPE in ExpiredMobFileCleanerChore
+Subject: [PATCH 067/195] HBASE-13152 NPE in ExpiredMobFileCleanerChore
  (Jingcheng Du)
 
 Reason: Mob Testing

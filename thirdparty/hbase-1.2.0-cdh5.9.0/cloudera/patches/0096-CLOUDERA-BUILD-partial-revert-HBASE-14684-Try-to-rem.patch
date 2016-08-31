@@ -1,7 +1,7 @@
 From 1f5ee6a143266507de02eb998cdc82e38fc428f6 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Mon, 11 Jan 2016 16:59:07 -0800
-Subject: [PATCH 096/194] CLOUDERA-BUILD partial revert HBASE-14684 Try to
+Subject: [PATCH 096/195] CLOUDERA-BUILD partial revert HBASE-14684 Try to
  remove all MiniMapReduceCluster in unit tests
 
 ---

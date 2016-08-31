@@ -1,7 +1,7 @@
 From a329dc80aee9fbbe6da589f87345e04b7b552e25 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Thu, 28 Jan 2016 10:13:42 -0800
-Subject: [PATCH 123/194] HBASE-15142 Procedure v2 - Basic WebUI listing the
+Subject: [PATCH 123/195] HBASE-15142 Procedure v2 - Basic WebUI listing the
  procedures
 
 Change-Id: Ied30f5c5186f13b71a289986dd4c96133ead4877

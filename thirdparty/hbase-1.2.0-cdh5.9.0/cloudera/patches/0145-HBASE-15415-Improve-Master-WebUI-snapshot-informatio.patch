@@ -1,7 +1,7 @@
 From 16828876b6e202c90d4519e2957a78a09456cc3f Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Mon, 9 May 2016 20:18:13 -0700
-Subject: [PATCH 145/194] HBASE-15415 Improve Master WebUI snapshot
+Subject: [PATCH 145/195] HBASE-15415 Improve Master WebUI snapshot
  information (huaxiang sun)
 
 Reason: Improvement

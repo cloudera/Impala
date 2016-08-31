@@ -1,7 +1,7 @@
 From e232e0cea194707b05c5afc44993d7f38f7dce6b Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Mon, 20 Apr 2015 08:41:14 +0100
-Subject: [PATCH 026/194] CLOUDERA-BUILD Add back old HFileLink methods
+Subject: [PATCH 026/195] CLOUDERA-BUILD Add back old HFileLink methods
 
 Reason: Compatibility
 Author: Matteo Bertozzi

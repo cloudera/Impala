@@ -1,7 +1,7 @@
 From 273bb4e34acb9654fd851eb5a4b64c185bd24fc3 Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@cloudera.com>
 Date: Mon, 27 Jul 2015 22:14:16 -0700
-Subject: [PATCH 029/194] CLOUDERA-BUILD Bumping HTrace version to
+Subject: [PATCH 029/195] CLOUDERA-BUILD Bumping HTrace version to
  3.2.0-incubating
 
 Author: Esteban Gutierrez

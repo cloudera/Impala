@@ -1,7 +1,7 @@
 From 8b00d2d91e8538f2294f39eca2ed8692d6f837b5 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Fri, 16 Oct 2015 11:22:07 -0700
-Subject: [PATCH 106/194] HBASE-14406 The dataframe datasource filter is
+Subject: [PATCH 106/195] HBASE-14406 The dataframe datasource filter is
  wrong, and will result in data loss or unexpected
  behavior (Ted Malaska)
 

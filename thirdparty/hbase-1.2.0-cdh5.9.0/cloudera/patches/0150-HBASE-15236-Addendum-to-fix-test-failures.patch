@@ -1,7 +1,7 @@
 From 26cfccf027bc037bc065881473c703a761659d07 Mon Sep 17 00:00:00 2001
 From: Apekshit <apeksharma@gmail.com>
 Date: Mon, 16 May 2016 16:04:07 -0700
-Subject: [PATCH 150/194] HBASE-15236 Addendum to fix test failures.
+Subject: [PATCH 150/195] HBASE-15236 Addendum to fix test failures.
 
 Change-Id: Id11fd523269b90e58de7fed199a2cc193d59616b
 Reason: Bug

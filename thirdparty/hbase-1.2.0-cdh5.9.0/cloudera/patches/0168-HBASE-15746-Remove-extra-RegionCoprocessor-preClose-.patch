@@ -1,7 +1,7 @@
 From cc0ce6672fc38b8298340d48b8770545f3bf7078 Mon Sep 17 00:00:00 2001
 From: Stephen Yuan Jiang <syuanjiangdev@gmail.com>
 Date: Tue, 14 Jun 2016 13:30:41 -0700
-Subject: [PATCH 168/194] HBASE-15746 Remove extra RegionCoprocessor
+Subject: [PATCH 168/195] HBASE-15746 Remove extra RegionCoprocessor
  preClose() in RSRpcServices#closeRegion (Stephen
  Yuan Jiang)
 
