@@ -1,7 +1,7 @@
 From 602cd5452d8f32fd5f0848c27eb2c5a7f3286f8d Mon Sep 17 00:00:00 2001
 From: anoopsjohn <anoopsamjohn@gmail.com>
 Date: Sat, 24 Jan 2015 11:37:01 +0530
-Subject: [PATCH 061/195] HBASE-12820 Use table lock instead of
+Subject: [PATCH 061/204] HBASE-12820 Use table lock instead of
  MobZookeeper.(Jingcheng Du)
 
 Conflicts:

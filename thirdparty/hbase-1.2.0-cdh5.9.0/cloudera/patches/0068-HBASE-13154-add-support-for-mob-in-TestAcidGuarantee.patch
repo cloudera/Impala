@@ -1,7 +1,7 @@
 From f762fbf0f9feac8a1aee0956dd522207d96274af Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Tue, 3 Mar 2015 09:20:03 -0800
-Subject: [PATCH 068/195] HBASE-13154 add support for mob in
+Subject: [PATCH 068/204] HBASE-13154 add support for mob in
  TestAcidGuarantees and
  IntegrationTestAcidGuarantees
 

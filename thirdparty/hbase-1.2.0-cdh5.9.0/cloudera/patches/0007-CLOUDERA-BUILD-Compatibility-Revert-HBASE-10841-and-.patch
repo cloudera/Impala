@@ -1,7 +1,7 @@
 From d65f6ca2223d30462ca5eaa0bcb7571ee9bca30b Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Mon, 15 Dec 2014 18:24:49 +0000
-Subject: [PATCH 007/195] CLOUDERA-BUILD Compatibility Revert HBASE-10841 and
+Subject: [PATCH 007/204] CLOUDERA-BUILD Compatibility Revert HBASE-10841 and
  HBASE-12046 HTD/HCD setters should be builder-style
 
 Change-Id: If99fd82becd80d7d7585fb4e97487c65b0ad7c7d

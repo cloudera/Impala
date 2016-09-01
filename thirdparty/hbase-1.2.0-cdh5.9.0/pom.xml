@@ -49,6 +49,17 @@
   </description>
   <url>http://hbase.apache.org</url>
   <inceptionYear>2007</inceptionYear>
+  <!-- Set here so we can consistently use the correct name, even on branches with
+       an ASF parent pom older than v15. Also uses the url from v18.
+    -->
+  <licenses>
+    <license>
+      <name>Apache License, Version 2.0</name>
+      <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
+
   <modules>
     <module>hbase-resource-bundle</module>
     <module>hbase-server</module>
@@ -798,7 +809,6 @@
               <exclude>src/main/site/resources/repo/**</exclude>
               <exclude>**/dependency-reduced-pom.xml</exclude>
               <exclude>**/rat.txt</exclude>
-              <exclude>**/ESAPI.properties</exclude>
               <exclude>**/cloudera/**</exclude>
               <exclude>**/debian/**</exclude>
               <exclude>PATCH.txt</exclude>
@@ -860,12 +870,18 @@
           </dependency>
         </dependencies>
         <!-- version set by parent -->
-        <configuration>
-          <rules>
-            <!-- The earliest maven version we verify builds for via ASF Jenkins -->
-            <requireMavenVersion>
-              <version>[${maven.min.version},)</version>
-              <message>Maven is out of date.
+        <executions>
+          <execution>
+            <id>min-maven-min-java-banned-xerces</id>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <!-- The earliest maven version we verify builds for via ASF Jenkins -->
+                <requireMavenVersion>
+                  <version>[${maven.min.version},)</version>
+                  <message>Maven is out of date.
   HBase requires at least version ${maven.min.version} of Maven to properly build from source.
   You appear to be using an older version. You can use either "mvn -version" or
   "mvn enforcer:display-info" to verify what version is active.
@@ -880,37 +896,32 @@
   You appear to be using an older version. You can use either "mvn -version" or
   "mvn enforcer:display-info" to verify what version is active.
   See the reference guide on building for more information: http://hbase.apache.org/book.html#build
-              </message>
-            </requireJavaVersion>
-          </rules>
-        </configuration>
-        <executions>
-          <execution>
-            <id>enforce</id>
-            <goals>
-              <goal>enforce</goal>
-            </goals>
+                  </message>
+                </requireJavaVersion>
+                <bannedDependencies>
+                  <excludes>
+                    <exclude>xerces:xercesImpl</exclude>
+                  </excludes>
+                  <message>We avoid adding our own Xerces jars to the classpath, see HBASE-16340.</message>
+                </bannedDependencies>
+              </rules>
+            </configuration>
           </execution>
           <execution>
-            <id>clean</id>
+            <id>banned-jsr305</id>
             <goals>
               <goal>enforce</goal>
             </goals>
-            <phase>pre-clean</phase>
-          </execution>
-          <execution>
-            <id>default</id>
-            <goals>
-              <goal>enforce</goal>
-            </goals>
-            <phase>validate</phase>
-          </execution>
-          <execution>
-            <id>site</id>
-            <goals>
-              <goal>enforce</goal>
-            </goals>
-            <phase>pre-site</phase>
+            <configuration>
+              <rules>
+                <bannedDependencies>
+                  <excludes>
+                    <exclude>com.google.code.findbugs:jsr305</exclude>
+                  </excludes>
+                  <message>We don't allow the JSR305 jar from the Findbugs project, see HBASE-16321.</message>
+                </bannedDependencies>
+              </rules>
+            </configuration>
           </execution>
         </executions>
       </plugin>
@@ -1252,7 +1263,6 @@
     <httpclient.version>3.1</httpclient.version>
     <metrics-core.version>2.2.0</metrics-core.version>
     <guava.version>12.0.1</guava.version>
-    <jsr305.version>1.3.9</jsr305.version>
     <jackson.version>${cdh.jackson.version}</jackson.version>
     <jasper.version>5.5.23</jasper.version>
     <jaxb-api.version>2.1</jaxb-api.version>
@@ -1500,6 +1510,12 @@
       </dependency>
       <!-- General dependencies -->
       <dependency>
+        <groupId>com.github.stephenc.findbugs</groupId>
+        <artifactId>findbugs-annotations</artifactId>
+        <version>${findbugs-annotations}</version>
+      </dependency>
+      <!-- General dependencies -->
+      <dependency>
         <groupId>org.codehaus.jettison</groupId>
         <artifactId>jettison</artifactId>
         <version>${jettison.version}</version>
@@ -1525,11 +1541,12 @@
         <groupId>com.google.guava</groupId>
         <artifactId>guava</artifactId>
         <version>${guava.version}</version>
-      </dependency>
-      <dependency>
-         <groupId>com.google.code.findbugs</groupId>
-         <artifactId>jsr305</artifactId>
-         <version>${jsr305.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>com.google.code.findbugs</groupId>
+            <artifactId>jsr305</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>commons-collections</groupId>
@@ -1857,7 +1874,6 @@
     <dependency>
       <groupId>com.github.stephenc.findbugs</groupId>
       <artifactId>findbugs-annotations</artifactId>
-      <version>${findbugs-annotations}</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
@@ -2112,6 +2128,10 @@
                 <groupId>stax</groupId>
                 <artifactId>stax-api</artifactId>
               </exclusion>
+              <exclusion>
+                <groupId>xerces</groupId>
+                <artifactId>xercesImpl</artifactId>
+              </exclusion>
             </exclusions>
             <version>${hadoop-two.version}</version>
           </dependency>
@@ -2137,6 +2157,10 @@
               <exclusion>
                 <groupId>stax</groupId>
                 <artifactId>stax-api</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>xerces</groupId>
+                <artifactId>xercesImpl</artifactId>
               </exclusion>
             </exclusions>
           </dependency>
@@ -2165,6 +2189,10 @@
               <exclusion>
                 <groupId>io.netty</groupId>
                 <artifactId>netty</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>com.google.code.findbugs</groupId>
+                <artifactId>jsr305</artifactId>
               </exclusion>
             </exclusions>
           </dependency>
@@ -2195,6 +2223,10 @@
               <exclusion>
                 <groupId>io.netty</groupId>
                 <artifactId>netty</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>com.google.code.findbugs</groupId>
+                <artifactId>jsr305</artifactId>
               </exclusion>
             </exclusions>
           </dependency>
@@ -2255,6 +2287,10 @@
                 <groupId>stax</groupId>
                 <artifactId>stax-api</artifactId>
               </exclusion>
+              <exclusion>
+                <groupId>xerces</groupId>
+                <artifactId>xercesImpl</artifactId>
+              </exclusion>
             </exclusions>
           </dependency>
           <dependency>
@@ -2279,6 +2315,10 @@
                 <groupId>stax</groupId>
                 <artifactId>stax-api</artifactId>
               </exclusion>
+              <exclusion>
+                <groupId>xerces</groupId>
+                <artifactId>xercesImpl</artifactId>
+              </exclusion>
             </exclusions>
           </dependency>
           <dependency>
@@ -2290,6 +2330,28 @@
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>
             <version>${hadoop-two.yarn.version}</version>
+            <exclusions>
+              <exclusion>
+                <groupId>javax.servlet.jsp</groupId>
+                <artifactId>jsp-api</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>javax.servlet</groupId>
+                <artifactId>servlet-api</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>stax</groupId>
+                <artifactId>stax-api</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>io.netty</groupId>
+                <artifactId>netty</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>com.google.code.findbugs</groupId>
+                <artifactId>jsr305</artifactId>
+              </exclusion>
+            </exclusions>
           </dependency>
           <dependency>
             <groupId>org.apache.hadoop</groupId>
@@ -2307,6 +2369,28 @@
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-minicluster</artifactId>
             <version>${hadoop-two.mr1.version}</version>
+            <exclusions>
+              <exclusion>
+                <groupId>javax.servlet.jsp</groupId>
+                <artifactId>jsp-api</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>javax.servlet</groupId>
+                <artifactId>servlet-api</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>stax</groupId>
+                <artifactId>stax-api</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>io.netty</groupId>
+                <artifactId>netty</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>com.google.code.findbugs</groupId>
+                <artifactId>jsr305</artifactId>
+              </exclusion>
+            </exclusions>
           </dependency>
           <dependency>
             <groupId>org.apache.hadoop</groupId>
@@ -2392,6 +2476,10 @@
                <groupId>stax</groupId>
                <artifactId>stax-api</artifactId>
              </exclusion>
+             <exclusion>
+               <groupId>xerces</groupId>
+               <artifactId>xercesImpl</artifactId>
+             </exclusion>
            </exclusions>
            <version>${hadoop-three.version}</version>
          </dependency>
@@ -2413,6 +2501,10 @@
              <exclusion>
                <groupId>stax</groupId>
                <artifactId>stax-api</artifactId>
+             </exclusion>
+             <exclusion>
+               <groupId>xerces</groupId>
+               <artifactId>xercesImpl</artifactId>
              </exclusion>
            </exclusions>
          </dependency>
@@ -2441,6 +2533,10 @@
              <exclusion>
                <groupId>io.netty</groupId>
                <artifactId>netty</artifactId>
+             </exclusion>
+             <exclusion>
+               <groupId>com.google.code.findbugs</groupId>
+               <artifactId>jsr305</artifactId>
              </exclusion>
            </exclusions>
          </dependency>
@@ -2476,6 +2572,10 @@
              <exclusion>
                <groupId>io.netty</groupId>
                <artifactId>netty</artifactId>
+             </exclusion>
+             <exclusion>
+               <groupId>com.google.code.findbugs</groupId>
+               <artifactId>jsr305</artifactId>
              </exclusion>
            </exclusions>
          </dependency>

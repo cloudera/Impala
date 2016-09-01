@@ -1,7 +1,7 @@
 From 6aa3c9138f2e8ad94da7e72ce69d5e4468978f20 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Fri, 15 Apr 2016 08:28:39 -0700
-Subject: [PATCH 138/195] HBASE-15622 Superusers does not consider the keytab
+Subject: [PATCH 138/204] HBASE-15622 Superusers does not consider the keytab
  credentials
 
 Reason: Bug

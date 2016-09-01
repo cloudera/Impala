@@ -1,7 +1,7 @@
 From da1979e3033590f5fc369558f39d5327c3000305 Mon Sep 17 00:00:00 2001
 From: anoopsjohn <anoopsamjohn@gmail.com>
 Date: Sat, 6 Sep 2014 10:06:37 +0530
-Subject: [PATCH 034/195] HBASE-11647 MOB integration testing. (Jingcheng Du)
+Subject: [PATCH 034/204] HBASE-11647 MOB integration testing. (Jingcheng Du)
  HBASE-11647 MOB integration testing. -
  addendum(Jingcheng Du) HBASE-11647 addendum to fix
  compile issues.

@@ -1,7 +1,7 @@
 From 741d54bc968a24f01392e3a07872df967924c2d8 Mon Sep 17 00:00:00 2001
 From: anoopsjohn <anoopsamjohn@gmail.com>
 Date: Sun, 14 Sep 2014 14:21:00 +0530
-Subject: [PATCH 035/195] HBASE-11968 If MOB is enabled, it should make sure
+Subject: [PATCH 035/204] HBASE-11968 If MOB is enabled, it should make sure
  hfile v3 is being used.
 
 Change-Id: Iae043e2f9cd85387b55e71c00f9d02a3f883f928

@@ -1,7 +1,7 @@
 From ed5ce7e9db8c6ce9da10b985f7b435d0babb80e5 Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Thu, 5 Mar 2015 09:59:59 -0800
-Subject: [PATCH 069/195] HBASE-12332 [mob] improve how we resolve mobfiles in
+Subject: [PATCH 069/204] HBASE-12332 [mob] improve how we resolve mobfiles in
  reads (Jingcheng Du and Jiajia Li)
 
 Reason: Mob Testing

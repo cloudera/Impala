@@ -1,7 +1,7 @@
 From c099b618628442a2fa78091289362ff4d0e5f3c9 Mon Sep 17 00:00:00 2001
 From: Andrew Purtell <apurtell@apache.org>
 Date: Fri, 15 Apr 2016 17:22:02 -0700
-Subject: [PATCH 155/195] HBASE-15614 Report metrics from JvmPauseMonitor
+Subject: [PATCH 155/204] HBASE-15614 Report metrics from JvmPauseMonitor
 
 Reason: Improvement
 Ref: CDH-40064

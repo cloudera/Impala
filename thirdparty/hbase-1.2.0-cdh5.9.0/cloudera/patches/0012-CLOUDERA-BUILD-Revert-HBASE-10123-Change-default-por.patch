@@ -1,7 +1,7 @@
 From 989020a5f72882371d74ddd5d483462d483ed7d9 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Thu, 18 Dec 2014 15:36:30 +0000
-Subject: [PATCH 012/195] CLOUDERA-BUILD Revert HBASE-10123 Change default
+Subject: [PATCH 012/204] CLOUDERA-BUILD Revert HBASE-10123 Change default
  ports; move them out of linux ephemeral port range
 
 ---

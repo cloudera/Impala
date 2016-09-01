@@ -1,7 +1,7 @@
 From 5f5f2f3eadcd2a766f94401f414d70515e59a075 Mon Sep 17 00:00:00 2001
 From: Huaxiang Sun <hsun@cloudera.com>
 Date: Fri, 8 Jan 2016 17:32:08 -0800
-Subject: [PATCH 088/195] HBASE-8329 Limit compaction speed (addendum) Reason:
+Subject: [PATCH 088/204] HBASE-8329 Limit compaction speed (addendum) Reason:
  New Feature Author: Duo Zhang Ref: CDH-35507
 
 Change-Id: I510fece5b57471db902a3ef02c81b7a04fcc50f6

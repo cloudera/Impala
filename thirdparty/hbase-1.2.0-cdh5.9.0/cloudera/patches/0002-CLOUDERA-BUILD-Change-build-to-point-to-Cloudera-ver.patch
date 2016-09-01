@@ -1,7 +1,7 @@
 From 22ce56fa756d074c6b3ca7a2a713470bfc99b39f Mon Sep 17 00:00:00 2001
 From: Huaxiang Sun <hsun@cloudera.com>
 Date: Wed, 2 Dec 2015 16:27:47 -0800
-Subject: [PATCH 002/195] CLOUDERA-BUILD Change build to point to Cloudera
+Subject: [PATCH 002/204] CLOUDERA-BUILD Change build to point to Cloudera
  versions and repositories.
 
 Changes in hbase-resource-bundle/src/main/resources/supplemental-models.xml

@@ -1,7 +1,7 @@
 From 690179c687f2cba785e1b46aa92385c768f1e5e2 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Fri, 18 Mar 2016 05:38:05 -0700
-Subject: [PATCH 139/195] HBASE-15456
+Subject: [PATCH 139/204] HBASE-15456
  CreateTableProcedure/ModifyTableProcedure needs to
  fail when there is no family in table descriptor
  (huaxiang sun)

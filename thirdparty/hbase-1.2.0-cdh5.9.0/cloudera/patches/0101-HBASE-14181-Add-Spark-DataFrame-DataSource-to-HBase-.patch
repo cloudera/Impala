@@ -1,7 +1,7 @@
 From 51d83927ef22564bd75c8294a18bbc0a2104398d Mon Sep 17 00:00:00 2001
 From: Ted Malaska <ted.malaska@cloudera.com>
 Date: Mon, 7 Sep 2015 09:19:52 -0500
-Subject: [PATCH 101/195] HBASE-14181 Add Spark DataFrame DataSource to
+Subject: [PATCH 101/204] HBASE-14181 Add Spark DataFrame DataSource to
  HBase-Spark Module
 
 Signed-off-by: Sean Busbey <busbey@cloudera.com>

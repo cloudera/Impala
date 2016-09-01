@@ -1,7 +1,7 @@
 From 75491690b7da8cf863bf04bee99580a4a2c2ebec Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Sat, 19 Dec 2015 15:14:58 -0800
-Subject: [PATCH 111/195] HBASE-14849 Add option to set block cache to false
+Subject: [PATCH 111/204] HBASE-14849 Add option to set block cache to false
  on SparkSQL executions (Zhan Zhang)
 
 Change-Id: Ia11dcd61f027379ccef68b26665774ce9baf87ea

@@ -1,7 +1,7 @@
 From fe5e77d6568427697dcc70bd9f8af36284ca5934 Mon Sep 17 00:00:00 2001
 From: Huaxiang Sun <hsun@cloudera.com>
 Date: Fri, 8 Jan 2016 17:36:34 -0800
-Subject: [PATCH 085/195] HBASE-13109 Make better SEEK vs SKIP decisions
+Subject: [PATCH 085/204] HBASE-13109 Make better SEEK vs SKIP decisions
  during scanning. (addendum)
 
 Reason: Product Requirement (Compatibility)

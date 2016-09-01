@@ -1,7 +1,7 @@
 From fe28fe84928038d0b96e67a834699058b5924aba Mon Sep 17 00:00:00 2001
 From: Sean Mackrory <mackrorysd@apache.org>
 Date: Wed, 25 May 2016 07:20:14 -0600
-Subject: [PATCH 175/195] HBASE-15891. Closeable resources potentially not
+Subject: [PATCH 175/204] HBASE-15891. Closeable resources potentially not
  getting closed if exception is thrown.
 
 Reason: Bug

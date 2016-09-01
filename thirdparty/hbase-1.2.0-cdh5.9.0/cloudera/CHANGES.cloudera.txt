@@ -1,3 +1,166 @@
+commit 283b39f56a362314185e6edbb455a4f4ed09b880
+Author: Harsh J <harsh@cloudera.com>
+Date:   Fri Apr 1 15:20:47 2016 +0530
+
+    HBASE-15396 Enhance mapreduce.TableSplit to add encoded region name
+    
+    (cherry picked from commit 7d3a89ce8e07d9fd1c31b4bd2324b71dd10ecef5)
+    
+    Signed-off-by: Sean Busbey <busbey@apache.org>
+    
+    Change-Id: Id22c6bf2724deecb06e1787ad32ed7862de1332c
+    Reason: Improvement
+    Author: Harsh J
+    Ref: CDH-38072
+    (cherry picked from commit 60070c308b9cbb7e709e02f86642e4e7c45d2152)
+
+commit 39db59200e214d8b683021b5fed2fa5361e9590b
+Author: Yu Li <liyu@apache.org>
+Date:   Wed Jul 13 09:33:24 2016 +0800
+
+    HBASE-16195 Should not add chunk into chunkQueue if not using chunk pool in HeapMemStoreLAB
+    
+    (cherry picked from commit ab239afb67c8c5d7a3c359ec17d278b5f579f4a7)
+    
+    Change-Id: Iaddb36957a47ad69b40df24c448604b151245977
+    Reason: Supportability
+    Author: Yu Li
+    Ref: CDH-42164
+
+commit 5ff28b7d0ce4a3be17937bf994d9f42967f9cc4b
+Author: Yu Li <liyu@apache.org>
+Date:   Sun Jul 10 14:09:02 2016 +0800
+
+    HBASE-16194 Should count in MSLAB chunk allocation into heap size change when adding duplicate cells
+    
+    (cherry picked from commit b96b042043d96cbb348b538a7abc9d44157948b9)
+    
+    Change-Id: I3950120bb0f26ad2e7fb4b03ebd7db0d79a51897
+    Reason: Supportability
+    Author: Yu Li
+    Ref: CDH-42164
+
+commit d431c65132107be306bb4791eca6cadb2f38ba3b
+Author: Sean Busbey <busbey@apache.org>
+Date:   Tue Jun 7 16:00:46 2016 -0500
+
+    CDH-41221 Add replication metrics retry metrics
+    
+    Adds some additional log detail at the TRACE
+    level about file offsets seen while handling recoverable errors. It also
+    add metrics that measure the use of this recovery mechanism.
+    
+    Change-Id: Iacc62aa16b703a1f879843d6fa4036d7746c4dc4
+    Reason: Supportability
+    Author: Sean Busbey
+    Ref: CDH-39853
+
+commit 5e3e0d20262e96503400c41ceff75ac58acbb74d
+Author: Sean Busbey <busbey@apache.org>
+Date:   Tue Aug 2 00:53:53 2016 -0500
+
+    HBASE-16318 fail build while rendering velocity template if dependency license isn't in whitelist.
+    
+    Signed-off-by: Andrew Purtell <apurtell@apache.org>
+    (cherry picked from commit ca1b49dd04db6d94b19dc097c52df763baa60f39)
+    
+    Change-Id: I1c6f4f09bed7ac49d3082f0587041e5e3c60fedb
+    Reason: Licensing
+    Author: Sean Busbey
+    Ref: CDH-42925
+
+commit 3ed66e3172592f2731bbeec9012c329a6bf9b595
+Author: Sean Busbey <busbey@apache.org>
+Date:   Tue Aug 2 00:54:50 2016 -0500
+
+    HBASE-16318 consistently use the correct name for 'Apache License, Version 2.0'
+    
+    Signed-off-by: Andrew Purtell <apurtell@apache.org>
+    (cherry picked from commit 3f30d420c773ab173252d2bfadf2df095d715878)
+    
+     Conflicts:
+    	hbase-resource-bundle/src/main/resources/supplemental-models.xml
+    
+    Change-Id: Ie3214cc97e2d3074d086ff6b33baeca422c28a5a
+    Reason: Licensing
+    Author: Sean Busbey
+    Ref: CDH-42925
+
+commit 351832da5cac56c9499ecc133a776a69358e16f5
+Author: Sean Busbey <busbey@apache.org>
+Date:   Tue Aug 2 11:36:51 2016 -0500
+
+    HBASE-16340 exclude Xerces iplementation jars from coming in transitively.
+    
+    Signed-off-by: Esteban Gutierrez <esteban@apache.org>
+    Signed-off-by: stack <stack@apache.org>
+    
+     Conflicts:
+    	hbase-spark/pom.xml
+    
+    (cherry picked from commit 262a4e666fce5eceb61f077c13b0e623f532598a)
+    
+    Change-Id: Ie4d7c77438416e93c103a191d15b2f491def14a5
+    Reason: Bug
+    Author: Sean Busbey
+    Ref: CDH-42925
+
+commit b6aa4be3dbfb6f6a4fbfbead65f323afb0484c73
+Author: Sean Busbey <busbey@apache.org>
+Date:   Tue Aug 2 01:17:59 2016 -0500
+
+    HBASE-16321 ensure no findbugs-jsr305
+    
+    Signed-off-by: Esteban Gutierrez <esteban@apache.org>
+    
+     Conflicts:
+    	hbase-client/src/main/java/org/apache/hadoop/hbase/MetaTableAccessor.java
+    	hbase-client/src/main/java/org/apache/hadoop/hbase/client/ConnectionImplementation.java
+    	hbase-rsgroup/pom.xml
+    	hbase-server/pom.xml
+    	hbase-server/src/main/java/org/apache/hadoop/hbase/coprocessor/ObserverContext.java
+    	hbase-server/src/main/java/org/apache/hadoop/hbase/master/TableStateManager.java
+    	hbase-server/src/main/java/org/apache/hadoop/hbase/util/FSTableDescriptors.java
+    	hbase-server/src/test/java/org/apache/hadoop/hbase/HBaseTestingUtility.java
+    	hbase-spark/pom.xml
+    	src/main/asciidoc/_chapters/developer.adoc
+    
+    (cherry picked from commit 7b91c136b238960ba2ba9ab985b62db1ae5f674c)
+    
+     Conflicts:
+    	hbase-client/pom.xml
+    	pom.xml
+    
+    Change-Id: I39a09d2362554ac81e83754f96efbf73e3218976
+    Reason: Licensing
+    Author: Sean Busbey
+    Ref: CDH-42925
+
+commit 4f9dde7af41241b9de4888c0a573e602fa3d8293
+Author: Nick Dimiduk <ndimiduk@apache.org>
+Date:   Mon Aug 1 22:48:41 2016 -0700
+
+    HBASE-16317 revert all ESAPI changes
+    
+    Revert "HBASE-15270 Use appropriate encoding for "filter" field in TaskMonitorTmpl.jamon."
+    
+    This reverts commit bbb4e60dae7269fd117f9897949f8dbc1d184b51.
+    
+    Revert "HBASE-15122 Servlets generate XSS_REQUEST_PARAMETER_TO_SERVLET_WRITER findbugs warnings (Samir Ahmic)"
+    
+    This reverts commit 3733223e409c5addfcbb914c202d8131f5ee95e8.
+    
+     Conflicts:
+    	hbase-resource-bundle/src/main/resources/supplemental-models.xml
+    	pom.xml
+    
+    (cherry-picked from commit dfc9616aea6b13168243bac951752c0823538607)
+    
+    Reason: Licensing
+    Author: Nick Dimiduk
+    Ref: CDH-42925
+    Change-Id: I013fefb8b3b9d3dde8f5ddd003730c0c246bb226
+
 commit 71b6a8a477df84f11f291eb0e95569b30fea3bb9
 Author: Jerry He <jerryjch@apache.org>
 Date:   Tue Aug 2 11:40:47 2016 -0700

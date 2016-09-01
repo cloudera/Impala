@@ -1,7 +1,7 @@
 From b1e48b9956d2baad3583d1af6c9db518da376262 Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Fri, 19 Sep 2014 11:13:06 -0700
-Subject: [PATCH 039/195] HBASE-12027 The ZooKeeperWatcher in HMobStore only
+Subject: [PATCH 039/204] HBASE-12027 The ZooKeeperWatcher in HMobStore only
  uses the default conf (Jingcheng Du)
 
 Reason: MOB Feature

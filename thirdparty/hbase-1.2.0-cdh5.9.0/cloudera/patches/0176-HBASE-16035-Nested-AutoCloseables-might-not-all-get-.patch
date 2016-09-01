@@ -1,7 +1,7 @@
 From 6fc70cdb3546db59b27cf91ae9dfbb25ac2e70e2 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Mon, 20 Jun 2016 16:25:50 -0700
-Subject: [PATCH 176/195] HBASE-16035 Nested AutoCloseables might not all get
+Subject: [PATCH 176/204] HBASE-16035 Nested AutoCloseables might not all get
  closed (Sean Mackrory)
 
 Reason: Bug

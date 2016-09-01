@@ -1,7 +1,7 @@
 From cc36e460f2cd99dc723c5bcc330a3e7207f9a612 Mon Sep 17 00:00:00 2001
 From: Apekshit <apeksharma@gmail.com>
 Date: Tue, 23 Feb 2016 15:16:42 -0800
-Subject: [PATCH 001/195] CLOUDERA-BUILD Compatability revert HBASE-15285.
+Subject: [PATCH 001/204] CLOUDERA-BUILD Compatability revert HBASE-15285.
  Revert "HBASE-15285 ADDENDUM make RETURN_RESULTS
  attribute name protected to match branch-1.1 and
  deprecated to warn of 2.0 (Sean Busbey)" Revert

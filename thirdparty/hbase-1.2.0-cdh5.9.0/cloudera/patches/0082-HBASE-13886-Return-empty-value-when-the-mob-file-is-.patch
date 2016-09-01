@@ -1,7 +1,7 @@
 From 6724d9522e0ff3faccc2ed47706043cd81620642 Mon Sep 17 00:00:00 2001
 From: anoopsjohn <anoopsamjohn@gmail.com>
 Date: Tue, 16 Jun 2015 17:17:03 +0530
-Subject: [PATCH 082/195] HBASE-13886 Return empty value when the mob file is
+Subject: [PATCH 082/204] HBASE-13886 Return empty value when the mob file is
  corrupt instead of throwing exceptions. (Jingcheng)
 
 Conflicts:

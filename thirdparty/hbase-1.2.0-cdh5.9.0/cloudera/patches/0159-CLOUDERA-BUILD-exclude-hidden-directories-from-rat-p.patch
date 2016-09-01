@@ -1,7 +1,7 @@
 From 558a4ed744b5d38176a1284c8071a242e23e85dd Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@cloudera.com>
 Date: Thu, 26 May 2016 12:28:10 -0700
-Subject: [PATCH 159/195] CLOUDERA-BUILD exclude hidden directories from rat
+Subject: [PATCH 159/204] CLOUDERA-BUILD exclude hidden directories from rat
  plugin.
 
 Reason: Build infra

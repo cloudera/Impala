@@ -1,7 +1,7 @@
 From 6c7ad14963b40a6462ea8f1c66b7321c60bca8f2 Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jon@cloudera.com>
 Date: Thu, 11 Feb 2016 17:52:28 -0800
-Subject: [PATCH 116/195] CDH-37191
+Subject: [PATCH 116/204] CDH-37191
  org.apache.hadoop.hbase.spark.TestJavaHBaseContext
  unit tests failing on cdh5-1.2.0
 

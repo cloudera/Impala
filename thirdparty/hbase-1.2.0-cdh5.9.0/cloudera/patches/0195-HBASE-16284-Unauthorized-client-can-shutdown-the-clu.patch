@@ -1,7 +1,7 @@
 From 71b6a8a477df84f11f291eb0e95569b30fea3bb9 Mon Sep 17 00:00:00 2001
 From: Jerry He <jerryjch@apache.org>
 Date: Tue, 2 Aug 2016 11:40:47 -0700
-Subject: [PATCH 195/195] HBASE-16284 Unauthorized client can shutdown the
+Subject: [PATCH 195/204] HBASE-16284 Unauthorized client can shutdown the
  cluster (Deokwoo Han)
 
 (cherry picked from commit db3b27f6b5b79fe147754d8c51c0303f1967f549)

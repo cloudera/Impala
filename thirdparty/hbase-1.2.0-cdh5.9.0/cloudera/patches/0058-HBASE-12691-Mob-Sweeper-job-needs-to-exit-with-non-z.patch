@@ -1,7 +1,7 @@
 From c5d0ff3c825f7748cd61818f13dcf754dad30c15 Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Sun, 14 Dec 2014 10:20:50 -0800
-Subject: [PATCH 058/195] HBASE-12691 Mob Sweeper job needs to exit with
+Subject: [PATCH 058/204] HBASE-12691 Mob Sweeper job needs to exit with
  non-zero error value if job fails for any reason
 
 Reason: MOB feature

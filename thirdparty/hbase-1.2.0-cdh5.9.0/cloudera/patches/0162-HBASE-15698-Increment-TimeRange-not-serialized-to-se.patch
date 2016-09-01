@@ -1,7 +1,7 @@
 From 4a8c4e7a401c769476f32714ce4eddbb892eab7c Mon Sep 17 00:00:00 2001
 From: Andrew Purtell <apurtell@apache.org>
 Date: Mon, 6 Jun 2016 16:59:43 -0700
-Subject: [PATCH 162/195] HBASE-15698 Increment TimeRange not serialized to
+Subject: [PATCH 162/204] HBASE-15698 Increment TimeRange not serialized to
  server (Ted Yu)
 
 (cherry picked from commit 8507446891a5e3506f4f585811aaeecab5079adf)

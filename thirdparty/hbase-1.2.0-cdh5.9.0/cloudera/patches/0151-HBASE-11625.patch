@@ -1,7 +1,7 @@
 From 780f72073258d9031d2c5d7991568c953eda1f2e Mon Sep 17 00:00:00 2001
 From: Apekshit <apeksharma@gmail.com>
 Date: Tue, 17 May 2016 14:07:16 -0700
-Subject: [PATCH 151/195] HBASE-11625 - Verifies data before building
+Subject: [PATCH 151/204] HBASE-11625 - Verifies data before building
  HFileBlock. - Adds HFileBlock.Header class which
  contains information about location of fields.
  Testing: Adds CorruptedFSReaderImpl to

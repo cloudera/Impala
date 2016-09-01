@@ -1,7 +1,7 @@
 From 2905ed899ab644f447f03b4fa157ad9960d5e81a Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Mon, 14 Dec 2015 15:42:39 -0800
-Subject: [PATCH 019/195] CLOUDERA-BUILD use reverse scan if meta replicas are
+Subject: [PATCH 019/204] CLOUDERA-BUILD use reverse scan if meta replicas are
  enabled
 
 Author: Matteo Bertozzi

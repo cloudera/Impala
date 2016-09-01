@@ -1,7 +1,7 @@
 From 08f5f5c43660a28a253a8a217a96203b99ee0ec9 Mon Sep 17 00:00:00 2001
 From: Huaxiang Sun <hsun@cloudera.com>
 Date: Fri, 8 Jan 2016 18:22:02 -0800
-Subject: [PATCH 087/195] HBASE-6778 Deprecate Chore; its a thread per task
+Subject: [PATCH 087/204] HBASE-6778 Deprecate Chore; its a thread per task
  when we should have one thread to do all tasks
  (addendum)
 

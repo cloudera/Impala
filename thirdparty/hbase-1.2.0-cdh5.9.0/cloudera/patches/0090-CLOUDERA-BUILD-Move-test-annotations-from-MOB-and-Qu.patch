@@ -1,7 +1,7 @@
 From 1f5b0ba7c0e77dc923bc5edb64086706d82e9969 Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@cloudera.com>
 Date: Sun, 1 Feb 2015 02:00:52 -0800
-Subject: [PATCH 090/195] CLOUDERA-BUILD Move test annotations from MOB and
+Subject: [PATCH 090/204] CLOUDERA-BUILD Move test annotations from MOB and
  Quotas to
  org.apache.hadoop.hbase.testclassification
 

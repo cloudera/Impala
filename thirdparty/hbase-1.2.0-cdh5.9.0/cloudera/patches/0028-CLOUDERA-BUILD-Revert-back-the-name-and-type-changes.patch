@@ -1,7 +1,7 @@
 From b48c65ec20299eeb72b99efe43981aad939c72cd Mon Sep 17 00:00:00 2001
 From: Srikanth Srungarapu <ssrungarapu@cloudera.com>
 Date: Tue, 14 Jul 2015 20:58:31 -0700
-Subject: [PATCH 028/195] CLOUDERA-BUILD Revert back the name and type changes
+Subject: [PATCH 028/204] CLOUDERA-BUILD Revert back the name and type changes
  block cache hit percentage that broke operational
  compatibility
 

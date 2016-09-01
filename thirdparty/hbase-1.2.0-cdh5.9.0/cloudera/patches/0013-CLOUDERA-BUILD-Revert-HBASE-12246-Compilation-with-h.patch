@@ -1,7 +1,7 @@
 From 076d652a33b0f6b2fbf775094869ffcf8010f494 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Thu, 18 Dec 2014 21:14:34 +0000
-Subject: [PATCH 013/195] CLOUDERA-BUILD Revert "HBASE-12246 Compilation with
+Subject: [PATCH 013/204] CLOUDERA-BUILD Revert "HBASE-12246 Compilation with
  hadoop-2.3.x and 2.2.x is broken -> HBASE-12220 Add
  hedgedReads and hedgedReadWins metrics -- REVERT"
 

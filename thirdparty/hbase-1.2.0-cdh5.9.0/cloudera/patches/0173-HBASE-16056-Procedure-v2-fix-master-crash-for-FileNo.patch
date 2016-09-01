@@ -1,7 +1,7 @@
 From fd5f56c0f474c9a445685069c9d23806feb9c393 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Fri, 17 Jun 2016 12:43:21 -0700
-Subject: [PATCH 173/195] HBASE-16056 Procedure v2 - fix master crash for
+Subject: [PATCH 173/204] HBASE-16056 Procedure v2 - fix master crash for
  FileNotFound
 
 Reason: Bug

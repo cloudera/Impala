@@ -1,7 +1,7 @@
 From 8322a0bd85398a9063b5b1ddcdfc7111256fbf9a Mon Sep 17 00:00:00 2001
 From: Apekshit Sharma <appy@apache.org>
 Date: Wed, 13 Jul 2016 14:01:38 -0700
-Subject: [PATCH 181/195] HBASE-16227 [Shell] Column value formatter not
+Subject: [PATCH 181/204] HBASE-16227 [Shell] Column value formatter not
  working in scans. Tested : manually using shell.
 
 Change-Id: Ia3cdf54d6ef325974596e6d37a56d071455364a4

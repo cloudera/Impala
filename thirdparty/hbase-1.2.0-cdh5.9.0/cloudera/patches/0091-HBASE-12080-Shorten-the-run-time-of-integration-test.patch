@@ -1,7 +1,7 @@
 From 4aa65761f96ec158db4f65e11cf6dab2ba04abc5 Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Wed, 24 Sep 2014 06:40:04 -0700
-Subject: [PATCH 091/195] HBASE-12080 Shorten the run time of integration test
+Subject: [PATCH 091/204] HBASE-12080 Shorten the run time of integration test
  by default when using mvn failsafe:integration-test
  (Jingcheng Du)
 

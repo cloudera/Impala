@@ -1,7 +1,7 @@
 From 46b1efe874e6d3fd65231b86a9667c4b6eaab71b Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Tue, 12 Apr 2016 12:23:28 -0700
-Subject: [PATCH 152/195] HBASE-15621 Suppress Hbase SnapshotHFile cleaner
+Subject: [PATCH 152/204] HBASE-15621 Suppress Hbase SnapshotHFile cleaner
  error messages when a snaphot is going on (Huaxiang
  Sun)
 

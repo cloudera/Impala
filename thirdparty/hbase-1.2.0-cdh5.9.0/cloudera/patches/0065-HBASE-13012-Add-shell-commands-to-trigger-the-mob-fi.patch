@@ -1,7 +1,7 @@
 From ad4a01b756f63827e517011ebcb3fae3e68db1dd Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Wed, 4 Mar 2015 23:47:05 -0800
-Subject: [PATCH 065/195] HBASE-13012 Add shell commands to trigger the mob
+Subject: [PATCH 065/204] HBASE-13012 Add shell commands to trigger the mob
  file compactor (Jingcheng Du and Jiajia Li)
 
 Conflicts:

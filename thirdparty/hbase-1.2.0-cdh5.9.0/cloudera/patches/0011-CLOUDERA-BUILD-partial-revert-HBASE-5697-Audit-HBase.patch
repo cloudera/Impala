@@ -1,7 +1,7 @@
 From d55f4f44499e850a118a65213eecf18514b971e6 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Fri, 19 Dec 2014 21:42:08 +0000
-Subject: [PATCH 011/195] CLOUDERA-BUILD partial revert HBASE-5697 Audit HBase
+Subject: [PATCH 011/204] CLOUDERA-BUILD partial revert HBASE-5697 Audit HBase
  for usage of deprecated hadoop 0.20.x, 1.x property
  names, for CDH5-MRv1
 

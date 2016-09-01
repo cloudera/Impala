@@ -1,7 +1,7 @@
 From bbc6762a65c5e406954488759aa1c11738ac782d Mon Sep 17 00:00:00 2001
 From: stack <stack@duboce.net>
 Date: Mon, 15 Aug 2016 21:52:26 -0700
-Subject: [PATCH 191/195] HBASE-16023 Fastpath for the FIFO rpcscheduler Adds
+Subject: [PATCH 191/204] HBASE-16023 Fastpath for the FIFO rpcscheduler Adds
  an executor that does balanced queue and fast path
  handing off requests directly to waiting handlers
  if any present. Idea taken from Apace Kudu
