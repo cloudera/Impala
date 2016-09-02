@@ -25,6 +25,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -39,6 +40,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.cloudera.impala.analysis.ColumnLineageGraph;
+import com.cloudera.impala.analysis.DescriptorTable;
 import com.cloudera.impala.catalog.CatalogException;
 import com.cloudera.impala.common.FrontendTestBase;
 import com.cloudera.impala.common.ImpalaException;
@@ -68,6 +70,7 @@ import com.cloudera.impala.thrift.TQueryExecRequest;
 import com.cloudera.impala.thrift.TQueryOptions;
 import com.cloudera.impala.thrift.TScanRangeLocations;
 import com.cloudera.impala.thrift.TTableDescriptor;
+import com.cloudera.impala.thrift.TTableSink;
 import com.cloudera.impala.thrift.TTupleDescriptor;
 import com.cloudera.impala.thrift.TUpdateMembershipRequest;
 import com.cloudera.impala.util.MembershipSnapshot;
@@ -395,6 +398,7 @@ public class PlannerTestBase extends FrontendTestBase {
     // Test single node plan, scan range locations, and column lineage.
     TExecRequest singleNodeExecRequest =
         testPlan(testCase, Section.PLAN, queryCtx, errorLog, actualOutput);
+    validateTableIds(singleNodeExecRequest);
     checkScanRangeLocations(testCase, singleNodeExecRequest, errorLog, actualOutput);
     checkColumnLineage(testCase, singleNodeExecRequest, errorLog, actualOutput);
     checkLimitCardinality(query, singleNodeExecRequest, errorLog);
@@ -402,6 +406,51 @@ public class PlannerTestBase extends FrontendTestBase {
     testPlan(testCase, Section.DISTRIBUTEDPLAN, queryCtx, errorLog, actualOutput);
     // test parallel plans
     testPlan(testCase, Section.PARALLELPLANS, queryCtx, errorLog, actualOutput);
+  }
+
+  /**
+   * Validate that all tables in the descriptor table of 'request' have a unique id and
+   * those are properly referenced by tuple descriptors and table sink.
+   */
+  private void validateTableIds(TExecRequest request) {
+    if (request == null || !request.isSetQuery_exec_request()) return;
+    TQueryExecRequest execRequest = request.query_exec_request;
+    HashSet<Integer> seenTableIds = Sets.newHashSet();
+    if (execRequest.isSetDesc_tbl()) {
+      TDescriptorTable descTbl = execRequest.desc_tbl;
+      if (descTbl.isSetTableDescriptors()) {
+        for (TTableDescriptor tableDesc: descTbl.tableDescriptors) {
+          if (seenTableIds.contains(tableDesc.id)) {
+            throw new IllegalStateException("Failed to verify table id for table: " +
+                tableDesc.getDbName() + "." + tableDesc.getTableName() +
+                ".\nTable id: " + tableDesc.id + " already used.");
+          }
+          seenTableIds.add(tableDesc.id);
+        }
+      }
+
+      if (descTbl.isSetTupleDescriptors()) {
+        for (TTupleDescriptor tupleDesc: descTbl.tupleDescriptors) {
+          if (tupleDesc.isSetTableId() && !seenTableIds.contains(tupleDesc.tableId)) {
+            throw new IllegalStateException("TableDescriptor does not include table id" +
+                "of:\n" + tupleDesc.toString());
+          }
+        }
+      }
+    }
+
+    if (execRequest.isSetFragments() && !execRequest.fragments.isEmpty()) {
+      TPlanFragment firstPlanFragment = execRequest.fragments.get(0);
+      if (firstPlanFragment.isSetOutput_sink()
+          && firstPlanFragment.output_sink.isSetTable_sink()) {
+        TTableSink tableSink = firstPlanFragment.output_sink.table_sink;
+        if (!seenTableIds.contains(tableSink.target_table_id)
+            || tableSink.target_table_id != DescriptorTable.TABLE_SINK_ID) {
+          throw new IllegalStateException("Table sink id error for target table:\n" +
+              tableSink.toString());
+        }
+      }
+    }
   }
 
   /**

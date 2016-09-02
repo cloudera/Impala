@@ -31,7 +31,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.UUID;
 
@@ -136,8 +135,6 @@ public class CatalogServiceCatalog extends Catalog {
   // of the catalog server. Rename into something that indicates its role as a global
   // sequence number assigned to catalog objects.
   private long catalogVersion_ = INITIAL_CATALOG_VERSION;
-
-  protected final AtomicInteger nextTableId_ = new AtomicInteger(0);
 
   // Manages the scheduling of background table loading.
   private final TableLoadingMgr tableLoadingMgr_;
@@ -597,6 +594,7 @@ public class CatalogServiceCatalog extends Catalog {
       }
     }
   }
+
   /**
    * Resets this catalog instance by clearing all cached table and database metadata.
    */
@@ -614,8 +612,6 @@ public class CatalogServiceCatalog extends Catalog {
 
     catalogLock_.writeLock().lock();
     try {
-      nextTableId_.set(0);
-
       // Not all Java UDFs are persisted to the metastore. The ones which aren't
       // should be restored once the catalog has been invalidated.
       Map<String, Db> oldDbCache = dbCache_.get();
@@ -648,8 +644,7 @@ public class CatalogServiceCatalog extends Catalog {
           newDbCache.put(db.getName().toLowerCase(), db);
 
           for (String tableName: msClient.getHiveClient().getAllTables(dbName)) {
-            Table incompleteTbl = IncompleteTable.createUninitializedTable(
-                getNextTableId(), db, tableName);
+            Table incompleteTbl = IncompleteTable.createUninitializedTable(db, tableName);
             incompleteTbl.setCatalogVersion(incrementAndGetCatalogVersion());
             db.addTable(incompleteTbl);
             if (loadInBackground_) {
@@ -705,8 +700,7 @@ public class CatalogServiceCatalog extends Catalog {
   public Table addTable(String dbName, String tblName) throws TableNotFoundException {
     Db db = getDb(dbName);
     if (db == null) return null;
-    Table incompleteTable =
-        IncompleteTable.createUninitializedTable(getNextTableId(), db, tblName);
+    Table incompleteTable = IncompleteTable.createUninitializedTable(db, tblName);
     incompleteTable.setCatalogVersion(incrementAndGetCatalogVersion());
     db.addTable(incompleteTable);
     return db.getTable(tblName);
@@ -1065,8 +1059,7 @@ public class CatalogServiceCatalog extends Catalog {
     // Add a new uninitialized table to the table cache, effectively invalidating
     // any existing entry. The metadata for the table will be loaded lazily, on the
     // on the next access to the table.
-    Table newTable = IncompleteTable.createUninitializedTable(
-        getNextTableId(), db, tblName);
+    Table newTable = IncompleteTable.createUninitializedTable(db, tblName);
     newTable.setCatalogVersion(incrementAndGetCatalogVersion());
     db.addTable(newTable);
     if (loadInBackground_) {
@@ -1228,10 +1221,6 @@ public class CatalogServiceCatalog extends Catalog {
 
   public ReentrantReadWriteLock getLock() { return catalogLock_; }
 
-  /**
-   * Gets the next table ID and increments the table ID counter.
-   */
-  public TableId getNextTableId() { return new TableId(nextTableId_.getAndIncrement()); }
   public SentryProxy getSentryProxy() { return sentryProxy_; }
   public AuthorizationPolicy getAuthPolicy() { return authPolicy_; }
 

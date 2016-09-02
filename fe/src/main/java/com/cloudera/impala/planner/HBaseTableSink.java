@@ -18,6 +18,7 @@
 
 package com.cloudera.impala.planner;
 
+import com.cloudera.impala.analysis.DescriptorTable;
 import com.cloudera.impala.catalog.Table;
 import com.cloudera.impala.common.PrintUtils;
 import com.cloudera.impala.thrift.TDataSink;
@@ -51,7 +52,7 @@ public class HBaseTableSink extends TableSink {
   @Override
   protected TDataSink toThrift() {
     TDataSink result = new TDataSink(TDataSinkType.TABLE_SINK);
-    TTableSink tTableSink = new TTableSink(targetTable_.getId().asInt(),
+    TTableSink tTableSink = new TTableSink(DescriptorTable.TABLE_SINK_ID,
         TTableSinkType.HBASE, sinkOp_.toThrift());
     result.table_sink = tTableSink;
     return result;

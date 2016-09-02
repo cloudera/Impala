@@ -93,9 +93,9 @@ public class KuduTable extends Table {
   // The set of columns that are key columns in Kudu.
   private ImmutableList<String> kuduKeyColumnNames_;
 
-  protected KuduTable(TableId id, org.apache.hadoop.hive.metastore.api.Table msTable,
+  protected KuduTable(org.apache.hadoop.hive.metastore.api.Table msTable,
       Db db, String name, String owner) {
-    super(id, msTable, db, name, owner);
+    super(msTable, db, name, owner);
   }
 
   public TKuduTable getKuduTable() {
@@ -107,8 +107,8 @@ public class KuduTable extends Table {
   }
 
   @Override
-  public TTableDescriptor toThriftDescriptor(Set<Long> referencedPartitions) {
-    TTableDescriptor desc = new TTableDescriptor(id_.asInt(), TTableType.KUDU_TABLE,
+  public TTableDescriptor toThriftDescriptor(int tableId, Set<Long> referencedPartitions) {
+    TTableDescriptor desc = new TTableDescriptor(tableId, TTableType.KUDU_TABLE,
         getTColumnDescriptors(), numClusteringCols_, kuduTableName_, db_.getName());
     desc.setKuduTable(getKuduTable());
     return desc;

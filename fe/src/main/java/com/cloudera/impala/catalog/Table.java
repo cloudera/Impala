@@ -60,13 +60,9 @@ import com.google.common.collect.Maps;
 public abstract class Table implements CatalogObject {
   private static final Logger LOG = Logger.getLogger(Table.class);
 
-  // Lock used to serialize calls to the Hive MetaStore to work around MetaStore
-  // concurrency bugs. Currently used to serialize calls to "getTable()" due to HIVE-5457.
-  private static final Object metastoreAccessLock_ = new Object();
   private long catalogVersion_ = Catalog.INITIAL_CATALOG_VERSION;
   protected org.apache.hadoop.hive.metastore.api.Table msTable_;
 
-  protected final TableId id_;
   protected final Db db_;
   protected final String name_;
   protected final String owner_;
@@ -98,9 +94,8 @@ public abstract class Table implements CatalogObject {
   protected static EnumSet<TableType> SUPPORTED_TABLE_TYPES = EnumSet.of(
       TableType.EXTERNAL_TABLE, TableType.MANAGED_TABLE, TableType.VIRTUAL_VIEW);
 
-  protected Table(TableId id, org.apache.hadoop.hive.metastore.api.Table msTable, Db db,
+  protected Table(org.apache.hadoop.hive.metastore.api.Table msTable, Db db,
       String name, String owner) {
-    id_ = id;
     msTable_ = msTable;
     db_ = db;
     name_ = name.toLowerCase();
@@ -110,7 +105,8 @@ public abstract class Table implements CatalogObject {
   }
 
   public ReentrantLock getLock() { return tableLock_; }
-  public abstract TTableDescriptor toThriftDescriptor(Set<Long> referencedPartitions);
+  public abstract TTableDescriptor toThriftDescriptor(
+      int tableId, Set<Long> referencedPartitions);
   public abstract TCatalogObjectType getCatalogObjectType();
 
   /**
@@ -213,24 +209,24 @@ public abstract class Table implements CatalogObject {
    * Creates a table of the appropriate type based on the given hive.metastore.api.Table
    * object.
    */
-  public static Table fromMetastoreTable(TableId id, Db db,
+  public static Table fromMetastoreTable(Db db,
       org.apache.hadoop.hive.metastore.api.Table msTbl) {
     // Create a table of appropriate type
     Table table = null;
     if (TableType.valueOf(msTbl.getTableType()) == TableType.VIRTUAL_VIEW) {
-      table = new View(id, msTbl, db, msTbl.getTableName(), msTbl.getOwner());
+      table = new View(msTbl, db, msTbl.getTableName(), msTbl.getOwner());
     } else if (HBaseTable.isHBaseTable(msTbl)) {
-      table = new HBaseTable(id, msTbl, db, msTbl.getTableName(), msTbl.getOwner());
+      table = new HBaseTable(msTbl, db, msTbl.getTableName(), msTbl.getOwner());
     } else if (KuduTable.isKuduTable(msTbl)) {
-      table = new KuduTable(id, msTbl, db, msTbl.getTableName(), msTbl.getOwner());
+      table = new KuduTable(msTbl, db, msTbl.getTableName(), msTbl.getOwner());
     } else if (DataSourceTable.isDataSourceTable(msTbl)) {
       // It's important to check if this is a DataSourceTable before HdfsTable because
       // DataSourceTables are still represented by HDFS tables in the metastore but
       // have a special table property to indicate that Impala should use an external
       // data source.
-      table = new DataSourceTable(id, msTbl, db, msTbl.getTableName(), msTbl.getOwner());
+      table = new DataSourceTable(msTbl, db, msTbl.getTableName(), msTbl.getOwner());
     } else if (HdfsFileFormat.isHdfsInputFormatClass(msTbl.getSd().getInputFormat())) {
-      table = new HdfsTable(id, msTbl, db, msTbl.getTableName(), msTbl.getOwner());
+      table = new HdfsTable(msTbl, db, msTbl.getTableName(), msTbl.getOwner());
     }
     return table;
   }
@@ -243,11 +239,10 @@ public abstract class Table implements CatalogObject {
       throws TableLoadingException {
     Table newTable;
     if (!thriftTable.isSetLoad_status() && thriftTable.isSetMetastore_table())  {
-      newTable = Table.fromMetastoreTable(new TableId(thriftTable.getId()),
-          parentDb, thriftTable.getMetastore_table());
+      newTable = Table.fromMetastoreTable(parentDb, thriftTable.getMetastore_table());
     } else {
-      newTable = IncompleteTable.createUninitializedTable(
-          TableId.createInvalidId(), parentDb, thriftTable.getTbl_name());
+      newTable =
+          IncompleteTable.createUninitializedTable(parentDb, thriftTable.getTbl_name());
     }
     newTable.loadFromThrift(thriftTable);
     newTable.validate();
@@ -295,7 +290,6 @@ public abstract class Table implements CatalogObject {
 
   public TTable toThrift() {
     TTable table = new TTable(db_.getName(), name_);
-    table.setId(id_.asInt());
     table.setAccess_level(accessLevel_);
 
     // Populate both regular columns and clustering columns (if there are any).
@@ -444,7 +438,6 @@ public abstract class Table implements CatalogObject {
   }
 
   public int getNumClusteringCols() { return numClusteringCols_; }
-  public TableId getId() { return id_; }
   public long getNumRows() { return numRows_; }
   public ArrayType getType() { return type_; }
 
