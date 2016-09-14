@@ -22,11 +22,14 @@
 # "-INTERNAL" appended. Parts of the code will look for this to distinguish
 # between released and internal versions.
 VERSION=2.7.0-cdh5.9.0
-GIT_HASH=$(git rev-parse HEAD)
+GIT_HASH=$(git rev-parse HEAD 2> /dev/null)
+if [ -z $GIT_HASH ]
+then
+  GIT_HASH="Could not obtain git hash"
+fi
+
 BUILD_TIME=`date`
 HEADER="# Generated version information from save-version.sh"
 echo -e \
 "${HEADER}\nVERSION: ${VERSION}\nGIT_HASH: ${GIT_HASH}\nBUILD_TIME: ${BUILD_TIME}"\
 > $IMPALA_HOME/bin/version.info
-
-cat $IMPALA_HOME/bin/version.info
