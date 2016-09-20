@@ -72,7 +72,7 @@ int, string
 ====
 ---- QUERY
 # IMPALA-3687: Create a table with mismatched column definitions and Avro schema.
-CREATE EXTERNAL TABLE alltypesagg_mismatch_column_name_comment (
+CREATE EXTERNAL TABLE IF NOT EXISTS functional_avro_snap.alltypesagg_mismatch_column_name_comment (
   id INT COMMENT 'int commnet',
   bool_col BOOLEAN COMMENT 'bool commnet',
   tinyint_col float COMMENT 'tinyint comment',
@@ -121,9 +121,12 @@ DESCRIBE alltypesagg_mismatch_column_name_comment
 string, string, string
 ====
 ---- QUERY
+DROP TABLE IF EXISTS functional_avro_snap.alltypesagg_mismatch_column_name_comment
+====
+---- QUERY
 # IMPALA-3687: Create a table with only Avro schema and later alter it to be a mismatched
 # schema.
-CREATE EXTERNAL TABLE alltypesagg_alter_avro_name_comment
+CREATE EXTERNAL TABLE IF NOT EXISTS functional_avro_snap.alltypesagg_alter_avro_name_comment
 STORED AS AVRO
 TBLPROPERTIES ('avro.schema.literal'= '{
 "fields": [
@@ -173,4 +176,7 @@ DESCRIBE alltypesagg_alter_avro_name_comment
 'varchar_col_mismatch','string','varchar comment mismatch'
 ---- TYPES
 string, string, string
+====
+---- QUERY
+DROP TABLE IF EXISTS functional_avro_snap.alltypesagg_alter_avro_name_comment
 ====
