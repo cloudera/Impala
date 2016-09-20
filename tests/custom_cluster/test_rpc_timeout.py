@@ -16,10 +16,8 @@ import pytest
 from tests.beeswax.impala_beeswax import ImpalaBeeswaxException
 from tests.common.custom_cluster_test_suite import CustomClusterTestSuite
 from tests.common.impala_cluster import ImpalaCluster
-from tests.common.skip import SkipIfBuildType
 from tests.verifiers.metric_verifier import MetricVerifier
 
-@SkipIfBuildType.not_dev_build
 class TestRPCTimeout(CustomClusterTestSuite):
   """Tests for every Impala RPC timeout handling, query should not hang and
      resource should be all released."""
