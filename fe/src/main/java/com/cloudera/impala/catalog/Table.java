@@ -407,6 +407,13 @@ public abstract class Table implements CatalogObject {
   }
 
   /**
+   * Returns the list of all partition columns.
+   */
+  public List<Column> getClusteringColumns() {
+    return colsByPos_.subList(0, numClusteringCols_);
+  }
+
+  /**
    * Returns the list of all columns excluding any partition columns.
    */
   public List<Column> getNonClusteringColumns() {
