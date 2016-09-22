@@ -99,3 +99,9 @@ DEFINE_bool(skip_file_runtime_filtering, false, "Skips file-based runtime filter
     "order to provide a regression test for IMPALA-3798. Effective in debug builds "
     "only.");
 #endif
+
+DEFINE_bool(enable_accept_queue_server, true,
+    "If true, uses a modified version of "
+    "TThreadedServer that accepts connections as quickly as possible and hands them off "
+    "to a thread pool to finish setup, reducing the chances that connections time out "
+    "waiting to be accepted.");
