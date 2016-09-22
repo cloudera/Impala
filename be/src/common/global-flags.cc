@@ -85,3 +85,9 @@ DEFINE_int32(fault_injection_rpc_delay_ms, 0, "A fault injection option that cau
 DEFINE_int32(fault_injection_rpc_type, 0, "A fault injection option that specifies "
     "which rpc call will be injected with the delay. Effective in debug builds only.");
 #endif
+
+DEFINE_bool(enable_accept_queue_server, true,
+    "If true, uses a modified version of "
+    "TThreadedServer that accepts connections as quickly as possible and hands them off "
+    "to a thread pool to finish setup, reducing the chances that connections time out "
+    "waiting to be accepted.");
