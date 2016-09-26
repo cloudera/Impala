@@ -227,6 +227,11 @@ class RuntimeState {
     query_status_ = Status(err_msg);
   }
 
+  /// Function for logging memory usages to the error log when memory limit is exceeded.
+  /// If 'failed_allocation_size' is greater than zero, logs the allocation size. If
+  /// 'failed_allocation_size' is zero, nothing about the allocation size is logged.
+  void LogMemLimitExceeded(const MemTracker* tracker, int64_t failed_allocation_size);
+
   /// Sets query_status_ to MEM_LIMIT_EXCEEDED and logs all the registered trackers.
   /// Subsequent calls to this will be no-ops. Returns query_status_.
   /// If 'failed_allocation_size' is not 0, then it is the size of the allocation (in

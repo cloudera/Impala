@@ -38,6 +38,10 @@ class AggregateFunctions {
   template <typename T>
   static void InitZero(FunctionContext*, T* dst);
 
+  // Sets dst's value to src. Handles deallocation if src and dst are StringVals.
+  template <typename T>
+  static void UpdateVal(FunctionContext*, const T& src, T* dst);
+
   /// StringVal GetValue() function that returns a copy of src
   static StringVal StringValGetValue(FunctionContext* ctx, const StringVal& src);
 

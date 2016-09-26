@@ -186,6 +186,34 @@ void AggregateFunctions::InitZero(FunctionContext*, DecimalVal* dst) {
   dst->val16 = 0;
 }
 
+template <typename T>
+void AggregateFunctions::UpdateVal(FunctionContext* ctx, const T& src, T* dst) {
+  *dst = src;
+}
+
+template <>
+void AggregateFunctions::UpdateVal(FunctionContext* ctx, const StringVal& src,
+    StringVal* dst) {
+  if (src.is_null) {
+    if (!dst->is_null) ctx->Free(dst->ptr);
+    *dst = StringVal::null();
+    return;
+  }
+
+  uint8_t* new_ptr;
+  if (dst->is_null) {
+    new_ptr = ctx->Allocate(src.len);
+  } else {
+    new_ptr = ctx->Reallocate(dst->ptr, src.len);
+  }
+  // Note that a zero-length string is not the same as StringVal::null().
+  RETURN_IF_NULL(ctx, new_ptr);
+  dst->ptr = new_ptr;
+  memcpy(dst->ptr, src.ptr, src.len);
+  dst->is_null = false;
+  dst->len = src.len;
+}
+
 StringVal AggregateFunctions::StringValGetValue(
     FunctionContext* ctx, const StringVal& src) {
   if (src.is_null) return src;
@@ -1448,10 +1476,19 @@ void AggregateFunctions::OffsetFnInit(FunctionContext* ctx, T* dst) {
   *dst = *static_cast<T*>(ctx->GetConstantArg(2));
 }
 
+template <>
+void AggregateFunctions::OffsetFnInit(FunctionContext* ctx, StringVal* dst) {
+  DCHECK_EQ(ctx->GetNumArgs(), 3);
+  DCHECK(ctx->IsArgConstant(1));
+  DCHECK(ctx->IsArgConstant(2));
+  DCHECK_EQ(ctx->GetArgType(0)->type, ctx->GetArgType(2)->type);
+  CopyStringVal(ctx, *static_cast<StringVal*>(ctx->GetConstantArg(2)), dst);
+}
+
 template <typename T>
 void AggregateFunctions::OffsetFnUpdate(FunctionContext* ctx, const T& src,
     const BigIntVal&, const T& default_value, T* dst) {
-  *dst = src;
+  UpdateVal(ctx, src, dst);
 }
 
 // Stamp out the templates for the types we need.

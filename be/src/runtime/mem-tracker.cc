@@ -19,6 +19,7 @@
 #include <gutil/strings/substitute.h>
 
 #include "runtime/exec-env.h"
+#include "runtime/runtime-state.h"
 #include "resourcebroker/resource-broker.h"
 #include "scheduling/query-resource-mgr.h"
 #include "util/debug-util.h"
@@ -286,6 +287,14 @@ string MemTracker::LogUsage(const string& prefix, const list<MemTracker*>& track
     if (!usage_string.empty()) usage_strings.push_back(usage_string);
   }
   return join(usage_strings, "\n");
+}
+
+Status MemTracker::MemLimitExceeded(RuntimeState* state, const std::string& details,
+    int64_t failed_allocation_size) {
+  Status status = Status::MemLimitExceeded();
+  status.AddDetail(details);
+  if (state != NULL) state->LogMemLimitExceeded(this, failed_allocation_size);
+  return status;
 }
 
 void MemTracker::LogUpdate(bool is_consume, int64_t bytes) const {

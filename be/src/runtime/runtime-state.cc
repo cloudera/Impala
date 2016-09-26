@@ -222,6 +222,27 @@ void RuntimeState::GetUnreportedErrors(ErrorLogMap* new_errors) {
   ClearErrorMap(error_log_);
 }
 
+void RuntimeState::LogMemLimitExceeded(const MemTracker* tracker,
+    int64_t failed_allocation_size) {
+  DCHECK_GE(failed_allocation_size, 0);
+  DCHECK(query_mem_tracker_.get() != NULL);
+  stringstream ss;
+  ss << "Memory Limit Exceeded by fragment: " << fragment_instance_id() << endl;
+  if (failed_allocation_size != 0) {
+    DCHECK(tracker != NULL);
+    ss << "  " << tracker->label() << " could not allocate "
+       << PrettyPrinter::Print(failed_allocation_size, TUnit::BYTES)
+       << " without exceeding limit." << endl;
+  }
+
+  if (exec_env_->process_mem_tracker()->LimitExceeded()) {
+    ss << exec_env_->process_mem_tracker()->LogUsage();
+  } else {
+    ss << query_mem_tracker_->LogUsage();
+  }
+  LogError(ErrorMsg(TErrorCode::GENERAL, ss.str()));
+}
+
 Status RuntimeState::SetMemLimitExceeded(MemTracker* tracker,
     int64_t failed_allocation_size, const ErrorMsg* msg) {
   DCHECK_GE(failed_allocation_size, 0);
