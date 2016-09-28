@@ -28,6 +28,7 @@
 #include "exec/partitioned-hash-join-node-ir.cc"
 #include "exprs/aggregate-functions.cc"
 #include "exprs/cast-functions.cc"
+#include "exprs/bit-byte-functions-ir.cc"
 #include "exprs/compound-predicates-ir.cc"
 #include "exprs/conditional-functions-ir.cc"
 #include "exprs/decimal-functions.cc"

@@ -2415,3 +2415,11 @@ NULL
 ---- TYPES
 timestamp
 ====
+---- QUERY
+# IMPALA-4196: Regression test for built-in bit-byte-functions with codegen
+select count(shiftleft(int_col, 1)) from functional_parquet.alltypes
+---- RESULTS
+7300
+---- TYPES
+bigint
+====
