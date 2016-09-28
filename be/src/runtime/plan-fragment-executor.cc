@@ -589,9 +589,7 @@ void PlanFragmentExecutor::Close() {
           runtime_state_->fragment_instance_id(), runtime_state_->cgroup());
     }
     if (plan_ != NULL) plan_->Close(runtime_state_.get());
-    for (DiskIoMgr::RequestContext* context: *runtime_state_->reader_contexts()) {
-      runtime_state_->io_mgr()->UnregisterContext(context);
-    }
+    runtime_state_->UnregisterReaderContexts();
     exec_env_->thread_mgr()->UnregisterPool(runtime_state_->resource_pool());
     runtime_state_->filter_bank()->Close();
   }

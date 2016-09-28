@@ -277,4 +277,17 @@ Status RuntimeState::GetCodegen(LlvmCodeGen** codegen, bool initialize) {
   return Status::OK();
 }
 
+void RuntimeState::AcquireReaderContext(DiskIoMgr::RequestContext* reader_context) {
+  boost::lock_guard<SpinLock> l(reader_contexts_lock_);
+  reader_contexts_.push_back(reader_context);
+}
+
+void RuntimeState::UnregisterReaderContexts() {
+  boost::lock_guard<SpinLock> l(reader_contexts_lock_);
+  for (DiskIoMgr::RequestContext* context : reader_contexts_) {
+    io_mgr()->UnregisterContext(context);
+  }
+  reader_contexts_.clear();
+}
+
 }
