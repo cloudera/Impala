@@ -2454,3 +2454,11 @@ STRING
 ---- ERRORS
 UDF WARNING: Could not base64 decode input in space 4; actual output length 0
 ====
+---- QUERY
+# IMPALA-4196: Regression test for built-in bit-byte-functions with codegen
+select count(shiftleft(int_col, 1)) from functional_parquet.alltypes
+---- RESULTS
+7300
+---- TYPES
+bigint
+====
