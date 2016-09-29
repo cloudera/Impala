@@ -111,6 +111,11 @@ class MemPool {
     total_allocated_bytes_ -= byte_size;
   }
 
+  /// Return a dummy pointer for zero-length allocations.
+  static uint8_t* EmptyAllocPtr() {
+    return reinterpret_cast<uint8_t*>(&zero_length_region_);
+  }
+
   /// Makes all allocated chunks available for re-use, but doesn't delete any chunks.
   void Clear();
 
@@ -162,6 +167,10 @@ class MemPool {
         allocated_bytes(0) {}
   };
 
+  /// A static field used as non-NULL pointer for zero length allocations.
+  /// NULL is reserved for allocation failures.
+  static uint32_t zero_length_region_;
+
   /// chunk from which we served the last Allocate() call;
   /// always points to the last chunk that contains allocated data;
   /// chunks 0..current_chunk_idx_ are guaranteed to contain data
@@ -207,7 +216,7 @@ class MemPool {
 
   template <bool CHECK_LIMIT_FIRST>
   uint8_t* Allocate(int size) {
-    if (size == 0) return NULL;
+    if (UNLIKELY(size == 0)) return EmptyAllocPtr();
 
     int64_t num_bytes = BitUtil::RoundUp(size, 8);
     if (current_chunk_idx_ == -1

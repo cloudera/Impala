@@ -25,12 +25,15 @@
 
 using namespace impala;
 
+#define MEM_POOL_POISON (0x66aa77bb)
+
 DECLARE_bool(disable_mem_pools);
 
 const int MemPool::INITIAL_CHUNK_SIZE;
 const int MemPool::MAX_CHUNK_SIZE;
 
 const char* MemPool::LLVM_CLASS_NAME = "class.impala::MemPool";
+uint32_t MemPool::zero_length_region_ = MEM_POOL_POISON;
 
 MemPool::MemPool(MemTracker* mem_tracker)
   : current_chunk_idx_(-1),
@@ -40,6 +43,7 @@ MemPool::MemPool(MemTracker* mem_tracker)
     total_reserved_bytes_(0),
     mem_tracker_(mem_tracker) {
   DCHECK(mem_tracker != NULL);
+  DCHECK_EQ(zero_length_region_, MEM_POOL_POISON);
 }
 
 MemPool::ChunkInfo::ChunkInfo(int64_t size)
@@ -64,6 +68,7 @@ MemPool::~MemPool() {
   if (ImpaladMetrics::MEM_POOL_TOTAL_BYTES != NULL) {
     ImpaladMetrics::MEM_POOL_TOTAL_BYTES->Increment(-total_bytes_released);
   }
+  DCHECK_EQ(zero_length_region_, MEM_POOL_POISON);
 }
 
 void MemPool::Clear() {
@@ -236,6 +241,7 @@ int64_t MemPool::GetTotalChunkSizes() const {
 }
 
 bool MemPool::CheckIntegrity(bool current_chunk_empty) {
+  DCHECK_EQ(zero_length_region_, MEM_POOL_POISON);
   // Without pooling, there are way too many chunks and this takes too long.
   if (FLAGS_disable_mem_pools) return true;
 

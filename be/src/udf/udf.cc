@@ -268,7 +268,6 @@ const char* FunctionContext::error_msg() const {
 
 uint8_t* FunctionContext::Allocate(int byte_size) {
   assert(!impl_->closed_);
-  if (byte_size == 0) return NULL;
   uint8_t* buffer = impl_->pool_->Allocate(byte_size);
   if (impl_->debug_) {
     impl_->allocations_[buffer] = byte_size;
@@ -392,7 +391,6 @@ void FunctionContext::SetFunctionState(FunctionStateScope scope, void* ptr) {
 
 uint8_t* FunctionContextImpl::AllocateLocal(int byte_size) {
   assert(!closed_);
-  if (byte_size == 0) return NULL;
   uint8_t* buffer = pool_->Allocate(byte_size);
   local_allocations_.push_back(buffer);
   VLOG_ROW << "Allocate Local: FunctionContext=" << this->context_

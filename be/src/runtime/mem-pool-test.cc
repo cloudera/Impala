@@ -96,6 +96,15 @@ TEST(MemPoolTest, Basic) {
     }
     EXPECT_EQ((16 + 32 + 65) * 1024, p.GetTotalChunkSizes());
 
+    int64_t peak_bytes = p.peak_allocated_bytes();
+    int64_t total_bytes = p.total_allocated_bytes();
+    // allocate 0 bytes, get non-NULL pointer
+    uint8_t* ptr1 = p.Allocate(0);
+    EXPECT_NE(ptr1, static_cast<uint8_t*>(NULL));
+    // which doesn't mess with existing allocations
+    EXPECT_EQ(peak_bytes, p.peak_allocated_bytes());
+    EXPECT_EQ(total_bytes, p.total_allocated_bytes());
+
     // ... unless it doesn't fit into any available chunk
     p.Allocate(120 * 1024);
     EXPECT_EQ((1 + 120) * 1024, p.total_allocated_bytes());
@@ -256,7 +265,6 @@ TEST(MemPoolTest, Limits) {
   result = p2->TryAllocate(20);
   DCHECK(result != NULL);
   DCHECK(MemPoolTest::CheckIntegrity(p2, false));
-
 
   p2->FreeAll();
   delete p2;

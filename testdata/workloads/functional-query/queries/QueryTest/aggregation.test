@@ -154,6 +154,33 @@ from alltypesagg where day is not null
 bigint, string, string, string, string
 ====
 ---- QUERY
+# Test for IMPALA-3018. Verify update() functions of min() and max() handle
+# zero-length string correctly.
+select max(str), min(str) from (values ('aaa' as str), (''), ('123')) as tmp
+---- RESULTS
+'aaa',''
+---- TYPES
+string,string
+====
+---- QUERY
+# Test for IMPALA-3018. Verify update() function of last_value() handles
+# zero-length string correctly.
+select last_value(b) over (partition by a order by d) from functional.nulltable;
+---- RESULTS
+''
+---- TYPES
+string
+====
+---- QUERY
+# Test for IMPALA-3018. Verify update() function of first_value() handles
+# zero-length string correctly.
+select first_value(b) over (partition by a order by d) from functional.nulltable;
+---- RESULTS
+''
+---- TYPES
+string
+====
+---- QUERY
 # grouping by different data types, with NULLs
 select tinyint_col, count(*) from alltypesagg where day is not null group by 1 order by 1
 ---- RESULTS
