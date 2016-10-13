@@ -1,0 +1,371 @@
+From 34da42a76d6cfcc9767e1d568ed99beb90ee69cc Mon Sep 17 00:00:00 2001
+From: Jenkins <dev-kitchen@cloudera.com>
+Date: Fri, 9 Sep 2016 10:55:18 -0700
+Subject: [PATCH 196/204] Update to 5.8.3-SNAPSHOT on Fri Sep  9 10:55:02 PDT
+ 2016
+
+JOB_NAME : 'Cut-Release-Branches'
+BUILD_NUMBER : '430'
+CODE_BRANCH : ''
+OLD_CDH_BRANCH : 'cdh5_5.8.x'
+
+Pushed to remote apache	git@github.sf.cloudera.com:Mirrors/apache-hbase.git (push)
+origin	git@github.sf.cloudera.com:CDH/hbase.git (push)
+---
+ hbase-annotations/pom.xml                |    2 +-
+ hbase-assembly/pom.xml                   |    2 +-
+ hbase-checkstyle/pom.xml                 |    4 ++--
+ hbase-client/pom.xml                     |    2 +-
+ hbase-common/pom.xml                     |    2 +-
+ hbase-examples/pom.xml                   |    2 +-
+ hbase-external-blockcache/pom.xml        |    2 +-
+ hbase-hadoop-compat/pom.xml              |    2 +-
+ hbase-hadoop2-compat/pom.xml             |    2 +-
+ hbase-it/pom.xml                         |    2 +-
+ hbase-prefix-tree/pom.xml                |    2 +-
+ hbase-procedure/pom.xml                  |    2 +-
+ hbase-protocol/pom.xml                   |    2 +-
+ hbase-resource-bundle/pom.xml            |    2 +-
+ hbase-rest/pom.xml                       |    2 +-
+ hbase-server/pom.xml                     |    2 +-
+ hbase-shaded/hbase-shaded-client/pom.xml |    2 +-
+ hbase-shaded/hbase-shaded-server/pom.xml |    2 +-
+ hbase-shaded/pom.xml                     |    2 +-
+ hbase-shell/pom.xml                      |    2 +-
+ hbase-spark/pom.xml                      |    2 +-
+ hbase-testing-util/pom.xml               |    2 +-
+ hbase-thrift/pom.xml                     |    2 +-
+ pom.xml                                  |    4 ++--
+ 24 files changed, 26 insertions(+), 26 deletions(-)
+
+diff --git a/hbase-annotations/pom.xml b/hbase-annotations/pom.xml
+index 9921539..887e2b5 100644
+--- a/hbase-annotations/pom.xml
++++ b/hbase-annotations/pom.xml
+@@ -23,7 +23,7 @@
+   <parent>
+     <artifactId>hbase</artifactId>
+     <groupId>org.apache.hbase</groupId>
+-    <version>1.2.0-cdh5.8.2-SNAPSHOT</version>
++    <version>1.2.0-cdh5.8.3-SNAPSHOT</version>
+     <relativePath>..</relativePath>
+   </parent>
+ 
+diff --git a/hbase-assembly/pom.xml b/hbase-assembly/pom.xml
+index af40fd4..181c844 100644
+--- a/hbase-assembly/pom.xml
++++ b/hbase-assembly/pom.xml
+@@ -23,7 +23,7 @@
+   <parent>
+     <artifactId>hbase</artifactId>
+     <groupId>org.apache.hbase</groupId>
+-    <version>1.2.0-cdh5.8.2-SNAPSHOT</version>
++    <version>1.2.0-cdh5.8.3-SNAPSHOT</version>
+     <relativePath>..</relativePath>
+   </parent>
+   <artifactId>hbase-assembly</artifactId>
+diff --git a/hbase-checkstyle/pom.xml b/hbase-checkstyle/pom.xml
+index c89134c..7fbf130 100644
+--- a/hbase-checkstyle/pom.xml
++++ b/hbase-checkstyle/pom.xml
+@@ -24,14 +24,14 @@
+ <modelVersion>4.0.0</modelVersion>
+ <groupId>org.apache.hbase</groupId>
+ <artifactId>hbase-checkstyle</artifactId>
+-<version>1.2.0-cdh5.8.2-SNAPSHOT</version>
++<version>1.2.0-cdh5.8.3-SNAPSHOT</version>
+ <name>Apache HBase - Checkstyle</name>
+ <description>Module to hold Checkstyle properties for HBase.</description>
+ 
+   <parent>
+     <artifactId>hbase</artifactId>
+     <groupId>org.apache.hbase</groupId>
+-    <version>1.2.0-cdh5.8.2-SNAPSHOT</version>
++    <version>1.2.0-cdh5.8.3-SNAPSHOT</version>
+     <relativePath>..</relativePath>
+   </parent>
+ 
+diff --git a/hbase-client/pom.xml b/hbase-client/pom.xml
+index 9761b5c..c85d28c 100644
+--- a/hbase-client/pom.xml
++++ b/hbase-client/pom.xml
+@@ -24,7 +24,7 @@
+   <parent>
+     <artifactId>hbase</artifactId>
+     <groupId>org.apache.hbase</groupId>
+-    <version>1.2.0-cdh5.8.2-SNAPSHOT</version>
++    <version>1.2.0-cdh5.8.3-SNAPSHOT</version>
+     <relativePath>..</relativePath>
+   </parent>
+ 
+diff --git a/hbase-common/pom.xml b/hbase-common/pom.xml
+index 87f0706..304185f 100644
+--- a/hbase-common/pom.xml
++++ b/hbase-common/pom.xml
+@@ -23,7 +23,7 @@
+   <parent>
+     <artifactId>hbase</artifactId>
+     <groupId>org.apache.hbase</groupId>
+-    <version>1.2.0-cdh5.8.2-SNAPSHOT</version>
++    <version>1.2.0-cdh5.8.3-SNAPSHOT</version>
+     <relativePath>..</relativePath>
+   </parent>
+ 
+diff --git a/hbase-examples/pom.xml b/hbase-examples/pom.xml
+index d69f2ab..840f427 100644
+--- a/hbase-examples/pom.xml
++++ b/hbase-examples/pom.xml
+@@ -23,7 +23,7 @@
+   <parent>
+     <artifactId>hbase</artifactId>
+     <groupId>org.apache.hbase</groupId>
+-    <version>1.2.0-cdh5.8.2-SNAPSHOT</version>
++    <version>1.2.0-cdh5.8.3-SNAPSHOT</version>
+     <relativePath>..</relativePath>
+   </parent>
+   <artifactId>hbase-examples</artifactId>
+diff --git a/hbase-external-blockcache/pom.xml b/hbase-external-blockcache/pom.xml
+index a7f80a2..5f701dd 100644
+--- a/hbase-external-blockcache/pom.xml
++++ b/hbase-external-blockcache/pom.xml
+@@ -25,7 +25,7 @@
+   <parent>
+     <artifactId>hbase</artifactId>
+     <groupId>org.apache.hbase</groupId>
+-    <version>1.2.0-cdh5.8.2-SNAPSHOT</version>
++    <version>1.2.0-cdh5.8.3-SNAPSHOT</version>
+     <relativePath>..</relativePath>
+   </parent>
+   <artifactId>hbase-external-blockcache</artifactId>
+diff --git a/hbase-hadoop-compat/pom.xml b/hbase-hadoop-compat/pom.xml
+index 116ea88..62ca9d4 100644
+--- a/hbase-hadoop-compat/pom.xml
++++ b/hbase-hadoop-compat/pom.xml
+@@ -23,7 +23,7 @@
+     <parent>
+         <artifactId>hbase</artifactId>
+         <groupId>org.apache.hbase</groupId>
+-        <version>1.2.0-cdh5.8.2-SNAPSHOT</version>
++        <version>1.2.0-cdh5.8.3-SNAPSHOT</version>
+         <relativePath>..</relativePath>
+     </parent>
+ 
+diff --git a/hbase-hadoop2-compat/pom.xml b/hbase-hadoop2-compat/pom.xml
+index 2e930b2..b95c8d4 100644
+--- a/hbase-hadoop2-compat/pom.xml
++++ b/hbase-hadoop2-compat/pom.xml
+@@ -21,7 +21,7 @@ limitations under the License.
+   <parent>
+     <artifactId>hbase</artifactId>
+     <groupId>org.apache.hbase</groupId>
+-    <version>1.2.0-cdh5.8.2-SNAPSHOT</version>
++    <version>1.2.0-cdh5.8.3-SNAPSHOT</version>
+     <relativePath>..</relativePath>
+   </parent>
+ 
+diff --git a/hbase-it/pom.xml b/hbase-it/pom.xml
+index 76a0722..e0ffe28 100644
+--- a/hbase-it/pom.xml
++++ b/hbase-it/pom.xml
+@@ -23,7 +23,7 @@
+   <parent>
+     <artifactId>hbase</artifactId>
+     <groupId>org.apache.hbase</groupId>
+-    <version>1.2.0-cdh5.8.2-SNAPSHOT</version>
++    <version>1.2.0-cdh5.8.3-SNAPSHOT</version>
+     <relativePath>..</relativePath>
+   </parent>
+ 
+diff --git a/hbase-prefix-tree/pom.xml b/hbase-prefix-tree/pom.xml
+index aab9221..e02a1fd 100644
+--- a/hbase-prefix-tree/pom.xml
++++ b/hbase-prefix-tree/pom.xml
+@@ -23,7 +23,7 @@
+   <parent>
+     <artifactId>hbase</artifactId>
+     <groupId>org.apache.hbase</groupId>
+-    <version>1.2.0-cdh5.8.2-SNAPSHOT</version>
++    <version>1.2.0-cdh5.8.3-SNAPSHOT</version>
+     <relativePath>..</relativePath>
+   </parent>
+ 
+diff --git a/hbase-procedure/pom.xml b/hbase-procedure/pom.xml
+index 3e040a2..02e700f 100644
+--- a/hbase-procedure/pom.xml
++++ b/hbase-procedure/pom.xml
+@@ -23,7 +23,7 @@
+   <parent>
+     <artifactId>hbase</artifactId>
+     <groupId>org.apache.hbase</groupId>
+-    <version>1.2.0-cdh5.8.2-SNAPSHOT</version>
++    <version>1.2.0-cdh5.8.3-SNAPSHOT</version>
+     <relativePath>..</relativePath>
+   </parent>
+ 
+diff --git a/hbase-protocol/pom.xml b/hbase-protocol/pom.xml
+index 932ca12..36dc4af 100644
+--- a/hbase-protocol/pom.xml
++++ b/hbase-protocol/pom.xml
+@@ -23,7 +23,7 @@
+     <parent>
+         <artifactId>hbase</artifactId>
+         <groupId>org.apache.hbase</groupId>
+-        <version>1.2.0-cdh5.8.2-SNAPSHOT</version>
++        <version>1.2.0-cdh5.8.3-SNAPSHOT</version>
+         <relativePath>..</relativePath>
+     </parent>
+ 
+diff --git a/hbase-resource-bundle/pom.xml b/hbase-resource-bundle/pom.xml
+index 9edde11..c08349a 100644
+--- a/hbase-resource-bundle/pom.xml
++++ b/hbase-resource-bundle/pom.xml
+@@ -23,7 +23,7 @@
+   <parent>
+     <artifactId>hbase</artifactId>
+     <groupId>org.apache.hbase</groupId>
+-    <version>1.2.0-cdh5.8.2-SNAPSHOT</version>
++    <version>1.2.0-cdh5.8.3-SNAPSHOT</version>
+     <relativePath>..</relativePath>
+   </parent>
+ 
+diff --git a/hbase-rest/pom.xml b/hbase-rest/pom.xml
+index 8555299..b06bff1 100644
+--- a/hbase-rest/pom.xml
++++ b/hbase-rest/pom.xml
+@@ -25,7 +25,7 @@
+   <parent>
+     <artifactId>hbase</artifactId>
+     <groupId>org.apache.hbase</groupId>
+-    <version>1.2.0-cdh5.8.2-SNAPSHOT</version>
++    <version>1.2.0-cdh5.8.3-SNAPSHOT</version>
+     <relativePath>..</relativePath>
+   </parent>
+   <artifactId>hbase-rest</artifactId>
+diff --git a/hbase-server/pom.xml b/hbase-server/pom.xml
+index 5652f52..bcce858 100644
+--- a/hbase-server/pom.xml
++++ b/hbase-server/pom.xml
+@@ -23,7 +23,7 @@
+   <parent>
+     <artifactId>hbase</artifactId>
+     <groupId>org.apache.hbase</groupId>
+-    <version>1.2.0-cdh5.8.2-SNAPSHOT</version>
++    <version>1.2.0-cdh5.8.3-SNAPSHOT</version>
+     <relativePath>..</relativePath>
+   </parent>
+   <artifactId>hbase-server</artifactId>
+diff --git a/hbase-shaded/hbase-shaded-client/pom.xml b/hbase-shaded/hbase-shaded-client/pom.xml
+index d15dad3..a6640eb 100644
+--- a/hbase-shaded/hbase-shaded-client/pom.xml
++++ b/hbase-shaded/hbase-shaded-client/pom.xml
+@@ -24,7 +24,7 @@
+     <parent>
+         <artifactId>hbase-shaded</artifactId>
+         <groupId>org.apache.hbase</groupId>
+-        <version>1.2.0-cdh5.8.2-SNAPSHOT</version>
++        <version>1.2.0-cdh5.8.3-SNAPSHOT</version>
+         <relativePath>..</relativePath>
+     </parent>
+     <artifactId>hbase-shaded-client</artifactId>
+diff --git a/hbase-shaded/hbase-shaded-server/pom.xml b/hbase-shaded/hbase-shaded-server/pom.xml
+index 14cce95..879dea3 100644
+--- a/hbase-shaded/hbase-shaded-server/pom.xml
++++ b/hbase-shaded/hbase-shaded-server/pom.xml
+@@ -24,7 +24,7 @@
+     <parent>
+         <artifactId>hbase-shaded</artifactId>
+         <groupId>org.apache.hbase</groupId>
+-        <version>1.2.0-cdh5.8.2-SNAPSHOT</version>
++        <version>1.2.0-cdh5.8.3-SNAPSHOT</version>
+         <relativePath>..</relativePath>
+     </parent>
+     <artifactId>hbase-shaded-server</artifactId>
+diff --git a/hbase-shaded/pom.xml b/hbase-shaded/pom.xml
+index 07d2d26..32c549f 100644
+--- a/hbase-shaded/pom.xml
++++ b/hbase-shaded/pom.xml
+@@ -23,7 +23,7 @@
+     <parent>
+         <artifactId>hbase</artifactId>
+         <groupId>org.apache.hbase</groupId>
+-        <version>1.2.0-cdh5.8.2-SNAPSHOT</version>
++        <version>1.2.0-cdh5.8.3-SNAPSHOT</version>
+         <relativePath>..</relativePath>
+     </parent>
+     <artifactId>hbase-shaded</artifactId>
+diff --git a/hbase-shell/pom.xml b/hbase-shell/pom.xml
+index 853a62e..1a7b8f2 100644
+--- a/hbase-shell/pom.xml
++++ b/hbase-shell/pom.xml
+@@ -23,7 +23,7 @@
+   <parent>
+     <artifactId>hbase</artifactId>
+     <groupId>org.apache.hbase</groupId>
+-    <version>1.2.0-cdh5.8.2-SNAPSHOT</version>
++    <version>1.2.0-cdh5.8.3-SNAPSHOT</version>
+     <relativePath>..</relativePath>
+   </parent>
+   <artifactId>hbase-shell</artifactId>
+diff --git a/hbase-spark/pom.xml b/hbase-spark/pom.xml
+index 07d9ca3..b42e1bc 100644
+--- a/hbase-spark/pom.xml
++++ b/hbase-spark/pom.xml
+@@ -30,7 +30,7 @@
+     <parent>
+         <artifactId>hbase</artifactId>
+         <groupId>org.apache.hbase</groupId>
+-        <version>1.2.0-cdh5.8.2-SNAPSHOT</version>
++        <version>1.2.0-cdh5.8.3-SNAPSHOT</version>
+         <relativePath>..</relativePath>
+     </parent>
+     <artifactId>hbase-spark</artifactId>
+diff --git a/hbase-testing-util/pom.xml b/hbase-testing-util/pom.xml
+index d2e67f3..8aaf8c4 100644
+--- a/hbase-testing-util/pom.xml
++++ b/hbase-testing-util/pom.xml
+@@ -23,7 +23,7 @@
+     <parent>
+         <artifactId>hbase</artifactId>
+         <groupId>org.apache.hbase</groupId>
+-        <version>1.2.0-cdh5.8.2-SNAPSHOT</version>
++        <version>1.2.0-cdh5.8.3-SNAPSHOT</version>
+         <relativePath>..</relativePath>
+     </parent>
+     <artifactId>hbase-testing-util</artifactId>
+diff --git a/hbase-thrift/pom.xml b/hbase-thrift/pom.xml
+index 680171f..49d61e4 100644
+--- a/hbase-thrift/pom.xml
++++ b/hbase-thrift/pom.xml
+@@ -23,7 +23,7 @@
+   <parent>
+     <artifactId>hbase</artifactId>
+     <groupId>org.apache.hbase</groupId>
+-    <version>1.2.0-cdh5.8.2-SNAPSHOT</version>
++    <version>1.2.0-cdh5.8.3-SNAPSHOT</version>
+     <relativePath>..</relativePath>
+   </parent>
+   <artifactId>hbase-thrift</artifactId>
+diff --git a/pom.xml b/pom.xml
+index 8e8fab9..334980d 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -32,14 +32,14 @@
+   <parent>
+     <groupId>com.cloudera.cdh</groupId>
+     <artifactId>cdh-root</artifactId>
+-    <version>5.8.2-SNAPSHOT</version>
++    <version>5.8.3-SNAPSHOT</version>
+     <relativePath/>
+     <!-- no parent resolution -->
+   </parent>
+   <groupId>org.apache.hbase</groupId>
+   <artifactId>hbase</artifactId>
+   <packaging>pom</packaging>
+-  <version>1.2.0-cdh5.8.2-SNAPSHOT</version>
++  <version>1.2.0-cdh5.8.3-SNAPSHOT</version>
+   <name>Apache HBase</name>
+   <description>
+     Apache HBase is the Hadoop database. Use it when you need
+-- 
+1.7.9.5
+
