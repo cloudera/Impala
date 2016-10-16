@@ -729,6 +729,11 @@ public class AnalyzeExprsTest extends AnalyzerTest {
         + "functional.alltypesagg");
     AnalyzesOk("select last_value(tinyint_col ignore nulls) over (order by id) from "
         + "functional.alltypesagg");
+    // IMPALA-4301: Test IGNORE NULLS with subqueries.
+    AnalyzesOk("select first_value(tinyint_col ignore nulls) over (order by id)," +
+               "last_value(tinyint_col ignore nulls) over (order by id)" +
+               "from functional.alltypesagg a " +
+               "where exists (select 1 from functional.alltypes b where a.id = b.id)");
 
     // legal combinations of analytic and agg functions
     AnalyzesOk("select sum(count(id)) over (partition by min(int_col) "

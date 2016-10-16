@@ -750,7 +750,8 @@ public class AnalyticExpr extends Expr {
           window_.getRightBoundary());
     }
 
-    // 8. Append IGNORE NULLS to fn name if set.
+    // 8. Change fn name to the IGNORE NULLS version. Also unset the IGNORE NULLS flag
+    // to allow statement rewriting for subqueries.
     if (getFnCall().getParams().isIgnoreNulls()) {
       if (analyticFnName.getFunction().equals(LAST_VALUE)) {
         fnCall_ = new FunctionCallExpr(new FunctionName(LAST_VALUE_IGNORE_NULLS),
@@ -760,6 +761,7 @@ public class AnalyticExpr extends Expr {
         fnCall_ = new FunctionCallExpr(new FunctionName(FIRST_VALUE_IGNORE_NULLS),
             getFnCall().getParams());
       }
+      getFnCall().getParams().setIsIgnoreNulls(false);
 
       fnCall_.setIsAnalyticFnCall(true);
       fnCall_.setIsInternalFnCall(true);
