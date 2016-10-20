@@ -23,6 +23,7 @@
 #include <boost/scoped_ptr.hpp>
 
 #include "common/logging.h"
+#include "common/status.h"
 #include "simple-scheduler.h"
 #include "util/runtime-profile.h"
 
@@ -754,19 +755,19 @@ class SchedulerWrapper {
   }
 
   /// Call ComputeScanRangeAssignment() with exec_at_coord set to false.
-  void Compute(Result* result) {
-    Compute(false, result);
+  Status Compute(Result* result) {
+    return Compute(false, result);
   }
 
   /// Call ComputeScanRangeAssignment().
-  void Compute(bool exec_at_coord, Result* result) {
+  Status Compute(bool exec_at_coord, Result* result) {
     DCHECK(scheduler_ != NULL);
 
     // Compute Assignment.
     FragmentScanRangeAssignment* assignment = result->AddAssignment();
-    scheduler_->ComputeScanRangeAssignment(*scheduler_->GetBackendConfig(), 0, NULL,
-        false, plan_.scan_range_locations(), plan_.referenced_datanodes(), exec_at_coord,
-        plan_.query_options(), NULL, assignment);
+    return scheduler_->ComputeScanRangeAssignment(*scheduler_->GetBackendConfig(), 0,
+        NULL, false, plan_.scan_range_locations(), plan_.referenced_datanodes(),
+        exec_at_coord, plan_.query_options(), NULL, assignment);
   }
 
   /// Reset the state of the scheduler by re-creating and initializing it.
@@ -1207,6 +1208,25 @@ TEST_F(SchedulerTest, TestSendUpdates) {
   scheduler.Compute(&result);
   EXPECT_EQ(1 * Block::DEFAULT_BLOCK_SIZE, result.NumDiskAssignedBytes(0));
   EXPECT_EQ(0, result.NumDiskAssignedBytes(1));
+}
+
+/// IMPALA-4329: Test scheduling with no backends.
+TEST_F(SchedulerTest, TestEmptyBackendConfig) {
+  Cluster cluster;
+  cluster.AddHost(false, true);
+
+  Schema schema(cluster);
+  schema.AddMultiBlockTable("T", 1, ReplicaPlacement::REMOTE_ONLY, 1);
+
+  Plan plan(schema);
+  plan.AddTableScan("T");
+
+  Result result(plan);
+  SchedulerWrapper scheduler(plan);
+  Status status = scheduler.Compute(&result);
+  EXPECT_TRUE(!status.ok());
+  EXPECT_EQ(status.GetDetail(),
+      "Cannot schedule query: no registered backends available.\n");
 }
 
 }  // end namespace impala

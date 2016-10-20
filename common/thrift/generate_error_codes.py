@@ -280,7 +280,21 @@ error_codes = (
    "data of type $1: $2"),
 
   ("TEXT_PARSER_TRUNCATED_COLUMN", 90, "Length of column is $0 which exceeds maximum "
-   "supported length of 2147483647 bytes.")
+   "supported length of 2147483647 bytes."),
+
+  # Backported, unused.
+  ("SCRATCH_LIMIT_EXCEEDED", 91, "Scratch space limit of $0 bytes exceeded for query "
+   "while spilling data to disk."),
+
+  # Backported, unused.
+  ("BUFFER_ALLOCATION_FAILED", 92, "Unexpected error allocating $0 byte buffer."),
+
+  # Backported, unused.
+  ("PARQUET_ZERO_ROWS_IN_NON_EMPTY_FILE", 93, "File '$0' is corrupt: metadata indicates "
+   "a zero row count but there is at least one non-empty row group."),
+
+  ("NO_REGISTERED_BACKENDS", 94, "Cannot schedule query: no registered backends "
+   "available."),
 )
 
 import sys
