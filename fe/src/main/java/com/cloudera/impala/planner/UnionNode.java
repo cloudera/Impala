@@ -74,16 +74,11 @@ public class UnionNode extends PlanNode {
   public boolean isConstantUnion() { return resultExprLists_.isEmpty(); }
 
   /**
-   * Add a child tree plus its corresponding resolved resultExprs.
+   * Add a child tree plus its corresponding unresolved resultExprs.
    */
-  public void addChild(PlanNode node, List<Expr> baseTblResultExprs) {
+  public void addChild(PlanNode node, List<Expr> resultExprs) {
     super.addChild(node);
-    resultExprLists_.add(baseTblResultExprs);
-    if (baseTblResultExprs != null) {
-      // if we're materializing output, we can only do that into a single
-      // output tuple
-      Preconditions.checkState(tupleIds_.size() == 1, tupleIds_.size());
-    }
+    resultExprLists_.add(resultExprs);
   }
 
   @Override
