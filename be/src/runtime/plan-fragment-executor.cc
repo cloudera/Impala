@@ -319,7 +319,6 @@ Status PlanFragmentExecutor::Open() {
     // make sure the thread started up, otherwise ReportProfile() might get into a race
     // with StopReportThread()
     report_thread_started_cv_.wait(l);
-    report_thread_active_ = true;
   }
 
   OptimizeLlvmModule();
@@ -388,6 +387,7 @@ void PlanFragmentExecutor::ReportProfile() {
   DCHECK(!report_status_cb_.empty());
   unique_lock<mutex> l(report_thread_lock_);
   // tell Open() that we started
+  report_thread_active_ = true;
   report_thread_started_cv_.notify_one();
 
   // Jitter the reporting time of remote fragments by a random amount between
