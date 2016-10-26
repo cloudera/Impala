@@ -164,7 +164,11 @@ class PlanFragmentExecutor {
   /// Indicates that profile reporting thread started.
   /// Tied to report_thread_lock_.
   boost::condition_variable report_thread_started_cv_;
-  bool report_thread_active_;  // true if we started the thread
+
+  /// When the report thread starts, it sets 'report_thread_active_' to true and signals
+  /// 'report_thread_started_cv_'. The report thread is shut down by setting
+  /// 'report_thread_active_' to false and signalling 'stop_report_thread_cv_'.
+  bool report_thread_active_;
 
   /// true if plan_->GetNext() indicated that it's done
   bool done_;
