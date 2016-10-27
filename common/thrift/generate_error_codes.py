@@ -295,6 +295,11 @@ error_codes = (
 
   ("NO_REGISTERED_BACKENDS", 94, "Cannot schedule query: no registered backends "
    "available."),
+
+  ("AVRO_UNSUPPORTED_TYPE", 95, "Column '$0': unsupported Avro type '$1'"),
+
+  ("AVRO_INVALID_DECIMAL", 96,
+      "Column '$0': invalid Avro decimal type with precision = '$1' scale = '$2'"),
 )
 
 import sys
