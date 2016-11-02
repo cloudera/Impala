@@ -28,6 +28,7 @@ import com.cloudera.impala.catalog.StructField;
 import com.cloudera.impala.catalog.StructType;
 import com.cloudera.impala.common.AnalysisException;
 import com.cloudera.impala.thrift.TExprNode;
+
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -147,6 +148,17 @@ public class Subquery extends Expr {
     }
     Preconditions.checkState(structFields.size() != 0);
     return new StructType(structFields);
+  }
+
+  /**
+   * Returns true if the toSql() of the Subqueries is identical. May return false for
+   * equivalent statements even due to minor syntactic differences like parenthesis.
+   * TODO: Switch to a less restrictive implementation.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (!super.equals(o)) return false;
+    return stmt_.toSql().equals(((Subquery)o).stmt_.toSql());
   }
 
   @Override
