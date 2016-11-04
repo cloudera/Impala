@@ -4,24 +4,25 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-import com.cloudera.impala.analysis.ExprSubstitutionMap;
-import com.cloudera.impala.analysis.QueryStmt;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.cloudera.impala.analysis.AnalysisContext;
 import com.cloudera.impala.analysis.ColumnLineageGraph;
 import com.cloudera.impala.analysis.Expr;
+import com.cloudera.impala.analysis.ExprSubstitutionMap;
 import com.cloudera.impala.analysis.InsertStmt;
+import com.cloudera.impala.analysis.QueryStmt;
 import com.cloudera.impala.catalog.HBaseTable;
 import com.cloudera.impala.catalog.Table;
 import com.cloudera.impala.common.ImpalaException;
 import com.cloudera.impala.common.PrintUtils;
 import com.cloudera.impala.common.RuntimeEnv;
+import com.cloudera.impala.service.BackendConfig;
 import com.cloudera.impala.thrift.TExplainLevel;
-import com.cloudera.impala.thrift.TRuntimeFilterMode;
 import com.cloudera.impala.thrift.TQueryCtx;
 import com.cloudera.impala.thrift.TQueryExecRequest;
+import com.cloudera.impala.thrift.TRuntimeFilterMode;
 import com.cloudera.impala.thrift.TTableName;
 import com.cloudera.impala.util.MaxRowsProcessedVisitor;
 import com.google.common.base.Joiner;
@@ -135,7 +136,7 @@ public class Planner {
     ctx_.getRootAnalyzer().getTimeline().markEvent("Distributed plan created");
 
     ColumnLineageGraph graph = ctx_.getRootAnalyzer().getColumnLineageGraph();
-    if (RuntimeEnv.INSTANCE.computeLineage() || RuntimeEnv.INSTANCE.isTestEnv()) {
+    if (BackendConfig.INSTANCE.getComputeLineage() || RuntimeEnv.INSTANCE.isTestEnv()) {
       // Compute the column lineage graph
       if (ctx_.isInsertOrCtas()) {
         Table targetTable = ctx_.getAnalysisResult().getInsertStmt().getTargetTable();
