@@ -1232,7 +1232,6 @@ public class SingleNodePlanner {
    */
   private PlanNode createHdfsScanPlan(TableRef hdfsTblRef, boolean fastPartitionKeyScans,
       Analyzer analyzer) throws ImpalaException {
-    HdfsTable hdfsTable = (HdfsTable)hdfsTblRef.getTable();
     TupleDescriptor tupleDesc = hdfsTblRef.getDesc();
 
     // Get all predicates bound by the tuple.
@@ -1245,6 +1244,7 @@ public class SingleNodePlanner {
     analyzer.markConjunctsAssigned(unassigned);
 
     analyzer.createEquivConjuncts(tupleDesc.getId(), conjuncts);
+    Expr.removeDuplicates(conjuncts);
 
     // Do partition pruning before deciding which slots to materialize,
     // We might end up removing some predicates.
