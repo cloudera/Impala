@@ -19,19 +19,12 @@
 
 #include "common/logging.h"
 #include "rpc/jni-thrift-util.h"
+#include "util/backend-gflag-util.h"
 #include "util/jni-util.h"
-#include "util/logging-support.h"
 
 #include "common/names.h"
 
 using namespace impala;
-
-DECLARE_string(sentry_config);
-DECLARE_int32(non_impala_java_vlog);
-DECLARE_bool(load_auth_to_local_rules);
-DECLARE_string(principal);
-
-DEFINE_bool(load_catalog_at_startup, false, "if true, load all catalog data at startup");
 
 // Authorization related flags. Must be set to valid values to properly configure
 // authorization.
@@ -55,10 +48,10 @@ DEFINE_string(authorized_proxy_user_config, "",
     "users. For example: hue=user1,user2;admin=*");
 DEFINE_string(authorized_proxy_user_config_delimiter, ",",
     "Specifies the delimiter used in authorized_proxy_user_config. ");
+
 Frontend::Frontend() {
   JniMethodDescriptor methods[] = {
-    {"<init>", "(ZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;"
-        "Ljava/lang/String;IIZ)V", &fe_ctor_},
+    {"<init>", "([B)V", &fe_ctor_},
     {"createExecRequest", "([B)[B", &create_exec_request_id_},
     {"getExplainPlan", "([B)Ljava/lang/String;", &get_explain_plan_id_},
     {"getHadoopConfig", "([B)[B", &get_hadoop_config_id_},
@@ -94,21 +87,10 @@ Frontend::Frontend() {
     EXIT_IF_ERROR(JniUtil::LoadJniMethod(jni_env, fe_class_, &(methods[i])));
   };
 
-  jboolean lazy = (FLAGS_load_catalog_at_startup ? false : true);
-  jstring policy_file_path =
-      jni_env->NewStringUTF(FLAGS_authorization_policy_file.c_str());
-  jstring server_name =
-      jni_env->NewStringUTF(FLAGS_server_name.c_str());
-  jstring sentry_config =
-      jni_env->NewStringUTF(FLAGS_sentry_config.c_str());
-  jstring auth_provider_class =
-      jni_env->NewStringUTF(FLAGS_authorization_policy_provider_class.c_str());
-  // auth_to_local rules are read if --load_auth_to_local_rules is set to true
-  // and impala is kerberized.
-  jboolean auth_to_local = FLAGS_load_auth_to_local_rules && !FLAGS_principal.empty();
-  jobject fe = jni_env->NewObject(fe_class_, fe_ctor_, lazy, server_name,
-      policy_file_path, sentry_config, auth_provider_class, FlagToTLogLevel(FLAGS_v),
-      FlagToTLogLevel(FLAGS_non_impala_java_vlog), auth_to_local);
+  jbyteArray cfg_bytes;
+  EXIT_IF_ERROR(GetThriftBackendGflags(jni_env, &cfg_bytes));
+
+  jobject fe = jni_env->NewObject(fe_class_, fe_ctor_, cfg_bytes);
   EXIT_IF_EXC(jni_env);
   EXIT_IF_ERROR(JniUtil::LocalToGlobalRef(jni_env, fe, &fe_));
 }

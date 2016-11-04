@@ -83,6 +83,7 @@ import com.cloudera.impala.thrift.TTableName;
 import com.cloudera.impala.thrift.TUniqueId;
 import com.cloudera.impala.thrift.TUpdateCatalogCacheRequest;
 import com.cloudera.impala.thrift.TUpdateMembershipRequest;
+import com.cloudera.impala.thrift.TBackendGflags;
 import com.cloudera.impala.util.GlogAppender;
 import com.cloudera.impala.util.PatternMatcher;
 import com.cloudera.impala.util.TSessionStateUtil;
@@ -109,17 +110,20 @@ public class JniFrontend {
   /**
    * Create a new instance of the Jni Frontend.
    */
-  public JniFrontend(boolean lazy, String serverName, String authorizationPolicyFile,
-      String sentryConfigFile, String authPolicyProviderClass, int impalaLogLevel,
-      int otherLogLevel, boolean allowAuthToLocal) throws InternalException {
-    BackendConfig.setAuthToLocal(allowAuthToLocal);
-    GlogAppender.Install(TLogLevel.values()[impalaLogLevel],
-        TLogLevel.values()[otherLogLevel]);
+  public JniFrontend(byte[] thriftBackendConfig) throws ImpalaException, TException {
+    TBackendGflags cfg = new TBackendGflags();
+    JniUtil.deserializeThrift(protocolFactory_, cfg, thriftBackendConfig);
+
+    BackendConfig.create(cfg);
+
+    GlogAppender.Install(TLogLevel.values()[cfg.impala_log_lvl],
+        TLogLevel.values()[cfg.non_impala_java_vlog]);
 
     // Validate the authorization configuration before initializing the Frontend.
     // If there are any configuration problems Impala startup will fail.
-    AuthorizationConfig authConfig = new AuthorizationConfig(serverName,
-        authorizationPolicyFile, sentryConfigFile, authPolicyProviderClass);
+    AuthorizationConfig authConfig = new AuthorizationConfig(cfg.server_name,
+        cfg.authorization_policy_file, cfg.sentry_config,
+        cfg.authorization_policy_provider_class);
     authConfig.validateConfig();
     if (authConfig.isEnabled()) {
       LOG.info(String.format("Authorization is 'ENABLED' using %s",

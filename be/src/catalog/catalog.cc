@@ -19,14 +19,11 @@
 
 #include "common/logging.h"
 #include "rpc/jni-thrift-util.h"
-#include "util/logging-support.h"
+#include "util/backend-gflag-util.h"
 
 #include "common/names.h"
 
 using namespace impala;
-
-DECLARE_bool(load_auth_to_local_rules);
-DECLARE_string(principal);
 
 DEFINE_bool(load_catalog_in_background, false,
     "If true, loads catalog metadata in the background. If false, metadata is loaded "
@@ -37,11 +34,9 @@ DEFINE_int32(num_metadata_loading_threads, 16,
 DEFINE_string(sentry_config, "", "Local path to a sentry-site.xml configuration "
     "file. If set, authorization will be enabled.");
 
-DECLARE_int32(non_impala_java_vlog);
-
 Catalog::Catalog() {
   JniMethodDescriptor methods[] = {
-    {"<init>", "(ZILjava/lang/String;IIZ)V", &catalog_ctor_},
+    {"<init>", "([B)V", &catalog_ctor_},
     {"updateCatalog", "([B)[B", &update_metastore_id_},
     {"execDdl", "([B)[B", &exec_ddl_id_},
     {"resetMetadata", "([B)[B", &reset_metadata_id_},
@@ -64,16 +59,10 @@ Catalog::Catalog() {
     EXIT_IF_ERROR(JniUtil::LoadJniMethod(jni_env, catalog_class_, &(methods[i])));
   }
 
-  jboolean load_in_background = FLAGS_load_catalog_in_background;
-  jint num_metadata_loading_threads = FLAGS_num_metadata_loading_threads;
-  jstring sentry_config = jni_env->NewStringUTF(FLAGS_sentry_config.c_str());
-  // auth_to_local rules are read if --load_auth_to_local_rules is set to true
-  // and impala is kerberized.
-  jboolean auth_to_local = FLAGS_load_auth_to_local_rules && !FLAGS_principal.empty();
-  jobject catalog = jni_env->NewObject(catalog_class_, catalog_ctor_,
-      load_in_background, num_metadata_loading_threads, sentry_config,
-      FlagToTLogLevel(FLAGS_v), FlagToTLogLevel(FLAGS_non_impala_java_vlog),
-      auth_to_local);
+  jbyteArray cfg_bytes;
+  EXIT_IF_ERROR(GetThriftBackendGflags(jni_env, &cfg_bytes));
+
+  jobject catalog = jni_env->NewObject(catalog_class_, catalog_ctor_, cfg_bytes);
   EXIT_IF_EXC(jni_env);
   EXIT_IF_ERROR(JniUtil::LocalToGlobalRef(jni_env, catalog, &catalog_));
 }
