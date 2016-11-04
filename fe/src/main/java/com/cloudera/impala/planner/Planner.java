@@ -20,6 +20,7 @@ import com.cloudera.impala.catalog.Table;
 import com.cloudera.impala.common.ImpalaException;
 import com.cloudera.impala.common.PrintUtils;
 import com.cloudera.impala.common.RuntimeEnv;
+import com.cloudera.impala.service.BackendConfig;
 import com.cloudera.impala.thrift.TExplainLevel;
 import com.cloudera.impala.thrift.TQueryCtx;
 import com.cloudera.impala.thrift.TQueryExecRequest;
@@ -145,7 +146,7 @@ public class Planner {
     ctx_.getRootAnalyzer().getTimeline().markEvent("Distributed plan created");
 
     ColumnLineageGraph graph = ctx_.getRootAnalyzer().getColumnLineageGraph();
-    if (RuntimeEnv.INSTANCE.computeLineage() || RuntimeEnv.INSTANCE.isTestEnv()) {
+    if (BackendConfig.INSTANCE.getComputeLineage() || RuntimeEnv.INSTANCE.isTestEnv()) {
       // Compute the column lineage graph
       if (ctx_.isInsertOrCtas()) {
         Table targetTable = ctx_.getAnalysisResult().getInsertStmt().getTargetTable();

@@ -22,6 +22,7 @@ import com.cloudera.impala.catalog.Table;
 import com.cloudera.impala.catalog.View;
 import com.cloudera.impala.common.AnalysisException;
 import com.cloudera.impala.common.RuntimeEnv;
+import com.cloudera.impala.service.BackendConfig;
 
 import com.google.common.base.Preconditions;
 
@@ -52,7 +53,7 @@ public class AlterViewStmt extends CreateOrAlterViewStmtBase {
     }
 
     createColumnAndViewDefs(analyzer);
-    if (RuntimeEnv.INSTANCE.computeLineage() || RuntimeEnv.INSTANCE.isTestEnv()) {
+    if (BackendConfig.INSTANCE.getComputeLineage() || RuntimeEnv.INSTANCE.isTestEnv()) {
       computeLineageGraph(analyzer);
     }
   }

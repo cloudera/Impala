@@ -723,8 +723,3 @@ struct TGetHadoopConfigResponse {
 struct TGetAllHadoopConfigsResponse {
   1: optional map<string, string> configs;
 }
-
-// BE startup options
-struct TStartupOptions {
-  1: optional bool compute_lineage
-}
