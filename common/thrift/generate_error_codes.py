@@ -300,6 +300,10 @@ error_codes = (
 
   ("AVRO_INVALID_DECIMAL", 96,
       "Column '$0': invalid Avro decimal type with precision = '$1' scale = '$2'"),
+
+  ("PARQUET_TIMESTAMP_OUT_OF_RANGE", 97,
+   "Parquet file '$0' column '$1' contains an out of range timestamp. "
+   "The valid date range is 1400-01-01..9999-12-31."),
 )
 
 import sys

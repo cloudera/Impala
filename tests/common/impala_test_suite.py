@@ -43,7 +43,10 @@ from tests.common.test_dimensions import (
     create_exec_option_dimension,
     get_dataset_from_workload,
     load_table_info_dimension)
-from tests.common.test_result_verifier import verify_raw_results, verify_runtime_profile
+from tests.common.test_result_verifier import (
+    apply_error_match_filter,
+    verify_raw_results,
+    verify_runtime_profile)
 from tests.common.test_vector import TestDimension
 from tests.performance.query import Query
 from tests.performance.query_exec_functions import execute_using_jdbc
@@ -227,8 +230,8 @@ class ImpalaTestSuite(BaseTestSuite):
         test_section[section_name] = test_section[section_name] \
                                      .replace('$NAMENODE', NAMENODE) \
                                      .replace('$IMPALA_HOME', IMPALA_HOME)
-      if use_db:
-        test_section['RESULTS'] = test_section['RESULTS'].replace('$DATABASE', use_db)
+        if use_db:
+          test_section[section_name] = test_section[section_name].replace('$DATABASE', use_db)
     verify_raw_results(test_section, result, vector.get_value('table_format').file_format,
                        pytest.config.option.update_results,
                        replace_filenames_with_placeholder)
