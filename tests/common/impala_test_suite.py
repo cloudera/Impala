@@ -194,7 +194,7 @@ class ImpalaTestSuite(BaseTestSuite):
     Verifies that at least one of the strings in 'expected_str' is a substring of the
     actual exception string 'actual_str'.
     """
-    actual_str = actual_str.replace('\n', '')
+    actual_str = ''.join(apply_error_match_filter([actual_str.replace('\n', '')]))
     for expected_str in expected_strs:
       # In error messages, some paths are always qualified and some are not.
       # So, allow both $NAMENODE and $FILESYSTEM_PREFIX to be used in CATCH.
@@ -318,6 +318,10 @@ class ImpalaTestSuite(BaseTestSuite):
             .replace('$IMPALA_HOME', IMPALA_HOME)
         if use_db:
           test_section['RESULTS'] = test_section['RESULTS'].replace('$DATABASE', use_db)
+        if 'ERRORS' in test_section:
+          test_section['ERRORS'] = test_section['ERRORS'].replace('$NAMENODE', NAMENODE);
+          if use_db:
+            test_section['ERRORS'] = test_section['ERRORS'].replace('$DATABASE', use_db)
         verify_raw_results(test_section, result,
                          vector.get_value('table_format').file_format,
                          pytest.config.option.update_results)

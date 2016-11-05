@@ -276,7 +276,11 @@ error_codes = (
    "data of type $1: $2"),
 
   ("TEXT_PARSER_TRUNCATED_COLUMN", 90, "Length of column is $0 which exceeds maximum "
-   "supported length of 2147483647 bytes.")
+   "supported length of 2147483647 bytes."),
+
+  ("PARQUET_TIMESTAMP_OUT_OF_RANGE", 91,
+   "Parquet file '$0' column '$1' contains an out of range timestamp. "
+   "The valid date range is 1400-01-01..9999-12-31."),
 )
 
 import sys
