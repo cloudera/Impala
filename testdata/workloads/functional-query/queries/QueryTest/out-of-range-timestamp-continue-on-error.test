@@ -1,0 +1,52 @@
+====
+---- QUERY
+# IMPALA-4363: Verify that if an out of range parquet timestamp is read,
+# it's treated as a NULL and a warning is issued.
+SELECT * FROM out_of_range_timestamp;
+---- TYPES
+TIMESTAMP
+---- RESULTS
+NULL
+1400-01-01 00:00:00
+9999-12-31 00:00:00
+NULL
+---- ERRORS
+Parquet file '$NAMENODE/test-warehouse/$DATABASE.db/out_of_range_timestamp/out_of_range_timestamp.parquet' column 'ts' contains an out of range timestamp. The valid date range is 1400-01-01..9999-12-31. (1 of 2 similar)
+====
+---- QUERY
+# IMPALA-4363: Verify that if an out of range parquet timestamp is read,
+# it's treated as a NULL and a warning is issued.
+CREATE TABLE t1 AS SELECT * FROM out_of_range_timestamp;
+---- ERRORS
+Parquet file '$NAMENODE/test-warehouse/$DATABASE.db/out_of_range_timestamp/out_of_range_timestamp.parquet' column 'ts' contains an out of range timestamp. The valid date range is 1400-01-01..9999-12-31. (1 of 2 similar)
+====
+---- QUERY
+# SELECT from the new table does not raise any errors.
+SELECT * FROM t1;
+---- TYPES
+TIMESTAMP
+---- RESULTS
+NULL
+1400-01-01 00:00:00
+9999-12-31 00:00:00
+NULL
+====
+---- QUERY
+# IMPALA-4363: Verify that if an out of range parquet timestamp is read,
+# it's treated as a NULL and a warning is issued.
+CREATE TABLE t2 LIKE out_of_range_timestamp;
+INSERT INTO t2 SELECT * FROM out_of_range_timestamp;
+---- ERRORS
+# SELECT from the new table does not raise any errors.
+Parquet file '$NAMENODE/test-warehouse/$DATABASE.db/out_of_range_timestamp/out_of_range_timestamp.parquet' column 'ts' contains an out of range timestamp. The valid date range is 1400-01-01..9999-12-31. (1 of 2 similar)
+====
+---- QUERY
+SELECT * FROM t2;
+---- TYPES
+TIMESTAMP
+---- RESULTS
+NULL
+1400-01-01 00:00:00
+9999-12-31 00:00:00
+NULL
+====

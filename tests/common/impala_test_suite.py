@@ -262,6 +262,8 @@ class ImpalaTestSuite(BaseTestSuite):
               .replace('$FILESYSTEM_PREFIX', FILESYSTEM_PREFIX) \
               .replace('$NAMENODE', NAMENODE) \
               .replace('$IMPALA_HOME', IMPALA_HOME)
+          if use_db:
+            expected_str = expected_str.replace('$DATABASE', use_db)
           assert expected_str in str(e)
           continue
         raise
@@ -282,6 +284,12 @@ class ImpalaTestSuite(BaseTestSuite):
         test_section['RESULTS'] = test_section['RESULTS'] \
             .replace('$NAMENODE', NAMENODE) \
             .replace('$IMPALA_HOME', IMPALA_HOME)
+        if use_db:
+          test_section['RESULTS'] = test_section['RESULTS'].replace('$DATABASE', use_db)
+        if 'ERRORS' in test_section:
+          test_section['ERRORS'] = test_section['ERRORS'].replace('$NAMENODE', NAMENODE);
+          if use_db:
+            test_section['ERRORS'] = test_section['ERRORS'].replace('$DATABASE', use_db)
         verify_raw_results(test_section, result,
                          vector.get_value('table_format').file_format,
                          pytest.config.option.update_results)

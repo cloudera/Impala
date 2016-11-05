@@ -15,7 +15,7 @@ from testdata.common import widetable
 from tests.common.test_vector import *
 from tests.common.impala_test_suite import *
 from tests.util.test_file_parser import *
-from tests.util.filesystem_utils import WAREHOUSE
+from tests.util.filesystem_utils import WAREHOUSE, get_fs_path
 from tests.common.test_dimensions import create_single_exec_option_dimension
 from tests.common.skip import SkipIfS3, SkipIfIsilon, SkipIfOldAggsJoins, SkipIfLocal
 
@@ -187,6 +187,8 @@ class TestWideTable(ImpalaTestSuite):
 
 
 class TestParquet(ImpalaTestSuite):
+  TEST_DB = 'test_parquet_file'
+
   @classmethod
   def get_workload(cls):
     return 'functional-query'
@@ -197,6 +199,15 @@ class TestParquet(ImpalaTestSuite):
     cls.TestMatrix.add_constraint(
       lambda v: v.get_value('table_format').file_format == 'parquet')
 
+  def setup_method(self, method):
+    self.cleanup_db(TestParquet.TEST_DB)
+    self.client.execute("create database %s location '%s/%s.db'" %
+        (TestParquet.TEST_DB, WAREHOUSE,
+        TestParquet.TEST_DB))
+
+  def teardown_method(self, method):
+    self.cleanup_db(TestParquet.TEST_DB)
+
   def test_parquet(self, vector):
     self.run_test_case('QueryTest/parquet', vector)
 
@@ -204,6 +215,25 @@ class TestParquet(ImpalaTestSuite):
   def test_corrupt_files(self, vector):
     vector.get_value('exec_option')['abort_on_error'] = 0
     self.run_test_case('QueryTest/parquet-continue-on-error', vector)
+
+  def test_timestamp_out_of_range(self, vector):
+    """IMPALA-4363: Test scanning parquet files with an out of range timestamp."""
+    self.client.execute(("create table {0}.out_of_range_timestamp (ts timestamp) "
+        "stored as parquet").format(TestParquet.TEST_DB))
+    out_of_range_timestamp_loc = get_fs_path(
+        "{0}/{1}.db/{2}".format(WAREHOUSE, TestParquet.TEST_DB, "out_of_range_timestamp"))
+    check_call(['hdfs', 'dfs', '-copyFromLocal',
+        os.environ['IMPALA_HOME'] + "/testdata/data/out_of_range_timestamp.parquet",
+        out_of_range_timestamp_loc])
+
+    vector.get_value('exec_option')['abort_on_error'] = 0
+    self.run_test_case('QueryTest/out-of-range-timestamp-continue-on-error',
+        vector,
+        TestParquet.TEST_DB)
+    vector.get_value('exec_option')['abort_on_error'] = 1
+    self.run_test_case('QueryTest/out-of-range-timestamp-abort-on-error',
+        vector,
+        TestParquet.TEST_DB)
 
   @SkipIfS3.hdfs_block_size
   @SkipIfIsilon.hdfs_block_size
