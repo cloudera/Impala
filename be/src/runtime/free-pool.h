@@ -61,11 +61,10 @@ class FreePool {
       return NULL;
     }
 #endif
-    ++net_allocations_;
-    if (FLAGS_disable_mem_pools) return reinterpret_cast<uint8_t*>(malloc(size));
-
     /// Return a non-NULL dummy pointer. NULL is reserved for failures.
     if (UNLIKELY(size == 0)) return mem_pool_->EmptyAllocPtr();
+    ++net_allocations_;
+    if (FLAGS_disable_mem_pools) return reinterpret_cast<uint8_t*>(malloc(size));
 
     /// Do ceil(log_2(size))
     int free_list_idx = BitUtil::Log2(size);
@@ -92,12 +91,12 @@ class FreePool {
   }
 
   void Free(uint8_t* ptr) {
+    if (UNLIKELY(ptr == NULL || ptr == mem_pool_->EmptyAllocPtr())) return;
     --net_allocations_;
     if (FLAGS_disable_mem_pools) {
       free(ptr);
       return;
     }
-    if (UNLIKELY(ptr == NULL || ptr == mem_pool_->EmptyAllocPtr())) return;
     FreeListNode* node = reinterpret_cast<FreeListNode*>(ptr - sizeof(FreeListNode));
     FreeListNode* list = node->list;
 #ifndef NDEBUG
@@ -115,6 +114,7 @@ class FreePool {
   /// NULL will be returned on allocation failure. It's the caller's responsibility to
   /// free the memory buffer pointed to by "ptr" in this case.
   uint8_t* Reallocate(uint8_t* ptr, int64_t size) {
+    if (UNLIKELY(ptr == NULL || ptr == mem_pool_->EmptyAllocPtr())) return Allocate(size);
 #ifndef NDEBUG
     static int32_t alloc_counts = 0;
     if (FLAGS_stress_free_pool_alloc > 0 &&
@@ -125,7 +125,6 @@ class FreePool {
     if (FLAGS_disable_mem_pools) {
       return reinterpret_cast<uint8_t*>(realloc(reinterpret_cast<void*>(ptr), size));
     }
-    if (UNLIKELY(ptr == NULL || ptr == mem_pool_->EmptyAllocPtr())) return Allocate(size);
     FreeListNode* node = reinterpret_cast<FreeListNode*>(ptr - sizeof(FreeListNode));
     FreeListNode* list = node->list;
 #ifndef NDEBUG
