@@ -1,0 +1,86 @@
+From b48bbe7f8190eaffa2497eeae9bb9c65f2712256 Mon Sep 17 00:00:00 2001
+From: Enis Soztutar <enis@apache.org>
+Date: Fri, 25 Sep 2015 11:04:53 -0700
+Subject: [PATCH 347/354] HBASE-14474 DeadLock in
+ RpcClientImpl.Connection.close()
+
+Change-Id: If3df4a8dc8bed622e2f0fc9f6fd2c93c5f1cbb9b
+Reason: Bug
+Ref: CDH-45893
+Author: Enis Soztutar
+---
+ .../org/apache/hadoop/hbase/ipc/RpcClientImpl.java |   25 +++++++++++++-------
+ 1 file changed, 17 insertions(+), 8 deletions(-)
+
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/ipc/RpcClientImpl.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/ipc/RpcClientImpl.java
+index 4bf35fa..9136926 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/ipc/RpcClientImpl.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/ipc/RpcClientImpl.java
+@@ -906,14 +906,20 @@ public class RpcClientImpl extends AbstractRpcClient {
+           IPCUtil.write(this.out, header, call.param, cellBlock);
+         } catch (IOException e) {
+           // We set the value inside the synchronized block, this way the next in line
+-          //  won't even try to write
+-          markClosed(e);
+-          close();
++          //  won't even try to write. Otherwise we might miss a call in the calls map?
++          shouldCloseConnection.set(true);
+           writeException = e;
+           interrupt();
+         }
+       }
+ 
++      // call close outside of the synchronized (outLock) to prevent deadlock - HBASE-14474
++      if (writeException != null) {
++        if (markClosed(writeException)) {
++          close();
++        }
++      }
++
+       // We added a call, and may be started the connection close. In both cases, we
+       //  need to notify the reader.
+       synchronized (this) {
+@@ -1014,10 +1020,11 @@ public class RpcClientImpl extends AbstractRpcClient {
+           e.getStackTrace(), doNotRetry);
+     }
+ 
+-    protected synchronized void markClosed(IOException e) {
++    protected synchronized boolean markClosed(IOException e) {
+       if (e == null) throw new NullPointerException();
+ 
+-      if (shouldCloseConnection.compareAndSet(false, true)) {
++      boolean ret = shouldCloseConnection.compareAndSet(false, true);
++      if (ret) {
+         if (LOG.isTraceEnabled()) {
+           LOG.trace(getName() + ": marking at should close, reason: " + e.getMessage());
+         }
+@@ -1026,6 +1033,7 @@ public class RpcClientImpl extends AbstractRpcClient {
+         }
+         notifyAll();
+       }
++      return ret;
+     }
+ 
+ 
+@@ -1134,14 +1142,15 @@ public class RpcClientImpl extends AbstractRpcClient {
+     }
+     if (connsToClose != null) {
+       for (Connection conn : connsToClose) {
+-        conn.markClosed(new InterruptedIOException("RpcClient is closing"));
+-        conn.close();
++        if (conn.markClosed(new InterruptedIOException("RpcClient is closing"))) {
++          conn.close();
++        }
+       }
+     }
+     // wait until all connections are closed
+     while (!connections.isEmpty()) {
+       try {
+-        Thread.sleep(100);
++        Thread.sleep(10);
+       } catch (InterruptedException e) {
+         LOG.info("Interrupted while stopping the client. We still have " + connections.size() +
+             " connections.");
+-- 
+1.7.9.5
+

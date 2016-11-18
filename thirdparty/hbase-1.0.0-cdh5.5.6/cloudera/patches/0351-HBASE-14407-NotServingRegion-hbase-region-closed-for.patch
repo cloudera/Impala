@@ -1,0 +1,58 @@
+From 34529ef86d01de9d9109bbc1c1886d07b7938c7b Mon Sep 17 00:00:00 2001
+From: Andrew Purtell <apurtell@apache.org>
+Date: Fri, 25 Sep 2015 17:57:14 -0700
+Subject: [PATCH 351/354] HBASE-14407 NotServingRegion: hbase region closed
+ forever (Shuaifeng Zhou)
+
+Reason: Bug
+Author: Shuaifeng Zhou
+Ref: CDH-41029
+
+Change-Id: I8b03c85e271ce9fb3645ffb7de9740c5f32d0b76
+(cherry picked from commit d6a003503c9cb754d641fead262c9b20d4e43219)
+---
+ .../hadoop/hbase/master/AssignmentManager.java     |   28 +++++++++++++++++++-
+ 1 file changed, 27 insertions(+), 1 deletion(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java
+index dc7b3ba..3aedbfd 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java
+@@ -2278,7 +2278,33 @@ public class AssignmentManager extends ZooKeeperListener {
+     LOG.debug("ALREADY_OPENED " + region.getRegionNameAsString()
+       + " to " + sn);
+     String encodedName = region.getEncodedName();
+-    deleteNodeInStates(encodedName, "offline", sn, EventType.M_ZK_REGION_OFFLINE);
++    
++    //If use ZkForAssignment, region already Opened event should not be handled, 
++    //leave it to zk event. See HBase-14407.
++    if(useZKForAssignment){
++      String node = ZKAssign.getNodeName(watcher, encodedName);
++      Stat stat = new Stat();
++      try {
++        byte[] existingBytes = ZKUtil.getDataNoWatch(watcher, node, stat);
++        if(existingBytes!=null){
++          RegionTransition rt= RegionTransition.parseFrom(existingBytes);
++          EventType et = rt.getEventType();
++          if (et.equals(EventType.RS_ZK_REGION_OPENED)) {
++            LOG.debug("ALREADY_OPENED " + region.getRegionNameAsString()
++              + " and node in "+et+" state");
++            return;
++          }
++        }
++      } catch (KeeperException ke) {
++        LOG.warn("Unexpected ZK exception getData " + node
++          + " node for the region " + encodedName, ke);
++      } catch (DeserializationException e) {
++        LOG.warn("Get RegionTransition from zk deserialization failed! ", e);
++      }
++      
++      deleteNodeInStates(encodedName, "offline", sn, EventType.M_ZK_REGION_OFFLINE);
++    }
++    
+     regionStates.regionOnline(region, sn);
+   }
+ 
+-- 
+1.7.9.5
+

@@ -1,0 +1,29 @@
+From 8d542a05c2901655f85b77963c8a0d0342744706 Mon Sep 17 00:00:00 2001
+From: Esteban Gutierrez <esteban@cloudera.com>
+Date: Wed, 23 Mar 2016 00:27:46 -0700
+Subject: [PATCH 310/354] HBASE-6617 ReplicationSourceManager should be able
+ to track multiple WAL paths (ADDENDUM) (Yu Li)
+
+Change-Id: I1d730cc28902b957f9c0d3ab7e4793137f65fe88
+Reason: Bug
+Author: Yu Li
+Ref: CDH-32912
+---
+ .../HBaseInterClusterReplicationEndpoint.java      |    1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/HBaseInterClusterReplicationEndpoint.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/HBaseInterClusterReplicationEndpoint.java
+index 788a504..1cf7bba 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/HBaseInterClusterReplicationEndpoint.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/HBaseInterClusterReplicationEndpoint.java
+@@ -165,6 +165,7 @@ public class HBaseInterClusterReplicationEndpoint extends HBaseReplicationEndpoi
+         // update metrics
+         this.metrics.setAgeOfLastShippedOp(entries.get(entries.size() - 1).getKey().getWriteTime(),
+           walGroupId);
++        replicationSinkMgr.reportSinkSuccess(sinkPeer);
+         return true;
+ 
+       } catch (IOException ioe) {
+-- 
+1.7.9.5
+

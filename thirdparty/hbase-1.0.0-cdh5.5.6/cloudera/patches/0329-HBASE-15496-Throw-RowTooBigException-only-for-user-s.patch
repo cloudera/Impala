@@ -1,0 +1,56 @@
+From 8e7f74f85df192eef6b9191b94623444ffba2f74 Mon Sep 17 00:00:00 2001
+From: Huaxiang Sun <hsun@cloudera.com>
+Date: Thu, 16 Jun 2016 16:32:02 -0700
+Subject: [PATCH 329/354] HBASE-15496 Throw RowTooBigException only for user
+ scan/get (Guanghao Zhang)
+
+Reason: Bug
+Author: Guanghao Zhang
+Ref: CDH-41134
+
+Change-Id: I54659b55983506bf57f84aa08dadaf0b5cb8b468
+---
+ .../hbase/regionserver/ScanQueryMatcher.java       |    4 ++++
+ .../hadoop/hbase/regionserver/StoreScanner.java    |    4 ++--
+ 2 files changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/ScanQueryMatcher.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/ScanQueryMatcher.java
+index a79b35f..998eac7 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/ScanQueryMatcher.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/ScanQueryMatcher.java
+@@ -616,6 +616,10 @@ public class ScanQueryMatcher {
+     }
+   }
+ 
++  boolean isUserScan() {
++    return this.isUserScan;
++  }
++
+   //Used only for testing purposes
+   static MatchCode checkColumn(ColumnTracker columnTracker, byte[] bytes, int offset,
+       int length, long ttl, byte type, boolean ignoreCount) throws IOException {
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/StoreScanner.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/StoreScanner.java
+index 7e05962..4306865 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/StoreScanner.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/StoreScanner.java
+@@ -356,7 +356,7 @@ public class StoreScanner extends NonReversedNonLazyKeyValueScanner
+       if (!isParallelSeek) {
+         long totalScannersSoughtBytes = 0;
+         for (KeyValueScanner scanner : scanners) {
+-          if (totalScannersSoughtBytes >= maxRowSize) {
++          if (matcher.isUserScan() && totalScannersSoughtBytes >= maxRowSize) {
+             throw new RowTooBigException("Max row size allowed: " + maxRowSize
+               + ", but row is bigger than that");
+           }
+@@ -579,7 +579,7 @@ public class StoreScanner extends NonReversedNonLazyKeyValueScanner
+             scannerContext.incrementSizeProgress(CellUtil.estimatedHeapSizeOfWithoutTags(cell));
+             scannerContext.incrementBatchProgress(1);
+ 
+-            if (totalBytesRead > maxRowSize) {
++            if (matcher.isUserScan() && totalBytesRead > maxRowSize) {
+               throw new RowTooBigException("Max row size allowed: " + maxRowSize
+               + ", but the row is bigger than that.");
+             }
+-- 
+1.7.9.5
+

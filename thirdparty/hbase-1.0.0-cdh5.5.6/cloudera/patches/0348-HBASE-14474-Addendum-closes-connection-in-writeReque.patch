@@ -1,0 +1,33 @@
+From 347a96d36e8439635bfa03b0d75ccab4fc5e61c4 Mon Sep 17 00:00:00 2001
+From: Enis Soztutar <enis@apache.org>
+Date: Fri, 16 Oct 2015 11:54:22 -0700
+Subject: [PATCH 348/354] HBASE-14474 Addendum closes connection in
+ writeRequest() outside synchronized block
+
+Change-Id: I63bcb65caa7b208a2088530fe050c222261718c4
+Reason: Bug
+Ref: CDH-45893
+Author: Enis Soztutar
+---
+ .../org/apache/hadoop/hbase/ipc/RpcClientImpl.java |    5 ++---
+ 1 file changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/ipc/RpcClientImpl.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/ipc/RpcClientImpl.java
+index 9136926..4bc1123 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/ipc/RpcClientImpl.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/ipc/RpcClientImpl.java
+@@ -915,9 +915,8 @@ public class RpcClientImpl extends AbstractRpcClient {
+ 
+       // call close outside of the synchronized (outLock) to prevent deadlock - HBASE-14474
+       if (writeException != null) {
+-        if (markClosed(writeException)) {
+-          close();
+-        }
++        markClosed(writeException);
++        close();
+       }
+ 
+       // We added a call, and may be started the connection close. In both cases, we
+-- 
+1.7.9.5
+

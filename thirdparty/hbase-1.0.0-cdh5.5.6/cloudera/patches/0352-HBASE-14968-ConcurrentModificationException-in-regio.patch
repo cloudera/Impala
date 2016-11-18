@@ -1,0 +1,179 @@
+From 8887db4d93ff4b63a49bfaac470983db8b5af514 Mon Sep 17 00:00:00 2001
+From: Enis Soztutar <enis@apache.org>
+Date: Tue, 15 Dec 2015 11:24:24 -0800
+Subject: [PATCH 352/354] HBASE-14968 ConcurrentModificationException in
+ region close resulting in the region staying in
+ closing state
+
+Conflicts:
+	hbase-server/src/main/java/org/apache/hadoop/hbase/coprocessor/CoprocessorHost.java
+
+Change-Id: I29ffa0bdcb94da6c56e4aa272d290f661311f0e4
+Reason: Bug
+Ref: CDH-47411
+Author: Enis Soztutar
+---
+ .../hadoop/hbase/coprocessor/CoprocessorHost.java  |   24 +++++++----
+ .../apache/hadoop/hbase/executor/EventHandler.java |    7 +++-
+ .../hadoop/hbase/executor/TestExecutorService.java |   43 +++++++++++++++++---
+ 3 files changed, 59 insertions(+), 15 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/coprocessor/CoprocessorHost.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/coprocessor/CoprocessorHost.java
+index 312a3ae..4485917 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/coprocessor/CoprocessorHost.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/coprocessor/CoprocessorHost.java
+@@ -100,8 +100,11 @@ public abstract class CoprocessorHost<E extends CoprocessorEnvironment> {
+    */
+   private static Set<String> coprocessorNames =
+       Collections.synchronizedSet(new HashSet<String>());
++
+   public static Set<String> getLoadedCoprocessors() {
+-      return coprocessorNames;
++    synchronized (coprocessorNames) {
++      return new HashSet(coprocessorNames);
++    }
+   }
+ 
+   /**
+@@ -339,6 +342,7 @@ public abstract class CoprocessorHost<E extends CoprocessorEnvironment> {
+    */
+   static class EnvironmentPriorityComparator
+       implements Comparator<CoprocessorEnvironment> {
++    @Override
+     public int compare(final CoprocessorEnvironment env1,
+         final CoprocessorEnvironment env2) {
+       if (env1.getPriority() < env2.getPriority()) {
+@@ -427,14 +431,16 @@ public abstract class CoprocessorHost<E extends CoprocessorEnvironment> {
+         LOG.warn("Not stopping coprocessor "+impl.getClass().getName()+
+             " because not active (state="+state.toString()+")");
+       }
+-      // clean up any table references
+-      for (HTableInterface table: openTables) {
+-        try {
+-          ((HTableWrapper)table).internalClose();
+-        } catch (IOException e) {
+-          // nothing can be done here
+-          LOG.warn("Failed to close " +
+-              Bytes.toStringBinary(table.getTableName()), e);
++      synchronized (openTables) {
++        // clean up any table references
++        for (HTableInterface table: openTables) {
++          try {
++            ((HTableWrapper)table).internalClose();
++          } catch (IOException e) {
++            // nothing can be done here
++            LOG.warn("Failed to close " +
++                Bytes.toStringBinary(table.getTableName()), e);
++          }
+         }
+       }
+     }
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/executor/EventHandler.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/executor/EventHandler.java
+index 541089a..73fd7f2 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/executor/EventHandler.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/executor/EventHandler.java
+@@ -121,6 +121,7 @@ public abstract class EventHandler implements Runnable, Comparable<Runnable> {
+     return this;
+   }
+ 
++  @Override
+   public void run() {
+     TraceScope chunk = Trace.startSpan(this.getClass().getSimpleName(), parent);
+     try {
+@@ -223,6 +224,10 @@ public abstract class EventHandler implements Runnable, Comparable<Runnable> {
+    * @param t Throwable object
+    */
+   protected void handleException(Throwable t) {
+-    LOG.error("Caught throwable while processing event " + eventType, t);
++    String msg = "Caught throwable while processing event " + eventType;
++    LOG.error(msg, t);
++    if (server != null) {
++      server.abort(msg, t);
++    }
+   }
+ }
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/executor/TestExecutorService.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/executor/TestExecutorService.java
+index acb7ecf..25496ed 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/executor/TestExecutorService.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/executor/TestExecutorService.java
+@@ -19,8 +19,6 @@
+ package org.apache.hadoop.hbase.executor;
+ 
+ import static org.junit.Assert.*;
+-import static org.junit.Assert.assertEquals;
+-
+ import java.io.IOException;
+ import java.io.StringWriter;
+ import java.util.concurrent.ThreadPoolExecutor;
+@@ -29,7 +27,9 @@ import java.util.concurrent.atomic.AtomicInteger;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hbase.*;
++import org.apache.hadoop.hbase.Waiter.Predicate;
+ import org.apache.hadoop.hbase.executor.ExecutorService.Executor;
+ import org.apache.hadoop.hbase.executor.ExecutorService.ExecutorStatus;
+ import org.apache.hadoop.hbase.testclassification.SmallTests;
+@@ -89,8 +89,8 @@ public class TestExecutorService {
+     assertTrue(status.queuedEvents.isEmpty());
+     assertEquals(5, status.running.size());
+     checkStatusDump(status);
+-    
+-    
++
++
+     // Now interrupt the running Executor
+     synchronized (lock) {
+       lock.set(false);
+@@ -139,7 +139,7 @@ public class TestExecutorService {
+     status.dumpTo(sw, "");
+     String dump = sw.toString();
+     LOG.info("Got status dump:\n" + dump);
+-    
++
+     assertTrue(dump.contains("Waiting on java.util.concurrent.atomic.AtomicBoolean"));
+   }
+ 
+@@ -172,5 +172,38 @@ public class TestExecutorService {
+     }
+   }
+ 
++  @Test
++  public void testAborting() throws Exception {
++    final Configuration conf = HBaseConfiguration.create();
++    final Server server = mock(Server.class);
++    when(server.getConfiguration()).thenReturn(conf);
++
++    ExecutorService executorService = new ExecutorService("unit_test");
++    executorService.startExecutorService(
++      ExecutorType.MASTER_SERVER_OPERATIONS, 1);
++
++
++    executorService.submit(new EventHandler(server, EventType.M_SERVER_SHUTDOWN) {
++      @Override
++      public void process() throws IOException {
++        throw new RuntimeException("Should cause abort");
++      }
++    });
++
++    Waiter.waitFor(conf, 30000, new Predicate<Exception>() {
++      @Override
++      public boolean evaluate() throws Exception {
++        try {
++          verify(server, times(1)).abort(anyString(), (Throwable) anyObject());
++          return true;
++        } catch (Throwable t) {
++          return false;
++        }
++      }
++    });
++
++    executorService.shutdown();
++  }
++
+ }
+ 
+-- 
+1.7.9.5
+

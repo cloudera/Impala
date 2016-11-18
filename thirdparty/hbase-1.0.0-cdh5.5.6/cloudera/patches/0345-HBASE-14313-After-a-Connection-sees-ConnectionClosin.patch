@@ -1,0 +1,33 @@
+From 5644b59250827cd0f8f14b87b1cb84e9c53158ef Mon Sep 17 00:00:00 2001
+From: Elliott Clark <eclark@apache.org>
+Date: Wed, 26 Aug 2015 22:28:38 -0700
+Subject: [PATCH 345/354] HBASE-14313 After a Connection sees
+ ConnectionClosingException it never recovers --
+ ADDENDUM
+
+Change-Id: Ib0022a713025dabc45c504716a8556b41d6d244f
+Reason: Bug
+Ref: CDH-45893
+Author: Elliott Clark
+---
+ .../org/apache/hadoop/hbase/ipc/RpcClientImpl.java |    4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/ipc/RpcClientImpl.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/ipc/RpcClientImpl.java
+index b9c6716..44b2df4 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/ipc/RpcClientImpl.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/ipc/RpcClientImpl.java
+@@ -940,7 +940,9 @@ public class RpcClientImpl extends AbstractRpcClient {
+         } catch (IOException e) {
+           // We set the value inside the synchronized block, this way the next in line
+           //  won't even try to write
+-          markClosed(e);
++          if (markClosed(e)) {
++            close();
++          }
+           writeException = e;
+           interrupt();
+         }
+-- 
+1.7.9.5
+

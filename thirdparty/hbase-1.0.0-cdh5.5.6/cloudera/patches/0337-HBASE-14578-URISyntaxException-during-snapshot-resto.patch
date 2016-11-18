@@ -1,0 +1,158 @@
+From 19ddbe142b11efee6f40a0713bc7466cdfba45da Mon Sep 17 00:00:00 2001
+From: tedyu <yuzhihong@gmail.com>
+Date: Sat, 10 Oct 2015 15:26:04 -0700
+Subject: [PATCH 337/354] HBASE-14578 URISyntaxException during snapshot
+ restore for table with user defined namespace
+ (Pankaj Kumar)
+
+Reason: Bug
+Author: Pankaj Kumar
+Ref: CDH-43204
+Change-Id: I8ff47f3869650d6e598e2d1a065189671fa9ec37
+---
+ .../hbase/snapshot/RestoreSnapshotHelper.java      |    7 ++++---
+ .../master/snapshot/TestSnapshotFileCache.java     |    4 ++--
+ .../hbase/snapshot/SnapshotTestingUtils.java       |   16 +++++++++-------
+ .../hadoop/hbase/snapshot/TestExportSnapshot.java  |    5 +++--
+ .../hbase/snapshot/TestMobExportSnapshot.java      |    5 +++--
+ .../hbase/snapshot/TestRestoreSnapshotHelper.java  |   12 +++++++++++-
+ 6 files changed, 32 insertions(+), 17 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/RestoreSnapshotHelper.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/RestoreSnapshotHelper.java
+index 50db7f3..350c75a 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/RestoreSnapshotHelper.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/RestoreSnapshotHelper.java
+@@ -683,9 +683,10 @@ public class RestoreSnapshotHelper {
+     String hfileName = storeFile.getName();
+ 
+     // Extract the referred information (hfile name and parent region)
+-    Path refPath = StoreFileInfo.getReferredToFile(new Path(new Path(new Path(
+-        snapshotTable.getNameAsString(), regionInfo.getEncodedName()), familyDir.getName()),
+-        hfileName));
++    Path refPath =
++        StoreFileInfo.getReferredToFile(new Path(new Path(new Path(new Path(snapshotTable
++            .getNamespaceAsString(), snapshotTable.getQualifierAsString()), regionInfo
++            .getEncodedName()), familyDir.getName()), hfileName)); 
+     String snapshotRegionName = refPath.getParent().getParent().getName();
+     String fileName = refPath.getName();
+ 
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/snapshot/TestSnapshotFileCache.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/snapshot/TestSnapshotFileCache.java
+index f1732bb..989efe4 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/snapshot/TestSnapshotFileCache.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/snapshot/TestSnapshotFileCache.java
+@@ -247,7 +247,7 @@ public class TestSnapshotFileCache {
+   private SnapshotMock.SnapshotBuilder createAndTestSnapshotV1(final SnapshotFileCache cache,
+       final String name, final boolean tmp, final boolean removeOnExit) throws IOException {
+     SnapshotMock snapshotMock = new SnapshotMock(UTIL.getConfiguration(), fs, rootDir);
+-    SnapshotMock.SnapshotBuilder builder = snapshotMock.createSnapshotV1(name);
++    SnapshotMock.SnapshotBuilder builder = snapshotMock.createSnapshotV1(name, name);
+     createAndTestSnapshot(cache, builder, tmp, removeOnExit);
+     return builder;
+   }
+@@ -255,7 +255,7 @@ public class TestSnapshotFileCache {
+   private void createAndTestSnapshotV2(final SnapshotFileCache cache, final String name,
+       final boolean tmp, final boolean removeOnExit) throws IOException {
+     SnapshotMock snapshotMock = new SnapshotMock(UTIL.getConfiguration(), fs, rootDir);
+-    SnapshotMock.SnapshotBuilder builder = snapshotMock.createSnapshotV2(name);
++    SnapshotMock.SnapshotBuilder builder = snapshotMock.createSnapshotV2(name, name);
+     createAndTestSnapshot(cache, builder, tmp, removeOnExit);
+   }
+ 
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/snapshot/SnapshotTestingUtils.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/snapshot/SnapshotTestingUtils.java
+index eb4920e..8ea06d4 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/snapshot/SnapshotTestingUtils.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/snapshot/SnapshotTestingUtils.java
+@@ -548,17 +548,19 @@ public class SnapshotTestingUtils {
+       this.rootDir = rootDir;
+     }
+ 
+-    public SnapshotBuilder createSnapshotV1(final String snapshotName) throws IOException {
+-      return createSnapshot(snapshotName, SnapshotManifestV1.DESCRIPTOR_VERSION);
++    public SnapshotBuilder createSnapshotV1(final String snapshotName, final String tableName)
++        throws IOException {
++      return createSnapshot(snapshotName, tableName, SnapshotManifestV1.DESCRIPTOR_VERSION);
+     }
+ 
+-    public SnapshotBuilder createSnapshotV2(final String snapshotName) throws IOException {
+-      return createSnapshot(snapshotName, SnapshotManifestV2.DESCRIPTOR_VERSION);
++    public SnapshotBuilder createSnapshotV2(final String snapshotName, final String tableName)
++        throws IOException {
++      return createSnapshot(snapshotName, tableName, SnapshotManifestV2.DESCRIPTOR_VERSION);
+     }
+ 
+-    private SnapshotBuilder createSnapshot(final String snapshotName, final int version)
+-        throws IOException {
+-      HTableDescriptor htd = createHtd(snapshotName);
++    private SnapshotBuilder createSnapshot(final String snapshotName, final String tableName,
++        final int version) throws IOException {
++      HTableDescriptor htd = createHtd(tableName);
+ 
+       RegionData[] regions = createTable(htd, TEST_NUM_REGIONS);
+ 
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/snapshot/TestExportSnapshot.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/snapshot/TestExportSnapshot.java
+index 05a3d22..e99203a 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/snapshot/TestExportSnapshot.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/snapshot/TestExportSnapshot.java
+@@ -230,11 +230,12 @@ public class TestExportSnapshot {
+     FileSystem fs = TEST_UTIL.getHBaseCluster().getMaster().getMasterFileSystem().getFileSystem();
+ 
+     SnapshotMock snapshotMock = new SnapshotMock(TEST_UTIL.getConfiguration(), fs, rootDir);
+-    SnapshotMock.SnapshotBuilder builder = snapshotMock.createSnapshotV2("tableWithRefsV1");
++    SnapshotMock.SnapshotBuilder builder =
++        snapshotMock.createSnapshotV2("tableWithRefsV1", "tableWithRefsV1");
+     testSnapshotWithRefsExportFileSystemState(builder);
+ 
+     snapshotMock = new SnapshotMock(TEST_UTIL.getConfiguration(), fs, rootDir);
+-    builder = snapshotMock.createSnapshotV2("tableWithRefsV2");
++    builder = snapshotMock.createSnapshotV2("tableWithRefsV2", "tableWithRefsV1");
+     testSnapshotWithRefsExportFileSystemState(builder);
+   }
+ 
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/snapshot/TestMobExportSnapshot.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/snapshot/TestMobExportSnapshot.java
+index 3b0989b..1983e7d 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/snapshot/TestMobExportSnapshot.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/snapshot/TestMobExportSnapshot.java
+@@ -230,11 +230,12 @@ public class TestMobExportSnapshot {
+     FileSystem fs = TEST_UTIL.getHBaseCluster().getMaster().getMasterFileSystem().getFileSystem();
+ 
+     SnapshotMock snapshotMock = new SnapshotMock(TEST_UTIL.getConfiguration(), fs, rootDir);
+-    SnapshotMock.SnapshotBuilder builder = snapshotMock.createSnapshotV2("tableWithRefsV1");
++    SnapshotMock.SnapshotBuilder builder = snapshotMock.createSnapshotV2("tableWithRefsV1",
++        "tableWithRefsV1");
+     testSnapshotWithRefsExportFileSystemState(builder);
+ 
+     snapshotMock = new SnapshotMock(TEST_UTIL.getConfiguration(), fs, rootDir);
+-    builder = snapshotMock.createSnapshotV2("tableWithRefsV2");
++    builder = snapshotMock.createSnapshotV2("tableWithRefsV2", "tableWithRefsV2");
+     testSnapshotWithRefsExportFileSystemState(builder);
+   }
+ 
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/snapshot/TestRestoreSnapshotHelper.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/snapshot/TestRestoreSnapshotHelper.java
+index 8726c59..cea0f5b 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/snapshot/TestRestoreSnapshotHelper.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/snapshot/TestRestoreSnapshotHelper.java
+@@ -76,10 +76,20 @@ public class TestRestoreSnapshotHelper {
+ 
+   @Test
+   public void testRestore() throws IOException {
++    restoreAndVerify("snapshot", "testRestore");
++  }
++
++  @Test
++  public void testRestoreWithNamespace() throws IOException {
++    restoreAndVerify("snapshot", "namespace1:testRestoreWithNamespace");
++  }
++
++  private void restoreAndVerify(final String snapshotName, final String tableName)
++      throws IOException {
+     // Test Rolling-Upgrade like Snapshot.
+     // half machines writing using v1 and the others using v2 format.
+     SnapshotMock snapshotMock = new SnapshotMock(TEST_UTIL.getConfiguration(), fs, rootDir);
+-    SnapshotMock.SnapshotBuilder builder = snapshotMock.createSnapshotV2("snapshot");
++    SnapshotMock.SnapshotBuilder builder = snapshotMock.createSnapshotV2("snapshot", tableName);
+     builder.addRegionV1();
+     builder.addRegionV2();
+     builder.addRegionV2();
+-- 
+1.7.9.5
+

@@ -1,0 +1,88 @@
+From ea8aaf89c861bcc336384aa801878c0ca9605ff3 Mon Sep 17 00:00:00 2001
+From: Devaraj Das <ddas@apache.org>
+Date: Fri, 16 Oct 2015 13:49:18 -0700
+Subject: [PATCH 350/354] HBASE-13330. Region left unassigned due to AM & SSH
+ each thinking the assignment would be done by the
+ other
+
+Reason: Bug
+Author: Devaraj Das
+Ref: CDH-41029
+
+Change-Id: I119a81cae568015c7271d8fd0bcc5672ca7b972b
+(cherry picked from commit e6290490986b681d19abfc5f9284ac254099c720)
+---
+ .../hadoop/hbase/master/AssignmentManager.java     |    1 +
+ .../hadoop/hbase/master/TestAssignmentManager.java |   44 ++++++++++++++++++++
+ 2 files changed, 45 insertions(+)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java
+index 88cdf2e..dc7b3ba 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java
+@@ -830,6 +830,7 @@ public class AssignmentManager extends ZooKeeperListener {
+       case RS_ZK_REGION_CLOSED:
+       case RS_ZK_REGION_FAILED_OPEN:
+         // Region is closed, insert into RIT and handle it
++        regionStates.setLastRegionServerOfRegion(sn, encodedName);
+         regionStates.updateRegionState(regionInfo, State.CLOSED, sn);
+         if (!replicasToClose.contains(regionInfo)) {
+           invokeAssign(regionInfo);
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/TestAssignmentManager.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/TestAssignmentManager.java
+index 65dc2ab..1d4440e 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/TestAssignmentManager.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/TestAssignmentManager.java
+@@ -880,6 +880,50 @@ public class TestAssignmentManager {
+     }
+   }
+ 
++  /*
++   * Tests the scenario
++   * - a regionserver (SERVERNAME_A) owns a region (hence the meta would have
++   *   the SERVERNAME_A as the host for the region),
++   * - SERVERNAME_A goes down
++   * - one of the affected regions is assigned to a live regionserver (SERVERNAME_B) but that
++   *   assignment somehow fails. The region ends up in the FAILED_OPEN state on ZK
++   * - [Issue that the patch on HBASE-13330 fixes] when the master is restarted,
++   *   the SSH for SERVERNAME_A rightly thinks that the region is now on transition on
++   *   SERVERNAME_B. But the owner for the region is still SERVERNAME_A in the AM's states.
++   *   The AM thinks that the SSH for SERVERNAME_A will assign the region. The region remains
++   *   unassigned for ever.
++   */
++  @Test(timeout = 60000)
++  public void testAssignmentOfRegionInSSHAndInFailedOpenState() throws IOException,
++  KeeperException, ServiceException, CoordinatedStateException, InterruptedException {
++    AssignmentManagerWithExtrasForTesting am = setUpMockedAssignmentManager(
++        this.server, this.serverManager);
++    ZKAssign.createNodeOffline(this.watcher, REGIONINFO, SERVERNAME_B);
++    int v = ZKAssign.getVersion(this.watcher, REGIONINFO);
++    ZKAssign.transitionNode(this.watcher, REGIONINFO, SERVERNAME_B,
++        EventType.M_ZK_REGION_OFFLINE, EventType.RS_ZK_REGION_FAILED_OPEN, v);
++    Mockito.when(this.serverManager.isServerOnline(SERVERNAME_B)).thenReturn(true);
++    Mockito.when(this.serverManager.isServerReachable(SERVERNAME_B)).thenReturn(true);
++    Mockito.when(this.serverManager.isServerOnline(SERVERNAME_A)).thenReturn(false);
++    DeadServer deadServers = new DeadServer();
++    deadServers.add(SERVERNAME_A);
++    Mockito.when(this.serverManager.getDeadServers()).thenReturn(deadServers);
++    final Map<ServerName, ServerLoad> onlineServers = new HashMap<ServerName, ServerLoad>();
++    onlineServers.put(SERVERNAME_B, ServerLoad.EMPTY_SERVERLOAD);
++    Mockito.when(this.serverManager.getOnlineServersList()).thenReturn(
++        new ArrayList<ServerName>(onlineServers.keySet()));
++    Mockito.when(this.serverManager.getOnlineServers()).thenReturn(onlineServers);
++    am.gate.set(false);
++    // join the cluster - that's when the AM is really kicking in after a restart
++    am.joinCluster();
++    while (!am.gate.get()) {
++      Thread.sleep(10);
++    }
++    assertTrue(am.getRegionStates().getRegionState(REGIONINFO).getState()
++        == RegionState.State.PENDING_OPEN);
++    am.shutdown();
++  }
++
+   /**
+    * Test the scenario when the master is in failover and trying to process a
+    * region which is in Opening state on a dead RS. Master will force offline the
+-- 
+1.7.9.5
+
