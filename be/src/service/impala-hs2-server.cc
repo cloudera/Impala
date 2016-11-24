@@ -934,17 +934,24 @@ void ImpalaServer::GetOperationStatus(TGetOperationStatusResp& return_val,
       request.operationHandle.operationId, &query_id, &secret), SQLSTATE_GENERAL_ERROR);
   VLOG_ROW << "GetOperationStatus(): query_id=" << PrintId(query_id);
 
-  lock_guard<mutex> l(query_exec_state_map_lock_);
-  QueryExecStateMap::iterator entry = query_exec_state_map_.find(query_id);
-  if (entry != query_exec_state_map_.end()) {
-    QueryState::type query_state = entry->second->query_state();
-    TOperationState::type operation_state = QueryStateToTOperationState(query_state);
-    return_val.__set_operationState(operation_state);
-    return;
+  shared_ptr<QueryExecState> exec_state = GetQueryExecState(query_id, false);
+  if (exec_state.get() == nullptr) {
+    // No handle was found
+    HS2_RETURN_ERROR(return_val, "Invalid query handle", SQLSTATE_GENERAL_ERROR);
   }
 
-  // No handle was found
-  HS2_RETURN_ERROR(return_val, "Invalid query handle", SQLSTATE_GENERAL_ERROR);
+  ScopedSessionState session_handle(this);
+  const TUniqueId session_id = exec_state->session_id();
+  shared_ptr<SessionState> session;
+  HS2_RETURN_IF_ERROR(return_val, session_handle.WithSession(session_id, &session),
+      SQLSTATE_GENERAL_ERROR);
+
+  {
+    lock_guard<mutex> l(*exec_state->lock());
+    TOperationState::type operation_state = QueryStateToTOperationState(
+        exec_state->query_state());
+    return_val.__set_operationState(operation_state);
+  }
 }
 
 void ImpalaServer::CancelOperation(TCancelOperationResp& return_val,
