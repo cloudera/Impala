@@ -310,7 +310,7 @@ public class AnalysisContext {
     public Set<TAccessEvent> getAccessEvents() { return analyzer_.getAccessEvents(); }
     public boolean requiresRewrite() {
       return analyzer_.containsSubquery() && !(stmt_ instanceof CreateViewStmt)
-          && !(stmt_ instanceof AlterViewStmt);
+          && !(stmt_ instanceof AlterViewStmt) && !(stmt_ instanceof ShowCreateTableStmt);
     }
     public TLineageGraph getThriftLineageGraph() {
       return analyzer_.getThriftSerializedLineageGraph();
