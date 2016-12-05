@@ -65,7 +65,6 @@ between
 bigint
 <ph rev="1.4.0">binary</ph>
 boolean
-<ph rev="2.6.0">buckets</ph>
 by
 <ph rev="1.4.0">cached</ph>
 <ph rev="2.3.0">cascade</ph>
@@ -93,7 +92,6 @@ delimited
 desc
 describe
 distinct
-<ph rev="2.6.0">distribute</ph>
 div
 double
 drop
@@ -194,7 +192,6 @@ serdeproperties
 set
 show
 smallint
-<ph rev="2.6.0">split</ph>
 stats
 stored
 straight_join
