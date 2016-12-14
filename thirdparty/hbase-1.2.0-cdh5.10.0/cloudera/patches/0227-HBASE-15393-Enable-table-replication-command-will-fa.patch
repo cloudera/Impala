@@ -1,7 +1,7 @@
 From 3141625fef9a0914107afea90e1afab26bc08cba Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Mon, 7 Mar 2016 04:57:55 -0800
-Subject: [PATCH 227/234] HBASE-15393 Enable table replication command will
+Subject: [PATCH 227/236] HBASE-15393 Enable table replication command will
  fail when parent znode is not default in peer
  cluster (Ashish Singhi)
 

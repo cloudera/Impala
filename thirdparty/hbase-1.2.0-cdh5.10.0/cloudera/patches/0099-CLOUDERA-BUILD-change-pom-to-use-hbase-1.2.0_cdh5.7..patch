@@ -1,7 +1,7 @@
 From 610f57794f059b6f8591ac24fbb6fadeebf341cb Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jon@cloudera.com>
 Date: Fri, 5 Feb 2016 07:44:04 -0800
-Subject: [PATCH 099/234] CLOUDERA-BUILD change pom to use hbase
+Subject: [PATCH 099/236] CLOUDERA-BUILD change pom to use hbase
  1.2.0_cdh5.7.0-SNAPSHOT, spark
  1.6.0_cdh5.7.0-SNAPSHOT
 

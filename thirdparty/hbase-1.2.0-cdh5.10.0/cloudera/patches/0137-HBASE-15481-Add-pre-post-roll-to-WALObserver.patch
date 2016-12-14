@@ -1,7 +1,7 @@
 From d69083c1cd95579fbc978c33795ee0ca5b99d36c Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Wed, 13 Apr 2016 00:43:39 -0500
-Subject: [PATCH 137/234] HBASE-15481 Add pre/post roll to WALObserver
+Subject: [PATCH 137/236] HBASE-15481 Add pre/post roll to WALObserver
 
 Reason: New Feature
 Author: Matteo Bertozzi

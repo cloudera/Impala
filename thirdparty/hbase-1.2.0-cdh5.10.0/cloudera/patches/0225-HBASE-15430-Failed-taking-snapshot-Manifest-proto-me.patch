@@ -1,7 +1,7 @@
 From 678bc9b7b8871e179bdba28cb539a92959ded464 Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@cloudera.com>
 Date: Tue, 15 Nov 2016 11:47:41 -0800
-Subject: [PATCH 225/234] HBASE-15430 Failed taking snapshot - Manifest
+Subject: [PATCH 225/236] HBASE-15430 Failed taking snapshot - Manifest
  proto-message too large (JunHo Cho) - ADDENDUM
 
 Change-Id: I6389eaacb88b3fde488e62bbaf2e911b485f933b

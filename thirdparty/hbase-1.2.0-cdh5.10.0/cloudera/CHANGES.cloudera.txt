@@ -1,3 +1,25 @@
+commit d59a9fb16a21e745b5bb523f85d70325205c36b8
+Author: Michael Stack <stack@apache.org>
+Date:   Fri Dec 9 14:14:04 2016 -0800
+
+    HBASE-16146 Counters are expensive...
+    Author: Gary Helmling
+    Reason: Bug/Performance
+    Ref: CDH-48135
+    
+    Change-Id: I11696a53553b04920fb574163832e962def04527
+
+commit 62604e1ae86becd7bf05d54fa6ad9162a98a106f
+Author: Michael Stack <stack@apache.org>
+Date:   Fri Dec 9 13:59:13 2016 -0800
+
+    HBASE-17072 HBASE-17072 CPU usage starts to climb up to 90-100% when using G1GC; purge ThreadLocal usage
+    Author: Michael Stack
+    Reason: Bug/Performance
+    Ref: CDH-48133
+    
+    Change-Id: I5c3d42f6be6183942b668ba1035d5d2bd4d466fe
+
 commit afe3af05ac1d22489dd4aa3054eed14d04e47a35
 Author: Jenkins <dev-kitchen@cloudera.com>
 Date:   Mon Nov 28 15:08:58 2016 -0800

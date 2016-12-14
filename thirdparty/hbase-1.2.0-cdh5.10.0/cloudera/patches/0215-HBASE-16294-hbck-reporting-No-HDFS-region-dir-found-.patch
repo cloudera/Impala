@@ -1,7 +1,7 @@
 From b4fceaa32c9d7139b8e62409af142cf007779e7b Mon Sep 17 00:00:00 2001
 From: Umesh Agashe <uagashe@cloudera.com>
 Date: Wed, 21 Sep 2016 10:05:33 -0700
-Subject: [PATCH 215/234] HBASE-16294 hbck reporting "No HDFS region dir
+Subject: [PATCH 215/236] HBASE-16294 hbck reporting "No HDFS region dir
  found" for replicas
 
 Warning message is display only for default/ primary replicas and not for

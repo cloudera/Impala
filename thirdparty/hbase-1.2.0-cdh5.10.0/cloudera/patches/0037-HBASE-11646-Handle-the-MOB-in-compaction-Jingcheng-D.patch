@@ -1,7 +1,7 @@
 From 6cb862634ff1e646f319a4e8d84f5f7e1f2ec7df Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Thu, 18 Sep 2014 07:03:21 -0700
-Subject: [PATCH 037/234] HBASE-11646 Handle the MOB in compaction (Jingcheng
+Subject: [PATCH 037/236] HBASE-11646 Handle the MOB in compaction (Jingcheng
  Du)
 
 Conflicts:

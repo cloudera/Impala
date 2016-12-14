@@ -1,7 +1,7 @@
 From da8227c4a4b1f3d02ce7ea0e5e2f00e8d3c71950 Mon Sep 17 00:00:00 2001
 From: Apekshit <apeksharma@gmail.com>
 Date: Mon, 11 Jan 2016 12:04:53 -0800
-Subject: [PATCH 113/234] HBASE-14159 Add dependency on
+Subject: [PATCH 113/236] HBASE-14159 Add dependency on
  hadoop-mapreduce-client-jobclient from hbase-spark.
 
 fix hbase-spark pom to include hadoop-mapreduce-client-jobclient test-jar

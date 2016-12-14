@@ -1,7 +1,7 @@
 From f64fe41feeeaffbcff3199cfb912688cce501d44 Mon Sep 17 00:00:00 2001
 From: Guanghao Zhang <zghaobac@gmail.com>
 Date: Mon, 26 Sep 2016 19:33:43 +0800
-Subject: [PATCH 229/234] HBASE-16653 Backport HBASE-11393 to branches which
+Subject: [PATCH 229/236] HBASE-16653 Backport HBASE-11393 to branches which
  support namespace
 
 Change-Id: I31fd99c95ae8392feb30ab54ad2618b4240f3079

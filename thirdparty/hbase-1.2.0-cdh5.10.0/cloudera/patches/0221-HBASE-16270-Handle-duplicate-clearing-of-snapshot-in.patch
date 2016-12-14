@@ -1,7 +1,7 @@
 From a75a9af14630e7a99087bd6823b3b48284920123 Mon Sep 17 00:00:00 2001
 From: Enis Soztutar <enis@apache.org>
 Date: Wed, 24 Aug 2016 06:43:19 -0700
-Subject: [PATCH 221/234] HBASE-16270 Handle duplicate clearing of snapshot in
+Subject: [PATCH 221/236] HBASE-16270 Handle duplicate clearing of snapshot in
  region replicas (Robert Yokota)
 
 Change-Id: Id33968f78b12c673a11ff314465a62a70778b0f9

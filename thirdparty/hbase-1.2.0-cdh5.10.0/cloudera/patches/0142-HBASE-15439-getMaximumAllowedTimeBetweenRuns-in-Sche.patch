@@ -1,7 +1,7 @@
 From 799f75cdeafc0ba124b7ebc89f21a873a015e2e7 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Mon, 14 Mar 2016 07:09:58 -0700
-Subject: [PATCH 142/234] HBASE-15439 getMaximumAllowedTimeBetweenRuns in
+Subject: [PATCH 142/236] HBASE-15439 getMaximumAllowedTimeBetweenRuns in
  ScheduledChore ignores the TimeUnit (Jingcheng Du)
 
 Change-Id: I1bf1e2d1e934b57889e222842077eeeaa43bbfbc

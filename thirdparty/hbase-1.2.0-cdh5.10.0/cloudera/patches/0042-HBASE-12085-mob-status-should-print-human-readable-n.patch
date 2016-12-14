@@ -1,7 +1,7 @@
 From 33bb7df7f3a9cf2c8190929a290a7f3a2d2303ff Mon Sep 17 00:00:00 2001
 From: anoopsjohn <anoopsamjohn@gmail.com>
 Date: Fri, 26 Sep 2014 13:29:36 +0530
-Subject: [PATCH 042/234] HBASE-12085 mob status should print human readable
+Subject: [PATCH 042/236] HBASE-12085 mob status should print human readable
  numbers.(Jingcheng Du)
 
 Change-Id: I495fff641711784c3e22ebe7600d5b60b73937b0

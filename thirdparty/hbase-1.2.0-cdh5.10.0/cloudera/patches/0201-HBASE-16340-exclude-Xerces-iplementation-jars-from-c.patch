@@ -1,7 +1,7 @@
 From 0cf655cb5761fd2323072358b00fc29d37deedf7 Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@apache.org>
 Date: Tue, 2 Aug 2016 11:36:51 -0500
-Subject: [PATCH 201/234] HBASE-16340 exclude Xerces iplementation jars from
+Subject: [PATCH 201/236] HBASE-16340 exclude Xerces iplementation jars from
  coming in transitively.
 
 Signed-off-by: Esteban Gutierrez <esteban@apache.org>

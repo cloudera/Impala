@@ -1,7 +1,7 @@
 From 39abf4677250d789be7a8db3fcbd2b3f75be1107 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Tue, 23 Aug 2016 14:22:20 -0700
-Subject: [PATCH 194/234] HBASE-16360 TableMapReduceUtil
+Subject: [PATCH 194/236] HBASE-16360 TableMapReduceUtil
  addHBaseDependencyJars has the wrong class name for
  PrefixTreeCodec (Jing Pu Chen)
 

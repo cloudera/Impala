@@ -1,7 +1,7 @@
 From 60070c308b9cbb7e709e02f86642e4e7c45d2152 Mon Sep 17 00:00:00 2001
 From: Harsh J <harsh@cloudera.com>
 Date: Fri, 1 Apr 2016 15:20:47 +0530
-Subject: [PATCH 207/234] HBASE-15396 Enhance mapreduce.TableSplit to add
+Subject: [PATCH 207/236] HBASE-15396 Enhance mapreduce.TableSplit to add
  encoded region name
 
 (cherry picked from commit 7d3a89ce8e07d9fd1c31b4bd2324b71dd10ecef5)

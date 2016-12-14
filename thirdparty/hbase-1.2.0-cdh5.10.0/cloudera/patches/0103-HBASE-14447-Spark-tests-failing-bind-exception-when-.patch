@@ -1,7 +1,7 @@
 From b320a9b9dbd72c487e6eedf4bd1f212c504159cd Mon Sep 17 00:00:00 2001
 From: stack <stack@apache.org>
 Date: Thu, 17 Sep 2015 09:12:48 -0700
-Subject: [PATCH 103/234] HBASE-14447 Spark tests failing: bind exception when
+Subject: [PATCH 103/236] HBASE-14447 Spark tests failing: bind exception when
  putting up info server
 
 Change-Id: I4d6fb34d65e1850e5f485501320bf1a34bbdb4ff

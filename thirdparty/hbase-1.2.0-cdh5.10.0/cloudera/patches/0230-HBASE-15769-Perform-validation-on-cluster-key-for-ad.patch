@@ -1,7 +1,7 @@
 From 1e205fc83d43b4623018d68139f9bd919d150d97 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Tue, 17 May 2016 13:26:45 -0700
-Subject: [PATCH 230/234] HBASE-15769 Perform validation on cluster key for
+Subject: [PATCH 230/236] HBASE-15769 Perform validation on cluster key for
  add_peer (Matt Warhaftig)
 
 Change-Id: I1919ec2adf48dfd39ef3d8324aa289dfdee485e0

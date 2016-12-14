@@ -1,7 +1,7 @@
 From 293db902109ac7a9474c5f030f28de06a9c9885b Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@apache.org>
 Date: Thu, 9 Jun 2016 13:30:45 -0500
-Subject: [PATCH 164/234] HBASE-15925 provide default values for hadoop compat
+Subject: [PATCH 164/236] HBASE-15925 provide default values for hadoop compat
  module related properties that match default hadoop
  profile.
 

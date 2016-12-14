@@ -1,7 +1,7 @@
 From eaf4ef08c21941836462dea01575e5cd9c419694 Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@cloudera.com>
 Date: Tue, 26 Apr 2016 11:18:59 -0500
-Subject: [PATCH 161/234] CDH-41002 Include workaround for HDFS+encryption
+Subject: [PATCH 161/236] CDH-41002 Include workaround for HDFS+encryption
  hbase replication log reader dataloss issue
  CDH-38113 Handle premature EOF treatment of WALs in
  replication.

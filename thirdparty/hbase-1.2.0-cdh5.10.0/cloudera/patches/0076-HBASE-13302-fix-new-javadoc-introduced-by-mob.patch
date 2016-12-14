@@ -1,7 +1,7 @@
 From bf012e1e360b50dd30cdf685808da542e0372dbb Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Wed, 8 Apr 2015 06:01:34 -0700
-Subject: [PATCH 076/234] HBASE-13302 fix new javadoc introduced by mob
+Subject: [PATCH 076/236] HBASE-13302 fix new javadoc introduced by mob
 
 Reason: Bugfix
 Author: Jonathan Hsieh

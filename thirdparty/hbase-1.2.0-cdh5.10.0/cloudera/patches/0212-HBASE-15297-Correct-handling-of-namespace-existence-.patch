@@ -1,7 +1,7 @@
 From 59a1d664bf2894386b71a5e462b39e67e44401e6 Mon Sep 17 00:00:00 2001
 From: Umesh Agashe <uagashe@cloudera.com>
 Date: Mon, 12 Sep 2016 16:24:44 -0700
-Subject: [PATCH 212/234] HBASE-15297 Correct handling of namespace existence
+Subject: [PATCH 212/236] HBASE-15297 Correct handling of namespace existence
  checks in shell.
 
 Changes namespace_exists? method in SecurityAdmin ruby code to catch NamespaceNotFoundException

@@ -1,7 +1,7 @@
 From 36970aab6c8dfd64a1ed95dbe9d1a9bbddf2a460 Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@apache.org>
 Date: Tue, 2 Aug 2016 00:53:53 -0500
-Subject: [PATCH 203/234] HBASE-16318 fail build while rendering velocity
+Subject: [PATCH 203/236] HBASE-16318 fail build while rendering velocity
  template if dependency license isn't in whitelist.
 
 Signed-off-by: Andrew Purtell <apurtell@apache.org>

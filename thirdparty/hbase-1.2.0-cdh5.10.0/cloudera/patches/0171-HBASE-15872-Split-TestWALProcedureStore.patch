@@ -1,7 +1,7 @@
 From dae4db4c2f46752411201cfb2b3be19720d656bc Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Fri, 20 May 2016 13:07:12 -0700
-Subject: [PATCH 171/234] HBASE-15872 Split TestWALProcedureStore
+Subject: [PATCH 171/236] HBASE-15872 Split TestWALProcedureStore
 
 Reason: Bug
 Author: Matteo Bertozzi

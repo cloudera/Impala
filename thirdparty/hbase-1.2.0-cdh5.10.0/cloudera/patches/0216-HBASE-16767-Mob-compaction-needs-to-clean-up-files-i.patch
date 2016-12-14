@@ -1,7 +1,7 @@
 From 2c9943b4a9eb4a15ec05d3e79c6d90e0375ae2c6 Mon Sep 17 00:00:00 2001
 From: Huaxiang Sun <hsun@cloudera.com>
 Date: Fri, 7 Oct 2016 15:47:06 -0700
-Subject: [PATCH 216/234] HBASE-16767 Mob compaction needs to clean up files
+Subject: [PATCH 216/236] HBASE-16767 Mob compaction needs to clean up files
  in /hbase/mobdir/.tmp and
  /hbase/mobdir/.tmp/.bulkload when running into IO
  exceptions

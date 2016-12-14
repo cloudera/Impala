@@ -1,7 +1,7 @@
 From 0d14b78ded6191be2d5d6b503ae4e538eb00bca7 Mon Sep 17 00:00:00 2001
 From: stack <stack@apache.org>
 Date: Wed, 30 Mar 2016 13:31:09 -0700
-Subject: [PATCH 220/234] HBASE-15324 Jitter may cause desiredMaxFileSize
+Subject: [PATCH 220/236] HBASE-15324 Jitter may cause desiredMaxFileSize
  overflow in ConstantSizeRegionSplitPolicy and
  trigger unexpected split (Yu Li)
 

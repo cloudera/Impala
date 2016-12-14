@@ -1,7 +1,7 @@
 From 3638c41a9ec28a0d2d24a827a4301553efe727ca Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Tue, 8 Mar 2016 11:07:33 -0800
-Subject: [PATCH 128/234] HBASE-15422 Procedure v2 - Avoid double yield
+Subject: [PATCH 128/236] HBASE-15422 Procedure v2 - Avoid double yield
 
 Reason: Bug
 Author: Matteo Bertozzi

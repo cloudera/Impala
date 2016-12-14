@@ -1,7 +1,7 @@
 From c4ee8320bb8501cda3b9c21be451341311cc3748 Mon Sep 17 00:00:00 2001
 From: Elliott Clark <eclark@apache.org>
 Date: Thu, 18 Feb 2016 09:54:05 -0800
-Subject: [PATCH 154/234] HBASE-15222 Use less contended classes for metrics
+Subject: [PATCH 154/236] HBASE-15222 Use less contended classes for metrics
 
 Summary:
 Use less contended things for metrics.

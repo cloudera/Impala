@@ -1,7 +1,7 @@
 From 4f1ffae1144c3fcfbae8ce76c4e9b578b41ff4c3 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Mon, 18 Jul 2016 06:54:09 -0700
-Subject: [PATCH 223/234] HBASE-16172 Unify the retry logic in
+Subject: [PATCH 223/236] HBASE-16172 Unify the retry logic in
  ScannerCallableWithReplicas and
  RpcRetryingCallerWithReadReplicas
 

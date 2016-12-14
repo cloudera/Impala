@@ -1,7 +1,7 @@
 From 1573b8a862a7216ddef557274e5557dbf439d55d Mon Sep 17 00:00:00 2001
 From: Philip Zeyliger <philip@cloudera.com>
 Date: Fri, 20 Nov 2015 23:59:30 +0000
-Subject: [PATCH 031/234] CLOUDERA-BUILD Specify assembly artifact naming.
+Subject: [PATCH 031/236] CLOUDERA-BUILD Specify assembly artifact naming.
 
 Reason: New Feature
 Author: Philip Zeyliger

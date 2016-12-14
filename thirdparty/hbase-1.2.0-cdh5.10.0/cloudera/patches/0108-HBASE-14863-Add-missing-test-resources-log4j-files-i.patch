@@ -1,7 +1,7 @@
 From d7ca61391f0e37d57f1be712af619f31a26ba2eb Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Sun, 22 Nov 2015 07:31:06 -0800
-Subject: [PATCH 108/234] HBASE-14863 Add missing test/resources/log4j files
+Subject: [PATCH 108/236] HBASE-14863 Add missing test/resources/log4j files
  in hbase modules HBASE-14894 Fix Misspellings of
  threshold in log4j.properties files for tests
 

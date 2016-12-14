@@ -1,7 +1,7 @@
 From 8c3afcfb3cfdf841280e6fda6402e7e7ebb23dd0 Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@cloudera.com>
 Date: Tue, 25 Oct 2016 17:11:50 -0700
-Subject: [PATCH 232/234] CLOUDERA-BULD Adds backwads compatibility to HBase
+Subject: [PATCH 232/236] CLOUDERA-BULD Adds backwads compatibility to HBase
  replication previous to namespace support.
 
 Change-Id: I20f8dbdfb4779cf81ff306998712440df7469dca

@@ -1,7 +1,7 @@
 From 811ec272f121cfa0bcf291f6234687979ae1ea21 Mon Sep 17 00:00:00 2001
 From: Enis Soztutar <enis@apache.org>
 Date: Thu, 21 Apr 2016 10:44:03 -0700
-Subject: [PATCH 211/234] HBASE-15683 Min latency in latency histograms are
+Subject: [PATCH 211/236] HBASE-15683 Min latency in latency histograms are
  emitted as Long.MAX_VALUE
 
 Change-Id: Ibba93aa83423d37907439cb1ed7373441d9d3b5a

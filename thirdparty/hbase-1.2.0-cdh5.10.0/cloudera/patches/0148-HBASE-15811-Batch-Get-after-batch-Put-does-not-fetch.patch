@@ -1,7 +1,7 @@
 From 5633281674ef5d1a73646789efe993ed513a4802 Mon Sep 17 00:00:00 2001
 From: stack <stack@apache.org>
 Date: Thu, 12 May 2016 14:37:29 -0700
-Subject: [PATCH 148/234] HBASE-15811 Batch Get after batch Put does not fetch
+Subject: [PATCH 148/236] HBASE-15811 Batch Get after batch Put does not fetch
  all Cells We were not waiting on all executors in a
  batch to complete. The test for no-more-executors
  was damaged by the 0.99/0.98.4 fix "HBASE-11403 Fix

@@ -1,7 +1,7 @@
 From 45e1aed806dbe91102a47630bed7041f7650baf2 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Wed, 16 Mar 2016 08:52:02 -0700
-Subject: [PATCH 222/234] HBASE-15430 Failed taking snapshot - Manifest
+Subject: [PATCH 222/236] HBASE-15430 Failed taking snapshot - Manifest
  proto-message too large (JunHo Cho)
 
 Change-Id: I1d09ca5bd26b90f21a4aaef2535c19a3c83a3946

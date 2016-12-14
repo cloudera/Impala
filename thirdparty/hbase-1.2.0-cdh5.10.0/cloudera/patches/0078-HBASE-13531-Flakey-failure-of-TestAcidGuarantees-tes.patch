@@ -1,7 +1,7 @@
 From e1bc92c33407883dd246a2489be67e0bd606ae5c Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Sat, 16 May 2015 16:45:49 -0700
-Subject: [PATCH 078/234] HBASE-13531 Flakey failure of
+Subject: [PATCH 078/236] HBASE-13531 Flakey failure of
  TestAcidGuarantees#testMobScanAtomicity (Jingcheng
  Du)
 

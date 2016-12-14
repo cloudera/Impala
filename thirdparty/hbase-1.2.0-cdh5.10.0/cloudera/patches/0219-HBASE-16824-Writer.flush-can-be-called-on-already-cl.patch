@@ -1,7 +1,7 @@
 From e7c4c8e0ae3829eb3e77ac160f2e184f5a97982a Mon Sep 17 00:00:00 2001
 From: Enis Soztutar <enis@apache.org>
 Date: Tue, 18 Oct 2016 18:46:02 -0700
-Subject: [PATCH 219/234] HBASE-16824 Writer.flush() can be called on already
+Subject: [PATCH 219/236] HBASE-16824 Writer.flush() can be called on already
  closed streams in WAL roll
 
 Change-Id: I46f6b3a5e8b32448e96fcb872a537588e8dbec17

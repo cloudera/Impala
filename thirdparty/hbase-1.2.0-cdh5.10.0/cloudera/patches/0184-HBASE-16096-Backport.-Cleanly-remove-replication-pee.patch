@@ -1,7 +1,7 @@
 From 031c54edb7d3123e6322d2bf0f94b465a7c43807 Mon Sep 17 00:00:00 2001
 From: Joseph Hwang <jzh@fb.com>
 Date: Thu, 30 Jun 2016 15:18:33 -0700
-Subject: [PATCH 184/234] HBASE-16096 Backport. Cleanly remove replication
+Subject: [PATCH 184/236] HBASE-16096 Backport. Cleanly remove replication
  peers from ZooKeeper.
 
 Signed-off-by: Elliott Clark <eclark@apache.org>

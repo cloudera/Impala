@@ -1,7 +1,7 @@
 From 4dae6004939abb3db2d21ab9ef9946044a9c1a3a Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Wed, 31 Aug 2016 19:44:58 -0700
-Subject: [PATCH 208/234] HBASE-16490 Fix race condition between
+Subject: [PATCH 208/236] HBASE-16490 Fix race condition between
  SnapshotManager and SnapshotCleaner (addendum)
 
 ---

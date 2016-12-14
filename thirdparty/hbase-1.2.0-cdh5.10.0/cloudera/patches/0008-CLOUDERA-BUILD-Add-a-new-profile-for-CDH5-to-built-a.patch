@@ -1,7 +1,7 @@
 From 01d11e0d50268b8eed68454a4645c684af003e06 Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@cloudera.com>
 Date: Wed, 13 Aug 2014 11:21:30 -0700
-Subject: [PATCH 008/234] CLOUDERA-BUILD Add a new profile for CDH5 to built
+Subject: [PATCH 008/236] CLOUDERA-BUILD Add a new profile for CDH5 to built
  against MR1. This is also the default profile.
 
 Change-Id: I8f66181be9444683ee76d5a230df18e440ab27cc

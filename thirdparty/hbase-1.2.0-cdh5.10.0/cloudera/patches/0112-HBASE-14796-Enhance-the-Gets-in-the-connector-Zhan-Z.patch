@@ -1,7 +1,7 @@
 From 01fc1cb7d7a02345496e4d8df7f946921f5df25d Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Mon, 28 Dec 2015 15:48:10 -0800
-Subject: [PATCH 112/234] HBASE-14796 Enhance the Gets in the connector (Zhan
+Subject: [PATCH 112/236] HBASE-14796 Enhance the Gets in the connector (Zhan
  Zhang)
 
 Change-Id: If22cce44e8afda5d3f31fa8785b4976786a540fd

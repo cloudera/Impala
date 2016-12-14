@@ -1,7 +1,7 @@
 From fbde7d001ed9c4c08b9cdf7b4008db101b9d5fb3 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Mon, 5 Oct 2015 11:50:21 -0700
-Subject: [PATCH 030/234] CLOUDERA-BUILD Add pre-commit hook
+Subject: [PATCH 030/236] CLOUDERA-BUILD Add pre-commit hook
 
 ---
  cloudera/pre_commit_hook.sh |    9 +++++++++

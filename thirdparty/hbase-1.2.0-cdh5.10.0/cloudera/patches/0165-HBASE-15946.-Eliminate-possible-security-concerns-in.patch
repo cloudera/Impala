@@ -1,7 +1,7 @@
 From 62df392c865d5bae283a8638b375de0dff324177 Mon Sep 17 00:00:00 2001
 From: Sean Mackrory <mackrorysd@apache.org>
 Date: Tue, 31 May 2016 10:28:27 -0600
-Subject: [PATCH 165/234] HBASE-15946. Eliminate possible security concerns in
+Subject: [PATCH 165/236] HBASE-15946. Eliminate possible security concerns in
  Store File metrics.
 
 Invoking 'hbase hfile' inside a servlet raises several concerns. This

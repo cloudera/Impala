@@ -1,7 +1,7 @@
 From d04d0c0a2c7fb039fb806395031122976c9104d8 Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@apache.org>
 Date: Thu, 17 Nov 2016 11:11:30 -0800
-Subject: [PATCH 226/234] HBASE-17058 Lower epsilon used for jitter
+Subject: [PATCH 226/236] HBASE-17058 Lower epsilon used for jitter
  verification from HBASE-15324
 
 Change-Id: I9954faa6dcb0f54d9b12a9360d393de2f4e0c82c

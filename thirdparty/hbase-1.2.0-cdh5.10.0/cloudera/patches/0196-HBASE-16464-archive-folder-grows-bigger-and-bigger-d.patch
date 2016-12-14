@@ -1,7 +1,7 @@
 From f41cab51be99b3f7182466bd7798e3ee45e823a4 Mon Sep 17 00:00:00 2001
 From: chenheng <chenheng@apache.org>
 Date: Mon, 22 Aug 2016 16:45:20 +0800
-Subject: [PATCH 196/234] HBASE-16464 archive folder grows bigger and bigger
+Subject: [PATCH 196/236] HBASE-16464 archive folder grows bigger and bigger
  due to corrupt snapshot under tmp dir
 
 Reason: Bug

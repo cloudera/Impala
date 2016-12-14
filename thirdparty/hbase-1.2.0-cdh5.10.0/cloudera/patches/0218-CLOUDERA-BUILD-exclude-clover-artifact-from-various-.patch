@@ -1,7 +1,7 @@
 From 517a4f6c719b12d0a0047cd20d4b2f523b091fb2 Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@cloudera.com>
 Date: Wed, 26 Oct 2016 16:21:26 -0500
-Subject: [PATCH 218/234] CLOUDERA-BUILD exclude clover artifact from various
+Subject: [PATCH 218/236] CLOUDERA-BUILD exclude clover artifact from various
  binary bundling tasks.
 
 Change-Id: I416575a0869c1926f24ae20ace239ea3163000b0

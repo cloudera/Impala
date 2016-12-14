@@ -1,7 +1,7 @@
 From b8923e0f9ef28ac5e620196951f381a559a7137e Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@apache.org>
 Date: Tue, 29 Sep 2015 20:00:49 -0500
-Subject: [PATCH 104/234] HBASE-14515 make sure spark tests are skippable like
+Subject: [PATCH 104/236] HBASE-14515 make sure spark tests are skippable like
  the other modules.
 
 Conflicts:

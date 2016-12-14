@@ -1,7 +1,7 @@
 From f93f56e35cbd2c8b662df91d0391027904f6feb6 Mon Sep 17 00:00:00 2001
 From: Gary Helmling <garyh@apache.org>
 Date: Thu, 19 May 2016 12:43:18 -0700
-Subject: [PATCH 209/234] HBASE-15856 Don't cache unresolved addresses for
+Subject: [PATCH 209/236] HBASE-15856 Don't cache unresolved addresses for
  connections
 
 Reason: Bug

@@ -1,7 +1,7 @@
 From ee28403e4b285efbd9f79c0f4aa134ae647dde53 Mon Sep 17 00:00:00 2001
 From: Srikanth Srungarapu <ssrungarapu@cloudera.com>
 Date: Wed, 4 Mar 2015 20:35:58 -0800
-Subject: [PATCH 021/234] CLOUDERA-BUILD Binary incompatibilities between our
+Subject: [PATCH 021/236] CLOUDERA-BUILD Binary incompatibilities between our
  HBase 0.98.6 and 1.0 branches
 
 Change-Id: Idec9f0c969c80bc6d1b0a8d963340d6e230ec5e8

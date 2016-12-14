@@ -1,7 +1,7 @@
 From 4b67b1e45e68903ac5cc3482cc572e0df19f27c8 Mon Sep 17 00:00:00 2001
 From: chenheng <chenheng@apache.org>
 Date: Sat, 27 Aug 2016 10:36:21 +0800
-Subject: [PATCH 199/234] HBASE016490 Fix race condition between
+Subject: [PATCH 199/236] HBASE016490 Fix race condition between
  SnapshotManager and SnapshotCleaner
 
 Reason: Bug

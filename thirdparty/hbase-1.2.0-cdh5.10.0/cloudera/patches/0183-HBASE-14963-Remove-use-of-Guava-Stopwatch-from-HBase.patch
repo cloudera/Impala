@@ -1,7 +1,7 @@
 From 60a3b125c8db685c537fefa50c953a38e2333d29 Mon Sep 17 00:00:00 2001
 From: Jerry He <jerryjch@apache.org>
 Date: Sat, 19 Mar 2016 13:21:53 -0700
-Subject: [PATCH 183/234] HBASE-14963 Remove use of Guava Stopwatch from HBase
+Subject: [PATCH 183/236] HBASE-14963 Remove use of Guava Stopwatch from HBase
  client code (Devaraj Das)
 
 (cherry picked from commit c2cd23fee98f34b846b4c43a9141f9bab598ae6a)

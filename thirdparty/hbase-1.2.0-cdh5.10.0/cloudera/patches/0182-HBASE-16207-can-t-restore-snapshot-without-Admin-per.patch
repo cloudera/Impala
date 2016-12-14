@@ -1,7 +1,7 @@
 From c7724fc9646ada135400b81f92fb4bf122a9c4fc Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Tue, 12 Jul 2016 05:55:07 -0700
-Subject: [PATCH 182/234] HBASE-16207 can't restore snapshot without "Admin"
+Subject: [PATCH 182/236] HBASE-16207 can't restore snapshot without "Admin"
  permission
 
 Reason: Bug

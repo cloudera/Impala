@@ -1,7 +1,7 @@
 From f26427f68362eae2362e217dd7f0fa98b7e698fc Mon Sep 17 00:00:00 2001
 From: anoopsjohn <anoopsamjohn@gmail.com>
 Date: Mon, 13 Jul 2015 14:36:44 +0530
-Subject: [PATCH 095/234] HBASE-12015 Not cleaning Mob data when Mob CF is
+Subject: [PATCH 095/236] HBASE-12015 Not cleaning Mob data when Mob CF is
  removed from table.(Pankaj Kumar)
 
 Reason: Bug

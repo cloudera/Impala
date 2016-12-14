@@ -1,7 +1,7 @@
 From be180ebbca359e60da91fe5064a8bf9b800a993e Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Wed, 13 Apr 2016 02:25:32 -0700
-Subject: [PATCH 228/234] HBASE-15633 Backport HBASE-15507 to branch-1
+Subject: [PATCH 228/236] HBASE-15633 Backport HBASE-15507 to branch-1
  (Geoffrey Jacoby)
 
 Change-Id: I2e755774c7871c032a36ebf266c4498b39f05167

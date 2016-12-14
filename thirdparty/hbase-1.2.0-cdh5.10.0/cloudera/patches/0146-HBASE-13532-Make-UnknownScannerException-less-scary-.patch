@@ -1,7 +1,7 @@
 From 93760980b149bd5ae5708e6088d5b478078a5cce Mon Sep 17 00:00:00 2001
 From: Apekshit <apeksharma@gmail.com>
 Date: Tue, 10 May 2016 19:11:51 -0700
-Subject: [PATCH 146/234] HBASE-13532 Make UnknownScannerException less scary
+Subject: [PATCH 146/236] HBASE-13532 Make UnknownScannerException less scary
  by giving more information in the exception string.
  (Apekshit)
 

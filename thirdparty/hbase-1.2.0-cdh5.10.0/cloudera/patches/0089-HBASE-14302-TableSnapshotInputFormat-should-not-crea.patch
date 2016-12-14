@@ -1,7 +1,7 @@
 From 90df1f714921b209d726590ae5b2ac3bb237d269 Mon Sep 17 00:00:00 2001
 From: Huaxiang Sun <hsun@cloudera.com>
 Date: Fri, 8 Jan 2016 18:39:36 -0800
-Subject: [PATCH 089/234] HBASE-14302 TableSnapshotInputFormat should not
+Subject: [PATCH 089/236] HBASE-14302 TableSnapshotInputFormat should not
  create back references when restoring snapshot
  (addendum)
 

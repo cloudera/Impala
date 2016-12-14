@@ -1,7 +1,7 @@
 From 3681f74c30ec96f7de050dc34c07969400da285e Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Wed, 16 Mar 2016 19:52:25 -0700
-Subject: [PATCH 231/234] HBASE-12940 Expose listPeerConfigs and getPeerConfig
+Subject: [PATCH 231/236] HBASE-12940 Expose listPeerConfigs and getPeerConfig
  to the HBase shell (Geoffrey Jacoby)
 
 Change-Id: Ibb30acb0f001ed03c33f517f1224d728639a34a7

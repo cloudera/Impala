@@ -1,7 +1,7 @@
 From 97a06dd7f21faa7565495eb04c4a3d77a44d55d5 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Fri, 1 Apr 2016 20:55:21 -0700
-Subject: [PATCH 132/234] HBASE-15582 SnapshotManifestV1 too verbose when
+Subject: [PATCH 132/236] HBASE-15582 SnapshotManifestV1 too verbose when
  there are no regions
 
 Reason: Improvement

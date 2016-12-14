@@ -1,7 +1,7 @@
 From c78348bb8ed8b8c912eec7b3a86c0bb193b62c17 Mon Sep 17 00:00:00 2001
 From: Huaxiang Sun <hsun@cloudera.com>
 Date: Thu, 15 Sep 2016 11:05:26 -0700
-Subject: [PATCH 214/234] CLOUDERA_BUILD Log error when doing mob compaction
+Subject: [PATCH 214/236] CLOUDERA_BUILD Log error when doing mob compaction
  and master does not have hfile v3 configured.
 
 Reason: Improvement

@@ -1,7 +1,7 @@
 From 3d3aaaefbef15597e31bb1a3bca95dc23e8e732b Mon Sep 17 00:00:00 2001
 From: Yu Li <liyu@apache.org>
 Date: Sun, 10 Jul 2016 14:09:02 +0800
-Subject: [PATCH 204/234] HBASE-16194 Should count in MSLAB chunk allocation
+Subject: [PATCH 204/236] HBASE-16194 Should count in MSLAB chunk allocation
  into heap size change when adding duplicate cells
 
 (cherry picked from commit b96b042043d96cbb348b538a7abc9d44157948b9)

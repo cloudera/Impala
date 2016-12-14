@@ -1,7 +1,7 @@
 From decc305bcb00485be251d2e8f8240d556f1a5b04 Mon Sep 17 00:00:00 2001
 From: Huaxiang Sun <hsun@cloudera.com>
 Date: Mon, 4 Jul 2016 21:43:29 +0800
-Subject: [PATCH 224/234] HBASE-16345 RpcRetryingCallerWithReadReplicas#call()
+Subject: [PATCH 224/236] HBASE-16345 RpcRetryingCallerWithReadReplicas#call()
  should catch some RegionServer Exceptions
 
 Fix logic for

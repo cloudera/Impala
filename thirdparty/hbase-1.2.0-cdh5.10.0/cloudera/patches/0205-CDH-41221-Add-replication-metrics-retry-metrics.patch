@@ -1,7 +1,7 @@
 From ec5105edc688cc87316523dbd0aecef9c2478346 Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@apache.org>
 Date: Tue, 7 Jun 2016 16:00:46 -0500
-Subject: [PATCH 205/234] CDH-41221 Add replication metrics retry metrics
+Subject: [PATCH 205/236] CDH-41221 Add replication metrics retry metrics
 
 Adds some additional log detail at the TRACE
 level about file offsets seen while handling recoverable errors. It also

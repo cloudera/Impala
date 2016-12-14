@@ -1,7 +1,7 @@
 From d735680f4c6eee21841c9a6a9e1a22adb3f2bfc2 Mon Sep 17 00:00:00 2001
 From: stack <stack@apache.org>
 Date: Thu, 2 Oct 2014 10:38:56 -0700
-Subject: [PATCH 153/234] HBASE-12133 Add FastLongHistogram for metric
+Subject: [PATCH 153/236] HBASE-12133 Add FastLongHistogram for metric
  computation (Yi Deng)
 
 Change-Id: I8940191306dc52f2066c5480524a74b7f5a387db

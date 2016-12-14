@@ -1,7 +1,7 @@
 From da2b96529321795739096c2eff6c5e0dff09d88e Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jmhsieh@apache.org>
 Date: Sat, 7 May 2016 15:33:20 -0700
-Subject: [PATCH 143/234] HBASE-15791 Improve javadoc around ScheduledChore
+Subject: [PATCH 143/236] HBASE-15791 Improve javadoc around ScheduledChore
 
 Change-Id: Icc0d015c4a28ff0a9b2910ef27eb6e6bfd080e43
 Reason: Bug

@@ -1,7 +1,7 @@
 From 628a6d5b27027a33bb3c2d27408e1f03feb25371 Mon Sep 17 00:00:00 2001
 From: Andrew Purtell <apurtell@apache.org>
 Date: Tue, 17 Nov 2015 13:48:47 -0800
-Subject: [PATCH 107/234] HBASE-14340 Add second bulk load option to Spark
+Subject: [PATCH 107/236] HBASE-14340 Add second bulk load option to Spark
  Bulk Load to send puts as the value (Ted Malaska)
 
 Conflicts:

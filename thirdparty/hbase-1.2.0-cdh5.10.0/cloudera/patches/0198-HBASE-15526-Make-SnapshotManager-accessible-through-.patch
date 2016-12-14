@@ -1,7 +1,7 @@
 From 44b131ba8aa6541f211f794ed9cbbc25c3fe1640 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Thu, 24 Mar 2016 15:59:46 -0700
-Subject: [PATCH 198/234] HBASE-15526 Make SnapshotManager accessible through
+Subject: [PATCH 198/236] HBASE-15526 Make SnapshotManager accessible through
  MasterServices
 
 Change-Id: Ie93916bf54fa987edd4dff1c08871a8d5f503dec

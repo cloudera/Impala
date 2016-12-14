@@ -1,7 +1,7 @@
 From 17f08b88aca78f1fbe5b40b1be89dd9e65280542 Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@apache.org>
 Date: Tue, 2 Aug 2016 00:54:50 -0500
-Subject: [PATCH 202/234] HBASE-16318 consistently use the correct name for
+Subject: [PATCH 202/236] HBASE-16318 consistently use the correct name for
  'Apache License, Version 2.0'
 
 Signed-off-by: Andrew Purtell <apurtell@apache.org>

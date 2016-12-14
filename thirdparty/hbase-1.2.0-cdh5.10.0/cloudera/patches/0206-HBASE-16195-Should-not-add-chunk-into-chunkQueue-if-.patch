@@ -1,7 +1,7 @@
 From 651222acb617a9c6e63f821eaf49e737679afb47 Mon Sep 17 00:00:00 2001
 From: Yu Li <liyu@apache.org>
 Date: Wed, 13 Jul 2016 09:33:24 +0800
-Subject: [PATCH 206/234] HBASE-16195 Should not add chunk into chunkQueue if
+Subject: [PATCH 206/236] HBASE-16195 Should not add chunk into chunkQueue if
  not using chunk pool in HeapMemStoreLAB
 
 (cherry picked from commit ab239afb67c8c5d7a3c359ec17d278b5f579f4a7)
