@@ -9,6 +9,7 @@ from tests.common.impala_test_suite import *
 from tests.common.skip import SkipIfIsilon, SkipIfS3, SkipIfLocal
 from tests.common.test_vector import *
 from tests.util.filesystem_utils import get_fs_path
+from tests.util.shell_util import exec_process
 
 # TODO: For these tests to pass, all table metadata must be created exhaustively.
 # the tests should be modified to remove that requirement.
@@ -61,6 +62,7 @@ class TestMetadataQueryStatements(ImpalaTestSuite):
     self.cleanup_db('impala_test_desc_db4')
     self.cleanup_db('hive_test_desc_db')
     self.cleanup_db('hive_test_db')
+    self.cleanup_db('partition_test_db')
 
     self.client.execute("create database if not exists impala_test_desc_db1")
     self.client.execute(
@@ -88,6 +90,7 @@ class TestMetadataQueryStatements(ImpalaTestSuite):
     self.cleanup_db('impala_test_desc_db4')
     self.cleanup_db('hive_test_desc_db')
     self.cleanup_db('hive_test_db')
+    self.cleanup_db('partition_test_db')
 
   def test_show(self, vector):
     self.run_test_case('QueryTest/show', vector)
@@ -282,3 +285,44 @@ class TestMetadataQueryStatements(ImpalaTestSuite):
 
     self.client.execute("invalidate metadata")
     assert db_name not in self.all_db_names()
+
+  def test_rmr_tbl_dir_and_refresh(self, vector):
+    """Test for CDH-48554. Drops the table directory of a partitioned
+    table and recreates an empty table directory and checks if refresh
+    can pick up these changes. The queries shouldn't error out once
+    refresh is run."""
+    db_name = 'partition_test_db'
+    self.client.execute("create database %s" % db_name)
+    # Create a partitioned table and add a partition to it.
+    table_name = db_name + ".partition_test_table"
+    self.client.execute(
+        "create table %s (x int) partitioned by (y int)" % table_name)
+    self.client.execute(
+        "insert into table %s partition (y=333) values (444)" % table_name)
+    result = self.client.execute("select x from %s" % table_name)
+    assert len(result.data) == 1
+    assert "444" in result.data
+
+    table_base_dir = get_fs_path(
+        "/test-warehouse/%s.db/partition_test_table" % db_name)
+    # Drop the base table directory and recreate an empty one.
+    rc, stdout, stderr = exec_process("hadoop fs -rmr %s" % table_base_dir)
+    assert rc == 0, "Error deleting table dir: %s" % table_base_dir
+    # Refresh the table metadata.
+    self.client.execute("refresh %s" % table_name)
+    # Verify the query returns empty results and is handled gracefully.
+    result = self.client.execute("select count(*) from %s" % table_name)
+    assert len(result.data) == 1
+    assert "0" in result.data
+
+    # Recreate the base table directory.
+    rc, stdout, stderr = exec_process("hadoop fs -mkdir %s" % table_base_dir)
+    assert rc == 0, "Error creating table dir: %s" % table_base_dir
+
+    # Refresh the table metadata.
+    self.client.execute("refresh %s" % table_name)
+
+    # Verify the query returns empty results.
+    result = self.client.execute("select count(*) from %s" % table_name)
+    assert len(result.data) == 1
+    assert "0" in result.data
