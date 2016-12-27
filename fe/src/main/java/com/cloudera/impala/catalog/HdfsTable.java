@@ -1452,7 +1452,6 @@ public class HdfsTable extends Table {
     }
     Path partDirPath = new Path(storageDescriptor.getLocation());
     FileSystem fs = partDirPath.getFileSystem(CONF);
-    if (!fs.exists(partDirPath)) return;
 
     String partitionDir = partDirPath.toString();
     numHdfsFiles_ -= partition.getNumFileDescriptors();
