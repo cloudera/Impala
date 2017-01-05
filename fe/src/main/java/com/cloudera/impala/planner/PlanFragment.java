@@ -18,17 +18,11 @@
 package com.cloudera.impala.planner;
 
 import java.util.List;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.util.Set;
 
 import com.cloudera.impala.analysis.Analyzer;
-import com.cloudera.impala.analysis.BinaryPredicate;
 import com.cloudera.impala.analysis.Expr;
-import com.cloudera.impala.analysis.JoinOperator;
-import com.cloudera.impala.analysis.SlotRef;
-import com.cloudera.impala.catalog.HdfsFileFormat;
-import com.cloudera.impala.catalog.HdfsTable;
+import com.cloudera.impala.analysis.TupleId;
 import com.cloudera.impala.common.AnalysisException;
 import com.cloudera.impala.common.InternalException;
 import com.cloudera.impala.common.NotImplementedException;
@@ -39,9 +33,14 @@ import com.cloudera.impala.thrift.TPartitionType;
 import com.cloudera.impala.thrift.TPlan;
 import com.cloudera.impala.thrift.TPlanFragment;
 import com.cloudera.impala.thrift.TPlanFragmentTree;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 
 /**
  * PlanFragments form a tree structure via their ExchangeNodes. A tree of fragments
@@ -384,5 +383,24 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     Preconditions.checkState(getChildren().containsAll(childFragments));
 
     for (PlanFragment child: getChildren()) child.verifyTree();
+  }
+
+  /**
+   * Returns true if 'exprs' reference a tuple that is made nullable in this fragment,
+   * but not in any of its input fragments.
+   */
+  public boolean refsNullableTupleId(List<Expr> exprs) {
+    Preconditions.checkNotNull(planRoot_);
+    List<TupleId> tids = Lists.newArrayList();
+    for (Expr e: exprs) e.getIds(tids, null);
+    Set<TupleId> nullableTids = Sets.newHashSet(planRoot_.getNullableTupleIds());
+    // Remove all tuple ids that were made nullable in an input fragment.
+    List<ExchangeNode> exchNodes = Lists.newArrayList();
+    planRoot_.collect(ExchangeNode.class, exchNodes);
+    for (ExchangeNode exchNode: exchNodes) {
+      nullableTids.removeAll(exchNode.getNullableTupleIds());
+    }
+    for (TupleId tid: tids) if (nullableTids.contains(tid)) return true;
+    return false;
   }
 }
