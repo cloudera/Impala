@@ -95,7 +95,8 @@ class TestScratchDir(CustomClusterTestSuite):
         one of those directories is used as scratch disk. Only one should be used as
         scratch because all directories are on same disk."""
     self._start_impala_cluster([
-      '--impalad_args="-scratch_dirs={0}"'.format(','.join(self.normal_dirs))])
+      '--impalad_args="-logbuflevel=-1 -scratch_dirs={0}"'.format(
+      ','.join(self.normal_dirs))])
     self.assert_impalad_log_contains("INFO", "Using scratch directory ",
                                     expected_count=1)
     exec_option = vector.get_value('exec_option')
@@ -109,7 +110,7 @@ class TestScratchDir(CustomClusterTestSuite):
   @CustomClusterTestSuite.with_args("-scratch_dirs=")
   def test_no_dirs(self, vector):
     """ Test we can execute a query with no scratch dirs """
-    self._start_impala_cluster(['--impalad_args="-scratch_dirs="'])
+    self._start_impala_cluster(['--impalad_args="-logbuflevel=-1 -scratch_dirs="'])
     self.assert_impalad_log_contains("WARNING",
         "Running without spill to disk: no scratch directories provided\.")
     exec_option = vector.get_value('exec_option')
@@ -125,7 +126,8 @@ class TestScratchDir(CustomClusterTestSuite):
   def test_non_writable_dirs(self, vector):
     """ Test we can execute a query with only bad non-writable scratch """
     self._start_impala_cluster([
-      '--impalad_args="-scratch_dirs={0}"'.format(','.join(self.non_writable_dirs))])
+      '--impalad_args="-logbuflevel=-1 -scratch_dirs={0}"'.format(
+      ','.join(self.non_writable_dirs))])
     self.assert_impalad_log_contains("ERROR", "Running without spill to disk: could "
         + "not use any scratch directories in list:.*. See previous "
         + "warnings for information on causes.")
@@ -145,7 +147,8 @@ class TestScratchDir(CustomClusterTestSuite):
   def test_non_existing_dirs(self, vector):
     """ Test that non-existing directories are not created or used """
     self._start_impala_cluster([
-      '--impalad_args="-scratch_dirs={0}"'.format(','.join(self.non_existing_dirs))])
+      '--impalad_args="-logbuflevel=-1 -scratch_dirs={0}"'.format(
+      ','.join(self.non_existing_dirs))])
     self.assert_impalad_log_contains("ERROR", "Running without spill to disk: could "
         + "not use any scratch directories in list:.*. See previous "
         + "warnings for information on causes.")
