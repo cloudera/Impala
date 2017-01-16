@@ -28,7 +28,8 @@ public class CatalogServiceTestCatalog extends CatalogServiceCatalog {
 
   public CatalogServiceTestCatalog(boolean loadInBackground, int numLoadingThreads,
       SentryConfig sentryConfig, TUniqueId catalogServiceId) {
-    super(loadInBackground, numLoadingThreads, sentryConfig, catalogServiceId);
+    super(loadInBackground, numLoadingThreads, sentryConfig, catalogServiceId,
+        System.getProperty("java.io.tmpdir"));
   }
 
   public static CatalogServiceCatalog create() {

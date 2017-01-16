@@ -99,7 +99,8 @@ public class JniCatalog {
     LOG.info(JniUtil.getJavaVersion());
 
     catalog_ = new CatalogServiceCatalog(cfg.load_catalog_in_background,
-        cfg.num_metadata_loading_threads, sentryConfig, getServiceId());
+        cfg.num_metadata_loading_threads, sentryConfig, getServiceId(),
+        cfg.local_library_path);
     try {
       catalog_.reset();
     } catch (CatalogException e) {
