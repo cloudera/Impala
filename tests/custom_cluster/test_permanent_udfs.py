@@ -13,10 +13,13 @@
 # limitations under the License.
 #
 
+import glob
 import os
 import pytest
+import shutil
 import subprocess
-from tests.beeswax.impala_beeswax import ImpalaBeeswaxException
+
+from tempfile import mkdtemp
 from tests.common.custom_cluster_test_suite import CustomClusterTestSuite
 from tests.common.skip import SkipIfS3, SkipIfIsilon, SkipIfLocal
 from tests.util.filesystem_utils import get_fs_path
@@ -30,6 +33,7 @@ class TestUdfPersistence(CustomClusterTestSuite):
   HIVE_IMPALA_INTEGRATION_DB = 'hive_impala_integration_db'
   HIVE_UDF_JAR = os.getenv('DEFAULT_FS') + '/test-warehouse/hive-exec.jar';
   JAVA_UDF_JAR = os.getenv('DEFAULT_FS') + '/test-warehouse/impala-hive-udfs.jar';
+  LOCAL_LIBRARY_DIR = mkdtemp(dir="/tmp")
 
   @classmethod
   def get_workload(cls):
@@ -73,6 +77,7 @@ class TestUdfPersistence(CustomClusterTestSuite):
     self.client.execute("DROP DATABASE IF EXISTS %s CASCADE" % self.JAVA_FN_TEST_DB)
     self.client.execute("DROP DATABASE IF EXISTS %s CASCADE"
        % self.HIVE_IMPALA_INTEGRATION_DB)
+    shutil.rmtree(self.LOCAL_LIBRARY_DIR, ignore_errors=True)
 
   def run_stmt_in_hive(self, stmt):
     """
@@ -173,6 +178,8 @@ class TestUdfPersistence(CustomClusterTestSuite):
   @SkipIfS3.hive
   @SkipIfLocal.hive
   @pytest.mark.execute_serially
+  @CustomClusterTestSuite.with_args(
+     catalogd_args= "--local_library_dir=%s" % LOCAL_LIBRARY_DIR)
   def test_java_udfs_hive_integration(self):
     ''' This test checks the integration between Hive and Impala on
     CREATE FUNCTION and DROP FUNCTION statements for persistent Java UDFs.
@@ -222,6 +229,8 @@ class TestUdfPersistence(CustomClusterTestSuite):
     self.client.execute("INVALIDATE METADATA")
     self.verify_function_count(
             "SHOW FUNCTIONS in {0}".format(self.HIVE_IMPALA_INTEGRATION_DB), 0)
+    # Make sure we deleted all the temporary jars we copied to the local fs
+    assert len(glob.glob(self.LOCAL_LIBRARY_DIR + "/*.jar")) == 0
 
   @pytest.mark.execute_serially
   def test_java_udfs_from_impala(self):
