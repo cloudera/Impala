@@ -107,11 +107,7 @@ public class HdfsPartition implements Comparable<HdfsPartition> {
     }
 
     public void addFileBlock(FileBlock blockMd) {
-      addThriftFileBlock(blockMd.toThrift());
-    }
-
-    public void addThriftFileBlock(THdfsFileBlock block) {
-      fileDescriptor_.addToFile_blocks(block);
+      fileDescriptor_.addToFile_blocks(blockMd.toThrift());
     }
 
     public static FileDescriptor fromThrift(THdfsFileDesc desc) {
@@ -385,7 +381,6 @@ public class HdfsPartition implements Comparable<HdfsPartition> {
   public String getLocation() {
     return (location_ != null) ? location_.toString() : null;
   }
-  public Path getLocationPath() { return new Path(getLocation()); }
   public long getId() { return id_; }
   public HdfsTable getTable() { return table_; }
   public void setNumRows(long numRows) { numRows_ = numRows; }

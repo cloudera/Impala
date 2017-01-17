@@ -602,8 +602,7 @@ public class CatalogOpExecutor {
       throw new CatalogException("Table " + tbl.getFullName() + " is not an HDFS table");
     }
     HdfsTable hdfsTable = (HdfsTable) tbl;
-    HdfsPartition hdfsPartition =
-        hdfsTable.createAndLoadPartition(partition.getSd(), partition);
+    HdfsPartition hdfsPartition = hdfsTable.createPartition(partition.getSd(), partition);
     return catalog_.addPartition(hdfsPartition);
   }
 
