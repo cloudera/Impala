@@ -29,6 +29,7 @@
 #include "service/query-exec-state.h"
 #include "thrift/protocol/TDebugProtocol.h"
 #include "util/coding-util.h"
+#include "util/logging-support.h"
 #include "util/redactor.h"
 #include "util/summary-util.h"
 #include "util/time.h"
@@ -121,6 +122,8 @@ void ImpalaHttpHandler::RegisterHandlers(Webserver* webserver) {
   webserver->RegisterUrlCallback("/query_stmt", "query_stmt.tmpl",
       [this](const auto& args, auto* doc) {
         this->QuerySummaryHandler(false, false, args, doc); }, false);
+
+  RegisterLogLevelCallbacks(webserver, true);
 }
 
 void ImpalaHttpHandler::HadoopVarzHandler(const Webserver::ArgumentMap& args,
