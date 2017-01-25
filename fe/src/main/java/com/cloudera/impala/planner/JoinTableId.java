@@ -18,6 +18,8 @@ import com.cloudera.impala.common.Id;
 import com.cloudera.impala.common.IdGenerator;
 
 public class JoinTableId extends Id<JoinTableId> {
+  static int INVALID_JOIN_TABLE_ID = -1;
+
   // Construction only allowed via an IdGenerator.
   protected JoinTableId(int id) {
     super(id);
@@ -25,8 +27,10 @@ public class JoinTableId extends Id<JoinTableId> {
 
   public static JoinTableId INVALID;
   static {
-    INVALID = new JoinTableId(Id.INVALID_ID);
+    INVALID = new JoinTableId(INVALID_JOIN_TABLE_ID);
   }
+
+  public boolean isValid() { return id_ != INVALID_JOIN_TABLE_ID; }
 
   public static IdGenerator<JoinTableId> createGenerator() {
     return new IdGenerator<JoinTableId>() {
