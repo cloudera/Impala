@@ -115,6 +115,7 @@ class RuntimeState {
   const std::string& effective_user() const {
     return GetEffectiveUser(query_ctx().session);
   }
+  bool decimal_v2() const { return query_options().decimal_v2; }
   const TUniqueId& session_id() const { return query_ctx().session.session_id; }
   const std::string& do_as_user() const { return query_ctx().session.delegated_user; }
   const std::string& connected_user() const {
