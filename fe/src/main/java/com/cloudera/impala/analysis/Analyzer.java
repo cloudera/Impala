@@ -57,6 +57,7 @@ import com.cloudera.impala.common.ImpalaException;
 import com.cloudera.impala.common.InternalException;
 import com.cloudera.impala.common.Pair;
 import com.cloudera.impala.common.PrintUtils;
+import com.cloudera.impala.common.RuntimeEnv;
 import com.cloudera.impala.planner.PlanNode;
 import com.cloudera.impala.service.FeSupport;
 import com.cloudera.impala.thrift.TAccessEvent;
@@ -64,6 +65,7 @@ import com.cloudera.impala.thrift.TCatalogObjectType;
 import com.cloudera.impala.thrift.TLineageGraph;
 import com.cloudera.impala.thrift.TNetworkAddress;
 import com.cloudera.impala.thrift.TQueryCtx;
+import com.cloudera.impala.thrift.TQueryOptions;
 import com.cloudera.impala.util.DisjointSet;
 import com.cloudera.impala.util.EventSequence;
 import com.cloudera.impala.util.ListMap;
@@ -1944,6 +1946,12 @@ public class Analyzer {
     globalState_.valueTransferGraph = new ValueTransferGraph();
     globalState_.valueTransferGraph.computeValueTransfers();
 
+    // Validate the value-transfer graph in single-node planner tests.
+    if (RuntimeEnv.INSTANCE.isTestEnv() && getQueryOptions().num_nodes == 1) {
+      Preconditions.checkState(validateValueTransferGraph(),
+          "Failed to validate value-transfer graph.");
+    }
+
     // we start out by assigning each slot to its own equiv class
     int numSlots = globalState_.descTbl.getMaxSlotId().asInt() + 1;
     for (int i = 0; i < numSlots; ++i) {
@@ -2251,6 +2259,9 @@ public class Analyzer {
   public String getDefaultDb() { return globalState_.queryCtx.session.database; }
   public User getUser() { return user_; }
   public TQueryCtx getQueryCtx() { return globalState_.queryCtx; }
+  public TQueryOptions getQueryOptions() {
+    return globalState_.queryCtx.request.getQuery_options();
+  }
   public AuthorizationConfig getAuthzConfig() { return globalState_.authzConfig; }
   public ListMap<TNetworkAddress> getHostIndex() { return globalState_.hostIndex; }
   public ColumnLineageGraph getColumnLineageGraph() { return globalState_.lineageGraph; }
@@ -2903,7 +2914,7 @@ public class Analyzer {
       for (Pair<SlotId, SlotId> vt: valueTransfers) {
         expectedValueTransfer[vt.first.asInt()][vt.second.asInt()] = true;
       }
-      // Set registered value tranfers in expectedValueTransfer.
+      // Set registered value transfers in expectedValueTransfer.
       for (Pair<SlotId, SlotId> vt: globalState_.registeredValueTransfers) {
         expectedValueTransfer[vt.first.asInt()][vt.second.asInt()] = true;
       }
