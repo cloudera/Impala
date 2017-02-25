@@ -246,7 +246,19 @@ enum TImpalaQueryOptions {
 
   // Indicates whether the FE should rewrite Exprs for optimization purposes.
   // It's sometimes useful to disable rewrites for testing, e.g., expr-test.cc.
-  ENABLE_EXPR_REWRITES
+  ENABLE_EXPR_REWRITES,
+
+  // Policy for resolving nested array fields in Parquet files.
+  // An Impala array type can have several different representations in
+  // a Parquet schema (three, two, or one level). There is fundamental ambiguity
+  // between the two and three level encodings with index-based field resolution.
+  // The ambiguity can manually be resolved using this query option, or by using
+  // PARQUET_FALLBACK_SCHEMA_RESOLUTION=name.
+  // The value TWO_LEVEL_THEN_THREE_LEVEL was the default mode since Impala 2.3.
+  // It is preserved as the default for compatibility.
+  // TODO: Remove the TWO_LEVEL_THEN_THREE_LEVEL mode completely or at least make
+  // it non-default in a compatibility breaking release.
+  PARQUET_ARRAY_RESOLUTION
 }
 
 // The summary of a DML statement.
