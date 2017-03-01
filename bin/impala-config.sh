@@ -296,7 +296,7 @@ export IMPALA_ZLIB_VERSION=1.2.8
 export IMPALA_KUDU_VERSION=kudu5.10.0-rc4-p1
 
 # Kudu version used to identify Java client jar from maven
-export KUDU_JAVA_VERSION=1.2.0-cdh5.10.0
+export KUDU_JAVA_VERSION=1.3.0-cdh5.11.0
 
 export KUDU_MASTER="${KUDU_MASTER:-127.0.0.1}"
 export KUDU_MASTER_PORT="${KUDU_MASTER_PORT:-7051}"
