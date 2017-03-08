@@ -1955,7 +1955,7 @@ Status HdfsParquetScanner::ProcessSplit() {
     // group.
     context_->ReleaseCompletedResources(batch_, /* done */ true);
     // Commit the rows to flush the row batch from the previous row group
-    CommitRows(0);
+    HdfsParquetScanner::CommitRows(0);
 
     RETURN_IF_ERROR(InitColumns(i, column_readers_));
 
@@ -2081,6 +2081,37 @@ int HdfsParquetScanner::TransferScratchTuples() {
   return output_row - output_row_start;
 }
 
+Status HdfsParquetScanner::CommitRows(int num_rows) {
+  DCHECK(batch_ != NULL);
+  DCHECK_LE(num_rows, batch_->capacity() - batch_->num_rows());
+  batch_->CommitRows(num_rows);
+  tuple_mem_ += static_cast<int64_t>(scan_node_->tuple_desc()->byte_size()) * num_rows;
+
+  // We need to pass the row batch to the scan node if there is too much memory attached,
+  // which can happen if the query is very selective. We need to release memory even
+  // if no rows passed predicates. We should only do this when all rows have been copied
+  // from the scratch batch, since those rows may reference completed I/O buffers in
+  // 'context_'.
+  if (scratch_batch_->AtEnd() &&
+      (batch_->AtCapacity() || context_->num_completed_io_buffers() > 0)) {
+    context_->ReleaseCompletedResources(batch_, /* done */ false);
+  }
+  if (batch_->AtCapacity()) {
+    scan_node_->AddMaterializedRowBatch(batch_);
+    RETURN_IF_ERROR(StartNewRowBatch());
+  }
+
+  if (context_->cancelled()) return Status::CANCELLED;
+  // Check for UDF errors.
+  RETURN_IF_ERROR(state_->GetQueryStatus());
+  // Free local expr allocations for this thread
+  HdfsScanNode::ConjunctsMap::const_iterator iter = scanner_conjuncts_map_.begin();
+  for (; iter != scanner_conjuncts_map_.end(); ++iter) {
+    ExprContext::FreeLocalAllocations(iter->second);
+  }
+  return Status::OK();
+}
+
 bool HdfsParquetScanner::EvalRuntimeFilters(TupleRow* row) {
   int num_filters = filter_ctxs_.size();
   for (int i = 0; i < num_filters; ++i) {
@@ -2177,7 +2208,7 @@ bool HdfsParquetScanner::AssembleRows(
     // is empty. CommitRows() creates new output batches as necessary.
     do {
       int num_row_to_commit = TransferScratchTuples();
-      parse_status_.MergeStatus(CommitRows(num_row_to_commit));
+      parse_status_.MergeStatus(HdfsParquetScanner::CommitRows(num_row_to_commit));
       if (UNLIKELY(!parse_status_.ok())) return false;
     } while (!scratch_batch_->AtEnd());
 
@@ -2429,7 +2460,7 @@ Status HdfsParquetScanner::ProcessFooter(bool* eosr) {
       num_tuples -= max_tuples;
 
       int num_to_commit = WriteEmptyTuples(context_, current_row, max_tuples);
-      RETURN_IF_ERROR(CommitRows(num_to_commit));
+      RETURN_IF_ERROR(HdfsParquetScanner::CommitRows(num_to_commit));
     }
 
     *eosr = true;

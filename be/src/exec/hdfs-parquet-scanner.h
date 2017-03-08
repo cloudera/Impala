@@ -502,6 +502,15 @@ class HdfsParquetScanner : public HdfsScanner {
   /// Returns the number of rows that should be committed to the output batch.
   int TransferScratchTuples();
 
+  /// Commit num_rows to the current row batch. Transfers resources from 'context_' to
+  /// the current row batch, if necessary, and safe to do so. If the current batch
+  /// reaches capacity, it is added to the scan node's row batch queue, and a new batch
+  /// is created with StartNewRowBatch().
+  /// Returns Status::OK if the query is not cancelled and hasn't exceeded any mem limits.
+  /// Scanner can call this with 0 rows to flush any pending resources (attached pools
+  /// and io buffers) to minimize memory consumption.
+  Status CommitRows(int num_rows);
+
   /// Evaluates runtime filters (if any) against the given row. Returns true if
   /// they passed, false otherwise. Maintains the runtime filter stats, determines
   /// whether the filters are effective, and disables them if they are not.
