@@ -27,7 +27,6 @@
 #include <vector>
 #include <boost/scoped_ptr.hpp>
 
-#include <boost/unordered_map.hpp>
 #include <boost/unordered_set.hpp>
 
 #include <llvm/IR/DerivedTypes.h>
@@ -72,12 +71,10 @@ namespace llvm {
 
 namespace impala {
 
-class CodegenAnyVal;
+class CodegenCallGraph;
 class CodegenSymbolEmitter;
 class SubExprElimination;
 
-/// Map of functions' names to their callee functions' names.
-typedef boost::unordered_map<std::string, boost::unordered_set<std::string>> FnRefsMap;
 
 /// LLVM code generator.  This is the top level object to generate jitted code.
 //
@@ -444,14 +441,7 @@ class LlvmCodeGen {
   friend class LlvmCodeGenTest;
   friend class SubExprElimination;
 
-  /// Returns true if the function 'fn' is defined in the Impalad native code.
-  static bool IsDefinedInImpalad(const std::string& fn);
-
-  /// Find all global variables and functions which reference the llvm::Value 'val'
-  /// and return them in 'users'.
-  static void FindGlobalUsers(llvm::User* val, std::vector<llvm::GlobalObject*>* users);
-
-  /// Top level codegen object.  'module_id' is used for debugging when outputting the IR.
+  /// Top level codegen object. 'module_id' is used for debugging when outputting the IR.
   LlvmCodeGen(ObjectPool* pool, const std::string& module_id);
 
   /// Initializes the jitter and execution engine with the given module.
@@ -554,15 +544,9 @@ class LlvmCodeGen {
   static std::string cpu_name_;
   static std::vector<std::string> cpu_attrs_;
 
-  /// A call graph for all IR functions in the main module. Used for determining
-  /// dependencies when materializing IR functions.
-  static FnRefsMap fn_refs_map_;
-
-  /// This set contains names of all functions which always need to be materialized.
-  /// They are referenced by global variables but NOT defined in the Impalad native
-  /// code (they may have been inlined by gcc). These functions are always materialized
-  /// when a module is loaded to ensure that LLVM can resolve references to them.
-  static boost::unordered_set<std::string> fns_to_always_materialize_;
+  /// A global shared call graph for all IR functions in the main module.
+  /// Used for determining dependencies when materializing IR functions.
+  static CodegenCallGraph shared_call_graph_;
 
   /// ID used for debugging (can be e.g. the fragment instance ID)
   std::string id_;
