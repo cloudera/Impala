@@ -28,6 +28,7 @@
 
 namespace impala {
 
+class AdmissionController;
 class CallableThreadPool;
 class DataStreamMgr;
 class DiskIoMgr;
@@ -70,10 +71,6 @@ class ExecEnv {
 
   void SetImpalaServer(ImpalaServer* server) { impala_server_ = server; }
 
-  StatestoreSubscriber* statestore_subscriber() {
-    return statestore_subscriber_.get();
-  }
-
   DataStreamMgr* stream_mgr() { return stream_mgr_.get(); }
   ImpalaBackendClientCache* impalad_client_cache() {
     return impalad_client_cache_.get();
@@ -101,6 +98,7 @@ class ExecEnv {
   void set_enable_webserver(bool enable) { enable_webserver_ = enable; }
 
   Scheduler* scheduler() { return scheduler_.get(); }
+  AdmissionController* admission_controller() { return admission_controller_.get(); }
   StatestoreSubscriber* subscriber() { return statestore_subscriber_.get(); }
 
   const TNetworkAddress& backend_address() const { return backend_address_; }
@@ -124,6 +122,7 @@ class ExecEnv {
   boost::scoped_ptr<MetricGroup> metrics_;
   boost::scoped_ptr<DataStreamMgr> stream_mgr_;
   boost::scoped_ptr<Scheduler> scheduler_;
+  boost::scoped_ptr<AdmissionController> admission_controller_;
   boost::scoped_ptr<StatestoreSubscriber> statestore_subscriber_;
   boost::scoped_ptr<ImpalaBackendClientCache> impalad_client_cache_;
   boost::scoped_ptr<CatalogServiceClientCache> catalogd_client_cache_;

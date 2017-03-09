@@ -268,6 +268,9 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
   /// Returns true if lineage logging is enabled, false otherwise.
   bool IsLineageLoggingEnabled();
 
+  /// Retuns true if this is a coordinator, false otherwise.
+  bool IsCoordinator();
+
  private:
   friend class ChildQuery;
   friend class ImpalaHttpHandler;
@@ -426,6 +429,10 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
   /// Returns OK if the authorization suceeds, otherwise returns an status with details
   /// on why the failure occurred.
   Status AuthorizeProxyUser(const std::string& user, const std::string& do_as_user);
+
+  // Check if the local backend descriptor is in the list of known backends. If not, add
+  // it to the list of known backends and add it to the 'topic_updates'.
+  void AddLocalBackendToStatestore(std::vector<TTopicDelta>* topic_updates);
 
   /// Snapshot of a query's state, archived in the query log.
   struct QueryStateRecord {
@@ -937,6 +944,13 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
 
   /// Container for a thread that runs ExpireQueries() if FLAGS_idle_query_timeout is set.
   boost::scoped_ptr<Thread> query_expiration_thread_;
+
+  /// Serializes TBackendDescriptors when creating topic updates
+  ThriftSerializer thrift_serializer_;
+
+  /// True if this ImpalaServer can accept client connections and coordinate
+  /// queries.
+  bool is_coordinator_;
 };
 
 /// Create an ImpalaServer and Thrift servers.
@@ -944,6 +958,8 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
 /// ImpalaService (Beeswax) on beeswax_port (returned via beeswax_server).
 /// If hs2_port != 0 (and hs2_server != NULL), creates a ThriftServer exporting
 /// ImpalaHiveServer2Service on hs2_port (returned via hs2_server).
+/// ImpalaService and ImpalaHiveServer2Service are initialized only if this
+/// Impala server is a coordinator (indicated by the is_coordinator flag).
 /// If be_port != 0 (and be_server != NULL), create a ThriftServer exporting
 /// ImpalaInternalService on be_port (returned via be_server).
 /// Returns created ImpalaServer. The caller owns fe_server and be_server.
@@ -953,7 +969,7 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
 /// which case none of the output parameters can be assumed to be valid.
 Status CreateImpalaServer(ExecEnv* exec_env, int beeswax_port, int hs2_port,
     int be_port, ThriftServer** beeswax_server, ThriftServer** hs2_server,
-    ThriftServer** be_server, ImpalaServer** impala_server);
+    ThriftServer** be_server, boost::shared_ptr<ImpalaServer>* impala_server);
 
 }
 

@@ -88,7 +88,6 @@ class SimpleScheduler : public Scheduler {
   virtual impala::Status Init();
 
   virtual Status Schedule(QuerySchedule* schedule);
-  virtual Status Release(QuerySchedule* schedule);
 
  private:
   /// Map from a host's IP address to the next backend to be round-robin scheduled for
