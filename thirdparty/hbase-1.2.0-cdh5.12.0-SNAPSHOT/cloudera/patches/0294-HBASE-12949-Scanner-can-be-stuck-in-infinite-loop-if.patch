@@ -1,0 +1,62 @@
+From fe19fee0cf077b87cba5b678f0a897fa721f1714 Mon Sep 17 00:00:00 2001
+From: Jerry He <jerryjch@apache.org>
+Date: Wed, 21 Sep 2016 13:31:18 -0700
+Subject: [PATCH 294/308] HBASE-12949 Scanner can be stuck in infinite loop if
+ the HFile is corrupted
+
+(cherry picked from commit c80d671a062737c806d4e20a992443e9b6b86b02)
+
+ Author:    Jerry He <jerryjch@apache.org>
+ Date:      Wed Sep 21 13:31:18 2016 -0700
+ Reason:    Bug
+ Ref:       CDH-24916
+
+Change-Id: Iccb247d2af502bc4334447fee81f39df2ce33d85
+---
+ .../hadoop/hbase/io/hfile/HFileReaderV2.java       |   16 +++++++++++++++-
+ 1 file changed, 15 insertions(+), 1 deletion(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/HFileReaderV2.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/HFileReaderV2.java
+index 50200dc..9eb9e4b 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/HFileReaderV2.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/HFileReaderV2.java
+@@ -961,6 +961,14 @@ public class HFileReaderV2 extends AbstractHFileReader {
+ 
+     /**
+      * @param v
++     * @return True if v &lt;= 0 or v &gt; current block buffer limit.
++     */
++    protected final boolean checkKeyLen(final int v) {
++      return v <= 0 || v > this.blockBuffer.limit();
++    }
++
++    /**
++     * @param v
+      * @return True if v &lt; 0 or v &gt; current block buffer limit.
+      */
+     protected final boolean checkLen(final int v) {
+@@ -971,7 +979,7 @@ public class HFileReaderV2 extends AbstractHFileReader {
+      * Check key and value lengths are wholesome.
+      */
+     protected final void checkKeyValueLen() {
+-      if (checkLen(this.currKeyLen) || checkLen(this.currValueLen)) {
++      if (checkKeyLen(this.currKeyLen) || checkLen(this.currValueLen)) {
+         throw new IllegalStateException("Invalid currKeyLen " + this.currKeyLen +
+           " or currValueLen " + this.currValueLen + ". Block offset: " + block.getOffset() +
+           ", block length: " + this.blockBuffer.limit() + ", position: " +
+@@ -1069,6 +1077,12 @@ public class HFileReaderV2 extends AbstractHFileReader {
+         blockBuffer.mark();
+         klen = blockBuffer.getInt();
+         vlen = blockBuffer.getInt();
++        if (checkKeyLen(klen) || checkLen(vlen)) {
++          throw new IllegalStateException("Invalid klen " + klen + " or vlen "
++              + vlen + ". Block offset: "
++              + block.getOffset() + ", block length: " + blockBuffer.limit() + ", position: "
++              + blockBuffer.position() + " (without header).");
++        }
+         blockBuffer.reset();
+         if (this.reader.shouldIncludeMemstoreTS()) {
+           if (this.reader.decodeMemstoreTS) {
+-- 
+1.7.9.5
+

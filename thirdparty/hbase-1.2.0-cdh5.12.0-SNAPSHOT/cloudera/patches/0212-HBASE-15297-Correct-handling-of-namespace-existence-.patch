@@ -1,0 +1,98 @@
+From 59a1d664bf2894386b71a5e462b39e67e44401e6 Mon Sep 17 00:00:00 2001
+From: Umesh Agashe <uagashe@cloudera.com>
+Date: Mon, 12 Sep 2016 16:24:44 -0700
+Subject: [PATCH 212/308] HBASE-15297 Correct handling of namespace existence
+ checks in shell.
+
+Changes namespace_exists? method in SecurityAdmin ruby code to catch NamespaceNotFoundException
+and modified Admin.java file to document the exception.
+
+Signed-off-by: Sean Busbey <busbey@apache.org>
+
+ Conflicts:
+	hbase-client/src/main/java/org/apache/hadoop/hbase/client/Admin.java
+	hbase-client/src/main/java/org/apache/hadoop/hbase/client/HBaseAdmin.java
+
+(cherry picked from commit 059a169d3a22cc2788ff0f4ea46dd03015338cfc)
+
+Change-Id: I0edc7bff943b0a179bef841621030fda64750737
+Reason: Supportability
+Author: Umesh Agashe
+Ref: CDH-44260
+---
+ .../java/org/apache/hadoop/hbase/client/Admin.java |    6 ++++--
+ .../org/apache/hadoop/hbase/client/HBaseAdmin.java |    4 +++-
+ hbase-shell/src/main/ruby/hbase/security.rb        |    9 +++------
+ 3 files changed, 10 insertions(+), 9 deletions(-)
+
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/Admin.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/Admin.java
+index 546f38b..4a7fbd4 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/Admin.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/Admin.java
+@@ -32,6 +32,7 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
+ import org.apache.hadoop.hbase.HRegionInfo;
+ import org.apache.hadoop.hbase.HTableDescriptor;
+ import org.apache.hadoop.hbase.NamespaceDescriptor;
++import org.apache.hadoop.hbase.NamespaceNotFoundException;
+ import org.apache.hadoop.hbase.ProcedureInfo;
+ import org.apache.hadoop.hbase.ServerName;
+ import org.apache.hadoop.hbase.TableExistsException;
+@@ -880,10 +881,11 @@ public interface Admin extends Abortable, Closeable {
+    *
+    * @param name name of namespace descriptor
+    * @return A descriptor
+-   * @throws IOException
++   * @throws org.apache.hadoop.hbase.NamespaceNotFoundException
++   * @throws IOException if a remote or network exception occurs
+    */
+   NamespaceDescriptor getNamespaceDescriptor(final String name)
+-      throws IOException;
++      throws NamespaceNotFoundException, IOException;
+ 
+   /**
+    * List available namespace descriptors
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/HBaseAdmin.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/HBaseAdmin.java
+index e31deb8..468135b 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/HBaseAdmin.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/HBaseAdmin.java
+@@ -51,6 +51,7 @@ import org.apache.hadoop.hbase.HTableDescriptor;
+ import org.apache.hadoop.hbase.MasterNotRunningException;
+ import org.apache.hadoop.hbase.MetaTableAccessor;
+ import org.apache.hadoop.hbase.NamespaceDescriptor;
++import org.apache.hadoop.hbase.NamespaceNotFoundException;
+ import org.apache.hadoop.hbase.NotServingRegionException;
+ import org.apache.hadoop.hbase.ProcedureInfo;
+ import org.apache.hadoop.hbase.RegionException;
+@@ -2883,7 +2884,8 @@ public class HBaseAdmin implements Admin {
+    * @throws IOException
+    */
+   @Override
+-  public NamespaceDescriptor getNamespaceDescriptor(final String name) throws IOException {
++  public NamespaceDescriptor getNamespaceDescriptor(final String name)
++      throws NamespaceNotFoundException, IOException {
+     return
+         executeCallable(new MasterCallable<NamespaceDescriptor>(getConnection()) {
+           @Override
+diff --git a/hbase-shell/src/main/ruby/hbase/security.rb b/hbase-shell/src/main/ruby/hbase/security.rb
+index f061e8c..aef2309 100644
+--- a/hbase-shell/src/main/ruby/hbase/security.rb
++++ b/hbase-shell/src/main/ruby/hbase/security.rb
+@@ -174,12 +174,9 @@ module Hbase
+ 
+      # Does Namespace exist
+     def namespace_exists?(namespace_name)
+-      namespaceDesc = @admin.getNamespaceDescriptor(namespace_name)
+-      if(namespaceDesc == nil)
+-        return false
+-      else
+-        return true
+-      end
++      return @admin.getNamespaceDescriptor(namespace_name) != nil
++    rescue org.apache.hadoop.hbase.NamespaceNotFoundException => e
++      return false
+     end
+ 
+     # Make sure that security features are available
+-- 
+1.7.9.5
+

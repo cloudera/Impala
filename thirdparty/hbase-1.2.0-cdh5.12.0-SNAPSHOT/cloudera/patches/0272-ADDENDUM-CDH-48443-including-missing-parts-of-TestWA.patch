@@ -1,0 +1,63 @@
+From 310c10a5c47bd555cb49716335e1c8899152d38c Mon Sep 17 00:00:00 2001
+From: Sean Busbey <busbey@cloudera.com>
+Date: Thu, 23 Feb 2017 07:45:36 -0600
+Subject: [PATCH 272/308] ADDENDUM CDH-48443 including missing parts of
+ TestWALObserver changes from HBASE-17624.
+
+Change-Id: Id8d62d52647eead4795fc598e740db0e82e056b3
+Reason: Bug
+Author: Michael Stack
+Ref: CDH-50644
+---
+ .../hadoop/hbase/coprocessor/TestWALObserver.java  |    8 +++-----
+ 1 file changed, 3 insertions(+), 5 deletions(-)
+
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/coprocessor/TestWALObserver.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/coprocessor/TestWALObserver.java
+index 846a5fd..fe63592 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/coprocessor/TestWALObserver.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/coprocessor/TestWALObserver.java
+@@ -96,7 +96,6 @@ public class TestWALObserver {
+ 
+   private Configuration conf;
+   private FileSystem fs;
+-  private Path dir;
+   private Path hbaseRootDir;
+   private Path hbaseWALRootDir;
+   private String logName;
+@@ -136,14 +135,12 @@ public class TestWALObserver {
+     this.fs = TEST_UTIL.getDFSCluster().getFileSystem();
+     this.hbaseRootDir = FSUtils.getRootDir(conf);
+     this.hbaseWALRootDir = FSUtils.getWALRootDir(conf);
+-    this.dir = new Path(this.hbaseRootDir, TestWALObserver.class.getName());
+     this.oldLogDir = new Path(this.hbaseWALRootDir,
+         HConstants.HREGION_OLDLOGDIR_NAME);
+     String serverName = ServerName.valueOf(currentTest.getMethodName(), 16010,
+         System.currentTimeMillis()).toString();
+     this.logDir = new Path(this.hbaseWALRootDir,
+         DefaultWALProvider.getWALDirectoryName(serverName));
+-    this.logName = HConstants.HREGION_LOGDIR_NAME;
+ 
+     if (TEST_UTIL.getDFSCluster().getFileSystem().exists(this.hbaseRootDir)) {
+       TEST_UTIL.getDFSCluster().getFileSystem().delete(this.hbaseRootDir, true);
+@@ -151,7 +148,7 @@ public class TestWALObserver {
+     if (TEST_UTIL.getDFSCluster().getFileSystem().exists(this.hbaseWALRootDir)) {
+       TEST_UTIL.getDFSCluster().getFileSystem().delete(this.hbaseWALRootDir, true);
+     }
+-    this.wals = new WALFactory(conf, null, currentTest.getMethodName());
++    this.wals = new WALFactory(conf, null, serverName);
+   }
+ 
+   @After
+@@ -429,7 +426,8 @@ public class TestWALObserver {
+         LOG.info("WALSplit path == " + p);
+         FileSystem newFS = FileSystem.get(newConf);
+         // Make a new wal for new region open.
+-        final WALFactory wals2 = new WALFactory(conf, null, currentTest.getMethodName()+"2");
++        final WALFactory wals2 = new WALFactory(conf, null,
++	    ServerName.valueOf(currentTest.getMethodName()+"2", 16010, System.currentTimeMillis()).toString());
+         WAL wal2 = wals2.getWAL(UNSPECIFIED_REGION);;
+         HRegion region = HRegion.openHRegion(newConf, FileSystem.get(newConf), hbaseRootDir,
+             hri, htd, wal2, TEST_UTIL.getHBaseCluster().getRegionServer(0), null);
+-- 
+1.7.9.5
+

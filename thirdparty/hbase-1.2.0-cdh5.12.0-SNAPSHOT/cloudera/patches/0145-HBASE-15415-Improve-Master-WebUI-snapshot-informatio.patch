@@ -1,0 +1,591 @@
+From 16828876b6e202c90d4519e2957a78a09456cc3f Mon Sep 17 00:00:00 2001
+From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
+Date: Mon, 9 May 2016 20:18:13 -0700
+Subject: [PATCH 145/308] HBASE-15415 Improve Master WebUI snapshot
+ information (huaxiang sun)
+
+Reason: Improvement
+Ref: CDH-36695
+Author: Huaxiang Sun
+
+Change-Id: I03ea197837dcf37a61a35456dd519079241b20f9
+---
+ .../hbase/tmpl/master/MasterStatusTmpl.jamon       |    2 +-
+ .../apache/hadoop/hbase/snapshot/SnapshotInfo.java |  201 ++++++++++++++++++--
+ .../hbase/snapshot/SnapshotReferenceUtil.java      |   70 ++++---
+ .../hbase-webapps/master/snapshotsStats.jsp        |  161 ++++++++++++++++
+ 4 files changed, 388 insertions(+), 46 deletions(-)
+ create mode 100644 hbase-server/src/main/resources/hbase-webapps/master/snapshotsStats.jsp
+
+diff --git a/hbase-server/src/main/jamon/org/apache/hadoop/hbase/tmpl/master/MasterStatusTmpl.jamon b/hbase-server/src/main/jamon/org/apache/hadoop/hbase/tmpl/master/MasterStatusTmpl.jamon
+index 7429498..2a5bfc7 100644
+--- a/hbase-server/src/main/jamon/org/apache/hadoop/hbase/tmpl/master/MasterStatusTmpl.jamon
++++ b/hbase-server/src/main/jamon/org/apache/hadoop/hbase/tmpl/master/MasterStatusTmpl.jamon
+@@ -476,7 +476,7 @@ AssignmentManager assignmentManager = master.getAssignmentManager();
+         <td><% new Date(snapshotDesc.getCreationTime()) %></td>
+     </tr>
+     </%for>
+-    <p><% snapshots.size() %> snapshot(s) in set.</p>
++    <p><% snapshots.size() %> snapshot(s) in set. [<a href="/snapshotsStats.jsp">Snapshot Storefile stats</a>]</p>
+ </table>
+ </%if>
+ </%def>
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/SnapshotInfo.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/SnapshotInfo.java
+index 537472f..8f71035 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/SnapshotInfo.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/SnapshotInfo.java
+@@ -23,8 +23,12 @@ import java.io.FileNotFoundException;
+ import java.net.URI;
+ import java.text.SimpleDateFormat;
+ import java.util.ArrayList;
++import java.util.Collections;
+ import java.util.Date;
+ import java.util.List;
++import java.util.Map;
++import java.util.concurrent.ConcurrentHashMap;
++import java.util.concurrent.ExecutorService;
+ import java.util.concurrent.atomic.AtomicInteger;
+ import java.util.concurrent.atomic.AtomicLong;
+ 
+@@ -124,6 +128,7 @@ public final class SnapshotInfo extends Configured implements Tool {
+     private AtomicLong hfilesArchiveSize = new AtomicLong();
+     private AtomicLong hfilesSize = new AtomicLong();
+     private AtomicLong hfilesMobSize = new AtomicLong();
++    private AtomicLong nonSharedHfilesArchiveSize = new AtomicLong();
+     private AtomicLong logSize = new AtomicLong();
+ 
+     private final SnapshotDescription snapshot;
+@@ -202,6 +207,17 @@ public final class SnapshotInfo extends Configured implements Tool {
+     /** @return the total size of the store files in the mob store*/
+     public long getMobStoreFilesSize() { return hfilesMobSize.get(); }
+ 
++    /** @return the total size of the store files in the archive which is not shared
++     *    with other snapshots and tables
++     *
++     *    This is only calculated when
++     *  {@link #getSnapshotStats(Configuration, HBaseProtos.SnapshotDescription, Map)}
++     *    is called with a non-null Map
++     */
++    public long getNonSharedArchivedStoreFilesSize() {
++      return nonSharedHfilesArchiveSize.get();
++    }
++
+     /** @return the percentage of the shared store files */
+     public float getSharedStoreFilePercentage() {
+       return ((float) hfilesSize.get() / (getStoreFilesSize())) * 100;
+@@ -217,15 +233,46 @@ public final class SnapshotInfo extends Configured implements Tool {
+       return logSize.get();
+     }
+ 
++    /** Check if for a give file in archive, if there are other snapshots/tables still
++     * reference it.
++     * @param filePath file path in archive
++     * @param snapshotFilesMap a map for store files in snapshots about how many snapshots refer
++     *                         to it.
++     * @return true or false
++     */
++    private boolean isArchivedFileStillReferenced(final Path filePath,
++        final Map<Path, Integer> snapshotFilesMap) {
++
++      Integer c = snapshotFilesMap.get(filePath);
++
++      // Check if there are other snapshots or table from clone_snapshot() (via back-reference)
++      // still reference to it.
++      if ((c != null) && (c == 1)) {
++        Path parentDir = filePath.getParent();
++        Path backRefDir = HFileLink.getBackReferencesDir(parentDir, filePath.getName());
++        try {
++          if (FSUtils.listStatus(fs, backRefDir) == null) {
++            return false;
++          }
++        } catch (IOException e) {
++          // For the purpose of this function, IOException is ignored and treated as
++          // the file is still being referenced.
++        }
++      }
++      return true;
++    }
++
+     /**
+      * Add the specified store file to the stats
+      * @param region region encoded Name
+      * @param family family name
+      * @param storeFile store file name
++     * @param filesMap store files map for all snapshots, it may be null
+      * @return the store file information
+      */
+     FileInfo addStoreFile(final HRegionInfo region, final String family,
+-        final SnapshotRegionManifest.StoreFile storeFile) throws IOException {
++        final SnapshotRegionManifest.StoreFile storeFile,
++        final Map<Path, Integer> filesMap) throws IOException {
+       HFileLink link = HFileLink.build(conf, snapshotTable, region.getEncodedName(),
+               family, storeFile.getName());
+       boolean isCorrupted = false;
+@@ -236,6 +283,13 @@ public final class SnapshotInfo extends Configured implements Tool {
+           size = fs.getFileStatus(link.getArchivePath()).getLen();
+           hfilesArchiveSize.addAndGet(size);
+           hfilesArchiveCount.incrementAndGet();
++
++          // If store file is not shared with other snapshots and tables,
++          // increase nonSharedHfilesArchiveSize
++          if ((filesMap != null) &&
++              !isArchivedFileStillReferenced(link.getArchivePath(), filesMap)) {
++            nonSharedHfilesArchiveSize.addAndGet(size);
++          }
+         } else if (inArchive = fs.exists(link.getMobPath())) {
+           size = fs.getFileStatus(link.getMobPath()).getLen();
+           hfilesMobSize.addAndGet(size);
+@@ -417,13 +471,14 @@ public final class SnapshotInfo extends Configured implements Tool {
+     final String table = snapshotDesc.getTable();
+     final SnapshotStats stats = new SnapshotStats(this.getConf(), this.fs, snapshotDesc);
+     SnapshotReferenceUtil.concurrentVisitReferencedFiles(getConf(), fs, snapshotManifest,
++        "SnapshotInfo",
+       new SnapshotReferenceUtil.SnapshotVisitor() {
+         @Override
+         public void storeFile(final HRegionInfo regionInfo, final String family,
+             final SnapshotRegionManifest.StoreFile storeFile) throws IOException {
+           if (storeFile.hasReference()) return;
+ 
+-          SnapshotStats.FileInfo info = stats.addStoreFile(regionInfo, family, storeFile);
++          SnapshotStats.FileInfo info = stats.addStoreFile(regionInfo, family, storeFile, null);
+           if (showFiles) {
+             String state = info.getStateToString();
+             System.out.printf("%8s %s/%s/%s/%s %s%n",
+@@ -505,26 +560,37 @@ public final class SnapshotInfo extends Configured implements Tool {
+    */
+   public static SnapshotStats getSnapshotStats(final Configuration conf,
+       final SnapshotDescription snapshot) throws IOException {
++    return getSnapshotStats(conf, snapshot, null);
++  }
++
++  /**
++   * Returns the snapshot stats
++   * @param conf the {@link Configuration} to use
++   * @param snapshotDesc  HBaseProtos.SnapshotDescription to get stats from
++   * @param filesMap {@link Map} store files map for all snapshots, it may be null
++   * @return the snapshot stats
++   */
++  public static SnapshotStats getSnapshotStats(final Configuration conf,
++      final SnapshotDescription snapshotDesc,
++      final Map<Path, Integer> filesMap) throws IOException {
+     Path rootDir = FSUtils.getRootDir(conf);
+     FileSystem fs = FileSystem.get(rootDir.toUri(), conf);
+-    Path snapshotDir = SnapshotDescriptionUtils.getCompletedSnapshotDir(snapshot, rootDir);
+-    SnapshotManifest manifest = SnapshotManifest.open(conf, fs, snapshotDir, snapshot);
+-    final SnapshotStats stats = new SnapshotStats(conf, fs, snapshot);
++    Path snapshotDir = SnapshotDescriptionUtils.getCompletedSnapshotDir(snapshotDesc, rootDir);
++    SnapshotManifest manifest = SnapshotManifest.open(conf, fs, snapshotDir, snapshotDesc);
++    final SnapshotStats stats = new SnapshotStats(conf, fs, snapshotDesc);
+     SnapshotReferenceUtil.concurrentVisitReferencedFiles(conf, fs, manifest,
+-      new SnapshotReferenceUtil.SnapshotVisitor() {
+-        @Override
+-        public void storeFile(final HRegionInfo regionInfo, final String family,
+-            final SnapshotRegionManifest.StoreFile storeFile) throws IOException {
+-          if (!storeFile.hasReference()) {
+-            stats.addStoreFile(regionInfo, family, storeFile);
++        "SnapshotsStatsAggregation", new SnapshotReferenceUtil.SnapshotVisitor() {
++          @Override public void storeFile(final HRegionInfo regionInfo, final String family,
++              final SnapshotRegionManifest.StoreFile storeFile) throws IOException {
++            if (!storeFile.hasReference()) {
++              stats.addStoreFile(regionInfo, family, storeFile, filesMap);
++            }
+           }
+-        }
+ 
+-        @Override
+-        public void logFile (final String server, final String logfile) throws IOException {
+-          stats.addLogFile(server, logfile);
+-        }
+-    });
++          @Override
++          public void logFile (final String server, final String logfile) throws IOException {
++            stats.addLogFile(server, logfile);
++          }});
+     return stats;
+   }
+ 
+@@ -539,7 +605,7 @@ public final class SnapshotInfo extends Configured implements Tool {
+     FileSystem fs = FileSystem.get(rootDir.toUri(), conf);
+     Path snapshotDir = SnapshotDescriptionUtils.getSnapshotsDir(rootDir);
+     FileStatus[] snapshots = fs.listStatus(snapshotDir,
+-      new SnapshotDescriptionUtils.CompletedSnaphotDirectoriesFilter(fs));
++        new SnapshotDescriptionUtils.CompletedSnaphotDirectoriesFilter(fs));
+     List<SnapshotDescription> snapshotLists =
+       new ArrayList<SnapshotDescription>(snapshots.length);
+     for (FileStatus snapshotDirStat: snapshots) {
+@@ -549,6 +615,105 @@ public final class SnapshotInfo extends Configured implements Tool {
+   }
+ 
+   /**
++   * Gets the store files map for snapshot
++   * @param conf the {@link Configuration} to use
++   * @param snapshot {@link SnapshotDescription} to get stats from
++   * @param exec the {@link ExecutorService} to use
++   * @param filesMap {@link Map} the map to put the mapping entries
++   * @param uniqueHFilesArchiveSize {@link AtomicLong} the accumulated store file size in archive
++   * @param uniqueHFilesSize {@link AtomicLong} the accumulated store file size shared
++   * @param uniqueHFilesMobSize {@link AtomicLong} the accumulated mob store file size shared
++   * @return the snapshot stats
++   */
++  private static void getSnapshotFilesMap(final Configuration conf,
++      final SnapshotDescription snapshot, final ExecutorService exec,
++      final ConcurrentHashMap<Path, Integer> filesMap,
++      final AtomicLong uniqueHFilesArchiveSize, final AtomicLong uniqueHFilesSize,
++      final AtomicLong uniqueHFilesMobSize) throws IOException {
++    Path rootDir = FSUtils.getRootDir(conf);
++    final FileSystem fs = FileSystem.get(rootDir.toUri(), conf);
++
++    Path snapshotDir = SnapshotDescriptionUtils.getCompletedSnapshotDir(snapshot, rootDir);
++    SnapshotManifest manifest = SnapshotManifest.open(conf, fs, snapshotDir, snapshot);
++    SnapshotReferenceUtil.concurrentVisitReferencedFiles(conf, fs, manifest, exec,
++        new SnapshotReferenceUtil.SnapshotVisitor() {
++          @Override public void storeFile(final HRegionInfo regionInfo, final String family,
++              final SnapshotRegionManifest.StoreFile storeFile) throws IOException {
++            if (!storeFile.hasReference()) {
++              HFileLink link = HFileLink
++                  .build(conf, TableName.valueOf(snapshot.getTable()), regionInfo.getEncodedName(),
++                      family, storeFile.getName());
++              long size;
++              Integer count;
++              Path p;
++              AtomicLong al;
++              int c = 0;
++
++              if (fs.exists(link.getArchivePath())) {
++                p = link.getArchivePath();
++                al = uniqueHFilesArchiveSize;
++                size = fs.getFileStatus(p).getLen();
++              } else if (fs.exists(link.getMobPath())) {
++                p = link.getMobPath();
++                al = uniqueHFilesMobSize;
++                size = fs.getFileStatus(p).getLen();
++              } else {
++                p = link.getOriginPath();
++                al = uniqueHFilesSize;
++                size = link.getFileStatus(fs).getLen();
++              }
++
++              // If it has been counted, do not double count
++              count = filesMap.get(p);
++              if (count != null) {
++                c = count.intValue();
++              } else {
++                al.addAndGet(size);
++              }
++
++              filesMap.put(p, ++c);
++            }
++          }
++          @Override
++          public void logFile (final String server, final String logfile) throws IOException {
++          }});
++  }
++
++  /**
++   * Returns the map of store files based on path for all snapshots
++   * @param conf the {@link Configuration} to use
++   * @param uniqueHFilesArchiveSize pass out the size for store files in archive
++   * @param uniqueHFilesSize pass out the size for store files shared
++   * @param uniqueHFilesMobSize pass out the size for mob store files shared
++   * @return the map of store files
++   */
++  public static Map<Path, Integer> getSnapshotsFilesMap(final Configuration conf,
++      AtomicLong uniqueHFilesArchiveSize, AtomicLong uniqueHFilesSize,
++      AtomicLong uniqueHFilesMobSize) throws IOException {
++    List<SnapshotDescription> snapshotList = getSnapshotList(conf);
++
++
++    if (snapshotList.size() == 0) {
++      return Collections.emptyMap();
++    }
++
++    ConcurrentHashMap<Path, Integer> fileMap = new ConcurrentHashMap<>();
++
++    ExecutorService exec = SnapshotManifest.createExecutor(conf, "SnapshotsFilesMapping");
++
++    try {
++      for (final SnapshotDescription snapshot : snapshotList) {
++        getSnapshotFilesMap(conf, snapshot, exec, fileMap, uniqueHFilesArchiveSize,
++            uniqueHFilesSize, uniqueHFilesMobSize);
++      }
++    } finally {
++      exec.shutdown();
++    }
++
++    return fileMap;
++  }
++
++  /**
+    * The guts of the {@link #main} method.
+    * Call this method to avoid the {@link #main(String[])} System.exit.
+    * @param args
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/SnapshotReferenceUtil.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/SnapshotReferenceUtil.java
+index 5f3235b..28bdeed 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/SnapshotReferenceUtil.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/SnapshotReferenceUtil.java
+@@ -197,7 +197,7 @@ public final class SnapshotReferenceUtil {
+       final SnapshotManifest manifest) throws IOException {
+     final SnapshotDescription snapshotDesc = manifest.getSnapshotDescription();
+     final Path snapshotDir = manifest.getSnapshotDir();
+-    concurrentVisitReferencedFiles(conf, fs, manifest, new StoreFileVisitor() {
++    concurrentVisitReferencedFiles(conf, fs, manifest, "VerifySnapshot", new StoreFileVisitor() {
+       @Override
+       public void storeFile(final HRegionInfo regionInfo, final String family,
+           final SnapshotRegionManifest.StoreFile storeFile) throws IOException {
+@@ -207,7 +207,28 @@ public final class SnapshotReferenceUtil {
+   }
+ 
+   public static void concurrentVisitReferencedFiles(final Configuration conf, final FileSystem fs,
+-      final SnapshotManifest manifest, final StoreFileVisitor visitor) throws IOException {
++      final SnapshotManifest manifest, final String desc, final StoreFileVisitor visitor)
++      throws IOException {
++
++    final Path snapshotDir = manifest.getSnapshotDir();
++    List<SnapshotRegionManifest> regionManifests = manifest.getRegionManifests();
++    if (regionManifests == null || regionManifests.size() == 0) {
++      LOG.debug("No manifest files present: " + snapshotDir);
++      return;
++    }
++
++    ExecutorService exec = SnapshotManifest.createExecutor(conf, desc);
++
++    try {
++      concurrentVisitReferencedFiles(conf, fs, manifest, exec, visitor);
++    } finally {
++      exec.shutdown();
++    }
++  }
++
++  public static void concurrentVisitReferencedFiles(final Configuration conf, final FileSystem fs,
++      final SnapshotManifest manifest, final ExecutorService exec, final StoreFileVisitor visitor)
++      throws IOException {
+     final SnapshotDescription snapshotDesc = manifest.getSnapshotDescription();
+     final Path snapshotDir = manifest.getSnapshotDir();
+ 
+@@ -217,36 +238,31 @@ public final class SnapshotReferenceUtil {
+       return;
+     }
+ 
+-    ExecutorService exec = SnapshotManifest.createExecutor(conf, "VerifySnapshot");
+     final ExecutorCompletionService<Void> completionService =
+       new ExecutorCompletionService<Void>(exec);
++
++    for (final SnapshotRegionManifest regionManifest : regionManifests) {
++      completionService.submit(new Callable<Void>() {
++        @Override public Void call() throws IOException {
++          visitRegionStoreFiles(regionManifest, visitor);
++          return null;
++        }
++      });
++    }
+     try {
+-      for (final SnapshotRegionManifest regionManifest: regionManifests) {
+-        completionService.submit(new Callable<Void>() {
+-          @Override
+-          public Void call() throws IOException {
+-            visitRegionStoreFiles(regionManifest, visitor);
+-            return null;
+-          }
+-        });
++      for (int i = 0; i < regionManifests.size(); ++i) {
++        completionService.take().get();
+       }
+-      try {
+-        for (int i = 0; i < regionManifests.size(); ++i) {
+-          completionService.take().get();
+-        }
+-      } catch (InterruptedException e) {
+-        throw new InterruptedIOException(e.getMessage());
+-      } catch (ExecutionException e) {
+-        if (e.getCause() instanceof CorruptedSnapshotException) {
+-          throw new CorruptedSnapshotException(e.getCause().getMessage(), snapshotDesc);
+-        } else {
+-          IOException ex = new IOException();
+-          ex.initCause(e.getCause());
+-          throw ex;
+-        }
++    } catch (InterruptedException e) {
++      throw new InterruptedIOException(e.getMessage());
++    } catch (ExecutionException e) {
++      if (e.getCause() instanceof CorruptedSnapshotException) {
++        throw new CorruptedSnapshotException(e.getCause().getMessage(), snapshotDesc);
++      } else {
++        IOException ex = new IOException();
++        ex.initCause(e.getCause());
++        throw ex;
+       }
+-    } finally {
+-      exec.shutdown();
+     }
+   }
+ 
+diff --git a/hbase-server/src/main/resources/hbase-webapps/master/snapshotsStats.jsp b/hbase-server/src/main/resources/hbase-webapps/master/snapshotsStats.jsp
+new file mode 100644
+index 0000000..d499f15
+--- /dev/null
++++ b/hbase-server/src/main/resources/hbase-webapps/master/snapshotsStats.jsp
+@@ -0,0 +1,161 @@
++<%--
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++--%>
++<%@ page contentType="text/html;charset=UTF-8"
++  import="java.util.concurrent.atomic.AtomicLong"
++  import="java.util.Date"
++  import="java.util.List"
++  import="java.util.Map"
++  import="org.apache.hadoop.conf.Configuration"
++  import="org.apache.hadoop.fs.Path"
++  import="org.apache.hadoop.hbase.HBaseConfiguration"
++  import="org.apache.hadoop.hbase.client.Admin"
++  import="org.apache.hadoop.hbase.master.HMaster"
++  import="org.apache.hadoop.hbase.protobuf.generated.HBaseProtos.SnapshotDescription"
++  import="org.apache.hadoop.hbase.snapshot.SnapshotInfo"
++  import="org.apache.hadoop.hbase.TableName"
++  import="org.apache.hadoop.util.StringUtils" %>
++<%
++  HMaster master = (HMaster)getServletContext().getAttribute(HMaster.MASTER);
++  Configuration conf = master.getConfiguration();
++  AtomicLong totalSharedSize = new AtomicLong();
++  AtomicLong totalArchivedSize = new AtomicLong();
++  AtomicLong totalMobSize = new AtomicLong();
++  long totalSize = 0;
++  long totalUnsharedArchivedSize = 0;
++
++  Map<Path, Integer> filesMap = null;
++
++  List<SnapshotDescription> snapshots = master.isInitialized() ?
++    master.getSnapshotManagerForTesting().getCompletedSnapshots() : null;
++
++  Admin admin = null;
++  boolean tableExists = false;
++
++  if (snapshots != null && snapshots.size() > 0) {
++    filesMap = SnapshotInfo.getSnapshotsFilesMap(master.getConfiguration(),
++                   totalArchivedSize, totalSharedSize, totalMobSize);
++    totalSize = totalSharedSize.get() + totalArchivedSize.get() + totalMobSize.get();
++    admin = master.getConnection().getAdmin();
++  }
++%>
++<!--[if IE]>
++<!DOCTYPE html>
++<![endif]-->
++<?xml version="1.0" encoding="UTF-8" ?>
++<html xmlns="http://www.w3.org/1999/xhtml">
++<head>
++    <meta charset="utf-8">
++    <title>HBase Master Snapshots: <%= master.getServerName() %></title>
++    <meta name="viewport" content="width=device-width, initial-scale=1.0">
++    <meta name="description" content="">
++    <meta name="author" content="">
++
++    <link href="/static/css/bootstrap.min.css" rel="stylesheet">
++    <link href="/static/css/bootstrap-theme.min.css" rel="stylesheet">
++    <link href="/static/css/hbase.css" rel="stylesheet">
++  </head>
++<body>
++<div class="navbar  navbar-fixed-top navbar-default">
++    <div class="container-fluid">
++        <div class="navbar-header">
++            <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-collapse">
++                <span class="icon-bar"></span>
++                <span class="icon-bar"></span>
++                <span class="icon-bar"></span>
++            </button>
++            <a class="navbar-brand" href="/master-status"><img src="/static/hbase_logo_small.png" alt="HBase Logo"/></a>
++        </div>
++        <div class="collapse navbar-collapse">
++            <ul class="nav navbar-nav">
++                <li><a href="/master-status">Home</a></li>
++                <li><a href="/tablesDetailed.jsp">Table Details</a></li>
++                <li><a href="/procedures.jsp">Procedures</a></li>
++                <li><a href="/logs/">Local Logs</a></li>
++                <li><a href="/logLevel">Log Level</a></li>
++                <li><a href="/dump">Debug Dump</a></li>
++                <li><a href="/jmx">Metrics Dump</a></li>
++                <% if (HBaseConfiguration.isShowConfInServlet()) { %>
++                <li><a href="/conf">HBase Configuration</a></li>
++                <% } %>
++            </ul>
++        </div><!--/.nav-collapse -->
++    </div>
++</div>
++<div class="container-fluid content">
++  <div class="row">
++      <div class="page-header">
++          <h1>Snapshot Storefile Stats</h1>
++      </div>
++  </div>
++  <table class="table table-striped" width="90%" >
++    <tr>
++        <th>Snapshot Name</th>
++        <th>Table</th>
++        <th>Creation Time</th>
++        <th>Shared Storefile Size</th>
++        <th>Mob Storefile Size</th>
++        <th>Archived Storefile Size</th>
++    </tr>
++    <%for (SnapshotDescription snapshotDesc : snapshots) { %>
++    <tr>
++      <td><a href="/snapshot.jsp?name=<%= snapshotDesc.getName() %>">
++        <%= snapshotDesc.getName() %></a></td>
++      <%
++        TableName snapshotTable = TableName.valueOf(snapshotDesc.getTable());
++        SnapshotInfo.SnapshotStats stats = SnapshotInfo.getSnapshotStats(master.getConfiguration(),
++          snapshotDesc, filesMap);
++        totalUnsharedArchivedSize += stats.getNonSharedArchivedStoreFilesSize();
++        tableExists = admin.tableExists(snapshotTable);
++      %>
++      <td>
++      <% if (tableExists) { %>
++        <a href="/table.jsp?name=<%= snapshotTable.getNameAsString() %>">
++          <%= snapshotTable.getNameAsString() %></a>
++      <% } else { %>
++        <%= snapshotTable.getNameAsString() %>
++      <% } %>
++      </td>
++      <td><%= new Date(snapshotDesc.getCreationTime()) %></td>
++      <td><%= StringUtils.humanReadableInt(stats.getSharedStoreFilesSize()) %></td>
++      <td><%= StringUtils.humanReadableInt(stats.getMobStoreFilesSize())  %></td>
++      <td><%= StringUtils.humanReadableInt(stats.getArchivedStoreFileSize()) %>
++        (<%= StringUtils.humanReadableInt(stats.getNonSharedArchivedStoreFilesSize()) %>)</td>
++    </tr>
++    <% } %>
++    <p><%= snapshots.size() %> snapshot(s) in set.</p>
++    <p>Total Storefile Size: <%= StringUtils.humanReadableInt(totalSize) %></p>
++    <p>Total Shared Storefile Size: <%= StringUtils.humanReadableInt(totalSharedSize.get()) %>,
++       Total Mob Storefile Size: <%= StringUtils.humanReadableInt(totalMobSize.get()) %>,
++       Total Archived Storefile Size: <%= StringUtils.humanReadableInt(totalArchivedSize.get()) %>
++       (<%= StringUtils.humanReadableInt(totalUnsharedArchivedSize) %>)</p>
++    <p>Shared Storefile Size is the Storefile size shared between snapshots and active tables.
++       Mob Storefile Size is the Mob Storefile size shared between snapshots and active tables.
++       Archived Storefile Size is the Storefile size in Archive.
++       The format of Archived Storefile Size is NNN(MMM). NNN is the total Storefile
++       size in Archive, MMM is the total Storefile size in Archive that is specific
++       to the snapshot (not shared with other snapshots and tables)</p>
++  </table>
++</div>
++
++<script src="/static/js/jquery.min.js" type="text/javascript"></script>
++<script src="/static/js/bootstrap.min.js" type="text/javascript"></script>
++
++</body>
++</html>
+-- 
+1.7.9.5
+

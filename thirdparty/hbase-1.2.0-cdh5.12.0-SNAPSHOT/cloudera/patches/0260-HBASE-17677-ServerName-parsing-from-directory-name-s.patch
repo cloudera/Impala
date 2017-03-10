@@ -1,0 +1,68 @@
+From e15b2064f729ab2b7b18b1c06e69843917ed047a Mon Sep 17 00:00:00 2001
+From: Sean Busbey <busbey@apache.org>
+Date: Wed, 22 Feb 2017 13:31:51 -0600
+Subject: [PATCH 260/308] HBASE-17677 ServerName parsing from directory name
+ should be more robust to errors from guava's
+ HostAndPort
+
+Signed-off-by: Michael Stack <stack@apache.org>
+(cherry picked from commit 040b2f186a08222fc0a0b3bd5c97ccef9cf45368)
+
+Change-Id: Iee35bf2c739bd517392dcc8c869bba405846137c
+Reason: Bug
+Author: Sean Busbey
+Ref: CDH-50644
+---
+ .../hadoop/hbase/wal/DefaultWALProvider.java       |    2 +-
+ .../apache/hadoop/hbase/wal/TestWALMethods.java    |   15 +++++++++++++++
+ 2 files changed, 16 insertions(+), 1 deletion(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/wal/DefaultWALProvider.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/wal/DefaultWALProvider.java
+index f9ece0f..be55a9e 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/wal/DefaultWALProvider.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/wal/DefaultWALProvider.java
+@@ -358,7 +358,7 @@ public class DefaultWALProvider implements WALProvider {
+     }
+     try {
+       serverName = ServerName.parseServerName(logDirName);
+-    } catch (IllegalArgumentException ex) {
++    } catch (IllegalArgumentException|IllegalStateException ex) {
+       serverName = null;
+       LOG.warn("Cannot parse a server name from path=" + logFile + "; " + ex.getMessage());
+     }
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/wal/TestWALMethods.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/wal/TestWALMethods.java
+index 1f07a4c..e96a5b8 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/wal/TestWALMethods.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/wal/TestWALMethods.java
+@@ -34,6 +34,7 @@ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.hbase.HBaseTestingUtility;
+ import org.apache.hadoop.hbase.HConstants;
+ import org.apache.hadoop.hbase.KeyValueTestUtil;
++import org.apache.hadoop.hbase.ServerName;
+ import org.apache.hadoop.hbase.testclassification.SmallTests;
+ import org.apache.hadoop.hbase.TableName;
+ import org.apache.hadoop.hbase.protobuf.generated.ZooKeeperProtos.SplitLogTask.RecoveryMode;
+@@ -59,6 +60,20 @@ public class TestWALMethods {
+ 
+   private final HBaseTestingUtility util = new HBaseTestingUtility();
+ 
++  @Test
++  public void testServerNameFromWAL() throws Exception {
++    Path walPath = new Path("/hbase/WALs/regionserver-2.example.com,22101,1487767381290", "regionserver-2.example.com%2C22101%2C1487767381290.null0.1487785392316");
++    ServerName name = DefaultWALProvider.getServerNameFromWALDirectoryName(walPath);
++    assertEquals(ServerName.valueOf("regionserver-2.example.com", 22101, 1487767381290L), name);
++  }
++
++  @Test
++  public void testServerNameFromTestWAL() throws Exception {
++    Path walPath = new Path("/user/example/test-data/12ff1404-68c6-4715-a4b9-775e763842bc/WALs/TestWALRecordReader", "TestWALRecordReader.default.1487787939118");
++    ServerName name = DefaultWALProvider.getServerNameFromWALDirectoryName(walPath);
++    assertNull(name);
++  }
++
+   /**
+    * Assert that getSplitEditFilesSorted returns files in expected order and
+    * that it skips moved-aside files.
+-- 
+1.7.9.5
+

@@ -1,0 +1,288 @@
+From e638d86435c2c4e88a9ef323027206e3f605bff1 Mon Sep 17 00:00:00 2001
+From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
+Date: Fri, 10 Jun 2016 21:49:10 -0700
+Subject: [PATCH 170/308] HBASE-14644 Region in transition metric is broken
+ (Huaxiang Sun)
+
+Reason: Bug
+Author: Huaxiang Sun
+Ref: CDH-41444
+
+Change-Id: I45aed3236d4ce3b6f3f595e4d8da88ee39892b8b
+---
+ .../hadoop/hbase/master/AssignmentManager.java     |    4 +
+ .../org/apache/hadoop/hbase/master/HMaster.java    |   25 +++-
+ .../hbase/master/MetricsAssignmentManager.java     |    4 +
+ .../hadoop/hbase/regionserver/HRegionServer.java   |    4 -
+ .../hbase/master/TestAssignmentManagerMetrics.java |  136 ++++++++++++++++++++
+ 5 files changed, 167 insertions(+), 6 deletions(-)
+ create mode 100644 hbase-server/src/test/java/org/apache/hadoop/hbase/master/TestAssignmentManagerMetrics.java
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java
+index 629d307..9308af6 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java
+@@ -330,6 +330,10 @@ public class AssignmentManager extends ZooKeeperListener {
+     useZKForAssignment = ConfigUtil.useZKForAssignment(conf);
+   }
+ 
++  MetricsAssignmentManager getAssignmentManagerMetrics() {
++    return this.metricsAssignmentManager;
++  }
++
+   /**
+    * Add the listener to the notification list.
+    * @param listener The AssignmentListener to register
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
+index e300980..8c1e256 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
+@@ -66,6 +66,7 @@ import org.apache.hadoop.hbase.NamespaceNotFoundException;
+ import org.apache.hadoop.hbase.PleaseHoldException;
+ import org.apache.hadoop.hbase.ProcedureInfo;
+ import org.apache.hadoop.hbase.RegionStateListener;
++import org.apache.hadoop.hbase.ScheduledChore;
+ import org.apache.hadoop.hbase.Server;
+ import org.apache.hadoop.hbase.ServerLoad;
+ import org.apache.hadoop.hbase.ServerName;
+@@ -295,6 +296,7 @@ public class HMaster extends HRegionServer implements MasterServices, Server {
+   private RegionNormalizerChore normalizerChore;
+   private ClusterStatusChore clusterStatusChore;
+   private ClusterStatusPublisher clusterStatusPublisherChore = null;
++  private PeriodicDoMetrics periodicDoMetricsChore = null;
+ 
+   CatalogJanitor catalogJanitorChore;
+   private LogCleaner logCleaner;
+@@ -354,6 +356,19 @@ public class HMaster extends HRegionServer implements MasterServices, Server {
+     }
+   }
+ 
++  private static class PeriodicDoMetrics extends ScheduledChore {
++    private final HMaster server;
++    public PeriodicDoMetrics(int doMetricsInterval, final HMaster server) {
++      super(server.getServerName() + "-DoMetricsChore", server, doMetricsInterval);
++      this.server = server;
++    }
++
++    @Override
++    protected void chore() {
++      server.doMetrics();
++    }
++  }
++
+   /**
+    * Initializes the HMaster. The steps are as follows:
+    * <p>
+@@ -421,6 +436,10 @@ public class HMaster extends HRegionServer implements MasterServices, Server {
+       }
+     }
+ 
++    // Do Metrics periodically
++    periodicDoMetricsChore = new PeriodicDoMetrics(msgInterval, this);
++    getChoreService().scheduleChore(periodicDoMetricsChore);
++
+     // Some unit tests don't need a cluster, so no zookeeper at all
+     if (!conf.getBoolean("hbase.testing.nocluster", false)) {
+       activeMasterManager = new ActiveMasterManager(zooKeeper, this.serverName, this);
+@@ -546,8 +565,7 @@ public class HMaster extends HRegionServer implements MasterServices, Server {
+    * Emit the HMaster metrics, such as region in transition metrics.
+    * Surrounding in a try block just to be sure metrics doesn't abort HMaster.
+    */
+-  @Override
+-  protected void doMetrics() {
++  private void doMetrics() {
+     try {
+       if (assignmentManager != null) {
+         assignmentManager.updateRegionsInTransitionMetrics();
+@@ -1210,6 +1228,9 @@ public class HMaster extends HRegionServer implements MasterServices, Server {
+     if (this.mobFileCompactThread != null) {
+       this.mobFileCompactThread.close();
+     }
++    if (this.periodicDoMetricsChore != null) {
++      periodicDoMetricsChore.cancel();
++    }
+   }
+ 
+   /**
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MetricsAssignmentManager.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MetricsAssignmentManager.java
+index 7b2423c..b89d2da 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MetricsAssignmentManager.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MetricsAssignmentManager.java
+@@ -29,6 +29,10 @@ public class MetricsAssignmentManager {
+         MetricsAssignmentManagerSource.class);
+   }
+ 
++  public MetricsAssignmentManagerSource getMetricsProcSource() {
++    return assignmentManagerSource;
++  }
++
+   public void updateAssignmentTime(long time) {
+     assignmentManagerSource.updateAssignmentTime(time);
+   }
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
+index a6c61dd..15ada46 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
+@@ -662,9 +662,6 @@ public class HRegionServer extends HasThread implements
+     return RSDumpServlet.class;
+   }
+ 
+-  protected void doMetrics() {
+-  }
+-
+   @Override
+   public boolean registerService(Service instance) {
+     /*
+@@ -968,7 +965,6 @@ public class HRegionServer extends HasThread implements
+         if ((now - lastMsg) >= msgInterval) {
+           tryRegionServerReport(lastMsg, now);
+           lastMsg = System.currentTimeMillis();
+-          doMetrics();
+         }
+         if (!isStopped() && !isAborted()) {
+           this.sleeper.sleep();
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/TestAssignmentManagerMetrics.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/TestAssignmentManagerMetrics.java
+new file mode 100644
+index 0000000..4817457
+--- /dev/null
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/TestAssignmentManagerMetrics.java
+@@ -0,0 +1,136 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hbase.master;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.hbase.CompatibilityFactory;
++import org.apache.hadoop.hbase.HBaseTestingUtility;
++import org.apache.hadoop.hbase.HConstants;
++import org.apache.hadoop.hbase.HColumnDescriptor;
++import org.apache.hadoop.hbase.HTableDescriptor;
++import org.apache.hadoop.hbase.MiniHBaseCluster;
++import org.apache.hadoop.hbase.TableName;
++import org.apache.hadoop.hbase.client.Put;
++import org.apache.hadoop.hbase.client.Table;
++import org.apache.hadoop.hbase.test.MetricsAssertHelper;
++import org.apache.hadoop.hbase.testclassification.MediumTests;
++import org.apache.hadoop.hbase.util.Bytes;
++import org.junit.AfterClass;
++import org.junit.BeforeClass;
++import org.junit.Test;
++import org.junit.experimental.categories.Category;
++
++
++@Category(MediumTests.class)
++public class TestAssignmentManagerMetrics {
++
++  private static final Log LOG = LogFactory.getLog(TestAssignmentManagerMetrics.class);
++  private static final MetricsAssertHelper metricsHelper = CompatibilityFactory
++      .getInstance(MetricsAssertHelper.class);
++
++  private static MiniHBaseCluster cluster;
++  private static HMaster master;
++  private static HBaseTestingUtility TEST_UTIL;
++  private static Configuration conf;
++  private static final int msgInterval = 1000;
++
++  @BeforeClass
++  public static void startCluster() throws Exception {
++    LOG.info("Starting cluster");
++    TEST_UTIL = new HBaseTestingUtility();
++    conf = TEST_UTIL.getConfiguration();
++
++    // Disable sanity check for coprocessor
++    conf.setBoolean("hbase.table.sanity.checks", false);
++
++    // set RIT stuck warning threshold to a small value
++    conf.setInt(HConstants.METRICS_RIT_STUCK_WARNING_THRESHOLD, 20);
++
++    // set msgInterval to 1 second
++    conf.setInt("hbase.regionserver.msginterval", msgInterval);
++
++    // set tablesOnMaster to none
++    conf.set("hbase.balancer.tablesOnMaster", "none");
++
++    TEST_UTIL.startMiniCluster(1);
++    cluster = TEST_UTIL.getHBaseCluster();
++    master = cluster.getMaster();
++  }
++
++  @AfterClass
++  public static void after() throws Exception {
++    if (TEST_UTIL != null) {
++      TEST_UTIL.shutdownMiniCluster();
++    }
++  }
++
++  @Test
++  public void testRITAssignmentManagerMetrics() throws Exception {
++
++    final TableName TABLENAME = TableName.valueOf("testRITMetrics");
++    final byte[] FAMILY = Bytes.toBytes("family");
++
++    Table table = null;
++    try {
++      table = TEST_UTIL.createTable(TABLENAME, FAMILY);
++
++      final byte[] row = Bytes.toBytes("row");
++      final byte[] qualifier = Bytes.toBytes("qualifier");
++      final byte[] value = Bytes.toBytes("value");
++
++      Put put = new Put(row);
++      put.addColumn(FAMILY, qualifier, value);
++      table.put(put);
++
++      // Sleep 3 seconds, wait for doMetrics chore catching up
++      Thread.sleep(msgInterval * 3);
++
++      // check the RIT is 0
++      MetricsAssignmentManagerSource amSource =
++          master.getAssignmentManager().getAssignmentManagerMetrics().getMetricsProcSource();
++
++      metricsHelper.assertGauge(MetricsAssignmentManagerSource.RIT_COUNT_NAME, 0, amSource);
++      metricsHelper.assertGauge(MetricsAssignmentManagerSource.RIT_COUNT_OVER_THRESHOLD_NAME, 0,
++          amSource);
++
++      // alter table with a non-existing coprocessor
++      HTableDescriptor htd = new HTableDescriptor(TABLENAME);
++      HColumnDescriptor hcd = new HColumnDescriptor(FAMILY);
++
++      htd.addFamily(hcd);
++
++      String spec = "hdfs:///foo.jar|com.foo.FooRegionObserver|1001|arg1=1,arg2=2";
++      htd.addCoprocessorWithSpec(spec);
++
++      TEST_UTIL.getHBaseAdmin().modifyTable(TABLENAME, htd);
++
++      // Sleep 3 seconds, wait for doMetrics chore catching up
++      Thread.sleep(msgInterval * 3);
++      metricsHelper.assertGauge(MetricsAssignmentManagerSource.RIT_COUNT_NAME, 1, amSource);
++      metricsHelper.assertGauge(MetricsAssignmentManagerSource.RIT_COUNT_OVER_THRESHOLD_NAME, 1,
++          amSource);
++
++    } finally {
++      if (table != null) {
++        table.close();
++      }
++    }
++  }
++}
+-- 
+1.7.9.5
+

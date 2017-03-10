@@ -1,0 +1,33 @@
+From 57292fa192a9fc79e7a30f41d4fde35911fe2dbf Mon Sep 17 00:00:00 2001
+From: Apekshit <apeksharma@gmail.com>
+Date: Fri, 26 Feb 2016 12:01:08 -0800
+Subject: [PATCH 125/308] HBASE-15349 Update surefire version to 2.19.1.
+ (Apekshit)
+
+Signed-off-by: stack <stack@apache.org>
+
+Reason: Improvement
+Ref: CDH-37905
+Author: Apekshit Sharma
+
+Change-Id: Iedabd5e263d7417df1f987fdc49f12805d3cc05d
+---
+ pom.xml |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/pom.xml b/pom.xml
+index 7bc4083..1f9f164 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -1293,7 +1293,7 @@
+     <procedure.test.jar>hbase-procedure-${project.version}-tests.jar</procedure.test.jar>
+     <it.test.jar>hbase-it-${project.version}-tests.jar</it.test.jar>
+     <annotations.test.jar>hbase-annotations-${project.version}-tests.jar</annotations.test.jar>
+-    <surefire.version>2.18.1</surefire.version>
++    <surefire.version>2.19.1</surefire.version>
+     <surefire.provider>surefire-junit47</surefire.provider>
+     <!-- default: run small & medium, medium with 2 threads -->
+     <surefire.skipFirstPart>false</surefire.skipFirstPart>
+-- 
+1.7.9.5
+

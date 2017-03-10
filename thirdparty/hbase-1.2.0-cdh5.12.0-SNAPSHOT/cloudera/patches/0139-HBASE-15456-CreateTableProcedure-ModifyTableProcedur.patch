@@ -1,0 +1,382 @@
+From 690179c687f2cba785e1b46aa92385c768f1e5e2 Mon Sep 17 00:00:00 2001
+From: tedyu <yuzhihong@gmail.com>
+Date: Fri, 18 Mar 2016 05:38:05 -0700
+Subject: [PATCH 139/308] HBASE-15456
+ CreateTableProcedure/ModifyTableProcedure needs to
+ fail when there is no family in table descriptor
+ (huaxiang sun)
+
+Change-Id: Id5da9b65d9e01ad65c4dc4a7adfa02d1ff8f09c0
+Reason: Improvement
+Author: Huaxiang Sun
+Ref: CDH-39237
+---
+ .../master/procedure/CreateTableProcedure.java     |    9 +++++++
+ .../master/procedure/ModifyTableProcedure.java     |    7 ++++++
+ .../apache/hadoop/hbase/regionserver/HRegion.java  |    7 ++++++
+ .../hbase/master/TestOpenedRegionHandler.java      |    2 ++
+ .../master/procedure/TestCreateTableProcedure.java |   24 +++++++++++++++++++
+ .../master/procedure/TestModifyTableProcedure.java |   24 +++++++++++++++++--
+ .../hbase/namespace/TestNamespaceAuditor.java      |   25 ++++++++++++++++++++
+ .../handler/TestCloseRegionHandler.java            |    5 ++++
+ .../handler/TestOpenRegionHandler.java             |    2 ++
+ .../hadoop/hbase/thrift/TestThriftServer.java      |    2 +-
+ 10 files changed, 104 insertions(+), 3 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/CreateTableProcedure.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/CreateTableProcedure.java
+index 6d4955c..c351cea 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/CreateTableProcedure.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/CreateTableProcedure.java
+@@ -30,6 +30,7 @@ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.hbase.DoNotRetryIOException;
+ import org.apache.hadoop.hbase.HRegionInfo;
+ import org.apache.hadoop.hbase.HTableDescriptor;
+ import org.apache.hadoop.hbase.MetaTableAccessor;
+@@ -302,6 +303,14 @@ public class CreateTableProcedure
+         return false;
+       }
+     }
++
++    // check that we have at least 1 CF
++    if (hTableDescriptor.getColumnFamilies().length == 0) {
++      setFailure("master-create-table", new DoNotRetryIOException("Table " +
++          getTableName().toString() + " should have at least one column family."));
++      return false;
++    }
++
+     return true;
+   }
+ 
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/ModifyTableProcedure.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/ModifyTableProcedure.java
+index f5158e7..57bbff6 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/ModifyTableProcedure.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/ModifyTableProcedure.java
+@@ -29,6 +29,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.hbase.DoNotRetryIOException;
+ import org.apache.hadoop.hbase.HConstants;
+ import org.apache.hadoop.hbase.HRegionInfo;
+ import org.apache.hadoop.hbase.HTableDescriptor;
+@@ -286,6 +287,12 @@ public class ModifyTableProcedure
+       throw new TableNotFoundException(getTableName());
+     }
+ 
++    // check that we have at least 1 CF
++    if (modifiedHTableDescriptor.getColumnFamilies().length == 0) {
++      throw new DoNotRetryIOException("Table " + getTableName().toString() +
++        " should have at least one column family.");
++    }
++
+     // In order to update the descriptor, we need to retrieve the old descriptor for comparison.
+     this.unmodifiedHTableDescriptor =
+         env.getMasterServices().getTableDescriptors().get(getTableName());
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
+index 38853ee..3116e5c 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
+@@ -785,6 +785,13 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+    * @throws IOException e
+    */
+   private long initialize(final CancelableProgressable reporter) throws IOException {
++
++    //Refuse to open the region if there is no column family in the table
++    if (htableDescriptor.getColumnFamilies().length == 0) {
++      throw new DoNotRetryIOException("Table " + htableDescriptor.getNameAsString() +
++          " should have at least one column family.");
++    }
++
+     MonitoredTask status = TaskMonitor.get().createStatus("Initializing region " + this);
+     long nextSeqId = -1;
+     try {
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/TestOpenedRegionHandler.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/TestOpenedRegionHandler.java
+index 6ffe9f4..9ecac42 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/TestOpenedRegionHandler.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/TestOpenedRegionHandler.java
+@@ -124,6 +124,8 @@ public class TestOpenedRegionHandler {
+       final Server server = new MockServer(TEST_UTIL);
+       HTableDescriptor htd = new HTableDescriptor(
+           TableName.valueOf("testShouldNotCompeleteOpenedRegionSuccessfullyIfVersionMismatches"));
++      HColumnDescriptor fam = new HColumnDescriptor("fam");
++      htd.addFamily(fam);
+       HRegionInfo hri = new HRegionInfo(htd.getTableName(),
+           Bytes.toBytes(testIndex), Bytes.toBytes(testIndex + 1));
+       region = HRegion.createHRegion(hri, TEST_UTIL.getDataTestDir(), TEST_UTIL.getConfiguration(), htd);
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/procedure/TestCreateTableProcedure.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/procedure/TestCreateTableProcedure.java
+index 73843e0..2841847 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/procedure/TestCreateTableProcedure.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/procedure/TestCreateTableProcedure.java
+@@ -23,10 +23,12 @@ import java.io.IOException;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.hbase.DoNotRetryIOException;
+ import org.apache.hadoop.hbase.HBaseTestingUtility;
+ import org.apache.hadoop.hbase.HConstants;
+ import org.apache.hadoop.hbase.HRegionInfo;
+ import org.apache.hadoop.hbase.HTableDescriptor;
++import org.apache.hadoop.hbase.ProcedureInfo;
+ import org.apache.hadoop.hbase.TableExistsException;
+ import org.apache.hadoop.hbase.TableName;
+ import org.apache.hadoop.hbase.procedure2.ProcedureExecutor;
+@@ -42,6 +44,7 @@ import org.junit.BeforeClass;
+ import org.junit.Test;
+ import org.junit.experimental.categories.Category;
+ 
++import static org.junit.Assert.assertEquals;
+ import static org.junit.Assert.assertTrue;
+ 
+ @Category(MediumTests.class)
+@@ -118,6 +121,27 @@ public class TestCreateTableProcedure {
+       UTIL.getHBaseCluster().getMaster(), tableName, regions, "f1", "f2");
+   }
+ 
++  @Test(timeout=60000)
++  public void testCreateWithoutColumnFamily() throws Exception {
++    final ProcedureExecutor<MasterProcedureEnv> procExec = getMasterProcedureExecutor();
++    final TableName tableName = TableName.valueOf("testCreateWithoutColumnFamily");
++    // create table with 0 families will fail
++    final HTableDescriptor htd = MasterProcedureTestingUtility.createHTD(tableName);
++
++    // disable sanity check
++    htd.setConfiguration("hbase.table.sanity.checks", Boolean.FALSE.toString());
++    final HRegionInfo[] regions = ModifyRegionUtils.createHRegionInfos(htd, null);
++
++    long procId =
++        ProcedureTestingUtility.submitAndWait(procExec,
++            new CreateTableProcedure(procExec.getEnvironment(), htd, regions));
++    final ProcedureInfo result = procExec.getResult(procId);
++    assertEquals(true, result.isFailed());
++    Throwable cause = ProcedureTestingUtility.getExceptionCause(result);
++    assertTrue("expected DoNotRetryIOException, got " + cause,
++        cause instanceof DoNotRetryIOException);
++  }
++
+   @Test(timeout=60000, expected=TableExistsException.class)
+   public void testCreateExisting() throws Exception {
+     final TableName tableName = TableName.valueOf("testCreateExisting");
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/procedure/TestModifyTableProcedure.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/procedure/TestModifyTableProcedure.java
+index 59229d4..ae43867 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/procedure/TestModifyTableProcedure.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/procedure/TestModifyTableProcedure.java
+@@ -25,11 +25,13 @@ import static org.junit.Assert.assertTrue;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.hbase.DoNotRetryIOException;
+ import org.apache.hadoop.hbase.HBaseTestingUtility;
+ import org.apache.hadoop.hbase.HColumnDescriptor;
+ import org.apache.hadoop.hbase.HConstants;
+ import org.apache.hadoop.hbase.HRegionInfo;
+ import org.apache.hadoop.hbase.HTableDescriptor;
++import org.apache.hadoop.hbase.ProcedureInfo;
+ import org.apache.hadoop.hbase.TableName;
+ import org.apache.hadoop.hbase.procedure2.ProcedureExecutor;
+ import org.apache.hadoop.hbase.procedure2.ProcedureTestingUtility;
+@@ -167,12 +169,13 @@ public class TestModifyTableProcedure {
+ 
+   @Test(timeout = 60000)
+   public void testModifyTableDeleteCF() throws Exception {
+-    final TableName tableName = TableName.valueOf("testModifyTableAddCF");
++    final TableName tableName = TableName.valueOf("testModifyTableDeleteCF");
++    final String cf1 = "cf1";
+     final String cf2 = "cf2";
+     final String cf3 = "cf3";
+     final ProcedureExecutor<MasterProcedureEnv> procExec = getMasterProcedureExecutor();
+ 
+-    MasterProcedureTestingUtility.createTable(procExec, tableName, null, "cf1", cf2, cf3);
++    MasterProcedureTestingUtility.createTable(procExec, tableName, null, cf1, cf2, cf3);
+     HTableDescriptor currentHtd = UTIL.getHBaseAdmin().getTableDescriptor(tableName);
+     assertEquals(3, currentHtd.getFamiliesKeys().size());
+ 
+@@ -195,6 +198,8 @@ public class TestModifyTableProcedure {
+     HTableDescriptor htd2 =
+         new HTableDescriptor(UTIL.getHBaseAdmin().getTableDescriptor(tableName));
+     htd2.removeFamily(cf3.getBytes());
++    // Disable Sanity check
++    htd2.setConfiguration("hbase.table.sanity.checks", Boolean.FALSE.toString());
+ 
+     long procId2 =
+         ProcedureTestingUtility.submitAndWait(procExec,
+@@ -204,6 +209,21 @@ public class TestModifyTableProcedure {
+     currentHtd = UTIL.getHBaseAdmin().getTableDescriptor(tableName);
+     assertEquals(1, currentHtd.getFamiliesKeys().size());
+     assertFalse(currentHtd.hasFamily(cf3.getBytes()));
++
++    //Removing the last family will fail
++    HTableDescriptor htd3 =
++        new HTableDescriptor(UTIL.getHBaseAdmin().getTableDescriptor(tableName));
++    htd3.removeFamily(cf1.getBytes());
++    long procId3 =
++        ProcedureTestingUtility.submitAndWait(procExec,
++            new ModifyTableProcedure(procExec.getEnvironment(), htd3));
++    final ProcedureInfo result = procExec.getResult(procId3);
++    assertEquals(true, result.isFailed());
++    Throwable cause = ProcedureTestingUtility.getExceptionCause(result);
++    assertTrue("expected DoNotRetryIOException, got " + cause,
++        cause instanceof DoNotRetryIOException);
++    assertEquals(1, currentHtd.getFamiliesKeys().size());
++    assertTrue(currentHtd.hasFamily(cf1.getBytes()));
+   }
+ 
+   @Test(timeout=60000)
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/namespace/TestNamespaceAuditor.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/namespace/TestNamespaceAuditor.java
+index b6fab17..0875f56 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/namespace/TestNamespaceAuditor.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/namespace/TestNamespaceAuditor.java
+@@ -144,12 +144,17 @@ public class TestNamespaceAuditor {
+     ADMIN.createNamespace(nspDesc);
+     assertNotNull("Namespace descriptor found null.", ADMIN.getNamespaceDescriptor(nsp));
+     assertEquals(ADMIN.listNamespaceDescriptors().length, 3);
++    HColumnDescriptor fam1 = new HColumnDescriptor("fam1");
++
+     HTableDescriptor tableDescOne =
+         new HTableDescriptor(TableName.valueOf(nsp + TableName.NAMESPACE_DELIM + "table1"));
++    tableDescOne.addFamily(fam1);
+     HTableDescriptor tableDescTwo =
+         new HTableDescriptor(TableName.valueOf(nsp + TableName.NAMESPACE_DELIM + "table2"));
++    tableDescTwo.addFamily(fam1);
+     HTableDescriptor tableDescThree =
+         new HTableDescriptor(TableName.valueOf(nsp + TableName.NAMESPACE_DELIM + "table3"));
++    tableDescThree.addFamily(fam1);
+     ADMIN.createTable(tableDescOne);
+     boolean constraintViolated = false;
+     try {
+@@ -248,10 +253,13 @@ public class TestNamespaceAuditor {
+     assertNotNull("Namespace descriptor found null.", ADMIN.getNamespaceDescriptor(namespace));
+     NamespaceTableAndRegionInfo stateInfo = getNamespaceState(nspDesc.getName());
+     assertNotNull("Namespace state found null for " + namespace, stateInfo);
++    HColumnDescriptor fam1 = new HColumnDescriptor("fam1");
+     HTableDescriptor tableDescOne =
+         new HTableDescriptor(TableName.valueOf(namespace + TableName.NAMESPACE_DELIM + "table1"));
++    tableDescOne.addFamily(fam1);
+     HTableDescriptor tableDescTwo =
+         new HTableDescriptor(TableName.valueOf(namespace + TableName.NAMESPACE_DELIM + "table2"));
++    tableDescTwo.addFamily(fam1);
+     ADMIN.createTable(tableDescOne);
+     ADMIN.createTable(tableDescTwo, Bytes.toBytes("AAA"), Bytes.toBytes("ZZZ"), 5);
+     stateInfo = getNamespaceState(nspDesc.getName());
+@@ -589,9 +597,13 @@ public class TestNamespaceAuditor {
+     TableName tableOne = TableName.valueOf(nsp1 + TableName.NAMESPACE_DELIM + "table1");
+     TableName tableTwo = TableName.valueOf(nsp1 + TableName.NAMESPACE_DELIM + "table2");
+     TableName tableThree = TableName.valueOf(nsp1 + TableName.NAMESPACE_DELIM + "table3");
++    HColumnDescriptor fam1 = new HColumnDescriptor("fam1");
+     HTableDescriptor tableDescOne = new HTableDescriptor(tableOne);
++    tableDescOne.addFamily(fam1);
+     HTableDescriptor tableDescTwo = new HTableDescriptor(tableTwo);
++    tableDescTwo.addFamily(fam1);
+     HTableDescriptor tableDescThree = new HTableDescriptor(tableThree);
++    tableDescThree.addFamily(fam1);
+     ADMIN.createTable(tableDescOne, Bytes.toBytes("1"), Bytes.toBytes("1000"), 3);
+     ADMIN.createTable(tableDescTwo, Bytes.toBytes("1"), Bytes.toBytes("1000"), 3);
+     ADMIN.createTable(tableDescThree, Bytes.toBytes("1"), Bytes.toBytes("1000"), 4);
+@@ -680,10 +692,13 @@ public class TestNamespaceAuditor {
+     ADMIN.createNamespace(nspDesc);
+     assertNotNull("Namespace descriptor found null.", ADMIN.getNamespaceDescriptor(nsp));
+     assertEquals(ADMIN.listNamespaceDescriptors().length, 3);
++    HColumnDescriptor fam1 = new HColumnDescriptor("fam1");
+     HTableDescriptor tableDescOne =
+         new HTableDescriptor(TableName.valueOf(nsp + TableName.NAMESPACE_DELIM + "table1"));
++    tableDescOne.addFamily(fam1);
+     HTableDescriptor tableDescTwo =
+         new HTableDescriptor(TableName.valueOf(nsp + TableName.NAMESPACE_DELIM + "table2"));
++    tableDescTwo.addFamily(fam1);
+     ADMIN.createTable(tableDescOne);
+     ADMIN.createTable(tableDescTwo, Bytes.toBytes("AAA"), Bytes.toBytes("ZZZ"), 4);
+   }
+@@ -698,7 +713,9 @@ public class TestNamespaceAuditor {
+     assertNotNull("Namespace descriptor found null.", ADMIN.getNamespaceDescriptor(nsp));
+     TableName tableName = TableName.valueOf(nsp + TableName.NAMESPACE_DELIM + "table1");
+     TableName cloneTableName = TableName.valueOf(nsp + TableName.NAMESPACE_DELIM + "table2");
++    HColumnDescriptor fam1 = new HColumnDescriptor("fam1");
+     HTableDescriptor tableDescOne = new HTableDescriptor(tableName);
++    tableDescOne.addFamily(fam1);
+     ADMIN.createTable(tableDescOne);
+     String snapshot = "snapshot_testTableQuotaExceedWithCloneSnapshot";
+     ADMIN.snapshot(snapshot, tableName);
+@@ -716,7 +733,10 @@ public class TestNamespaceAuditor {
+     assertNotNull("Namespace descriptor found null.", ADMIN.getNamespaceDescriptor(nsp));
+     TableName tableName = TableName.valueOf(nsp + TableName.NAMESPACE_DELIM + "table1");
+     TableName cloneTableName = TableName.valueOf(nsp + TableName.NAMESPACE_DELIM + "table2");
++
++    HColumnDescriptor fam1 = new HColumnDescriptor("fam1");
+     HTableDescriptor tableDescOne = new HTableDescriptor(tableName);
++    tableDescOne.addFamily(fam1);
+ 
+     ADMIN.createTable(tableDescOne, Bytes.toBytes("AAA"), Bytes.toBytes("ZZZ"), 4);
+     String snapshot = "snapshot_testCloneSnapshot";
+@@ -751,6 +771,8 @@ public class TestNamespaceAuditor {
+     assertNotNull("Namespace descriptor found null.", ADMIN.getNamespaceDescriptor(nsp));
+     TableName tableName1 = TableName.valueOf(nsp + TableName.NAMESPACE_DELIM + "table1");
+     HTableDescriptor tableDescOne = new HTableDescriptor(tableName1);
++    HColumnDescriptor fam1 = new HColumnDescriptor("fam1");
++    tableDescOne.addFamily(fam1);
+     ADMIN.createTable(tableDescOne, Bytes.toBytes("AAA"), Bytes.toBytes("ZZZ"), 4);
+ 
+     NamespaceTableAndRegionInfo nstate = getNamespaceState(nsp);
+@@ -786,6 +808,9 @@ public class TestNamespaceAuditor {
+     assertNotNull("Namespace descriptor found null.", ndesc);
+     TableName tableName1 = TableName.valueOf(nsp + TableName.NAMESPACE_DELIM + "table1");
+     HTableDescriptor tableDescOne = new HTableDescriptor(tableName1);
++    HColumnDescriptor fam1 = new HColumnDescriptor("fam1");
++    tableDescOne.addFamily(fam1);
++
+     ADMIN.createTable(tableDescOne, Bytes.toBytes("AAA"), Bytes.toBytes("ZZZ"), 4);
+ 
+     NamespaceTableAndRegionInfo nstate = getNamespaceState(nsp);
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/handler/TestCloseRegionHandler.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/handler/TestCloseRegionHandler.java
+index ead4d5c..6e84da6 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/handler/TestCloseRegionHandler.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/handler/TestCloseRegionHandler.java
+@@ -29,6 +29,7 @@ import org.apache.hadoop.hbase.HBaseTestingUtility;
+ import org.apache.hadoop.hbase.HConstants;
+ import org.apache.hadoop.hbase.HRegionInfo;
+ import org.apache.hadoop.hbase.HTableDescriptor;
++import org.apache.hadoop.hbase.HColumnDescriptor;
+ import org.apache.hadoop.hbase.testclassification.MediumTests;
+ import org.apache.hadoop.hbase.RegionTransition;
+ import org.apache.hadoop.hbase.Server;
+@@ -61,6 +62,10 @@ public class TestCloseRegionHandler {
+   private final static HBaseTestingUtility HTU = HBaseTestingUtility.createLocalHTU();
+   private static final HTableDescriptor TEST_HTD =
+     new HTableDescriptor(TableName.valueOf("TestCloseRegionHandler"));
++  private static final HColumnDescriptor fam = new HColumnDescriptor("fam");
++  static {
++    TEST_HTD.addFamily(fam);
++  }
+   private HRegionInfo TEST_HRI;
+   private int testIndex = 0;
+ 
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/handler/TestOpenRegionHandler.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/handler/TestOpenRegionHandler.java
+index f1b0883..b084b48 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/handler/TestOpenRegionHandler.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/handler/TestOpenRegionHandler.java
+@@ -60,6 +60,8 @@ public class TestOpenRegionHandler {
+     HTU.getConfiguration().setBoolean("hbase.assignment.usezk", true);
+     HTU.startMiniZKCluster();
+     TEST_HTD = new HTableDescriptor(TableName.valueOf("TestOpenRegionHandler.java"));
++    HColumnDescriptor fam = new HColumnDescriptor("fam");
++    TEST_HTD.addFamily(fam);
+   }
+ 
+   @AfterClass public static void after() throws IOException {
+diff --git a/hbase-thrift/src/test/java/org/apache/hadoop/hbase/thrift/TestThriftServer.java b/hbase-thrift/src/test/java/org/apache/hadoop/hbase/thrift/TestThriftServer.java
+index 71e88d5..5d12d04 100644
+--- a/hbase-thrift/src/test/java/org/apache/hadoop/hbase/thrift/TestThriftServer.java
++++ b/hbase-thrift/src/test/java/org/apache/hadoop/hbase/thrift/TestThriftServer.java
+@@ -232,7 +232,7 @@ public class TestThriftServer {
+     assertEquals(handler.getTableNames().size(), 1);
+     assertEquals(handler.getColumnDescriptors(tableAname).size(), 2);
+     assertTrue(handler.isTableEnabled(tableAname));
+-    handler.createTable(tableBname, new ArrayList<ColumnDescriptor>());
++    handler.createTable(tableBname, getColumnDescriptors());
+     assertEquals(handler.getTableNames().size(), 2);
+   }
+ 
+-- 
+1.7.9.5
+

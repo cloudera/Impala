@@ -1,0 +1,29 @@
+From bc41317bb745eb5521eb5f918bed9acd35cd7628 Mon Sep 17 00:00:00 2001
+From: Jonathan M Hsieh <jmhsieh@apache.org>
+Date: Wed, 29 Jun 2016 08:51:00 -0700
+Subject: [PATCH 177/308] HBASE-16140 bump owasp.esapi from 2.1.0 to 2.1.0.1
+
+Change-Id: I7fee7272f35b2315d73cd169a10fd6d9170f6c4b
+Reason: Security fix
+Author: Jonathan Hsieh
+Ref: CDH-40953
+---
+ hbase-server/pom.xml |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/hbase-server/pom.xml b/hbase-server/pom.xml
+index 2da215c..c38084e 100644
+--- a/hbase-server/pom.xml
++++ b/hbase-server/pom.xml
+@@ -573,7 +573,7 @@
+     <dependency>
+       <groupId>org.owasp.esapi</groupId>
+       <artifactId>esapi</artifactId>
+-      <version>2.1.0</version>
++      <version>2.1.0.1</version>
+       <exclusions>
+         <exclusion>
+           <artifactId>xercesImpl</artifactId>
+-- 
+1.7.9.5
+

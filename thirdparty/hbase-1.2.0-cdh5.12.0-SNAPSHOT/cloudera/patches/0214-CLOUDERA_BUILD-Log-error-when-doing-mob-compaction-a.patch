@@ -1,0 +1,37 @@
+From c78348bb8ed8b8c912eec7b3a86c0bb193b62c17 Mon Sep 17 00:00:00 2001
+From: Huaxiang Sun <hsun@cloudera.com>
+Date: Thu, 15 Sep 2016 11:05:26 -0700
+Subject: [PATCH 214/308] CLOUDERA_BUILD Log error when doing mob compaction
+ and master does not have hfile v3 configured.
+
+Reason: Improvement
+Author: Huaxiang Sun
+Ref: CDH-44406
+
+Change-Id: Ifd8671c1e86d28ccfd79d83860c2bd21c2d97ffe
+---
+ .../java/org/apache/hadoop/hbase/mob/MobUtils.java |    8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/MobUtils.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/MobUtils.java
+index cb813ac..388b7c7 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/MobUtils.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/MobUtils.java
+@@ -680,6 +680,14 @@ public class MobUtils {
+   public static void doMobFileCompaction(Configuration conf, FileSystem fs, TableName tableName,
+     HColumnDescriptor hcd, ExecutorService pool, TableLockManager tableLockManager,
+     boolean isForceAllFiles) throws IOException {
++
++    if (HFile.getFormatVersion(conf) < HFile.MIN_FORMAT_VERSION_WITH_TAGS) {
++      throw new IOException("A minimum HFile version of "
++          + HFile.MIN_FORMAT_VERSION_WITH_TAGS
++          + " is required for MOB feature. Consider setting " + HFile.FORMAT_VERSION_KEY
++          + " in hbase master's hbase-site.xml accordingly.");
++    }
++
+     String className = conf.get(MobConstants.MOB_FILE_COMPACTOR_CLASS_KEY,
+       PartitionedMobFileCompactor.class.getName());
+     // instantiate the mob file compactor.
+-- 
+1.7.9.5
+

@@ -1,0 +1,131 @@
+From 49a4dae5ca98096ba37ec43aa8c52952cb8a1ebc Mon Sep 17 00:00:00 2001
+From: Yu Li <liyu@apache.org>
+Date: Fri, 17 Jun 2016 18:00:16 +0800
+Subject: [PATCH 297/308] HBASE-16032 Possible memory leak in StoreScanner
+
+(cherry picked from commit f8762efc0e041ba63c745bfa3ccb9f06d2010699)
+
+Change-Id: If7fcf5ffbe6a4ba62a4cf14b5dfebf9f83dda764
+Author: Balazs Meszaros
+Reason: Bug
+Ref: CDH-50433
+---
+ .../apache/hadoop/hbase/regionserver/HRegion.java  |   41 ++++++++++++-------
+ .../hadoop/hbase/regionserver/StoreScanner.java    |   43 ++++++++++++--------
+ 2 files changed, 52 insertions(+), 32 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
+index 6f2faba..85fc8dd 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
+@@ -5537,26 +5537,39 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+       // by the filter to operate (scanners list) and all others (joinedScanners list).
+       List<KeyValueScanner> scanners = new ArrayList<KeyValueScanner>();
+       List<KeyValueScanner> joinedScanners = new ArrayList<KeyValueScanner>();
+-      if (additionalScanners != null) {
++      // Store all already instantiated scanners for exception handling
++      List<KeyValueScanner> instantiatedScanners = new ArrayList<KeyValueScanner>();
++      // handle additionalScanners
++      if (additionalScanners != null && !additionalScanners.isEmpty()) {
+         scanners.addAll(additionalScanners);
++        instantiatedScanners.addAll(additionalScanners);
+       }
+ 
+-      for (Map.Entry<byte[], NavigableSet<byte[]>> entry : scan.getFamilyMap().entrySet()) {
+-        Store store = stores.get(entry.getKey());
+-        KeyValueScanner scanner;
+-        try {
+-          scanner = store.getScanner(scan, entry.getValue(), this.readPt);
+-        } catch (FileNotFoundException e) {
+-          throw handleFileNotFound(e);
++      try {
++        for (Map.Entry<byte[], NavigableSet<byte[]>> entry : scan.getFamilyMap().entrySet()) {
++          Store store = stores.get(entry.getKey());
++          KeyValueScanner scanner;
++          try {
++            scanner = store.getScanner(scan, entry.getValue(), this.readPt);
++          } catch (FileNotFoundException e) {
++            throw handleFileNotFound(e);
++          }
++          instantiatedScanners.add(scanner);
++          if (this.filter == null || !scan.doLoadColumnFamiliesOnDemand()
++              || this.filter.isFamilyEssential(entry.getKey())) {
++            scanners.add(scanner);
++          } else {
++            joinedScanners.add(scanner);
++          }
+         }
+-        if (this.filter == null || !scan.doLoadColumnFamiliesOnDemand()
+-          || this.filter.isFamilyEssential(entry.getKey())) {
+-          scanners.add(scanner);
+-        } else {
+-          joinedScanners.add(scanner);
++        initializeKVHeap(scanners, joinedScanners, region);
++      } catch (IOException e) {
++        // close all already instantiated scanners before throwing the exception
++        for (KeyValueScanner scanner : instantiatedScanners) {
++          scanner.close();
+         }
++        throw e;
+       }
+-      initializeKVHeap(scanners, joinedScanners, region);
+     }
+ 
+     protected void initializeKVHeap(List<KeyValueScanner> scanners,
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/StoreScanner.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/StoreScanner.java
+index eb09d9d..17917bd 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/StoreScanner.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/StoreScanner.java
+@@ -188,24 +188,31 @@ public class StoreScanner extends NonReversedNonLazyKeyValueScanner
+ 
+     this.store.addChangedReaderObserver(this);
+ 
+-    // Pass columns to try to filter out unnecessary StoreFiles.
+-    List<KeyValueScanner> scanners = getScannersNoCompaction();
+-
+-    // Seek all scanners to the start of the Row (or if the exact matching row
+-    // key does not exist, then to the start of the next matching Row).
+-    // Always check bloom filter to optimize the top row seek for delete
+-    // family marker.
+-    seekScanners(scanners, matcher.getStartKey(), explicitColumnQuery
+-        && lazySeekEnabledGlobally, parallelSeekEnabled);
+-
+-    // set storeLimit
+-    this.storeLimit = scan.getMaxResultsPerColumnFamily();
+-
+-    // set rowOffset
+-    this.storeOffset = scan.getRowOffsetPerColumnFamily();
+-
+-    // Combine all seeked scanners with a heap
+-    resetKVHeap(scanners, store.getComparator());
++    try {
++      // Pass columns to try to filter out unnecessary StoreFiles.
++      List<KeyValueScanner> scanners = getScannersNoCompaction();
++
++      // Seek all scanners to the start of the Row (or if the exact matching row
++      // key does not exist, then to the start of the next matching Row).
++      // Always check bloom filter to optimize the top row seek for delete
++      // family marker.
++      seekScanners(scanners, matcher.getStartKey(), explicitColumnQuery && lazySeekEnabledGlobally,
++        parallelSeekEnabled);
++
++      // set storeLimit
++      this.storeLimit = scan.getMaxResultsPerColumnFamily();
++
++      // set rowOffset
++      this.storeOffset = scan.getRowOffsetPerColumnFamily();
++
++      // Combine all seeked scanners with a heap
++      resetKVHeap(scanners, store.getComparator());
++    } catch (IOException e) {
++      // remove us from the HStore#changedReaderObservers here or we'll have no chance to
++      // and might cause memory leak
++      this.store.deleteChangedReaderObserver(this);
++      throw e;
++    }
+   }
+ 
+   /**
+-- 
+1.7.9.5
+

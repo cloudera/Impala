@@ -1,0 +1,30 @@
+From b786db3e3fa9c63951c5435bdc845d85ebd061ab Mon Sep 17 00:00:00 2001
+From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
+Date: Mon, 16 May 2016 15:53:44 -0700
+Subject: [PATCH 149/308] HBASE-15622 Superusers does not consider the keytab
+ credentials
+
+Reason: Bug
+Author: Matteo Bertozzi
+Ref: CDH-39154
+
+Change-Id: Ide268263df3bdc4b040bb233f80b7d54f873cc1d
+---
+ .../hadoop/hbase/regionserver/HRegionServer.java   |    1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
+index 059b289..b6ece23 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
+@@ -505,7 +505,6 @@ public class HRegionServer extends HasThread implements
+     this.conf = conf;
+     checkCodecs(this.conf);
+     this.userProvider = UserProvider.instantiate(conf);
+-    Superusers.initialize(conf);
+     FSUtils.setupShortCircuitRead(this.conf);
+     // Disable usage of meta replicas in the regionserver
+     this.conf.setBoolean(HConstants.USE_META_REPLICAS, false);
+-- 
+1.7.9.5
+

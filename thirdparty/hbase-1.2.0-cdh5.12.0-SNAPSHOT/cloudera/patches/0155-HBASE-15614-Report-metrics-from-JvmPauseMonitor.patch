@@ -1,0 +1,363 @@
+From c099b618628442a2fa78091289362ff4d0e5f3c9 Mon Sep 17 00:00:00 2001
+From: Andrew Purtell <apurtell@apache.org>
+Date: Fri, 15 Apr 2016 17:22:02 -0700
+Subject: [PATCH 155/308] HBASE-15614 Report metrics from JvmPauseMonitor
+
+Reason: Improvement
+Ref: CDH-40064
+Author: Andrew Purtell
+
+Change-Id: I1f4477ccbe95c00fbc708d21096f917f2ed20a09
+---
+ .../hbase/metrics/JvmPauseMonitorSource.java       |   63 +++++++++++++++++
+ .../regionserver/MetricsRegionServerSource.java    |    3 +-
+ .../MetricsRegionServerSourceImpl.java             |   35 ++++++++++
+ .../hadoop/hbase/regionserver/HRegionServer.java   |    6 +-
+ .../apache/hadoop/hbase/util/JvmPauseMonitor.java  |   72 ++++++++++++++------
+ .../regionserver/TestMetricsRegionServer.java      |   20 ++++++
+ 6 files changed, 176 insertions(+), 23 deletions(-)
+ create mode 100644 hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/metrics/JvmPauseMonitorSource.java
+
+diff --git a/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/metrics/JvmPauseMonitorSource.java b/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/metrics/JvmPauseMonitorSource.java
+new file mode 100644
+index 0000000..af6eeed
+--- /dev/null
++++ b/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/metrics/JvmPauseMonitorSource.java
+@@ -0,0 +1,63 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.hbase.metrics;
++
++/**
++ * Interface for sources that will export JvmPauseMonitor metrics
++ */
++public interface JvmPauseMonitorSource  {
++
++  String INFO_THRESHOLD_COUNT_KEY = "pauseInfoThresholdExceeded";
++  String INFO_THRESHOLD_COUNT_DESC = "Count of INFO level pause threshold alerts";
++  String WARN_THRESHOLD_COUNT_KEY = "pauseWarnThresholdExceeded";
++  String WARN_THRESHOLD_COUNT_DESC = "Count of WARN level pause threshold alerts";
++
++  String PAUSE_TIME_WITH_GC_KEY = "pauseTimeWithGc";
++  String PAUSE_TIME_WITH_GC_DESC = "Histogram for excessive pause times with GC activity detected";
++
++  String PAUSE_TIME_WITHOUT_GC_KEY = "pauseTimeWithoutGc";
++  String PAUSE_TIME_WITHOUT_GC_DESC =
++      "Histogram for excessive pause times without GC activity detected";
++
++  /**
++   * Increment the INFO level threshold exceeded count
++   * @param count the count
++   */
++  void incInfoThresholdExceeded(int count);
++
++  /**
++   * Increment the WARN level threshold exceeded count
++   * @param count the count
++   */
++  void incWarnThresholdExceeded(int count);
++
++  /**
++   * Update the pause time histogram where GC activity was detected.
++   *
++   * @param t time it took
++   */
++  void updatePauseTimeWithGc(long t);
++
++  /**
++   * Update the pause time histogram where GC activity was not detected.
++   *
++   * @param t time it took
++   */
++  void updatePauseTimeWithoutGc(long t);
++}
+diff --git a/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionServerSource.java b/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionServerSource.java
+index 766531d..c5e23d0 100644
+--- a/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionServerSource.java
++++ b/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionServerSource.java
+@@ -19,11 +19,12 @@
+ package org.apache.hadoop.hbase.regionserver;
+ 
+ import org.apache.hadoop.hbase.metrics.BaseSource;
++import org.apache.hadoop.hbase.metrics.JvmPauseMonitorSource;
+ 
+ /**
+  * Interface for classes that expose metrics about the regionserver.
+  */
+-public interface MetricsRegionServerSource extends BaseSource {
++public interface MetricsRegionServerSource extends BaseSource, JvmPauseMonitorSource {
+ 
+   /**
+    * The name of the metrics
+diff --git a/hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionServerSourceImpl.java b/hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionServerSourceImpl.java
+index c4e37da..b84f8e3 100644
+--- a/hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionServerSourceImpl.java
++++ b/hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionServerSourceImpl.java
+@@ -56,6 +56,12 @@ public class MetricsRegionServerSourceImpl
+   private final MetricHistogram splitTimeHisto;
+   private final MetricHistogram flushTimeHisto;
+ 
++  // pause monitor metrics
++  private final MutableFastCounter infoPauseThresholdExceeded;
++  private final MutableFastCounter warnPauseThresholdExceeded;
++  private final MetricHistogram pausesWithGc;
++  private final MetricHistogram pausesWithoutGc;
++
+   public MetricsRegionServerSourceImpl(MetricsRegionServerWrapper rsWrap) {
+     this(METRICS_NAME, METRICS_DESCRIPTION, METRICS_CONTEXT, METRICS_JMX_CONTEXT, rsWrap);
+   }
+@@ -91,6 +97,14 @@ public class MetricsRegionServerSourceImpl
+ 
+     splitRequest = getMetricsRegistry().newCounter(SPLIT_REQUEST_KEY, SPLIT_REQUEST_DESC, 0L);
+     splitSuccess = getMetricsRegistry().newCounter(SPLIT_SUCCESS_KEY, SPLIT_SUCCESS_DESC, 0L);
++
++    // pause monitor metrics
++    infoPauseThresholdExceeded = getMetricsRegistry().newCounter(INFO_THRESHOLD_COUNT_KEY,
++      INFO_THRESHOLD_COUNT_DESC, 0L);
++    warnPauseThresholdExceeded = getMetricsRegistry().newCounter(WARN_THRESHOLD_COUNT_KEY,
++      WARN_THRESHOLD_COUNT_DESC, 0L);
++    pausesWithGc = getMetricsRegistry().newTimeHistogram(PAUSE_TIME_WITH_GC_KEY);
++    pausesWithoutGc = getMetricsRegistry().newTimeHistogram(PAUSE_TIME_WITHOUT_GC_KEY);
+   }
+ 
+   @Override
+@@ -311,8 +325,29 @@ public class MetricsRegionServerSourceImpl
+               rsWrap.getZookeeperQuorum())
+           .tag(Interns.info(SERVER_NAME_NAME, SERVER_NAME_DESC), rsWrap.getServerName())
+           .tag(Interns.info(CLUSTER_ID_NAME, CLUSTER_ID_DESC), rsWrap.getClusterId());
++
+     }
+ 
+     metricsRegistry.snapshot(mrb, all);
+   }
++
++  @Override
++  public void incInfoThresholdExceeded(int count) {
++    infoPauseThresholdExceeded.incr(count);
++  }
++
++  @Override
++  public void incWarnThresholdExceeded(int count) {
++    warnPauseThresholdExceeded.incr(count);
++  }
++
++  @Override
++  public void updatePauseTimeWithGc(long t) {
++    pausesWithGc.add(t);
++  }
++
++  @Override
++  public void updatePauseTimeWithoutGc(long t) {
++    pausesWithoutGc.add(t);
++  }
+ }
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
+index b6ece23..962bbbd 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
+@@ -747,8 +747,6 @@ public class HRegionServer extends HasThread implements
+           HConstants.DEFAULT_THREAD_WAKE_FREQUENCY);
+         healthCheckChore = new HealthCheckChore(sleepTime, this, getConfiguration());
+       }
+-      this.pauseMonitor = new JvmPauseMonitor(conf);
+-      pauseMonitor.start();
+ 
+       initializeZooKeeper();
+       if (!isStopped() && !isAborted()) {
+@@ -1387,6 +1385,10 @@ public class HRegionServer extends HasThread implements
+       // Init in here rather than in constructor after thread name has been set
+       this.metricsRegionServer = new MetricsRegionServer(new MetricsRegionServerWrapperImpl(this));
+ 
++      // Now that we have a metrics source, start the pause monitor
++      this.pauseMonitor = new JvmPauseMonitor(conf, this.metricsRegionServer.getMetricsSource());
++      pauseMonitor.start();
++
+       startServiceThreads();
+       startHeapMemoryManager();
+       LOG.info("Serving as " + this.serverName +
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/util/JvmPauseMonitor.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/util/JvmPauseMonitor.java
+index 80fde68..436f04a 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/util/JvmPauseMonitor.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/util/JvmPauseMonitor.java
+@@ -26,6 +26,7 @@ import java.util.Set;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.hbase.classification.InterfaceAudience;
++import org.apache.hadoop.hbase.metrics.JvmPauseMonitorSource;
+ import org.apache.hadoop.conf.Configuration;
+ 
+ import com.google.common.base.Joiner;
+@@ -56,22 +57,28 @@ public class JvmPauseMonitor {
+   
+   /** log WARN if we detect a pause longer than this threshold */
+   private final long warnThresholdMs;
+-  private static final String WARN_THRESHOLD_KEY =
++  public static final String WARN_THRESHOLD_KEY =
+       "jvm.pause.warn-threshold.ms";
+   private static final long WARN_THRESHOLD_DEFAULT = 10000;
+   
+   /** log INFO if we detect a pause longer than this threshold */
+   private final long infoThresholdMs;
+-  private static final String INFO_THRESHOLD_KEY =
++  public static final String INFO_THRESHOLD_KEY =
+       "jvm.pause.info-threshold.ms";
+   private static final long INFO_THRESHOLD_DEFAULT = 1000;
+ 
+   private Thread monitorThread;
+   private volatile boolean shouldRun = true;
++  private JvmPauseMonitorSource metricsSource;
+ 
+   public JvmPauseMonitor(Configuration conf) {
++    this(conf, null);
++  }
++
++  public JvmPauseMonitor(Configuration conf, JvmPauseMonitorSource metricsSource) {
+     this.warnThresholdMs = conf.getLong(WARN_THRESHOLD_KEY, WARN_THRESHOLD_DEFAULT);
+     this.infoThresholdMs = conf.getLong(INFO_THRESHOLD_KEY, INFO_THRESHOLD_DEFAULT);
++    this.metricsSource = metricsSource;
+   }
+   
+   public void start() {
+@@ -92,19 +99,7 @@ public class JvmPauseMonitor {
+     }
+   }
+   
+-  private String formatMessage(long extraSleepTime, Map<String, GcTimes> gcTimesAfterSleep,
+-      Map<String, GcTimes> gcTimesBeforeSleep) {
+-
+-    Set<String> gcBeanNames = Sets.intersection(gcTimesAfterSleep.keySet(),
+-      gcTimesBeforeSleep.keySet());
+-    List<String> gcDiffs = Lists.newArrayList();
+-    for (String name : gcBeanNames) {
+-      GcTimes diff = gcTimesAfterSleep.get(name).subtract(gcTimesBeforeSleep.get(name));
+-      if (diff.gcCount != 0) {
+-        gcDiffs.add("GC pool '" + name + "' had collection(s): " + diff.toString());
+-      }
+-    }
+-
++  private String formatMessage(long extraSleepTime, List<String> gcDiffs) {
+     String ret = "Detected pause in JVM or host machine (eg GC): " + "pause of approximately "
+         + extraSleepTime + "ms\n";
+     if (gcDiffs.isEmpty()) {
+@@ -160,20 +155,57 @@ public class JvmPauseMonitor {
+         } catch (InterruptedException ie) {
+           return;
+         }
++
+         long extraSleepTime = sw.elapsedMillis() - SLEEP_INTERVAL_MS;
+         Map<String, GcTimes> gcTimesAfterSleep = getGcTimes();
+ 
+-        if (extraSleepTime > warnThresholdMs) {
+-          LOG.warn(formatMessage(extraSleepTime, gcTimesAfterSleep, gcTimesBeforeSleep));
+-        } else if (extraSleepTime > infoThresholdMs) {
+-          LOG.info(formatMessage(extraSleepTime, gcTimesAfterSleep, gcTimesBeforeSleep));
++        if (extraSleepTime > infoThresholdMs) {
++          Set<String> gcBeanNames = Sets.intersection(gcTimesAfterSleep.keySet(),
++            gcTimesBeforeSleep.keySet());
++          List<String> gcDiffs = Lists.newArrayList();
++          for (String name : gcBeanNames) {
++            GcTimes diff = gcTimesAfterSleep.get(name).subtract(gcTimesBeforeSleep.get(name));
++            if (diff.gcCount != 0) {
++              gcDiffs.add("GC pool '" + name + "' had collection(s): " + diff.toString());
++            }
++          }
++
++          updateMetrics(extraSleepTime, !gcDiffs.isEmpty());
++
++          if (extraSleepTime > warnThresholdMs) {
++            LOG.warn(formatMessage(extraSleepTime, gcDiffs));
++          } else {
++            LOG.info(formatMessage(extraSleepTime, gcDiffs));
++          }
+         }
+-
+         gcTimesBeforeSleep = gcTimesAfterSleep;
+       }
+     }
+   }
+ 
++  public void updateMetrics(long sleepTime, boolean gcDetected) {
++    if (metricsSource != null) {
++      if (sleepTime > warnThresholdMs) {
++        metricsSource.incWarnThresholdExceeded(1);
++      } else {
++        metricsSource.incInfoThresholdExceeded(1);
++      }
++      if (gcDetected) {
++        metricsSource.updatePauseTimeWithGc(sleepTime);
++      } else {
++        metricsSource.updatePauseTimeWithoutGc(sleepTime);
++      }
++    }
++  }
++
++  public JvmPauseMonitorSource getMetricsSource() {
++    return metricsSource;
++  }
++
++  public void setMetricsSource(JvmPauseMonitorSource metricsSource) {
++    this.metricsSource = metricsSource;
++  }
++
+   /**
+    * Simple 'main' to facilitate manual testing of the pause monitor.
+    * 
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestMetricsRegionServer.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestMetricsRegionServer.java
+index 51642c7..6f55b7a 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestMetricsRegionServer.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestMetricsRegionServer.java
+@@ -17,9 +17,11 @@
+  */
+ package org.apache.hadoop.hbase.regionserver;
+ 
++import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hbase.CompatibilityFactory;
+ import org.apache.hadoop.hbase.testclassification.SmallTests;
+ import org.apache.hadoop.hbase.test.MetricsAssertHelper;
++import org.apache.hadoop.hbase.util.JvmPauseMonitor;
+ import org.junit.Before;
+ import org.junit.BeforeClass;
+ import org.junit.Test;
+@@ -133,5 +135,23 @@ public class TestMetricsRegionServer {
+     HELPER.assertCounter("slowIncrementCount", 15, serverSource);
+     HELPER.assertCounter("slowPutCount", 16, serverSource);
+   }
++
++  @Test
++  public void testPauseMonitor() {
++    Configuration conf = new Configuration();
++    conf.setLong(JvmPauseMonitor.INFO_THRESHOLD_KEY, 1000L);
++    conf.setLong(JvmPauseMonitor.WARN_THRESHOLD_KEY, 10000L);
++    JvmPauseMonitor monitor = new JvmPauseMonitor(conf, serverSource);
++    monitor.updateMetrics(1500, false);
++    HELPER.assertCounter("pauseInfoThresholdExceeded", 1, serverSource);
++    HELPER.assertCounter("pauseWarnThresholdExceeded", 0, serverSource);
++    HELPER.assertCounter("pauseTimeWithoutGc_num_ops", 1, serverSource);
++    HELPER.assertCounter("pauseTimeWithGc_num_ops", 0, serverSource);
++    monitor.updateMetrics(15000, true);
++    HELPER.assertCounter("pauseInfoThresholdExceeded", 1, serverSource);
++    HELPER.assertCounter("pauseWarnThresholdExceeded", 1, serverSource);
++    HELPER.assertCounter("pauseTimeWithoutGc_num_ops", 1, serverSource);
++    HELPER.assertCounter("pauseTimeWithGc_num_ops", 1, serverSource);
++  }
+ }
+ 
+-- 
+1.7.9.5
+

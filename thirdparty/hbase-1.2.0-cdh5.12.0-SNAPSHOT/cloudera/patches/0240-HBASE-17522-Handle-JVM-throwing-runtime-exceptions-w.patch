@@ -1,0 +1,581 @@
+From 9ad43d60aa6d05049357cea34da87e4791eba4b3 Mon Sep 17 00:00:00 2001
+From: Sean Busbey <busbey@apache.org>
+Date: Wed, 25 Jan 2017 15:30:56 -0600
+Subject: [PATCH 240/308] HBASE-17522 Handle JVM throwing runtime exceptions
+ when we ask for details on heap usage the same as a
+ correctly returned 'undefined'.
+
+Signed-off-by: Michael Stack <stack@apache.org>
+
+ Conflicts:
+	hbase-common/src/main/java/org/apache/hadoop/hbase/io/util/HeapMemorySizeUtil.java
+	hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/CacheConfig.java
+	hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
+	hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
+	hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/MemStoreFlusher.java
+	hbase-server/src/test/java/org/apache/hadoop/hbase/io/hfile/TestCacheConfig.java
+	hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestDefaultMemStore.java
+
+Addendum HBASE-17522 missed some branch-1 specific direct uses of MemoryMXBean
+
+branch-1.2 Conflicts:
+	hbase-server/src/main/jamon/org/apache/hadoop/hbase/tmpl/regionserver/ServerMetricsTmpl.jamon
+	hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
+
+(cherry picked from commit 7efa34b426fd1ec096b7d0297af4da48d201e73d)
+
+cdh Conflicts:
+	hbase-server/src/main/jamon/org/apache/hadoop/hbase/tmpl/regionserver/ServerMetricsTmpl.jamon
+
+Change-Id: I8c74cc88d2a96dc595f91dc073885b614a10ea1f
+Reason: Bug
+Author: Sean Busbey
+Ref: CDH-49359
+---
+ .../hadoop/hbase/io/util/HeapMemorySizeUtil.java   |   77 +++++++++++++++++++-
+ .../tmpl/regionserver/ServerMetricsTmpl.jamon      |   16 +++-
+ .../apache/hadoop/hbase/io/hfile/CacheConfig.java  |   45 ++++--------
+ .../hadoop/hbase/regionserver/FlushType.java       |   31 ++++++++
+ .../apache/hadoop/hbase/regionserver/HRegion.java  |   11 ++-
+ .../hadoop/hbase/regionserver/HRegionServer.java   |   13 +++-
+ .../hbase/regionserver/HeapMemoryManager.java      |   31 ++++++--
+ .../hbase/regionserver/MemStoreChunkPool.java      |    8 +-
+ .../hadoop/hbase/regionserver/MemStoreFlusher.java |   12 +--
+ .../hadoop/hbase/regionserver/wal/FSHLog.java      |    9 ++-
+ .../hadoop/hbase/io/hfile/TestCacheConfig.java     |    9 +--
+ 11 files changed, 201 insertions(+), 61 deletions(-)
+ create mode 100644 hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/FlushType.java
+
+diff --git a/hbase-common/src/main/java/org/apache/hadoop/hbase/io/util/HeapMemorySizeUtil.java b/hbase-common/src/main/java/org/apache/hadoop/hbase/io/util/HeapMemorySizeUtil.java
+index f1c0750..4369305 100644
+--- a/hbase-common/src/main/java/org/apache/hadoop/hbase/io/util/HeapMemorySizeUtil.java
++++ b/hbase-common/src/main/java/org/apache/hadoop/hbase/io/util/HeapMemorySizeUtil.java
+@@ -45,6 +45,27 @@ public class HeapMemorySizeUtil {
+   // a constant to convert a fraction to a percentage
+   private static final int CONVERT_TO_PERCENTAGE = 100;
+ 
++  private static final String JVM_HEAP_EXCEPTION = "Got an exception while attempting to read " +
++      "information about the JVM heap. Please submit this log information in a bug report and " +
++      "include your JVM settings, specifically the GC in use and any -XX options. Consider " +
++      "restarting the service.";
++
++  /**
++   * Return JVM memory statistics while properly handling runtime exceptions from the JVM.
++   * @return a memory usage object, null if there was a runtime exception. (n.b. you
++   *         could also get -1 values back from the JVM)
++   * @see MemoryUsage
++   */
++  public static MemoryUsage safeGetHeapMemoryUsage() {
++    MemoryUsage usage = null;
++    try {
++      usage = ManagementFactory.getMemoryMXBean().getHeapMemoryUsage();
++    } catch (RuntimeException exception) {
++      LOG.warn(JVM_HEAP_EXCEPTION, exception);
++    }
++    return usage;
++  }
++
+   /**
+    * Checks whether we have enough heap memory left out after portion for Memstore and Block cache.
+    * We need atleast 20% of heap left out for other RS functions.
+@@ -143,10 +164,62 @@ public class HeapMemorySizeUtil {
+     // L2 block cache can be on heap when IOEngine is "heap"
+     if (bucketCacheIOEngineName != null && bucketCacheIOEngineName.startsWith("heap")) {
+       float bucketCachePercentage = conf.getFloat(HConstants.BUCKET_CACHE_SIZE_KEY, 0F);
+-      MemoryUsage mu = ManagementFactory.getMemoryMXBean().getHeapMemoryUsage();
++      long max = -1L;
++      final MemoryUsage usage = safeGetHeapMemoryUsage();
++      if (usage != null) {
++        max = usage.getMax();
++      }
+       l2CachePercent = bucketCachePercentage < 1 ? bucketCachePercentage
+-          : (bucketCachePercentage * 1024 * 1024) / mu.getMax();
++          : (bucketCachePercentage * 1024 * 1024) / max;
+     }
+     return l2CachePercent;
+   }
++
++  /**
++   * @param conf used to read cache configs
++   * @return the number of bytes to use for LRU, negative if disabled.
++   * @throws IllegalArgumentException if HFILE_BLOCK_CACHE_SIZE_KEY is > 1.0
++   */
++  public static long getLruCacheSize(final Configuration conf) {
++    float cachePercentage = conf.getFloat(HConstants.HFILE_BLOCK_CACHE_SIZE_KEY,
++      HConstants.HFILE_BLOCK_CACHE_SIZE_DEFAULT);
++    if (cachePercentage <= 0.0001f) {
++      return -1;
++    }
++    if (cachePercentage > 1.0) {
++      throw new IllegalArgumentException(HConstants.HFILE_BLOCK_CACHE_SIZE_KEY +
++        " must be between 0.0 and 1.0, and not > 1.0");
++    }
++    long max = -1L;
++    final MemoryUsage usage = safeGetHeapMemoryUsage();
++    if (usage != null) {
++      max = usage.getMax();
++    }
++
++    // Calculate the amount of heap to give the heap.
++    return (long) (max * cachePercentage);
++  }
++
++  /**
++   * @param conf used to read config for bucket cache size. (< 1 is treated as % and > is treated as MiB)
++   * @return the number of bytes to use for bucket cache, negative if disabled.
++   */
++  public static long getBucketCacheSize(final Configuration conf) {
++    final float bucketCachePercentage = conf.getFloat(HConstants.BUCKET_CACHE_SIZE_KEY, 0F);
++    long bucketCacheSize;
++    // Values < 1 are treated as % of heap
++    if (bucketCachePercentage < 1) {
++      long max = -1L;
++      final MemoryUsage usage = safeGetHeapMemoryUsage();
++      if (usage != null) {
++        max = usage.getMax();
++      }
++      bucketCacheSize = (long)(max * bucketCachePercentage);
++    // values >= 1 are treated as # of MiB
++    } else {
++      bucketCacheSize = (long)(bucketCachePercentage * 1024 * 1024);
++    }
++    return bucketCacheSize;
++  }
++
+ }
+diff --git a/hbase-server/src/main/jamon/org/apache/hadoop/hbase/tmpl/regionserver/ServerMetricsTmpl.jamon b/hbase-server/src/main/jamon/org/apache/hadoop/hbase/tmpl/regionserver/ServerMetricsTmpl.jamon
+index e04756d..f3d874d 100644
+--- a/hbase-server/src/main/jamon/org/apache/hadoop/hbase/tmpl/regionserver/ServerMetricsTmpl.jamon
++++ b/hbase-server/src/main/jamon/org/apache/hadoop/hbase/tmpl/regionserver/ServerMetricsTmpl.jamon
+@@ -34,7 +34,8 @@ org.apache.hadoop.hbase.protobuf.generated.AdminProtos.ServerInfo;
+ org.apache.hadoop.hbase.protobuf.generated.ClusterStatusProtos.RegionLoad;
+ org.apache.hadoop.hbase.util.DirectMemoryUtils;
+ org.apache.hadoop.util.StringUtils;
+-java.lang.management.ManagementFactory;
++java.lang.management.MemoryUsage;
++org.apache.hadoop.hbase.io.util.HeapMemorySizeUtil;
+ </%import>
+ <div class="tabbable">
+     <ul class="nav nav-pills">
+@@ -94,6 +95,15 @@ java.lang.management.ManagementFactory;
+ <%args>
+ MetricsRegionServerWrapper mWrap;
+ </%args>
++<%java
++  long usedHeap = -1L;
++  long maxHeap = -1L;
++  final MemoryUsage usage = HeapMemorySizeUtil.safeGetHeapMemoryUsage();
++  if (usage != null) {
++    maxHeap = usage.getMax();
++    usedHeap = usage.getUsed();
++  }
++%>
+ <table class="table table-striped">
+ <tr>
+     <tr>
+@@ -106,10 +116,10 @@ MetricsRegionServerWrapper mWrap;
+ </tr>
+ <tr>
+     <td>
+-        <% StringUtils.humanReadableInt(ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getUsed()) %>
++        <% StringUtils.humanReadableInt(usedHeap) %>
+     </td>
+     <td>
+-        <% StringUtils.humanReadableInt(ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getMax()) %>
++        <% StringUtils.humanReadableInt(maxHeap) %>
+     </td>
+     <td>
+         <% StringUtils.humanReadableInt(DirectMemoryUtils.getDirectMemoryUsage()) %>
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/CacheConfig.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/CacheConfig.java
+index 2b76b88..2053760 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/CacheConfig.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/CacheConfig.java
+@@ -32,6 +32,7 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
+ import org.apache.hadoop.hbase.HConstants;
+ import org.apache.hadoop.hbase.io.hfile.BlockType.BlockCategory;
+ import org.apache.hadoop.hbase.io.hfile.bucket.BucketCache;
++import org.apache.hadoop.hbase.io.util.HeapMemorySizeUtil;
+ import org.apache.hadoop.hbase.util.ReflectionUtils;
+ import org.apache.hadoop.util.StringUtils;
+ 
+@@ -520,30 +521,16 @@ public class CacheConfig {
+   @VisibleForTesting
+   static boolean blockCacheDisabled = false;
+ 
+-  static long getLruCacheSize(final Configuration conf, final MemoryUsage mu) {
+-    float cachePercentage = conf.getFloat(HConstants.HFILE_BLOCK_CACHE_SIZE_KEY,
+-      HConstants.HFILE_BLOCK_CACHE_SIZE_DEFAULT);
+-    if (cachePercentage <= 0.0001f) {
+-      blockCacheDisabled = true;
+-      return -1;
+-    }
+-    if (cachePercentage > 1.0) {
+-      throw new IllegalArgumentException(HConstants.HFILE_BLOCK_CACHE_SIZE_KEY +
+-        " must be between 0.0 and 1.0, and not > 1.0");
+-    }
+-
+-    // Calculate the amount of heap to give the heap.
+-    return (long) (mu.getMax() * cachePercentage);
+-  }
+-
+   /**
+    * @param c Configuration to use.
+-   * @param mu JMX Memory Bean
+    * @return An L1 instance.  Currently an instance of LruBlockCache.
+    */
+-  private static LruBlockCache getL1(final Configuration c, final MemoryUsage mu) {
+-    long lruCacheSize = getLruCacheSize(c, mu);
+-    if (lruCacheSize < 0) return null;
++  private static LruBlockCache getL1(final Configuration c) {
++    final long lruCacheSize = HeapMemorySizeUtil.getLruCacheSize(c);
++    if (lruCacheSize < 0) {
++      blockCacheDisabled = true;
++    }
++    if (blockCacheDisabled) return null;
+     int blockSize = c.getInt(BLOCKCACHE_BLOCKSIZE_KEY, HConstants.DEFAULT_BLOCKSIZE);
+     LOG.info("Allocating LruBlockCache size=" +
+       StringUtils.byteDesc(lruCacheSize) + ", blockSize=" + StringUtils.byteDesc(blockSize));
+@@ -552,11 +539,10 @@ public class CacheConfig {
+ 
+   /**
+    * @param c Configuration to use.
+-   * @param mu JMX Memory Bean
+    * @return Returns L2 block cache instance (for now it is BucketCache BlockCache all the time)
+    * or null if not supposed to be a L2.
+    */
+-  private static BlockCache getL2(final Configuration c, final MemoryUsage mu) {
++  private static BlockCache getL2(final Configuration c) {
+     final boolean useExternal = c.getBoolean(EXTERNAL_BLOCKCACHE_KEY, EXTERNAL_BLOCKCACHE_DEFAULT);
+     if (LOG.isDebugEnabled()) {
+       LOG.debug("Trying to use " + (useExternal?" External":" Internal") + " l2 cache");
+@@ -568,7 +554,7 @@ public class CacheConfig {
+     }
+ 
+     // otherwise use the bucket cache.
+-    return getBucketCache(c, mu);
++    return getBucketCache(c);
+ 
+   }
+ 
+@@ -598,15 +584,13 @@ public class CacheConfig {
+ 
+   }
+ 
+-  private static BlockCache getBucketCache(Configuration c, MemoryUsage mu) {
++  private static BlockCache getBucketCache(Configuration c) {
+     // Check for L2.  ioengine name must be non-null.
+     String bucketCacheIOEngineName = c.get(BUCKET_CACHE_IOENGINE_KEY, null);
+     if (bucketCacheIOEngineName == null || bucketCacheIOEngineName.length() <= 0) return null;
+ 
+     int blockSize = c.getInt(BLOCKCACHE_BLOCKSIZE_KEY, HConstants.DEFAULT_BLOCKSIZE);
+-    float bucketCachePercentage = c.getFloat(BUCKET_CACHE_SIZE_KEY, 0F);
+-    long bucketCacheSize = (long) (bucketCachePercentage < 1? mu.getMax() * bucketCachePercentage:
+-      bucketCachePercentage * 1024 * 1024);
++    final long bucketCacheSize = HeapMemorySizeUtil.getBucketCacheSize(c);
+     if (bucketCacheSize <= 0) {
+       throw new IllegalStateException("bucketCacheSize <= 0; Check " +
+         BUCKET_CACHE_SIZE_KEY + " setting and/or server java heap size");
+@@ -653,11 +637,10 @@ public class CacheConfig {
+   public static synchronized BlockCache instantiateBlockCache(Configuration conf) {
+     if (GLOBAL_BLOCK_CACHE_INSTANCE != null) return GLOBAL_BLOCK_CACHE_INSTANCE;
+     if (blockCacheDisabled) return null;
+-    MemoryUsage mu = ManagementFactory.getMemoryMXBean().getHeapMemoryUsage();
+-    LruBlockCache l1 = getL1(conf, mu);
+-    // blockCacheDisabled is set as a side-effect of getL1(), so check it again after the call.
++    LruBlockCache l1 = getL1(conf);
++    // blockCacheDisabled is set as a side-effect of getL1Internal(), so check it again after the call.
+     if (blockCacheDisabled) return null;
+-    BlockCache l2 = getL2(conf, mu);
++    BlockCache l2 = getL2(conf);
+     if (l2 == null) {
+       GLOBAL_BLOCK_CACHE_INSTANCE = l1;
+     } else {
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/FlushType.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/FlushType.java
+new file mode 100644
+index 0000000..0b96a86
+--- /dev/null
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/FlushType.java
+@@ -0,0 +1,31 @@
++/**
++ *
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hbase.regionserver;
++
++import org.apache.hadoop.hbase.classification.InterfaceAudience;
++
++/**
++ * Reasons we flush.
++ * @see MemStoreFlusher
++ * @see FlushRequester
++ */
++@InterfaceAudience.Private
++enum FlushType {
++  NORMAL, ABOVE_LOWER_MARK, ABOVE_HIGHER_MARK;
++}
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
+index 693214b..1e35670 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
+@@ -6837,7 +6837,16 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+     ClientProtos.RegionLoadStats.Builder stats = ClientProtos.RegionLoadStats.newBuilder();
+     stats.setMemstoreLoad((int) (Math.min(100, (this.memstoreSize.get() * 100) / this
+         .memstoreFlushSize)));
+-    stats.setHeapOccupancy((int)rsServices.getHeapMemoryManager().getHeapOccupancyPercent()*100);
++    if (rsServices.getHeapMemoryManager() != null) {
++      // the HeapMemoryManager uses -0.0 to signal a problem asking the JVM,
++      // so we could just do the calculation below and we'll get a 0.
++      // treating it as a special case analogous to no HMM instead so that it can be
++      // programatically treated different from using <1% of heap.
++      final float occupancy = rsServices.getHeapMemoryManager().getHeapOccupancyPercent();
++      if (occupancy != HeapMemoryManager.HEAP_OCCUPANCY_ERROR_VALUE) {
++        stats.setHeapOccupancy((int)(occupancy * 100));
++      }
++    }
+     stats.setCompactionPressure((int)rsServices.getCompactionPressure()*100 > 100 ? 100 :
+                 (int)rsServices.getCompactionPressure()*100);
+     return stats.build();
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
+index 15ada46..256f2db 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
+@@ -95,6 +95,7 @@ import org.apache.hadoop.hbase.executor.ExecutorType;
+ import org.apache.hadoop.hbase.fs.HFileSystem;
+ import org.apache.hadoop.hbase.http.InfoServer;
+ import org.apache.hadoop.hbase.io.hfile.CacheConfig;
++import org.apache.hadoop.hbase.io.util.HeapMemorySizeUtil;
+ import org.apache.hadoop.hbase.ipc.RpcClient;
+ import org.apache.hadoop.hbase.ipc.RpcClientFactory;
+ import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
+@@ -1180,14 +1181,20 @@ public class HRegionServer extends HasThread implements
+     // history.
+     MetricsRegionServerWrapper regionServerWrapper = metricsRegionServer.getRegionServerWrapper();
+     Collection<Region> regions = getOnlineRegionsLocalContext();
+-    MemoryUsage memory = ManagementFactory.getMemoryMXBean().getHeapMemoryUsage();
++    long usedMemory = -1L;
++    long maxMemory = -1L;
++    final MemoryUsage usage = HeapMemorySizeUtil.safeGetHeapMemoryUsage();
++    if (usage != null) {
++      usedMemory = usage.getUsed();
++      maxMemory = usage.getMax();
++    }
+ 
+     ClusterStatusProtos.ServerLoad.Builder serverLoad =
+       ClusterStatusProtos.ServerLoad.newBuilder();
+     serverLoad.setNumberOfRequests((int) regionServerWrapper.getRequestsPerSecond());
+     serverLoad.setTotalNumberOfRequests((int) regionServerWrapper.getTotalRequestCount());
+-    serverLoad.setUsedHeapMB((int)(memory.getUsed() / 1024 / 1024));
+-    serverLoad.setMaxHeapMB((int) (memory.getMax() / 1024 / 1024));
++    serverLoad.setUsedHeapMB((int)(usedMemory / 1024 / 1024));
++    serverLoad.setMaxHeapMB((int) (maxMemory / 1024 / 1024));
+     Set<String> coprocessors = getWAL(null).getCoprocessorHost().getCoprocessors();
+     Builder coprocessorBuilder = Coprocessor.newBuilder();
+     for (String coprocessor : coprocessors) {
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HeapMemoryManager.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HeapMemoryManager.java
+index a920bcc..99bab28 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HeapMemoryManager.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HeapMemoryManager.java
+@@ -62,6 +62,8 @@ public class HeapMemoryManager {
+   public static final String HBASE_RS_HEAP_MEMORY_TUNER_CLASS = 
+       "hbase.regionserver.heapmemory.tuner.class";
+ 
++  public static final float HEAP_OCCUPANCY_ERROR_VALUE = -0.0f;
++
+   private float globalMemStorePercent;
+   private float globalMemStorePercentMinRange;
+   private float globalMemStorePercentMaxRange;
+@@ -83,7 +85,19 @@ public class HeapMemoryManager {
+   private final int defaultChorePeriod;
+   private final float heapOccupancyLowWatermark;
+ 
+-  private long maxHeapSize = ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getMax();
++  private final long maxHeapSize;
++  {
++    // note that this initialization still isn't threadsafe, because updating a long isn't atomic.
++    long tempMaxHeap = -1L;
++    try {
++      final MemoryUsage usage = HeapMemorySizeUtil.safeGetHeapMemoryUsage();
++      if (usage != null) {
++        tempMaxHeap = usage.getMax();
++      }
++    } finally {
++      maxHeapSize = tempMaxHeap;
++    }
++  }
+ 
+   public static HeapMemoryManager create(Configuration conf, FlushRequester memStoreFlusher,
+                 Server server, RegionServerAccounting regionServerAccounting) {
+@@ -210,10 +224,10 @@ public class HeapMemoryManager {
+   }
+ 
+   /**
+-   * @return heap occupancy percentage, 0 &lt;= n &lt;= 1
++   * @return heap occupancy percentage, 0 &lt;= n &lt;= 1. or -0.0 for error asking JVM
+    */
+   public float getHeapOccupancyPercent() {
+-    return this.heapOccupancyPercent;
++    return this.heapOccupancyPercent == Float.MAX_VALUE ? HEAP_OCCUPANCY_ERROR_VALUE : this.heapOccupancyPercent;
+   }
+ 
+   private class HeapMemoryTunerChore extends ScheduledChore implements FlushRequestListener {
+@@ -235,8 +249,15 @@ public class HeapMemoryManager {
+     @Override
+     protected void chore() {
+       // Sample heap occupancy
+-      MemoryUsage memUsage = ManagementFactory.getMemoryMXBean().getHeapMemoryUsage();
+-      heapOccupancyPercent = (float)memUsage.getUsed() / (float)memUsage.getCommitted();
++      final MemoryUsage usage = HeapMemorySizeUtil.safeGetHeapMemoryUsage();
++      if (usage != null) {
++        heapOccupancyPercent = (float)usage.getUsed() / (float)usage.getCommitted();
++      } else {
++        // previously, an exception would have meant death for the tuning chore
++        // so switch to alarming so that we similarly stop tuning until we get
++        // heap usage information again.
++        heapOccupancyPercent = Float.MAX_VALUE;
++      }
+       // If we are above the heap occupancy alarm low watermark, switch to short
+       // sleeps for close monitoring. Stop autotuning, we are in a danger zone.
+       if (heapOccupancyPercent >= heapOccupancyLowWatermark) {
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/MemStoreChunkPool.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/MemStoreChunkPool.java
+index 81b6046..eb43b43 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/MemStoreChunkPool.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/MemStoreChunkPool.java
+@@ -18,7 +18,7 @@
+  */
+ package org.apache.hadoop.hbase.regionserver;
+ 
+-import java.lang.management.ManagementFactory;
++import java.lang.management.MemoryUsage;
+ import java.util.concurrent.BlockingQueue;
+ import java.util.concurrent.Executors;
+ import java.util.concurrent.LinkedBlockingQueue;
+@@ -203,7 +203,11 @@ public class MemStoreChunkPool {
+       if (poolSizePercentage > 1.0) {
+         throw new IllegalArgumentException(CHUNK_POOL_MAXSIZE_KEY + " must be between 0.0 and 1.0");
+       }
+-      long heapMax = ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getMax();
++      long heapMax = -1L;
++      final MemoryUsage usage = HeapMemorySizeUtil.safeGetHeapMemoryUsage();
++      if (usage != null) {
++        heapMax = usage.getMax();
++      }
+       long globalMemStoreLimit = (long) (heapMax * HeapMemorySizeUtil.getGlobalMemStorePercent(conf,
+           false));
+       int chunkSize = conf.getInt(HeapMemStoreLAB.CHUNK_SIZE_KEY,
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/MemStoreFlusher.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/MemStoreFlusher.java
+index c7980b3..d2c820f 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/MemStoreFlusher.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/MemStoreFlusher.java
+@@ -22,7 +22,7 @@ import static org.apache.hadoop.util.StringUtils.humanReadableInt;
+ 
+ import java.io.IOException;
+ import java.lang.Thread.UncaughtExceptionHandler;
+-import java.lang.management.ManagementFactory;
++import java.lang.management.MemoryUsage;
+ import java.util.ArrayList;
+ import java.util.ConcurrentModificationException;
+ import java.util.HashMap;
+@@ -110,7 +110,11 @@ class MemStoreFlusher implements FlushRequester {
+     this.server = server;
+     this.threadWakeFrequency =
+       conf.getLong(HConstants.THREAD_WAKE_FREQUENCY, 10 * 1000);
+-    long max = ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getMax();
++    long max = -1L;
++    final MemoryUsage usage = HeapMemorySizeUtil.safeGetHeapMemoryUsage();
++    if (usage != null) {
++      max = usage.getMax();
++    }
+     float globalMemStorePercent = HeapMemorySizeUtil.getGlobalMemStorePercent(conf, true);
+     this.globalMemStoreLimit = (long) (max * globalMemStorePercent);
+     this.globalMemStoreLimitLowMarkPercent =
+@@ -807,7 +811,3 @@ class MemStoreFlusher implements FlushRequester {
+     }
+   }
+ }
+-
+-enum FlushType {
+-  NORMAL, ABOVE_LOWER_MARK, ABOVE_HIGHER_MARK;
+-}
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/wal/FSHLog.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/wal/FSHLog.java
+index fb04d5e..6b0e7dd 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/wal/FSHLog.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/wal/FSHLog.java
+@@ -23,7 +23,6 @@ import java.io.FileNotFoundException;
+ import java.io.IOException;
+ import java.io.InterruptedIOException;
+ import java.io.OutputStream;
+-import java.lang.management.ManagementFactory;
+ import java.lang.management.MemoryUsage;
+ import java.lang.reflect.InvocationTargetException;
+ import java.net.URLEncoder;
+@@ -567,8 +566,12 @@ public class FSHLog implements WAL {
+   }
+ 
+   private int calculateMaxLogFiles(float memstoreSizeRatio, long logRollSize) {
+-    MemoryUsage mu = ManagementFactory.getMemoryMXBean().getHeapMemoryUsage();
+-    int maxLogs = Math.round(mu.getMax() * memstoreSizeRatio * 2 / logRollSize);
++    long max = -1L;
++    final MemoryUsage usage = HeapMemorySizeUtil.safeGetHeapMemoryUsage();
++    if (usage != null) {
++      max = usage.getMax();
++    }
++    int maxLogs = Math.round(max * memstoreSizeRatio * 2 / logRollSize);
+     return maxLogs;
+   }
+ 
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/io/hfile/TestCacheConfig.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/io/hfile/TestCacheConfig.java
+index 4671f3a..0175224 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/io/hfile/TestCacheConfig.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/io/hfile/TestCacheConfig.java
+@@ -37,6 +37,7 @@ import org.apache.hadoop.hbase.HBaseTestingUtility;
+ import org.apache.hadoop.hbase.HConstants;
+ import org.apache.hadoop.hbase.testclassification.LargeTests;
+ import org.apache.hadoop.hbase.io.hfile.bucket.BucketCache;
++import org.apache.hadoop.hbase.io.util.HeapMemorySizeUtil;
+ import org.apache.hadoop.hbase.util.Threads;
+ import org.junit.After;
+ import org.junit.Before;
+@@ -251,8 +252,7 @@ public class TestCacheConfig {
+     BlockCache [] bcs = cbc.getBlockCaches();
+     assertTrue(bcs[0] instanceof LruBlockCache);
+     LruBlockCache lbc = (LruBlockCache)bcs[0];
+-    assertEquals(CacheConfig.getLruCacheSize(this.conf,
+-        ManagementFactory.getMemoryMXBean().getHeapMemoryUsage()), lbc.getMaxSize());
++    assertEquals(HeapMemorySizeUtil.getLruCacheSize(this.conf), lbc.getMaxSize());
+     assertTrue(bcs[1] instanceof BucketCache);
+     BucketCache bc = (BucketCache)bcs[1];
+     // getMaxSize comes back in bytes but we specified size in MB
+@@ -269,8 +269,7 @@ public class TestCacheConfig {
+     // Make lru size is smaller than bcSize for sure.  Need this to be true so when eviction
+     // from L1 happens, it does not fail because L2 can't take the eviction because block too big.
+     this.conf.setFloat(HConstants.HFILE_BLOCK_CACHE_SIZE_KEY, 0.001f);
+-    MemoryUsage mu = ManagementFactory.getMemoryMXBean().getHeapMemoryUsage();
+-    long lruExpectedSize = CacheConfig.getLruCacheSize(this.conf, mu);
++    long lruExpectedSize = HeapMemorySizeUtil.getLruCacheSize(this.conf);
+     final int bcSize = 100;
+     long bcExpectedSize = 100 * 1024 * 1024; // MB.
+     assertTrue(lruExpectedSize < bcExpectedSize);
+@@ -343,4 +342,4 @@ public class TestCacheConfig {
+       blocks.get(BlockType.DATA) == null? 0:
+       blocks.get(BlockType.DATA).intValue());
+   }
+-}
+\ No newline at end of file
++}
+-- 
+1.7.9.5
+

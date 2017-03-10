@@ -1,0 +1,48 @@
+From c7724fc9646ada135400b81f92fb4bf122a9c4fc Mon Sep 17 00:00:00 2001
+From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
+Date: Tue, 12 Jul 2016 05:55:07 -0700
+Subject: [PATCH 182/308] HBASE-16207 can't restore snapshot without "Admin"
+ permission
+
+Reason: Bug
+Author: Matteo Bertozzi
+Ref: CDH-42051
+
+Change-Id: Ia97f913f168941d80e75cb92044b00d1e1bc1990
+---
+ .../org/apache/hadoop/hbase/master/HMaster.java    |    2 +-
+ .../hadoop/hbase/master/MasterRpcServices.java     |    4 ++--
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
+index 7914cbe..5d9b56d 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
+@@ -2533,7 +2533,7 @@ public class HMaster extends HRegionServer implements MasterServices, Server {
+    * @throws IOException if the namespace manager is not ready yet.
+    * @throws NamespaceNotFoundException if the namespace does not exists
+    */
+-  private void ensureNamespaceExists(final String name)
++  protected void ensureNamespaceExists(final String name)
+       throws IOException, NamespaceNotFoundException {
+     checkNamespaceManagerReady();
+     NamespaceDescriptor nsd = tableNamespaceManager.get(name);
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MasterRpcServices.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MasterRpcServices.java
+index 96c5b23..4389302 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MasterRpcServices.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MasterRpcServices.java
+@@ -1264,9 +1264,9 @@ public class MasterRpcServices extends RSRpcServices
+       master.checkInitialized();
+       master.snapshotManager.checkSnapshotSupport();
+ 
+-    // ensure namespace exists
++      // ensure namespace exists
+       TableName dstTable = TableName.valueOf(request.getSnapshot().getTable());
+-      master.getNamespaceDescriptor(dstTable.getNamespaceAsString());
++      master.ensureNamespaceExists(dstTable.getNamespaceAsString());
+ 
+       SnapshotDescription reqSnapshot = request.getSnapshot();
+       master.snapshotManager.restoreSnapshot(reqSnapshot);
+-- 
+1.7.9.5
+

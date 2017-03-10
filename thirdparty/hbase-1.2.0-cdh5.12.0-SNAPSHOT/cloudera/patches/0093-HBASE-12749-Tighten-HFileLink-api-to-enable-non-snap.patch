@@ -1,0 +1,31 @@
+From a135af405539dfe0b502afa26902dc8b3cbc7246 Mon Sep 17 00:00:00 2001
+From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
+Date: Mon, 30 Mar 2015 18:56:04 +0200
+Subject: [PATCH 093/308] HBASE-12749 Tighten HFileLink api to enable
+ non-snapshot uses (addendum)
+
+Reason: Test
+Author: Matteo Bertozzi
+Ref: CDH-26305
+---
+ .../hadoop/hbase/migration/TestUpgradeTo96.java    |    4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/migration/TestUpgradeTo96.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/migration/TestUpgradeTo96.java
+index 2a8c9e3..1555894 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/migration/TestUpgradeTo96.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/migration/TestUpgradeTo96.java
+@@ -209,8 +209,8 @@ public class TestUpgradeTo96 {
+     HFileV1Detector t = new HFileV1Detector();
+     t.setConf(TEST_UTIL.getConfiguration());
+     FileLink fileLink = t.getFileLinkWithPreNSPath(aFileLink);
+-    //assert it has 6 paths (2 NS, 2 Pre NS, and 2 .tmp)  to look.
+-    assertTrue(fileLink.getLocations().length == 6);
++    //assert it has 7 paths (2 NS, 2 Pre NS,  2 .tmp, 1 mob)  to look.
++    assertEquals(7, fileLink.getLocations().length);
+     for (Path p : fileLink.getLocations()) {
+       if (p.equals(preNamespaceArchivePath)) preNSArchivePathExists = true;
+       if (p.equals(preNamespaceTablePath)) preNSTablePathExists = true;
+-- 
+1.7.9.5
+

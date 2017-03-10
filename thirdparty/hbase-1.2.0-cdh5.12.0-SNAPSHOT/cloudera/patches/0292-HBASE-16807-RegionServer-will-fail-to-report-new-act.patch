@@ -1,0 +1,83 @@
+From 32484ad6693c68a480fa366be13429948284c67a Mon Sep 17 00:00:00 2001
+From: Pankaj Kumar <pankaj.kr@huawei.com>
+Date: Thu, 13 Oct 2016 22:26:42 +0800
+Subject: [PATCH 292/308] HBASE-16807, RegionServer will fail to report new
+ active Hmaster until HMaster/RegionServer failover.
+
+Reason: Bug
+Author: Pankaj Kumar
+Ref: CDH-50443
+
+Change-Id: I0dad3825078d30d36eb565027e141a1da7aadcea
+Signed-off-by: chenheng <chenheng@apache.org>
+---
+ .../hadoop/hbase/regionserver/HRegionServer.java   |   18 +++++++++++++++---
+ .../TestRegionServerReportForDuty.java             |    4 ++--
+ 2 files changed, 17 insertions(+), 5 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
+index 2b2dc03..cc398c3 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
+@@ -1176,7 +1176,7 @@ public class HRegionServer extends HasThread implements
+       }
+       // Couldn't connect to the master, get location from zk and reconnect
+       // Method blocks until new master is found or we are stopped
+-      createRegionServerStatusStub();
++      createRegionServerStatusStub(true);
+     }
+   }
+ 
+@@ -2213,12 +2213,24 @@ public class HRegionServer extends HasThread implements
+    */
+   @VisibleForTesting
+   protected synchronized ServerName createRegionServerStatusStub() {
++    // Create RS stub without refreshing the master node from ZK, use cached data
++    return createRegionServerStatusStub(false);
++  }
++
++  /**
++   * Get the current master from ZooKeeper and open the RPC connection to it. To get a fresh
++   * connection, the current rssStub must be null. Method will block until a master is available.
++   * You can break from this block by requesting the server stop.
++   * @param refresh If true then master address will be read from ZK, otherwise use cached data
++   * @return master + port, or null if server has been stopped
++   */
++  @VisibleForTesting
++  protected synchronized ServerName createRegionServerStatusStub(boolean refresh) {
+     if (rssStub != null) {
+       return masterAddressTracker.getMasterAddress();
+     }
+     ServerName sn = null;
+     long previousLogTime = 0;
+-    boolean refresh = false; // for the first time, use cached data
+     RegionServerStatusService.BlockingInterface intf = null;
+     boolean interrupted = false;
+     try {
+@@ -2293,7 +2305,7 @@ public class HRegionServer extends HasThread implements
+    * @throws IOException
+    */
+   private RegionServerStartupResponse reportForDuty() throws IOException {
+-    ServerName masterServerName = createRegionServerStatusStub();
++    ServerName masterServerName = createRegionServerStatusStub(true);
+     if (masterServerName == null) return null;
+     RegionServerStartupResponse result = null;
+     try {
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestRegionServerReportForDuty.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestRegionServerReportForDuty.java
+index 5778c6c..77cb5b7 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestRegionServerReportForDuty.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestRegionServerReportForDuty.java
+@@ -166,8 +166,8 @@ public class TestRegionServerReportForDuty {
+     }
+ 
+     @Override
+-    protected synchronized ServerName createRegionServerStatusStub() {
+-      sn = super.createRegionServerStatusStub();
++    protected synchronized ServerName createRegionServerStatusStub(boolean refresh) {
++      sn = super.createRegionServerStatusStub(refresh);
+       rpcStubCreatedFlag = true;
+ 
+       // Wait for master switch over. Only do this for the second region server.
+-- 
+1.7.9.5
+

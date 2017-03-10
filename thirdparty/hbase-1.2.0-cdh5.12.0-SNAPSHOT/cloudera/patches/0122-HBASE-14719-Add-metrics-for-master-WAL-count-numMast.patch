@@ -1,0 +1,472 @@
+From 69c62a4d2884886e37652b563c39d6304ee99e59 Mon Sep 17 00:00:00 2001
+From: Vrishal Kulkarni <vrishal@fb.com>
+Date: Fri, 20 Nov 2015 06:57:18 -0800
+Subject: [PATCH 122/308] HBASE-14719 Add metrics for master WAL count
+ (numMasterWALs). Metric numMasterWALs appears as
+ follows in metrics dump
+
+{
+    "name" : "Hadoop:service=HBase,name=Master,sub=Procedure",
+    "modelerType" : "Master,sub=Procedure",
+    "tag.Context" : "master",
+    "tag.Hostname" : "vrishal-mbp",
+    "numMasterWALs" : 1
+},
+
+Change-Id: Ia58e6f266583284306df0b8c46bbf6b83701defd
+---
+ .../hbase/master/MetricsMasterProcSource.java      |   53 ++++++++++++++
+ .../master/MetricsMasterProcSourceFactory.java     |   28 ++++++++
+ .../hadoop/hbase/master/MetricsMasterSource.java   |    1 -
+ .../hadoop/hbase/master/MetricsMasterWrapper.java  |    5 ++
+ .../master/MetricsMasterProcSourceFactoryImpl.java |   38 ++++++++++
+ .../hbase/master/MetricsMasterProcSourceImpl.java  |   75 ++++++++++++++++++++
+ ...oop.hbase.master.MetricsMasterProcSourceFactory |   18 +++++
+ .../master/TestMetricsMasterProcSourceImpl.java    |   46 ++++++++++++
+ .../procedure2/store/wal/ProcedureWALFile.java     |    2 +-
+ .../org/apache/hadoop/hbase/master/HMaster.java    |    4 ++
+ .../apache/hadoop/hbase/master/MetricsMaster.java  |   10 ++-
+ .../hbase/master/MetricsMasterWrapperImpl.java     |    6 ++
+ .../hadoop/hbase/master/TestMasterMetrics.java     |    6 ++
+ .../hbase/master/TestMasterMetricsWrapper.java     |    3 +-
+ 14 files changed, 289 insertions(+), 6 deletions(-)
+ create mode 100644 hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/master/MetricsMasterProcSource.java
+ create mode 100644 hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/master/MetricsMasterProcSourceFactory.java
+ create mode 100644 hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/master/MetricsMasterProcSourceFactoryImpl.java
+ create mode 100644 hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/master/MetricsMasterProcSourceImpl.java
+ create mode 100644 hbase-hadoop2-compat/src/main/resources/META-INF/services/org.apache.hadoop.hbase.master.MetricsMasterProcSourceFactory
+ create mode 100644 hbase-hadoop2-compat/src/test/java/org/apache/hadoop/hbase/master/TestMetricsMasterProcSourceImpl.java
+
+diff --git a/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/master/MetricsMasterProcSource.java b/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/master/MetricsMasterProcSource.java
+new file mode 100644
+index 0000000..51a17a8
+--- /dev/null
++++ b/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/master/MetricsMasterProcSource.java
+@@ -0,0 +1,53 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.hbase.master;
++
++import org.apache.hadoop.hbase.metrics.BaseSource;
++
++/**
++ * Interface that classes that expose metrics about the master will implement.
++ */
++public interface MetricsMasterProcSource extends BaseSource {
++
++  /**
++   * The name of the metrics
++   */
++  String METRICS_NAME = "Procedure";
++
++  /**
++   * The context metrics will be under.
++   */
++  String METRICS_CONTEXT = "master";
++
++  /**
++   * The name of the metrics context that metrics will be under in jmx
++   */
++  String METRICS_JMX_CONTEXT = "Master,sub=" + METRICS_NAME;
++
++  /**
++   * Description
++   */
++  String METRICS_DESCRIPTION = "Metrics about HBase master procedure";
++
++  // Strings used for exporting to metrics system.
++  String NUM_MASTER_WALS_NAME = "numMasterWALs";
++
++  String NUM_MASTER_WALS_DESC = "Number of master WAL files";
++
++}
+diff --git a/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/master/MetricsMasterProcSourceFactory.java b/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/master/MetricsMasterProcSourceFactory.java
+new file mode 100644
+index 0000000..b282e06
+--- /dev/null
++++ b/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/master/MetricsMasterProcSourceFactory.java
+@@ -0,0 +1,28 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.hbase.master;
++
++/**
++ * Interface of a factory to create MetricsMasterSource when given a MetricsMasterWrapper
++ */
++public interface MetricsMasterProcSourceFactory {
++
++  MetricsMasterProcSource create(MetricsMasterWrapper masterWrapper);
++
++}
+diff --git a/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/master/MetricsMasterSource.java b/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/master/MetricsMasterSource.java
+index 7dcb500..ab621cc 100644
+--- a/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/master/MetricsMasterSource.java
++++ b/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/master/MetricsMasterSource.java
+@@ -58,7 +58,6 @@ public interface MetricsMasterSource extends BaseSource {
+   String CLUSTER_ID_NAME = "clusterId";
+   String IS_ACTIVE_MASTER_NAME = "isActiveMaster";
+ 
+-
+   String CLUSTER_REQUESTS_NAME = "clusterRequests";
+   String MASTER_ACTIVE_TIME_DESC = "Master Active Time";
+   String MASTER_START_TIME_DESC = "Master Start Time";
+diff --git a/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/master/MetricsMasterWrapper.java b/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/master/MetricsMasterWrapper.java
+index 644522a..678db69 100644
+--- a/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/master/MetricsMasterWrapper.java
++++ b/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/master/MetricsMasterWrapper.java
+@@ -107,4 +107,9 @@ public interface MetricsMasterWrapper {
+    */
+   int getNumDeadRegionServers();
+ 
++  /**
++   * Get the number of master WAL files.
++   */
++  long getNumWALFiles();
++
+ }
+diff --git a/hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/master/MetricsMasterProcSourceFactoryImpl.java b/hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/master/MetricsMasterProcSourceFactoryImpl.java
+new file mode 100644
+index 0000000..e4110f6
+--- /dev/null
++++ b/hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/master/MetricsMasterProcSourceFactoryImpl.java
+@@ -0,0 +1,38 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.hbase.master;
++
++import org.apache.hadoop.hbase.classification.InterfaceAudience;
++
++/**
++ * Factory to create MetricsMasterProcSource when given a MetricsMasterWrapper
++ */
++@InterfaceAudience.Private
++public class MetricsMasterProcSourceFactoryImpl implements MetricsMasterProcSourceFactory {
++
++  private MetricsMasterProcSource masterProcSource;
++
++  @Override
++  public synchronized MetricsMasterProcSource create(MetricsMasterWrapper masterWrapper) {
++    if (masterProcSource == null) {
++      masterProcSource = new MetricsMasterProcSourceImpl(masterWrapper);
++    }
++    return masterProcSource;
++  }
++}
+diff --git a/hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/master/MetricsMasterProcSourceImpl.java b/hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/master/MetricsMasterProcSourceImpl.java
+new file mode 100644
+index 0000000..0375e37
+--- /dev/null
++++ b/hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/master/MetricsMasterProcSourceImpl.java
+@@ -0,0 +1,75 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.hbase.master;
++
++import org.apache.hadoop.hbase.classification.InterfaceAudience;
++import org.apache.hadoop.hbase.metrics.BaseSourceImpl;
++import org.apache.hadoop.metrics2.MetricsCollector;
++import org.apache.hadoop.metrics2.MetricsRecordBuilder;
++import org.apache.hadoop.metrics2.lib.Interns;
++
++/**
++ * Hadoop2 implementation of MetricsMasterSource.
++ *
++ * Implements BaseSource through BaseSourceImpl, following the pattern
++ */
++@InterfaceAudience.Private
++public class MetricsMasterProcSourceImpl
++    extends BaseSourceImpl implements MetricsMasterProcSource {
++
++  private final MetricsMasterWrapper masterWrapper;
++
++  public MetricsMasterProcSourceImpl(MetricsMasterWrapper masterWrapper) {
++    this(METRICS_NAME,
++        METRICS_DESCRIPTION,
++        METRICS_CONTEXT,
++        METRICS_JMX_CONTEXT,
++        masterWrapper);
++  }
++
++  public MetricsMasterProcSourceImpl(String metricsName,
++                                     String metricsDescription,
++                                     String metricsContext,
++                                     String metricsJmxContext,
++                                     MetricsMasterWrapper masterWrapper) {
++    super(metricsName, metricsDescription, metricsContext, metricsJmxContext);
++    this.masterWrapper = masterWrapper;
++
++  }
++
++  @Override
++  public void init() {
++    super.init();
++  }
++
++  @Override
++  public void getMetrics(MetricsCollector metricsCollector, boolean all) {
++    MetricsRecordBuilder metricsRecordBuilder = metricsCollector.addRecord(metricsName);
++
++    // masterWrapper can be null because this function is called inside of init.
++    if (masterWrapper != null) {
++      metricsRecordBuilder
++          .addGauge(Interns.info(NUM_MASTER_WALS_NAME, NUM_MASTER_WALS_DESC),
++              masterWrapper.getNumWALFiles());
++    }
++
++    metricsRegistry.snapshot(metricsRecordBuilder, all);
++  }
++
++}
+diff --git a/hbase-hadoop2-compat/src/main/resources/META-INF/services/org.apache.hadoop.hbase.master.MetricsMasterProcSourceFactory b/hbase-hadoop2-compat/src/main/resources/META-INF/services/org.apache.hadoop.hbase.master.MetricsMasterProcSourceFactory
+new file mode 100644
+index 0000000..3896388
+--- /dev/null
++++ b/hbase-hadoop2-compat/src/main/resources/META-INF/services/org.apache.hadoop.hbase.master.MetricsMasterProcSourceFactory
+@@ -0,0 +1,18 @@
++# Licensed to the Apache Software Foundation (ASF) under one
++# or more contributor license agreements.  See the NOTICE file
++# distributed with this work for additional information
++# regarding copyright ownership.  The ASF licenses this file
++# to you under the Apache License, Version 2.0 (the
++# "License"); you may not use this file except in compliance
++# with the License.  You may obtain a copy of the License at
++#
++#   http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing,
++# software distributed under the License is distributed on an
++# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
++# KIND, either express or implied.  See the License for the
++# specific language governing permissions and limitations
++# under the License.
++#
++org.apache.hadoop.hbase.master.MetricsMasterProcSourceFactoryImpl
+\ No newline at end of file
+diff --git a/hbase-hadoop2-compat/src/test/java/org/apache/hadoop/hbase/master/TestMetricsMasterProcSourceImpl.java b/hbase-hadoop2-compat/src/test/java/org/apache/hadoop/hbase/master/TestMetricsMasterProcSourceImpl.java
+new file mode 100644
+index 0000000..3fe60b8
+--- /dev/null
++++ b/hbase-hadoop2-compat/src/test/java/org/apache/hadoop/hbase/master/TestMetricsMasterProcSourceImpl.java
+@@ -0,0 +1,46 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.hbase.master;
++
++import org.apache.hadoop.hbase.CompatibilitySingletonFactory;
++import org.apache.hadoop.hbase.testclassification.MetricsTests;
++import org.apache.hadoop.hbase.testclassification.SmallTests;
++import org.junit.Test;
++import org.junit.experimental.categories.Category;
++
++import static org.junit.Assert.assertSame;
++import static org.junit.Assert.assertTrue;
++
++/**
++ *  Test for MetricsMasterProcSourceImpl
++ */
++@Category({MetricsTests.class, SmallTests.class})
++public class TestMetricsMasterProcSourceImpl {
++
++  @Test
++  public void testGetInstance() throws Exception {
++    MetricsMasterProcSourceFactory metricsMasterProcSourceFactory = CompatibilitySingletonFactory
++        .getInstance(MetricsMasterProcSourceFactory.class);
++    MetricsMasterProcSource masterProcSource = metricsMasterProcSourceFactory.create(null);
++    assertTrue(masterProcSource instanceof MetricsMasterProcSourceImpl);
++    assertSame(metricsMasterProcSourceFactory,
++            CompatibilitySingletonFactory.getInstance(MetricsMasterProcSourceFactory.class));
++  }
++
++}
+diff --git a/hbase-procedure/src/main/java/org/apache/hadoop/hbase/procedure2/store/wal/ProcedureWALFile.java b/hbase-procedure/src/main/java/org/apache/hadoop/hbase/procedure2/store/wal/ProcedureWALFile.java
+index 4f8a493..6493526 100644
+--- a/hbase-procedure/src/main/java/org/apache/hadoop/hbase/procedure2/store/wal/ProcedureWALFile.java
++++ b/hbase-procedure/src/main/java/org/apache/hadoop/hbase/procedure2/store/wal/ProcedureWALFile.java
+@@ -121,7 +121,7 @@ public class ProcedureWALFile implements Comparable<ProcedureWALFile> {
+   }
+ 
+   public long getSize() {
+-    return logStatus.getLen();
++    return logStatus != null ? logStatus.getLen() : 0;
+   }
+ 
+   public void removeFile() throws IOException {
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
+index f8e353f..d331f80 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
+@@ -2178,6 +2178,10 @@ public class HMaster extends HRegionServer implements MasterServices, Server {
+     return masterActiveTime;
+   }
+ 
++  public int getNumWALFiles() {
++    return procedureStore != null ? procedureStore.getActiveLogs().size() : 0;
++  }
++
+   public int getRegionServerInfoPort(final ServerName sn) {
+     RegionServerInfo info = this.regionServerTracker.getRegionServerInfo(sn);
+     if (info == null || info.getInfoPort() == 0) {
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MetricsMaster.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MetricsMaster.java
+index aeac924..d055853 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MetricsMaster.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MetricsMaster.java
+@@ -23,9 +23,6 @@ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.hbase.classification.InterfaceAudience;
+ import org.apache.hadoop.hbase.classification.InterfaceStability;
+ import org.apache.hadoop.hbase.CompatibilitySingletonFactory;
+-import org.apache.hadoop.hbase.master.MetricsMasterSource;
+-import org.apache.hadoop.hbase.master.MetricsMasterSourceFactory;
+-import org.apache.hadoop.hbase.master.MetricsMasterWrapper;
+ 
+ /**
+  * This class is for maintaining the various master statistics
+@@ -39,9 +36,12 @@ import org.apache.hadoop.hbase.master.MetricsMasterWrapper;
+ public class MetricsMaster {
+   private static final Log LOG = LogFactory.getLog(MetricsMaster.class);
+   private MetricsMasterSource masterSource;
++  private MetricsMasterProcSource masterProcSource;
+ 
+   public MetricsMaster(MetricsMasterWrapper masterWrapper) {
+     masterSource = CompatibilitySingletonFactory.getInstance(MetricsMasterSourceFactory.class).create(masterWrapper);
++    masterProcSource =
++            CompatibilitySingletonFactory.getInstance(MetricsMasterProcSourceFactory.class).create(masterWrapper);
+   }
+ 
+   // for unit-test usage
+@@ -49,6 +49,10 @@ public class MetricsMaster {
+     return masterSource;
+   }
+ 
++  public MetricsMasterProcSource getMetricsProcSource() {
++    return masterProcSource;
++  }
++
+   /**
+    * @param inc How much to add to requests.
+    */
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MetricsMasterWrapperImpl.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MetricsMasterWrapperImpl.java
+index 727f9b2..a935a37 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MetricsMasterWrapperImpl.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MetricsMasterWrapperImpl.java
+@@ -118,4 +118,10 @@ public class MetricsMasterWrapperImpl implements MetricsMasterWrapper {
+   public boolean getIsActiveMaster() {
+     return master.isActiveMaster();
+   }
++
++  @Override
++  public long getNumWALFiles() {
++    return master.getNumWALFiles();
++  }
++
+ }
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/TestMasterMetrics.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/TestMasterMetrics.java
+index b7e77fa..f6f9b49 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/TestMasterMetrics.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/TestMasterMetrics.java
+@@ -128,4 +128,10 @@ public class TestMasterMetrics {
+     metricsHelper.assertTag("clusterId", master.getClusterId(), masterSource);
+     metricsHelper.assertTag("zookeeperQuorum", master.getZooKeeper().getQuorum(), masterSource);
+   }
++
++  @Test
++  public void testDefaultMasterProcMetrics() throws Exception {
++    MetricsMasterProcSource masterSource = master.getMasterMetrics().getMetricsProcSource();
++    metricsHelper.assertGauge("numMasterWALs", master.getNumWALFiles(), masterSource);
++  }
+ }
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/TestMasterMetricsWrapper.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/TestMasterMetricsWrapper.java
+index 1232a40..00753f2 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/TestMasterMetricsWrapper.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/TestMasterMetricsWrapper.java
+@@ -72,5 +72,6 @@ public class TestMasterMetricsWrapper {
+     }
+     assertEquals(3, info.getNumRegionServers());
+     assertEquals(1, info.getNumDeadRegionServers());
++    assertEquals(1, info.getNumWALFiles());
+   }
+-}
+\ No newline at end of file
++}
+-- 
+1.7.9.5
+

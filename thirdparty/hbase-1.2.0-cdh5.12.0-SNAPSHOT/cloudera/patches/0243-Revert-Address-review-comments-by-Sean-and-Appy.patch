@@ -1,0 +1,2874 @@
+From 74f0da544b25e1b79ed4431c7837fd7c1dc82a88 Mon Sep 17 00:00:00 2001
+From: Michael Stack <stack@apache.org>
+Date: Fri, 10 Feb 2017 16:56:02 -0800
+Subject: [PATCH 243/308] Revert "Address review comments by Sean and Appy"
+ Revert mistaken push
+
+This reverts commit 376c706fc76370a0a76d71f3a4dafe1c9f556e53.
+---
+ .../java/org/apache/hadoop/hbase/ServerName.java   |  113 +++++++-----------
+ .../apache/hadoop/hbase/protobuf/ProtobufUtil.java |    8 +-
+ .../hadoop/hbase/client/TestAsyncProcess.java      |    6 +-
+ .../apache/hadoop/hbase/rsgroup/RSGroupInfo.java   |   24 ++--
+ .../java/org/apache/hadoop/hbase/util/Address.java |   81 -------------
+ .../hbase/rsgroup/IntegrationTestRSGroup.java      |   12 +-
+ hbase-rsgroup/pom.xml                              |   24 +++-
+ .../apache/hadoop/hbase/rsgroup/RSGroupAdmin.java  |   40 ++++---
+ .../hadoop/hbase/rsgroup/RSGroupAdminClient.java   |   47 ++++----
+ .../hadoop/hbase/rsgroup/RSGroupAdminEndpoint.java |   88 +++++++++-----
+ .../hadoop/hbase/rsgroup/RSGroupAdminServer.java   |  122 +++++++++-----------
+ .../hbase/rsgroup/RSGroupBasedLoadBalancer.java    |   33 ++++--
+ .../hadoop/hbase/rsgroup/RSGroupInfoManager.java   |   13 ++-
+ .../hbase/rsgroup/RSGroupInfoManagerImpl.java      |   56 +++++----
+ .../apache/hadoop/hbase/rsgroup/RSGroupSerDe.java  |    6 +-
+ .../hadoop/hbase/rsgroup/RSGroupableBalancer.java  |   10 +-
+ .../balancer/TestRSGroupBasedLoadBalancer.java     |   26 +++--
+ .../apache/hadoop/hbase/rsgroup/TestRSGroups.java  |   38 +++---
+ .../hadoop/hbase/rsgroup/TestRSGroupsBase.java     |   68 ++++++-----
+ .../hbase/rsgroup/TestRSGroupsOfflineMode.java     |   64 +++++-----
+ .../hbase/rsgroup/VerifyingRSGroupAdminClient.java |   14 ++-
+ .../coprocessor/BaseMasterAndRegionObserver.java   |    7 +-
+ .../hbase/coprocessor/BaseMasterObserver.java      |    7 +-
+ .../hadoop/hbase/coprocessor/MasterObserver.java   |    7 +-
+ .../hadoop/hbase/master/AssignmentManager.java     |    2 +-
+ .../apache/hadoop/hbase/master/LoadBalancer.java   |    7 +-
+ .../hadoop/hbase/master/MasterCoprocessorHost.java |    7 +-
+ .../hadoop/hbase/regionserver/HRegionServer.java   |    2 +-
+ .../hbase/security/access/AccessController.java    |    5 +-
+ .../org/apache/hadoop/hbase/TestServerName.java    |   15 ++-
+ .../hbase/coprocessor/TestMasterObserver.java      |    6 +-
+ .../master/balancer/TestRegionLocationFinder.java  |    5 +-
+ hbase-shell/src/main/ruby/hbase/rsgroup_admin.rb   |    9 +-
+ .../main/ruby/shell/commands/balance_rsgroup.rb    |    3 +
+ .../src/main/ruby/shell/commands/get_rsgroup.rb    |    7 +-
+ .../main/ruby/shell/commands/get_server_rsgroup.rb |    5 +-
+ .../main/ruby/shell/commands/get_table_rsgroup.rb  |    3 +
+ .../src/main/ruby/shell/commands/list_rsgroups.rb  |    5 +-
+ .../ruby/shell/commands/move_rsgroup_servers.rb    |    3 +
+ .../ruby/shell/commands/move_rsgroup_tables.rb     |    3 +
+ .../src/main/ruby/shell/commands/remove_rsgroup.rb |    3 +
+ .../src/test/ruby/shell/rsgroup_shell_test.rb      |    2 +-
+ 42 files changed, 511 insertions(+), 495 deletions(-)
+ delete mode 100644 hbase-common/src/main/java/org/apache/hadoop/hbase/util/Address.java
+
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/ServerName.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/ServerName.java
+index a1399a9..b4e1316 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/ServerName.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/ServerName.java
+@@ -18,11 +18,8 @@
+  */
+ package org.apache.hadoop.hbase;
+ 
+-import java.io.Serializable;
+-import java.util.ArrayList;
+-import java.util.List;
+-import java.util.Locale;
+-import java.util.regex.Pattern;
++import com.google.common.net.InetAddresses;
++import com.google.protobuf.InvalidProtocolBufferException;
+ 
+ import org.apache.hadoop.hbase.classification.InterfaceAudience;
+ import org.apache.hadoop.hbase.classification.InterfaceStability;
+@@ -31,15 +28,21 @@ import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
+ import org.apache.hadoop.hbase.protobuf.generated.ZooKeeperProtos;
+ import org.apache.hadoop.hbase.util.Addressing;
+ import org.apache.hadoop.hbase.util.Bytes;
+-import org.apache.hadoop.hbase.util.Address;
+ 
++import com.google.common.net.HostAndPort;
+ import com.google.common.net.InetAddresses;
+ import com.google.protobuf.InvalidProtocolBufferException;
+ 
++import java.io.Serializable;
++import java.util.ArrayList;
++import java.util.List;
++import java.util.Locale;
++import java.util.regex.Pattern;
++
+ /**
+- * Name of a particular incarnation of an HBase Server.
+- * A {@link ServerName} is used uniquely identifying a server instance in a cluster and is made
+- * of the combination of hostname, port, and startcode.  The startcode distinguishes restarted
++ * Instance of an HBase ServerName.
++ * A server name is used uniquely identifying a server instance in a cluster and is made
++ * of the combination of hostname, port, and startcode.  The startcode distingushes restarted
+  * servers on same hostname and port (startcode is usually timestamp of server startup). The
+  * {@link #toString()} format of ServerName is safe to use in the  filesystem and as znode name
+  * up in ZooKeeper.  Its format is:
+@@ -50,17 +53,13 @@ import com.google.protobuf.InvalidProtocolBufferException;
+  * the {@link #toString()} would be <code>www.example.org,1234,1212121212</code>.
+  *
+  * <p>You can obtain a versioned serialized form of this class by calling
+- * {@link #getVersionedBytes()}.  To deserialize, call
+- * {@link #parseVersionedServerName(byte[])}.
+- * 
+- * <p>Use {@link #getAddress()} to obtain the Server hostname + port
+- * (Endpoint/Socket Address).
++ * {@link #getVersionedBytes()}.  To deserialize, call {@link #parseVersionedServerName(byte[])}
+  *
+  * <p>Immutable.
+  */
+ @InterfaceAudience.Public
+ @InterfaceStability.Evolving
+-public class ServerName implements Comparable<ServerName>, Serializable {
++  public class ServerName implements Comparable<ServerName>, Serializable {
+   private static final long serialVersionUID = 1367463982557264981L;
+ 
+   /**
+@@ -94,8 +93,10 @@ public class ServerName implements Comparable<ServerName>, Serializable {
+   public static final String UNKNOWN_SERVERNAME = "#unknown#";
+ 
+   private final String servername;
++  private final String hostnameOnly;
++  private final int port;
+   private final long startcode;
+-  private transient Address address;
++  private transient HostAndPort hostAndPort;
+ 
+   /**
+    * Cached versioned bytes of this ServerName instance.
+@@ -105,33 +106,18 @@ public class ServerName implements Comparable<ServerName>, Serializable {
+   public static final List<ServerName> EMPTY_SERVER_LIST = new ArrayList<ServerName>(0);
+ 
+   private ServerName(final String hostname, final int port, final long startcode) {
+-    this(Address.fromParts(hostname, port), startcode);
+-  }
+-
+-  private ServerName(final Address address, final long startcode) {
+-    // Use HostAndPort to host port and hostname. Does validation and can do ipv6
+-    this.address = address;
++    // Drop the domain is there is one; no need of it in a local cluster.  With it, we get long
++    // unwieldy names.
++    this.hostnameOnly = hostname;
++    this.port = port;
+     this.startcode = startcode;
+-    this.servername = getServerName(this.address.getHostname(),
+-        this.address.getPort(), startcode);
+-  }
+-
+-  private ServerName(final String serverName) {
+-    this(parseHostname(serverName), parsePort(serverName),
+-      parseStartcode(serverName));
+-  }
+-
+-  private ServerName(final String hostAndPort, final long startCode) {
+-    this(Address.fromString(hostAndPort), startCode);
++    this.servername = getServerName(hostname, port, startcode);
+   }
+ 
+   /**
+    * @param hostname
+    * @return hostname minus the domain, if there is one (will do pass-through on ip addresses)
+-   * @deprecated Since 2.0. This is for internal use only.
+    */
+-  @Deprecated
+-  // Make this private in hbase-3.0.
+   static String getHostNameMinusDomain(final String hostname) {
+     if (InetAddresses.isInetAddress(hostname)) return hostname;
+     String [] parts = hostname.split("\\.");
+@@ -139,11 +125,16 @@ public class ServerName implements Comparable<ServerName>, Serializable {
+     return parts[0];
+   }
+ 
+-  /**
+-   * @deprecated Since 2.0. Use {@link #valueOf(String)}
+-   */
+-  @Deprecated
+-  // This is unused. Get rid of it.
++  private ServerName(final String serverName) {
++    this(parseHostname(serverName), parsePort(serverName),
++      parseStartcode(serverName));
++  }
++
++  private ServerName(final String hostAndPort, final long startCode) {
++    this(Addressing.parseHostname(hostAndPort),
++      Addressing.parsePort(hostAndPort), startCode);
++  }
++
+   public static String parseHostname(final String serverName) {
+     if (serverName == null || serverName.length() <= 0) {
+       throw new IllegalArgumentException("Passed hostname is null or empty");
+@@ -155,21 +146,11 @@ public class ServerName implements Comparable<ServerName>, Serializable {
+     return serverName.substring(0, index);
+   }
+ 
+-  /**
+-   * @deprecated Since 2.0. Use {@link #valueOf(String)}
+-   */
+-  @Deprecated
+-  // This is unused. Get rid of it.
+   public static int parsePort(final String serverName) {
+     String [] split = serverName.split(SERVERNAME_SEPARATOR);
+     return Integer.parseInt(split[1]);
+   }
+ 
+-  /**
+-   * @deprecated Since 2.0. Use {@link #valueOf(String)}
+-   */
+-  @Deprecated
+-  // This is unused. Get rid of it.
+   public static long parseStartcode(final String serverName) {
+     int index = serverName.lastIndexOf(SERVERNAME_SEPARATOR);
+     return Long.parseLong(serverName.substring(index + 1));
+@@ -215,8 +196,7 @@ public class ServerName implements Comparable<ServerName>, Serializable {
+    */
+   public String toShortString() {
+     return Addressing.createHostAndPortStr(
+-        getHostNameMinusDomain(this.address.getHostname()),
+-        this.address.getPort());
++        getHostNameMinusDomain(hostnameOnly), port);
+   }
+ 
+   /**
+@@ -235,11 +215,11 @@ public class ServerName implements Comparable<ServerName>, Serializable {
+   }
+ 
+   public String getHostname() {
+-    return this.address.getHostname();
++    return hostnameOnly;
+   }
+ 
+   public int getPort() {
+-    return this.address.getPort();
++    return port;
+   }
+ 
+   public long getStartcode() {
+@@ -253,10 +233,7 @@ public class ServerName implements Comparable<ServerName>, Serializable {
+    * @param startcode
+    * @return Server name made of the concatenation of hostname, port and
+    * startcode formatted as <code>&lt;hostname&gt; ',' &lt;port&gt; ',' &lt;startcode&gt;</code>
+-   * @deprecated Since 2.0. Use {@link ServerName#valueOf(String, int, long)} instead.
+    */
+-  @Deprecated
+-  // TODO: Make this private in hbase-3.0.
+   static String getServerName(String hostName, int port, long startcode) {
+     final StringBuilder name = new StringBuilder(hostName.length() + 1 + 5 + 1 + 13);
+     name.append(hostName.toLowerCase(Locale.ROOT));
+@@ -272,9 +249,7 @@ public class ServerName implements Comparable<ServerName>, Serializable {
+    * @param startcode
+    * @return Server name made of the concatenation of hostname, port and
+    * startcode formatted as <code>&lt;hostname&gt; ',' &lt;port&gt; ',' &lt;startcode&gt;</code>
+-   * @deprecated Since 2.0. Use {@link ServerName#valueOf(String, long)} instead.
+    */
+-  @Deprecated
+   public static String getServerName(final String hostAndPort,
+       final long startcode) {
+     int index = hostAndPort.indexOf(":");
+@@ -286,23 +261,22 @@ public class ServerName implements Comparable<ServerName>, Serializable {
+   /**
+    * @return Hostname and port formatted as described at
+    * {@link Addressing#createHostAndPortStr(String, int)}
+-   * @deprecated Since 2.0. Use {@link #getAddress()} instead.
+    */
+-  @Deprecated
+   public String getHostAndPort() {
+-    return this.address.toString();
++    return Addressing.createHostAndPortStr(hostnameOnly, port);
+   }
+ 
+-  public Address getAddress() {
+-    return this.address;
++  public HostAndPort getHostPort() {
++    if (hostAndPort == null) {
++      hostAndPort = HostAndPort.fromParts(hostnameOnly, port);
++    }
++    return hostAndPort;
+   }
+ 
+   /**
+    * @param serverName ServerName in form specified by {@link #getServerName()}
+    * @return The server start code parsed from <code>servername</code>
+-   * @deprecated Since 2.0. Use instance of ServerName to pull out start code.
+    */
+-  @Deprecated
+   public static long getServerStartcodeFromServerName(final String serverName) {
+     int index = serverName.lastIndexOf(SERVERNAME_SEPARATOR);
+     return Long.parseLong(serverName.substring(index + 1));
+@@ -312,9 +286,7 @@ public class ServerName implements Comparable<ServerName>, Serializable {
+    * Utility method to excise the start code from a server name
+    * @param inServerName full server name
+    * @return server name less its start code
+-   * @deprecated Since 2.0. Use {@link #getAddress()}
+    */
+-  @Deprecated
+   public static String getServerNameLessStartCode(String inServerName) {
+     if (inServerName != null && inServerName.length() > 0) {
+       int index = inServerName.lastIndexOf(SERVERNAME_SEPARATOR);
+@@ -354,7 +326,6 @@ public class ServerName implements Comparable<ServerName>, Serializable {
+    */
+   public static boolean isSameHostnameAndPort(final ServerName left,
+       final ServerName right) {
+-    // TODO: Make this left.getAddress().equals(right.getAddress())
+     if (left == null) return false;
+     if (right == null) return false;
+     return left.getHostname().compareToIgnoreCase(right.getHostname()) == 0 &&
+@@ -443,4 +414,4 @@ public class ServerName implements Comparable<ServerName>, Serializable {
+     int port = Addressing.parsePort(str);
+     return valueOf(hostname, port, -1L);
+   }
+-}
+\ No newline at end of file
++}
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/protobuf/ProtobufUtil.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/protobuf/ProtobufUtil.java
+index 1531c86..6be8978 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/protobuf/ProtobufUtil.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/protobuf/ProtobufUtil.java
+@@ -21,6 +21,7 @@ package org.apache.hadoop.hbase.protobuf;
+ import com.google.common.collect.ArrayListMultimap;
+ import com.google.common.collect.ListMultimap;
+ import com.google.common.collect.Lists;
++import com.google.common.net.HostAndPort;
+ import com.google.protobuf.ByteString;
+ import com.google.protobuf.CodedInputStream;
+ import com.google.protobuf.InvalidProtocolBufferException;
+@@ -155,7 +156,6 @@ import org.apache.hadoop.hbase.security.access.UserPermission;
+ import org.apache.hadoop.hbase.security.token.AuthenticationTokenIdentifier;
+ import org.apache.hadoop.hbase.security.visibility.Authorizations;
+ import org.apache.hadoop.hbase.security.visibility.CellVisibility;
+-import org.apache.hadoop.hbase.util.Address;
+ import org.apache.hadoop.hbase.util.ByteStringer;
+ import org.apache.hadoop.hbase.util.Bytes;
+ import org.apache.hadoop.hbase.util.DynamicClassLoader;
+@@ -3326,7 +3326,7 @@ public final class ProtobufUtil {
+   public static RSGroupInfo toGroupInfo(RSGroupProtos.RSGroupInfo proto) {
+     RSGroupInfo RSGroupInfo = new RSGroupInfo(proto.getName());
+     for(HBaseProtos.ServerName el: proto.getServersList()) {
+-      RSGroupInfo.addServer(Address.fromParts(el.getHostName(), el.getPort()));
++      RSGroupInfo.addServer(HostAndPort.fromParts(el.getHostName(), el.getPort()));
+     }
+     for(HBaseProtos.TableName pTableName: proto.getTablesList()) {
+       RSGroupInfo.addTable(ProtobufUtil.toTableName(pTableName));
+@@ -3342,9 +3342,9 @@ public final class ProtobufUtil {
+     }
+     List<HBaseProtos.ServerName> hostports =
+         new ArrayList<HBaseProtos.ServerName>(pojo.getServers().size());
+-    for(Address el: pojo.getServers()) {
++    for(HostAndPort el: pojo.getServers()) {
+       hostports.add(HBaseProtos.ServerName.newBuilder()
+-          .setHostName(el.getHostname())
++          .setHostName(el.getHostText())
+           .setPort(el.getPort())
+           .build());
+     }
+diff --git a/hbase-client/src/test/java/org/apache/hadoop/hbase/client/TestAsyncProcess.java b/hbase-client/src/test/java/org/apache/hadoop/hbase/client/TestAsyncProcess.java
+index 06f054b..cf5b7bf 100644
+--- a/hbase-client/src/test/java/org/apache/hadoop/hbase/client/TestAsyncProcess.java
++++ b/hbase-client/src/test/java/org/apache/hadoop/hbase/client/TestAsyncProcess.java
+@@ -83,9 +83,9 @@ public class TestAsyncProcess {
+   private static final byte[] FAILS = "FAILS".getBytes();
+   private static final Configuration conf = new Configuration();
+ 
+-  private static ServerName sn = ServerName.valueOf("s1,1,1");
+-  private static ServerName sn2 = ServerName.valueOf("s2,2,2");
+-  private static ServerName sn3 = ServerName.valueOf("s3,3,3");
++  private static ServerName sn = ServerName.valueOf("s1:1,1");
++  private static ServerName sn2 = ServerName.valueOf("s2:2,2");
++  private static ServerName sn3 = ServerName.valueOf("s3:3,3");
+   private static HRegionInfo hri1 =
+       new HRegionInfo(DUMMY_TABLE, DUMMY_BYTES_1, DUMMY_BYTES_2, false, 1);
+   private static HRegionInfo hri2 =
+diff --git a/hbase-common/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupInfo.java b/hbase-common/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupInfo.java
+index 362bb9e..0fb02d8 100644
+--- a/hbase-common/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupInfo.java
++++ b/hbase-common/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupInfo.java
+@@ -1,4 +1,6 @@
+ /**
++ * Copyright The Apache Software Foundation
++ *
+  * Licensed to the Apache Software Foundation (ASF) under one
+  * or more contributor license agreements.  See the NOTICE file
+  * distributed with this work for additional information
+@@ -19,6 +21,7 @@
+ package org.apache.hadoop.hbase.rsgroup;
+ 
+ import com.google.common.collect.Sets;
++import com.google.common.net.HostAndPort;
+ 
+ import java.util.Collection;
+ import java.util.NavigableSet;
+@@ -27,7 +30,6 @@ import java.util.Set;
+ import org.apache.hadoop.hbase.TableName;
+ import org.apache.hadoop.hbase.classification.InterfaceAudience;
+ import org.apache.hadoop.hbase.classification.InterfaceStability;
+-import org.apache.hadoop.hbase.util.Address;
+ 
+ /**
+  * Stores the group information of region server groups.
+@@ -35,19 +37,20 @@ import org.apache.hadoop.hbase.util.Address;
+ @InterfaceAudience.Public
+ @InterfaceStability.Evolving
+ public class RSGroupInfo {
++
+   public static final String DEFAULT_GROUP = "default";
+   public static final String NAMESPACEDESC_PROP_GROUP = "hbase.rsgroup.name";
+ 
+   private String name;
+-  private Set<Address> servers;
++  private Set<HostAndPort> servers;
+   private NavigableSet<TableName> tables;
+ 
+   public RSGroupInfo(String name) {
+-    this(name, Sets.<Address>newHashSet(), Sets.<TableName>newTreeSet());
++    this(name, Sets.<HostAndPort>newHashSet(), Sets.<TableName>newTreeSet());
+   }
+ 
+   RSGroupInfo(String name,
+-              Set<Address> servers,
++              Set<HostAndPort> servers,
+               NavigableSet<TableName> tables) {
+     this.name = name;
+     this.servers = servers;
+@@ -74,7 +77,7 @@ public class RSGroupInfo {
+    *
+    * @param hostPort the server
+    */
+-  public void addServer(Address hostPort){
++  public void addServer(HostAndPort hostPort){
+     servers.add(hostPort);
+   }
+ 
+@@ -83,7 +86,7 @@ public class RSGroupInfo {
+    *
+    * @param hostPort the servers
+    */
+-  public void addAllServers(Collection<Address> hostPort){
++  public void addAllServers(Collection<HostAndPort> hostPort){
+     servers.addAll(hostPort);
+   }
+ 
+@@ -91,7 +94,7 @@ public class RSGroupInfo {
+    * @param hostPort hostPort of the server
+    * @return true, if a server with hostPort is found
+    */
+-  public boolean containsServer(Address hostPort) {
++  public boolean containsServer(HostAndPort hostPort) {
+     return servers.contains(hostPort);
+   }
+ 
+@@ -100,7 +103,7 @@ public class RSGroupInfo {
+    *
+    * @return set of servers
+    */
+-  public Set<Address> getServers() {
++  public Set<HostAndPort> getServers() {
+     return servers;
+   }
+ 
+@@ -109,7 +112,7 @@ public class RSGroupInfo {
+    *
+    * @param hostPort HostPort of the server to remove
+    */
+-  public boolean removeServer(Address hostPort) {
++  public boolean removeServer(HostAndPort hostPort) {
+     return servers.remove(hostPort);
+   }
+ 
+@@ -180,4 +183,5 @@ public class RSGroupInfo {
+     result = 31 * result + name.hashCode();
+     return result;
+   }
+-}
+\ No newline at end of file
++
++}
+diff --git a/hbase-common/src/main/java/org/apache/hadoop/hbase/util/Address.java b/hbase-common/src/main/java/org/apache/hadoop/hbase/util/Address.java
+deleted file mode 100644
+index 8bef9f5..0000000
+--- a/hbase-common/src/main/java/org/apache/hadoop/hbase/util/Address.java
++++ /dev/null
+@@ -1,81 +0,0 @@
+-/**
+- * Licensed to the Apache Software Foundation (ASF) under one
+- * or more contributor license agreements.  See the NOTICE file
+- * distributed with this work for additional information
+- * regarding copyright ownership.  The ASF licenses this file
+- * to you under the Apache License, Version 2.0 (the
+- * "License"); you may not use this file except in compliance
+- * with the License.  You may obtain a copy of the License at
+- *
+- *     http://www.apache.org/licenses/LICENSE-2.0
+- *
+- * Unless required by applicable law or agreed to in writing, software
+- * distributed under the License is distributed on an "AS IS" BASIS,
+- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- * See the License for the specific language governing permissions and
+- * limitations under the License.
+- */
+-package org.apache.hadoop.hbase.util;
+-
+-import org.apache.hadoop.hbase.classification.InterfaceAudience;
+-import org.apache.hadoop.hbase.classification.InterfaceStability;
+-
+-import com.google.common.net.HostAndPort;
+-
+-/**
+- * An immutable type to hold a hostname and port, like a
+- * java.net.InetSocketAddress (but without danger of our calling
+- * resolve) or an Endpoint.
+- * <p>This class is a facade over Guava's {@link HostAndPort}. We
+- * cannot have Guava classes in our API hence this Type.
+- */
+-@InterfaceStability.Evolving
+-@InterfaceAudience.Public
+-public class Address {
+-  public HostAndPort hostAndPort;
+-
+-  private Address(HostAndPort hostAndPort) {
+-    this.hostAndPort = hostAndPort;
+-  }
+-
+-  public static Address fromParts(String hostname, int port) {
+-    return new Address(HostAndPort.fromParts(hostname, port));
+-  }
+-
+-  public static Address fromString(String hostnameAndPort) {
+-    return new Address(HostAndPort.fromString(hostnameAndPort));
+-  }
+-
+-  public String getHostname() {
+-    return this.hostAndPort.getHostText();
+-  }
+-
+-  public int getPort() {
+-    return this.hostAndPort.getPort();
+-  }
+-
+-  @Override
+-  public String toString() {
+-    return this.hostAndPort.toString();
+-  }
+-
+-  @Override
+-  // Don't use HostAndPort equals... It is wonky including
+-  // ipv6 brackets
+-  public boolean equals(Object other) {
+-    if (this == other) {
+-      return true;
+-    }
+-    if (other instanceof Address) {
+-      Address that = (Address)other;
+-      return this.getHostname().equals(that.getHostname()) &&
+-          this.getPort() == that.getPort();
+-    }
+-    return false;
+-  }
+-
+-  @Override
+-  public int hashCode() {
+-    return this.getHostname().hashCode() ^ getPort();
+-  }
+-}
+\ No newline at end of file
+diff --git a/hbase-it/src/test/java/org/apache/hadoop/hbase/rsgroup/IntegrationTestRSGroup.java b/hbase-it/src/test/java/org/apache/hadoop/hbase/rsgroup/IntegrationTestRSGroup.java
+index 2c7713d..fe9c58c2 100644
+--- a/hbase-it/src/test/java/org/apache/hadoop/hbase/rsgroup/IntegrationTestRSGroup.java
++++ b/hbase-it/src/test/java/org/apache/hadoop/hbase/rsgroup/IntegrationTestRSGroup.java
+@@ -26,7 +26,6 @@ import org.apache.hadoop.hbase.Waiter;
+ import org.apache.hadoop.hbase.testclassification.IntegrationTests;
+ import org.junit.After;
+ import org.junit.Before;
+-import org.junit.BeforeClass;
+ import org.junit.experimental.categories.Category;
+ 
+ /**
+@@ -38,11 +37,11 @@ import org.junit.experimental.categories.Category;
+ public class IntegrationTestRSGroup extends TestRSGroupsBase {
+   //Integration specific
+   private final static Log LOG = LogFactory.getLog(IntegrationTestRSGroup.class);
+-  private static boolean INITIALIZED = false;
++  private static boolean initialized = false;
+ 
+-  @BeforeClass
++  @Before
+   public void beforeMethod() throws Exception {
+-    if(!INITIALIZED) {
++    if(!initialized) {
+       LOG.info("Setting up IntegrationTestGroup");
+       LOG.info("Initializing cluster with " + NUM_SLAVES_BASE + " servers");
+       TEST_UTIL = new IntegrationTestingUtility();
+@@ -50,10 +49,10 @@ public class IntegrationTestRSGroup extends TestRSGroupsBase {
+       //set shared configs
+       admin = TEST_UTIL.getHBaseAdmin();
+       cluster = TEST_UTIL.getHBaseClusterInterface();
+-      rsGroupAdmin = new VerifyingRSGroupAdminClient(new RSGroupAdminClient(TEST_UTIL.getConnection()),
++      rsGroupAdmin = new VerifyingRSGroupAdminClient(rsGroupAdmin.newClient(TEST_UTIL.getConnection()),
+           TEST_UTIL.getConfiguration());
+       LOG.info("Done initializing cluster");
+-      INITIALIZED = true;
++      initialized = true;
+       //cluster may not be clean
+       //cleanup when initializing
+       afterMethod();
+@@ -63,7 +62,6 @@ public class IntegrationTestRSGroup extends TestRSGroupsBase {
+   @After
+   public void afterMethod() throws Exception {
+     LOG.info("Cleaning up previous test run");
+-    rsGroupAdmin.close();
+     //cleanup previous artifacts
+     deleteTableIfNecessary();
+     deleteNamespaceIfNecessary();
+diff --git a/hbase-rsgroup/pom.xml b/hbase-rsgroup/pom.xml
+index f2c2efd..d4cfedf 100644
+--- a/hbase-rsgroup/pom.xml
++++ b/hbase-rsgroup/pom.xml
+@@ -49,6 +49,23 @@
+           <skipAssembly>true</skipAssembly>
+         </configuration>
+       </plugin>
++      <plugin>
++        <artifactId>maven-surefire-plugin</artifactId>
++        <!-- Always skip the second part executions, since we only run
++          simple unit tests in this module -->
++        <executions>
++          <execution>
++            <id>secondPartTestsExecution</id>
++            <phase>test</phase>
++            <goals>
++              <goal>test</goal>
++            </goals>
++            <configuration>
++              <skip>true</skip>
++            </configuration>
++          </execution>
++        </executions>
++      </plugin>
+       <!-- Make a jar and put the sources in the jar -->
+       <plugin>
+         <groupId>org.apache.maven.plugins</groupId>
+@@ -119,6 +136,11 @@
+     </dependency>
+     <dependency>
+       <groupId>org.apache.hbase</groupId>
++      <artifactId>hbase-common</artifactId>
++      <type>test-jar</type>
++    </dependency>
++    <dependency>
++      <groupId>org.apache.hbase</groupId>
+       <artifactId>hbase-protocol</artifactId>
+     </dependency>
+     <dependency>
+@@ -204,7 +226,7 @@
+         <surefire.skipFirstPart>true</surefire.skipFirstPart>
+       </properties>
+     </profile>
+-    <!-- profile against Hadoop 1.0.x. It has to have the same
++    <!-- profile against Hadoop 1.0.x: This is the default. It has to have the same
+  activation property as the parent Hadoop 1.0.x profile to make sure it gets run at
+  the same time. -->
+     <profile>
+diff --git a/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupAdmin.java b/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupAdmin.java
+index 140ff08..f94d0f6 100644
+--- a/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupAdmin.java
++++ b/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupAdmin.java
+@@ -1,4 +1,6 @@
+ /**
++ * Copyright The Apache Software Foundation
++ *
+  * Licensed to the Apache Software Foundation (ASF) under one
+  * or more contributor license agreements.  See the NOTICE file
+  * distributed with this work for additional information
+@@ -17,6 +19,8 @@
+  */
+ package org.apache.hadoop.hbase.rsgroup;
+ 
++import com.google.common.net.HostAndPort;
++
+ import java.io.Closeable;
+ import java.io.IOException;
+ import java.util.List;
+@@ -24,20 +28,31 @@ import java.util.Set;
+ 
+ import org.apache.hadoop.hbase.TableName;
+ import org.apache.hadoop.hbase.classification.InterfaceAudience;
+-import org.apache.hadoop.hbase.util.Address;
++import org.apache.hadoop.hbase.client.Connection;
+ 
+ /**
+  * Group user API interface used between client and server.
+  */
+ @InterfaceAudience.Private
+-public interface RSGroupAdmin extends Closeable {
++public abstract class RSGroupAdmin implements Closeable {
++
++  /**
++   * Create a new RSGroupAdmin client
++   * @param conn connection RSGroupAdmin instance will use
++   * @return a new RSGroupAdmin client
++   * @throws IOException on failure to create new client
++   */
++  public static RSGroupAdmin newClient(Connection conn) throws IOException {
++    return new RSGroupAdminClient(conn);
++  }
++
+   /**
+    * Gets the regionserver group information.
+    *
+    * @param groupName the group name
+    * @return An instance of RSGroupInfo
+    */
+-  RSGroupInfo getRSGroupInfo(String groupName) throws IOException;
++  public abstract RSGroupInfo getRSGroupInfo(String groupName) throws IOException;
+ 
+   /**
+    * Gets the regionserver group info of table.
+@@ -45,7 +60,7 @@ public interface RSGroupAdmin extends Closeable {
+    * @param tableName the table name
+    * @return An instance of RSGroupInfo.
+    */
+-  RSGroupInfo getRSGroupInfoOfTable(TableName tableName) throws IOException;
++  public abstract RSGroupInfo getRSGroupInfoOfTable(TableName tableName) throws IOException;
+ 
+   /**
+    * Move a set of serves to another group
+@@ -55,8 +70,7 @@ public interface RSGroupAdmin extends Closeable {
+    * @param targetGroup the target group
+    * @throws java.io.IOException Signals that an I/O exception has occurred.
+    */
+-  void moveServers(Set<Address> servers, String targetGroup)
+-  throws IOException;
++  public abstract void moveServers(Set<HostAndPort> servers, String targetGroup) throws IOException;
+ 
+   /**
+    * Move tables to a new group.
+@@ -65,21 +79,21 @@ public interface RSGroupAdmin extends Closeable {
+    * @param targetGroup target group
+    * @throws java.io.IOException on failure to move tables
+    */
+-  void moveTables(Set<TableName> tables, String targetGroup) throws IOException;
++  public abstract void moveTables(Set<TableName> tables, String targetGroup) throws IOException;
+ 
+   /**
+    * Add a new group
+    * @param name name of the group
+    * @throws java.io.IOException on failure to add group
+    */
+-  void addRSGroup(String name) throws IOException;
++  public abstract void addRSGroup(String name) throws IOException;
+ 
+   /**
+    * Remove a regionserver group
+    * @param name name of the group
+    * @throws java.io.IOException on failure to remove group
+    */
+-  void removeRSGroup(String name) throws IOException;
++  public abstract void removeRSGroup(String name) throws IOException;
+ 
+   /**
+    * Balance the regions in a group
+@@ -88,14 +102,14 @@ public interface RSGroupAdmin extends Closeable {
+    * @return boolean whether balance ran or not
+    * @throws java.io.IOException on unexpected failure to balance group
+    */
+-  boolean balanceRSGroup(String name) throws IOException;
++  public abstract boolean balanceRSGroup(String name) throws IOException;
+ 
+   /**
+    * Lists the existing groups.
+    *
+    * @return Collection of RSGroupInfo.
+    */
+-  List<RSGroupInfo> listRSGroups() throws IOException;
++  public abstract List<RSGroupInfo> listRSGroups() throws IOException;
+ 
+   /**
+    * Retrieve the RSGroupInfo a server is affiliated to
+@@ -103,5 +117,5 @@ public interface RSGroupAdmin extends Closeable {
+    * @return RSGroupInfo associated with the server
+    * @throws java.io.IOException on unexpected failure to retrieve GroupInfo
+    */
+-  RSGroupInfo getRSGroupOfServer(Address hostPort) throws IOException;
+-}
+\ No newline at end of file
++  public abstract RSGroupInfo getRSGroupOfServer(HostAndPort hostPort) throws IOException;
++}
+diff --git a/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupAdminClient.java b/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupAdminClient.java
+index d3822a6..a7f14f7 100644
+--- a/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupAdminClient.java
++++ b/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupAdminClient.java
+@@ -1,4 +1,6 @@
+ /**
++ * Copyright The Apache Software Foundation
++ *
+  * Licensed to the Apache Software Foundation (ASF) under one
+  * or more contributor license agreements.  See the NOTICE file
+  * distributed with this work for additional information
+@@ -17,11 +19,17 @@
+  */
+ package org.apache.hadoop.hbase.rsgroup;
+ 
++import com.google.common.collect.Sets;
++import com.google.common.net.HostAndPort;
++import com.google.protobuf.ServiceException;
++
+ import java.io.IOException;
+ import java.util.ArrayList;
+ import java.util.List;
+ import java.util.Set;
+ 
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.hbase.TableName;
+ import org.apache.hadoop.hbase.classification.InterfaceAudience;
+ import org.apache.hadoop.hbase.classification.InterfaceStability;
+@@ -32,10 +40,6 @@ import org.apache.hadoop.hbase.protobuf.generated.RSGroupAdminProtos;
+ import org.apache.hadoop.hbase.protobuf.generated.RSGroupAdminProtos.GetRSGroupInfoOfServerResponse;
+ import org.apache.hadoop.hbase.protobuf.generated.RSGroupAdminProtos.GetRSGroupInfoOfTableResponse;
+ import org.apache.hadoop.hbase.protobuf.generated.RSGroupProtos;
+-import org.apache.hadoop.hbase.util.Address;
+-
+-import com.google.common.collect.Sets;
+-import com.google.protobuf.ServiceException;
+ 
+ 
+ /**
+@@ -43,11 +47,12 @@ import com.google.protobuf.ServiceException;
+  */
+ @InterfaceAudience.Public
+ @InterfaceStability.Evolving
+-class RSGroupAdminClient implements RSGroupAdmin {
+-  private RSGroupAdminProtos.RSGroupAdminService.BlockingInterface stub;
++class RSGroupAdminClient extends RSGroupAdmin {
++  private RSGroupAdminProtos.RSGroupAdminService.BlockingInterface proxy;
++  private static final Log LOG = LogFactory.getLog(RSGroupAdminClient.class);
+ 
+   public RSGroupAdminClient(Connection conn) throws IOException {
+-    stub = RSGroupAdminProtos.RSGroupAdminService.newBlockingStub(
++    proxy = RSGroupAdminProtos.RSGroupAdminService.newBlockingStub(
+         conn.getAdmin().coprocessorService());
+   }
+ 
+@@ -55,7 +60,7 @@ class RSGroupAdminClient implements RSGroupAdmin {
+   public RSGroupInfo getRSGroupInfo(String groupName) throws IOException {
+     try {
+       RSGroupAdminProtos.GetRSGroupInfoResponse resp =
+-        stub.getRSGroupInfo(null,
++        proxy.getRSGroupInfo(null,
+             RSGroupAdminProtos.GetRSGroupInfoRequest.newBuilder()
+                 .setRSGroupName(groupName).build());
+       if(resp.hasRSGroupInfo()) {
+@@ -74,7 +79,7 @@ class RSGroupAdminClient implements RSGroupAdmin {
+             .setTableName(ProtobufUtil.toProtoTableName(tableName)).build();
+ 
+     try {
+-      GetRSGroupInfoOfTableResponse resp = stub.getRSGroupInfoOfTable(null, request);
++      GetRSGroupInfoOfTableResponse resp = proxy.getRSGroupInfoOfTable(null, request);
+       if (resp.hasRSGroupInfo()) {
+         return ProtobufUtil.toGroupInfo(resp.getRSGroupInfo());
+       }
+@@ -85,11 +90,11 @@ class RSGroupAdminClient implements RSGroupAdmin {
+   }
+ 
+   @Override
+-  public void moveServers(Set<Address> servers, String targetGroup) throws IOException {
++  public void moveServers(Set<HostAndPort> servers, String targetGroup) throws IOException {
+     Set<HBaseProtos.ServerName> hostPorts = Sets.newHashSet();
+-    for(Address el: servers) {
++    for(HostAndPort el: servers) {
+       hostPorts.add(HBaseProtos.ServerName.newBuilder()
+-        .setHostName(el.getHostname())
++        .setHostName(el.getHostText())
+         .setPort(el.getPort())
+         .build());
+     }
+@@ -99,7 +104,7 @@ class RSGroupAdminClient implements RSGroupAdmin {
+             .addAllServers(hostPorts).build();
+ 
+     try {
+-      stub.moveServers(null, request);
++      proxy.moveServers(null, request);
+     } catch (ServiceException e) {
+       throw ProtobufUtil.getRemoteException(e);
+     }
+@@ -114,7 +119,7 @@ class RSGroupAdminClient implements RSGroupAdmin {
+       builder.addTableName(ProtobufUtil.toProtoTableName(tableName));
+     }
+     try {
+-      stub.moveTables(null, builder.build());
++      proxy.moveTables(null, builder.build());
+     } catch (ServiceException e) {
+       throw ProtobufUtil.getRemoteException(e);
+     }
+@@ -126,7 +131,7 @@ class RSGroupAdminClient implements RSGroupAdmin {
+         RSGroupAdminProtos.AddRSGroupRequest.newBuilder()
+             .setRSGroupName(groupName).build();
+     try {
+-      stub.addRSGroup(null, request);
++      proxy.addRSGroup(null, request);
+     } catch (ServiceException e) {
+       throw ProtobufUtil.getRemoteException(e);
+     }
+@@ -138,7 +143,7 @@ class RSGroupAdminClient implements RSGroupAdmin {
+         RSGroupAdminProtos.RemoveRSGroupRequest.newBuilder()
+             .setRSGroupName(name).build();
+     try {
+-      stub.removeRSGroup(null, request);
++      proxy.removeRSGroup(null, request);
+     } catch (ServiceException e) {
+       throw ProtobufUtil.getRemoteException(e);
+     }
+@@ -151,7 +156,7 @@ class RSGroupAdminClient implements RSGroupAdmin {
+             .setRSGroupName(name).build();
+ 
+     try {
+-      return stub.balanceRSGroup(null, request).getBalanceRan();
++      return proxy.balanceRSGroup(null, request).getBalanceRan();
+     } catch (ServiceException e) {
+       throw ProtobufUtil.getRemoteException(e);
+     }
+@@ -161,7 +166,7 @@ class RSGroupAdminClient implements RSGroupAdmin {
+   public List<RSGroupInfo> listRSGroups() throws IOException {
+     try {
+       List<RSGroupProtos.RSGroupInfo> resp =
+-          stub.listRSGroupInfos(null,
++          proxy.listRSGroupInfos(null,
+               RSGroupAdminProtos.ListRSGroupInfosRequest.newBuilder().build()).getRSGroupInfoList();
+       List<RSGroupInfo> result = new ArrayList<RSGroupInfo>(resp.size());
+       for(RSGroupProtos.RSGroupInfo entry: resp) {
+@@ -174,16 +179,16 @@ class RSGroupAdminClient implements RSGroupAdmin {
+   }
+ 
+   @Override
+-  public RSGroupInfo getRSGroupOfServer(Address hostPort) throws IOException {
++  public RSGroupInfo getRSGroupOfServer(HostAndPort hostPort) throws IOException {
+     RSGroupAdminProtos.GetRSGroupInfoOfServerRequest request =
+         RSGroupAdminProtos.GetRSGroupInfoOfServerRequest.newBuilder()
+             .setServer(HBaseProtos.ServerName.newBuilder()
+-                .setHostName(hostPort.getHostname())
++                .setHostName(hostPort.getHostText())
+                 .setPort(hostPort.getPort())
+                 .build())
+             .build();
+     try {
+-      GetRSGroupInfoOfServerResponse resp = stub.getRSGroupInfoOfServer(null, request);
++      GetRSGroupInfoOfServerResponse resp = proxy.getRSGroupInfoOfServer(null, request);
+       if (resp.hasRSGroupInfo()) {
+         return ProtobufUtil.toGroupInfo(resp.getRSGroupInfo());
+       }
+diff --git a/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupAdminEndpoint.java b/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupAdminEndpoint.java
+index 13afe3a..5ec97d7 100644
+--- a/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupAdminEndpoint.java
++++ b/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupAdminEndpoint.java
+@@ -1,4 +1,6 @@
+ /**
++ * Copyright The Apache Software Foundation
++ *
+  * Licensed to the Apache Software Foundation (ASF) under one
+  * or more contributor license agreements.  See the NOTICE file
+  * distributed with this work for additional information
+@@ -18,11 +20,19 @@
+ 
+ package org.apache.hadoop.hbase.rsgroup;
+ 
++import com.google.common.collect.Sets;
++import com.google.common.net.HostAndPort;
++import com.google.protobuf.RpcCallback;
++import com.google.protobuf.RpcController;
++import com.google.protobuf.Service;
++
+ import java.io.IOException;
+ import java.util.HashSet;
+ import java.util.List;
+ import java.util.Set;
+ 
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.hbase.Coprocessor;
+ import org.apache.hadoop.hbase.CoprocessorEnvironment;
+ import org.apache.hadoop.hbase.HColumnDescriptor;
+@@ -33,7 +43,6 @@ import org.apache.hadoop.hbase.NamespaceDescriptor;
+ import org.apache.hadoop.hbase.ProcedureInfo;
+ import org.apache.hadoop.hbase.ServerName;
+ import org.apache.hadoop.hbase.TableName;
+-import org.apache.hadoop.hbase.classification.InterfaceAudience;
+ import org.apache.hadoop.hbase.constraint.ConstraintException;
+ import org.apache.hadoop.hbase.coprocessor.CoprocessorService;
+ import org.apache.hadoop.hbase.coprocessor.MasterCoprocessorEnvironment;
+@@ -68,16 +77,12 @@ import org.apache.hadoop.hbase.protobuf.generated.RSGroupAdminProtos.MoveTablesR
+ import org.apache.hadoop.hbase.protobuf.generated.RSGroupAdminProtos.RSGroupAdminService;
+ import org.apache.hadoop.hbase.protobuf.generated.RSGroupAdminProtos.RemoveRSGroupRequest;
+ import org.apache.hadoop.hbase.protobuf.generated.RSGroupAdminProtos.RemoveRSGroupResponse;
+-import org.apache.hadoop.hbase.util.Address;
+ 
+-import com.google.common.collect.Sets;
+-import com.google.protobuf.RpcCallback;
+-import com.google.protobuf.RpcController;
+-import com.google.protobuf.Service;
+ 
+-@InterfaceAudience.Private
+ public class RSGroupAdminEndpoint extends RSGroupAdminService
+     implements CoprocessorService, Coprocessor, MasterObserver {
++
++  private static final Log LOG = LogFactory.getLog(RSGroupAdminEndpoint.class);
+   private MasterServices master = null;
+ 
+   private static RSGroupInfoManagerImpl groupInfoManager;
+@@ -113,94 +118,112 @@ public class RSGroupAdminEndpoint extends RSGroupAdminService
+   public void getRSGroupInfo(RpcController controller,
+                            GetRSGroupInfoRequest request,
+                            RpcCallback<GetRSGroupInfoResponse> done) {
+-    GetRSGroupInfoResponse.Builder builder = GetRSGroupInfoResponse.newBuilder();
++    GetRSGroupInfoResponse response = null;
+     try {
++      GetRSGroupInfoResponse.Builder builder =
++          GetRSGroupInfoResponse.newBuilder();
+       RSGroupInfo RSGroupInfo = groupAdminServer.getRSGroupInfo(request.getRSGroupName());
+       if(RSGroupInfo != null) {
+         builder.setRSGroupInfo(ProtobufUtil.toProtoGroupInfo(RSGroupInfo));
+       }
++      response = builder.build();
+     } catch (IOException e) {
+       ResponseConverter.setControllerException(controller, e);
+     }
+-    done.run(builder.build());
++    done.run(response);
+   }
+ 
+   @Override
+   public void getRSGroupInfoOfTable(RpcController controller,
+                                   GetRSGroupInfoOfTableRequest request,
+                                   RpcCallback<GetRSGroupInfoOfTableResponse> done) {
+-    GetRSGroupInfoOfTableResponse.Builder builder = GetRSGroupInfoOfTableResponse.newBuilder();
++    GetRSGroupInfoOfTableResponse response = null;
+     try {
++      GetRSGroupInfoOfTableResponse.Builder builder =
++          GetRSGroupInfoOfTableResponse.newBuilder();
+       TableName tableName = ProtobufUtil.toTableName(request.getTableName());
+       RSGroupInfo RSGroupInfo = groupAdminServer.getRSGroupInfoOfTable(tableName);
+-      if (RSGroupInfo != null) {
+-        builder.setRSGroupInfo(ProtobufUtil.toProtoGroupInfo(RSGroupInfo));
++      if (RSGroupInfo == null) {
++        response = builder.build();
++      } else {
++        response = builder.setRSGroupInfo(ProtobufUtil.toProtoGroupInfo(RSGroupInfo)).build();
+       }
+     } catch (IOException e) {
+       ResponseConverter.setControllerException(controller, e);
+     }
+-    done.run(builder.build());
++    done.run(response);
+   }
+ 
+   @Override
+   public void moveServers(RpcController controller,
+                           MoveServersRequest request,
+                           RpcCallback<MoveServersResponse> done) {
+-    RSGroupAdminProtos.MoveServersResponse.Builder builder =
+-        RSGroupAdminProtos.MoveServersResponse.newBuilder();
++    RSGroupAdminProtos.MoveServersResponse response = null;
+     try {
+-      Set<Address> hostPorts = Sets.newHashSet();
++      RSGroupAdminProtos.MoveServersResponse.Builder builder =
++          RSGroupAdminProtos.MoveServersResponse.newBuilder();
++      Set<HostAndPort> hostPorts = Sets.newHashSet();
+       for(HBaseProtos.ServerName el: request.getServersList()) {
+-        hostPorts.add(Address.fromParts(el.getHostName(), el.getPort()));
++        hostPorts.add(HostAndPort.fromParts(el.getHostName(), el.getPort()));
+       }
+       groupAdminServer.moveServers(hostPorts, request.getTargetGroup());
++      response = builder.build();
+     } catch (IOException e) {
+       ResponseConverter.setControllerException(controller, e);
+     }
+-    done.run(builder.build());
++    done.run(response);
+   }
+ 
+   @Override
+   public void moveTables(RpcController controller,
+                          MoveTablesRequest request,
+                          RpcCallback<MoveTablesResponse> done) {
+-    MoveTablesResponse.Builder builder = MoveTablesResponse.newBuilder();
++    MoveTablesResponse response = null;
+     try {
++      MoveTablesResponse.Builder builder =
++          MoveTablesResponse.newBuilder();
+       Set<TableName> tables = new HashSet<TableName>(request.getTableNameList().size());
+       for(HBaseProtos.TableName tableName: request.getTableNameList()) {
+         tables.add(ProtobufUtil.toTableName(tableName));
+       }
+       groupAdminServer.moveTables(tables, request.getTargetGroup());
++      response = builder.build();
+     } catch (IOException e) {
+       ResponseConverter.setControllerException(controller, e);
+     }
+-    done.run(builder.build());
++    done.run(response);
+   }
+ 
+   @Override
+   public void addRSGroup(RpcController controller,
+                        AddRSGroupRequest request,
+                        RpcCallback<AddRSGroupResponse> done) {
+-    AddRSGroupResponse.Builder builder = AddRSGroupResponse.newBuilder();
++    AddRSGroupResponse response = null;
+     try {
++      AddRSGroupResponse.Builder builder =
++          AddRSGroupResponse.newBuilder();
+       groupAdminServer.addRSGroup(request.getRSGroupName());
++      response = builder.build();
+     } catch (IOException e) {
+       ResponseConverter.setControllerException(controller, e);
+     }
+-    done.run(builder.build());
++    done.run(response);
+   }
+ 
+   @Override
+   public void removeRSGroup(RpcController controller,
+                           RemoveRSGroupRequest request,
+                           RpcCallback<RemoveRSGroupResponse> done) {
+-    RemoveRSGroupResponse.Builder builder = RemoveRSGroupResponse.newBuilder();
++    RemoveRSGroupResponse response = null;
+     try {
++      RemoveRSGroupResponse.Builder builder =
++          RemoveRSGroupResponse.newBuilder();
+       groupAdminServer.removeRSGroup(request.getRSGroupName());
++      response = builder.build();
+     } catch (IOException e) {
+       ResponseConverter.setControllerException(controller, e);
+     }
+-    done.run(builder.build());
++    done.run(response);
+   }
+ 
+   @Override
+@@ -221,15 +244,18 @@ public class RSGroupAdminEndpoint extends RSGroupAdminService
+   public void listRSGroupInfos(RpcController controller,
+                              ListRSGroupInfosRequest request,
+                              RpcCallback<ListRSGroupInfosResponse> done) {
+-    ListRSGroupInfosResponse.Builder builder = ListRSGroupInfosResponse.newBuilder();
++    ListRSGroupInfosResponse response = null;
+     try {
++      ListRSGroupInfosResponse.Builder builder =
++          ListRSGroupInfosResponse.newBuilder();
+       for(RSGroupInfo RSGroupInfo : groupAdminServer.listRSGroups()) {
+         builder.addRSGroupInfo(ProtobufUtil.toProtoGroupInfo(RSGroupInfo));
+       }
++      response = builder.build();
+     } catch (IOException e) {
+       ResponseConverter.setControllerException(controller, e);
+     }
+-    done.run(builder.build());
++    done.run(response);
+   }
+ 
+   @Override
+@@ -238,8 +264,8 @@ public class RSGroupAdminEndpoint extends RSGroupAdminService
+                                    RpcCallback<GetRSGroupInfoOfServerResponse> done) {
+     GetRSGroupInfoOfServerResponse.Builder builder = GetRSGroupInfoOfServerResponse.newBuilder();
+     try {
+-      Address hp =
+-          Address.fromParts(request.getServer().getHostName(), request.getServer().getPort());
++      HostAndPort hp =
++          HostAndPort.fromParts(request.getServer().getHostName(), request.getServer().getPort());
+       RSGroupInfo RSGroupInfo = groupAdminServer.getRSGroupOfServer(hp);
+       if (RSGroupInfo != null) {
+         builder.setRSGroupInfo(ProtobufUtil.toProtoGroupInfo(RSGroupInfo));
+@@ -768,14 +794,12 @@ public class RSGroupAdminEndpoint extends RSGroupAdminService
+   }
+ 
+   @Override
+-  public void preMoveServers(ObserverContext<MasterCoprocessorEnvironment> ctx,
+-      Set<Address>
++  public void preMoveServers(ObserverContext<MasterCoprocessorEnvironment> ctx, Set<HostAndPort>
+       servers, String targetGroup) throws IOException {
+   }
+ 
+   @Override
+-  public void postMoveServers(ObserverContext<MasterCoprocessorEnvironment> ctx,
+-      Set<Address>
++  public void postMoveServers(ObserverContext<MasterCoprocessorEnvironment> ctx, Set<HostAndPort>
+       servers, String targetGroup) throws IOException {
+   }
+ 
+diff --git a/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupAdminServer.java b/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupAdminServer.java
+index dd23944..fac0f13 100644
+--- a/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupAdminServer.java
++++ b/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupAdminServer.java
+@@ -1,4 +1,6 @@
+ /**
++ * Copyright The Apache Software Foundation
++ *
+  * Licensed to the Apache Software Foundation (ASF) under one
+  * or more contributor license agreements.  See the NOTICE file
+  * distributed with this work for additional information
+@@ -20,6 +22,7 @@ package org.apache.hadoop.hbase.rsgroup;
+ import com.google.common.collect.Lists;
+ import com.google.common.collect.Maps;
+ import com.google.common.collect.Sets;
++import com.google.common.net.HostAndPort;
+ 
+ import java.io.IOException;
+ import java.util.ArrayList;
+@@ -51,74 +54,67 @@ import org.apache.hadoop.hbase.master.RegionPlan;
+ import org.apache.hadoop.hbase.master.RegionState;
+ import org.apache.hadoop.hbase.master.ServerManager;
+ import org.apache.hadoop.hbase.master.TableLockManager.TableLock;
+-import org.apache.hadoop.hbase.util.Address;
+ 
+ /**
+- * Service to support Region Server Grouping (HBase-6721).
++ * Service to support Region Server Grouping (HBase-6721)
+  */
+ @InterfaceAudience.Private
+-public class RSGroupAdminServer implements RSGroupAdmin {
++public class RSGroupAdminServer extends RSGroupAdmin {
+   private static final Log LOG = LogFactory.getLog(RSGroupAdminServer.class);
+ 
+   private MasterServices master;
+   //List of servers that are being moved from one group to another
+   //Key=host:port,Value=targetGroup
+-  private ConcurrentMap<Address,String> serversInTransition =
+-      new ConcurrentHashMap<Address, String>();
+-  private RSGroupInfoManager rsGroupInfoManager;
++  private ConcurrentMap<HostAndPort,String> serversInTransition =
++      new ConcurrentHashMap<HostAndPort, String>();
++  private RSGroupInfoManager RSGroupInfoManager;
+ 
+   public RSGroupAdminServer(MasterServices master,
+                             RSGroupInfoManager RSGroupInfoManager) throws IOException {
+     this.master = master;
+-    this.rsGroupInfoManager = RSGroupInfoManager;
++    this.RSGroupInfoManager = RSGroupInfoManager;
+   }
+ 
+   @Override
+   public RSGroupInfo getRSGroupInfo(String groupName) throws IOException {
+-    RSGroupInfoManager m = getRSGroupInfoManager();
+-    synchronized (m) {
+-      return m.getRSGroup(groupName);
+-    }
++    return getRSGroupInfoManager().getRSGroup(groupName);
+   }
+ 
++
+   @Override
+   public RSGroupInfo getRSGroupInfoOfTable(TableName tableName) throws IOException {
+-    RSGroupInfoManager m = getRSGroupInfoManager();
+-    String groupName = null;
+-    synchronized (m) {
+-      groupName = getRSGroupInfoManager().getRSGroupOfTable(tableName);
+-      return groupName == null? null: getRSGroupInfoManager().getRSGroup(groupName);
+-    }
+-  }
+-
+-  private RSGroupInfo getAndCheckRSGroup(String name)
+-  throws IOException {
+-    if (StringUtils.isEmpty(name)) {
+-      throw new ConstraintException("The target group cannot be null.");
+-    }
+-    RSGroupInfo rsgi = getRSGroupInfo(name);
+-    if (rsgi == null) {
+-      throw new ConstraintException("Group does not exist: " + name);
++    String groupName = getRSGroupInfoManager().getRSGroupOfTable(tableName);
++    if (groupName == null) {
++      return null;
+     }
+-    return rsgi;
++    return getRSGroupInfoManager().getRSGroup(groupName);
+   }
+ 
+   @Override
+-  public void moveServers(Set<Address> servers, String targetGroupName)
++  public void moveServers(Set<HostAndPort> servers, String targetGroupName)
+       throws IOException {
+     if (servers == null) {
+-      throw new ConstraintException("The list of servers cannot be null.");
++      throw new ConstraintException(
++          "The list of servers cannot be null.");
++    }
++    if (StringUtils.isEmpty(targetGroupName)) {
++      throw new ConstraintException("The target group cannot be null.");
+     }
+     if (servers.size() < 1) {
+       return;
+     }
+-    RSGroupInfo targetGrp = getAndCheckRSGroup(targetGroupName);
++
++    RSGroupInfo targetGrp = getRSGroupInfo(targetGroupName);
++    if (targetGrp == null) {
++      throw new ConstraintException("Group does not exist: "+targetGroupName);
++    }
++
+     RSGroupInfoManager manager = getRSGroupInfoManager();
+     synchronized (manager) {
+       if (master.getMasterCoprocessorHost() != null) {
+         master.getMasterCoprocessorHost().preMoveServers(servers, targetGroupName);
+       }
+-      Address firstServer = servers.iterator().next();
++      HostAndPort firstServer = servers.iterator().next();
+       //we only allow a move from a single source group
+       //so this should be ok
+       RSGroupInfo srcGrp = manager.getRSGroupOfServer(firstServer);
+@@ -130,11 +126,11 @@ public class RSGroupAdminServer implements RSGroupAdmin {
+             "Server "+firstServer+" does not have a group.");
+       }
+       if (RSGroupInfo.DEFAULT_GROUP.equals(srcGrp.getName())) {
+-        Set<Address> onlineServers = new HashSet<Address>();
++        Set<HostAndPort> onlineServers = new HashSet<HostAndPort>();
+         for(ServerName server: master.getServerManager().getOnlineServers().keySet()) {
+-          onlineServers.add(server.getAddress());
++          onlineServers.add(server.getHostPort());
+         }
+-        for(Address el: servers) {
++        for(HostAndPort el: servers) {
+           if(!onlineServers.contains(el)) {
+             throw new ConstraintException(
+                 "Server "+el+" is not an online server in default group.");
+@@ -150,12 +146,11 @@ public class RSGroupAdminServer implements RSGroupAdmin {
+ 
+       String sourceGroupName = getRSGroupInfoManager()
+           .getRSGroupOfServer(srcGrp.getServers().iterator().next()).getName();
+-      getAndCheckRSGroup(sourceGroupName);
+-      if (sourceGroupName.equals(targetGroupName)) {
+-        throw new ConstraintException(
+-            "Target group is the same as source group: "+targetGroupName);
++      if(getRSGroupInfo(targetGroupName) == null) {
++        throw new ConstraintException("Target group does not exist: "+targetGroupName);
+       }
+-      for (Address server: servers) {
++
++      for(HostAndPort server: servers) {
+         if (serversInTransition.containsKey(server)) {
+           throw new ConstraintException(
+               "Server list contains a server that is already being moved: "+server);
+@@ -168,33 +163,36 @@ public class RSGroupAdminServer implements RSGroupAdmin {
+         }
+       }
+ 
++      if(sourceGroupName.equals(targetGroupName)) {
++        throw new ConstraintException(
++            "Target group is the same as source group: "+targetGroupName);
++      }
++
+       try {
+         //update the servers as in transition
+-        for (Address server : servers) {
++        for (HostAndPort server : servers) {
+           serversInTransition.put(server, targetGroupName);
+         }
+ 
+         getRSGroupInfoManager().moveServers(servers, sourceGroupName, targetGroupName);
+         boolean found;
+-        // Appy makes note that if we were passed in a List of servers,
+-        // we'd save having to do stuff like the below.
+-        List<Address> tmpServers = Lists.newArrayList(servers);
++        List<HostAndPort> tmpServers = Lists.newArrayList(servers);
+         do {
+           found = false;
+-          for (Iterator<Address> iter = tmpServers.iterator();
++          for (Iterator<HostAndPort> iter = tmpServers.iterator();
+                iter.hasNext(); ) {
+-            Address rs = iter.next();
++            HostAndPort rs = iter.next();
+             //get online regions
+             List<HRegionInfo> regions = new LinkedList<HRegionInfo>();
+             for (Map.Entry<HRegionInfo, ServerName> el :
+                 master.getAssignmentManager().getRegionStates().getRegionAssignments().entrySet()) {
+-              if (el.getValue().getAddress().equals(rs)) {
++              if (el.getValue().getHostPort().equals(rs)) {
+                 regions.add(el.getKey());
+               }
+             }
+             for (RegionState state :
+                 master.getAssignmentManager().getRegionStates().getRegionsInTransition().values()) {
+-              if (state.getServerName().getAddress().equals(rs)) {
++              if (state.getServerName().getHostPort().equals(rs)) {
+                 regions.add(state.getRegion());
+               }
+             }
+@@ -226,7 +224,7 @@ public class RSGroupAdminServer implements RSGroupAdmin {
+         } while (found);
+       } finally {
+         //remove from transition
+-        for (Address server : servers) {
++        for (HostAndPort server : servers) {
+           serversInTransition.remove(server);
+         }
+       }
+@@ -294,10 +292,7 @@ public class RSGroupAdminServer implements RSGroupAdmin {
+     if (master.getMasterCoprocessorHost() != null) {
+       master.getMasterCoprocessorHost().preAddRSGroup(name);
+     }
+-    RSGroupInfoManager m = getRSGroupInfoManager();
+-    synchronized(m) {
+-      m.addRSGroup(new RSGroupInfo(name));
+-    }
++    getRSGroupInfoManager().addRSGroup(new RSGroupInfo(name));
+     if (master.getMasterCoprocessorHost() != null) {
+       master.getMasterCoprocessorHost().postAddRSGroup(name);
+     }
+@@ -398,26 +393,17 @@ public class RSGroupAdminServer implements RSGroupAdmin {
+ 
+   @Override
+   public List<RSGroupInfo> listRSGroups() throws IOException {
+-    RSGroupInfoManager m = getRSGroupInfoManager();
+-    synchronized (m) {
+-      return m.listRSGroups();
+-    }
++    return getRSGroupInfoManager().listRSGroups();
+   }
+ 
+   @Override
+-  public RSGroupInfo getRSGroupOfServer(Address hostPort) throws IOException {
+-    RSGroupInfoManager m = getRSGroupInfoManager();
+-    synchronized (m) {
+-      return m.getRSGroupOfServer(hostPort);
+-    }
++  public RSGroupInfo getRSGroupOfServer(HostAndPort hostPort) throws IOException {
++    return getRSGroupInfoManager().getRSGroupOfServer(hostPort);
+   }
+ 
+   @InterfaceAudience.Private
+-  // Private because the client needs to be careful using rsGroupInfoManager;
+-  // All modifications on rsGroupInfoManager must be under a synchronize on
+-  // rsGroupInfoManager
+-  private RSGroupInfoManager getRSGroupInfoManager() throws IOException {
+-    return rsGroupInfoManager;
++  public RSGroupInfoManager getRSGroupInfoManager() throws IOException {
++    return RSGroupInfoManager;
+   }
+ 
+   private Map<String, RegionState> rsGroupGetRegionsInTransition(String groupName)
+@@ -460,7 +446,7 @@ public class RSGroupAdminServer implements RSGroupAdmin {
+ 
+     Map<ServerName, List<HRegionInfo>> serverMap = Maps.newHashMap();
+     for(ServerName serverName: master.getServerManager().getOnlineServers().keySet()) {
+-      if(RSGroupInfo.getServers().contains(serverName.getAddress())) {
++      if(RSGroupInfo.getServers().contains(serverName.getHostPort())) {
+         serverMap.put(serverName, Collections.EMPTY_LIST);
+       }
+     }
+diff --git a/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupBasedLoadBalancer.java b/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupBasedLoadBalancer.java
+index d05b928..913612b 100644
+--- a/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupBasedLoadBalancer.java
++++ b/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupBasedLoadBalancer.java
+@@ -1,4 +1,6 @@
+ /**
++ * Copyright The Apache Software Foundation
++ *
+  * Licensed to the Apache Software Foundation (ASF) under one
+  * or more contributor license agreements.  See the NOTICE file
+  * distributed with this work for additional information
+@@ -43,7 +45,6 @@ import org.apache.hadoop.hbase.master.LoadBalancer;
+ import org.apache.hadoop.hbase.master.MasterServices;
+ import org.apache.hadoop.hbase.master.RegionPlan;
+ import org.apache.hadoop.hbase.master.balancer.StochasticLoadBalancer;
+-import org.apache.hadoop.hbase.util.Address;
+ import org.apache.hadoop.util.ReflectionUtils;
+ 
+ import com.google.common.collect.ArrayListMultimap;
+@@ -51,6 +52,7 @@ import com.google.common.collect.LinkedListMultimap;
+ import com.google.common.collect.ListMultimap;
+ import com.google.common.collect.Lists;
+ import com.google.common.collect.Maps;
++import com.google.common.net.HostAndPort;
+ 
+ /**
+  * GroupBasedLoadBalancer, used when Region Server Grouping is configured (HBase-6721)
+@@ -129,9 +131,9 @@ public class RSGroupBasedLoadBalancer implements RSGroupableBalancer {
+       for (RSGroupInfo info : RSGroupInfoManager.listRSGroups()) {
+         Map<ServerName, List<HRegionInfo>> groupClusterState =
+             new HashMap<ServerName, List<HRegionInfo>>();
+-        for (Address sName : info.getServers()) {
++        for (HostAndPort sName : info.getServers()) {
+           for(ServerName curr: clusterState.keySet()) {
+-            if(curr.getAddress().equals(sName)) {
++            if(curr.getHostPort().equals(sName)) {
+               groupClusterState.put(curr, correctedState.get(curr));
+             }
+           }
+@@ -264,7 +266,7 @@ public class RSGroupBasedLoadBalancer implements RSGroupableBalancer {
+     if (RSGroupInfo != null) {
+       return filterServers(RSGroupInfo.getServers(), onlineServers);
+     } else {
+-      LOG.warn("Group Information found to be null. Some regions might be unassigned.");
++      LOG.debug("Group Information found to be null. Some regions might be unassigned.");
+       return Collections.EMPTY_LIST;
+     }
+   }
+@@ -278,12 +280,12 @@ public class RSGroupBasedLoadBalancer implements RSGroupableBalancer {
+    *          List of servers which are online.
+    * @return the list
+    */
+-  private List<ServerName> filterServers(Collection<Address> servers,
++  private List<ServerName> filterServers(Collection<HostAndPort> servers,
+       Collection<ServerName> onlineServers) {
+     ArrayList<ServerName> finalList = new ArrayList<ServerName>();
+-    for (Address server : servers) {
++    for (HostAndPort server : servers) {
+       for(ServerName curr: onlineServers) {
+-        if(curr.getAddress().equals(server)) {
++        if(curr.getHostPort().equals(server)) {
+           finalList.add(curr);
+         }
+       }
+@@ -291,6 +293,17 @@ public class RSGroupBasedLoadBalancer implements RSGroupableBalancer {
+     return finalList;
+   }
+ 
++  private ListMultimap<String, HRegionInfo> groupRegions(
++      List<HRegionInfo> regionList) throws IOException {
++    ListMultimap<String, HRegionInfo> regionGroup = ArrayListMultimap
++        .create();
++    for (HRegionInfo region : regionList) {
++      String groupName = RSGroupInfoManager.getRSGroupOfTable(region.getTable());
++      regionGroup.put(groupName, region);
++    }
++    return regionGroup;
++  }
++
+   private Set<HRegionInfo> getMisplacedRegions(
+       Map<HRegionInfo, ServerName> regions) throws IOException {
+     Set<HRegionInfo> misplacedRegions = new HashSet<HRegionInfo>();
+@@ -299,11 +312,11 @@ public class RSGroupBasedLoadBalancer implements RSGroupableBalancer {
+       RSGroupInfo info =
+           RSGroupInfoManager.getRSGroup(RSGroupInfoManager.getRSGroupOfTable(region.getTable()));
+       if (assignedServer != null &&
+-          (info == null || !info.containsServer(assignedServer.getAddress()))) {
++          (info == null || !info.containsServer(assignedServer.getHostPort()))) {
+         LOG.debug("Found misplaced region: " + region.getRegionNameAsString() +
+             " on server: " + assignedServer +
+             " found in group: " +
+-            RSGroupInfoManager.getRSGroupOfServer(assignedServer.getAddress()) +
++            RSGroupInfoManager.getRSGroupOfServer(assignedServer.getHostPort()) +
+             " outside of group: " + info.getName());
+         misplacedRegions.add(region);
+       }
+@@ -329,7 +342,7 @@ public class RSGroupBasedLoadBalancer implements RSGroupableBalancer {
+           LOG.debug("Group information null for region of table " + region.getTable(),
+               exp);
+         }
+-        if ((info == null) || (!info.containsServer(sName.getAddress()))) {
++        if ((info == null) || (!info.containsServer(sName.getHostPort()))) {
+           correctAssignments.get(LoadBalancer.BOGUS_SERVER_NAME).add(region);
+         } else {
+           correctAssignments.get(sName).add(region);
+diff --git a/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupInfoManager.java b/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupInfoManager.java
+index 759f827..434c85f 100644
+--- a/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupInfoManager.java
++++ b/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupInfoManager.java
+@@ -1,4 +1,6 @@
+ /**
++ * Copyright The Apache Software Foundation
++ *
+  * Licensed to the Apache Software Foundation (ASF) under one
+  * or more contributor license agreements.  See the NOTICE file
+  * distributed with this work for additional information
+@@ -18,22 +20,21 @@
+ 
+ package org.apache.hadoop.hbase.rsgroup;
+ 
++import com.google.common.net.HostAndPort;
++
+ import java.io.IOException;
+ import java.util.List;
+ import java.util.Set;
+ 
+ import org.apache.hadoop.hbase.NamespaceDescriptor;
+ import org.apache.hadoop.hbase.TableName;
+-import org.apache.hadoop.hbase.classification.InterfaceAudience;
+ import org.apache.hadoop.hbase.util.Bytes;
+-import org.apache.hadoop.hbase.util.Address;
+ 
+ /**
+  * Interface used to manage RSGroupInfo storage. An implementation
+  * has the option to support offline mode.
+  * See {@link RSGroupBasedLoadBalancer}
+  */
+-@InterfaceAudience.Private
+ public interface RSGroupInfoManager {
+   //Assigned before user tables
+   public static final TableName RSGROUP_TABLE_NAME =
+@@ -69,7 +70,7 @@ public interface RSGroupInfoManager {
+    * @return true if move was successful
+    * @throws java.io.IOException on move failure
+    */
+-  boolean moveServers(Set<Address> hostPorts,
++  boolean moveServers(Set<HostAndPort> hostPorts,
+                       String srcGroup, String dstGroup) throws IOException;
+ 
+   /**
+@@ -78,7 +79,7 @@ public interface RSGroupInfoManager {
+    * @param hostPort the server
+    * @return An instance of RSGroupInfo
+    */
+-  RSGroupInfo getRSGroupOfServer(Address hostPort) throws IOException;
++  RSGroupInfo getRSGroupOfServer(HostAndPort hostPort) throws IOException;
+ 
+   /**
+    * Gets the group information.
+@@ -128,4 +129,4 @@ public interface RSGroupInfoManager {
+    * @return whether the manager is in online mode
+    */
+   boolean isOnline();
+-}
+\ No newline at end of file
++}
+diff --git a/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupInfoManagerImpl.java b/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupInfoManagerImpl.java
+index 504cfda..e0ae774 100644
+--- a/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupInfoManagerImpl.java
++++ b/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupInfoManagerImpl.java
+@@ -1,4 +1,6 @@
+ /**
++ * Copyright The Apache Software Foundation
++ *
+  * Licensed to the Apache Software Foundation (ASF) under one
+  * or more contributor license agreements.  See the NOTICE file
+  * distributed with this work for additional information
+@@ -22,6 +24,7 @@ import com.google.common.collect.Lists;
+ import com.google.common.collect.Maps;
+ 
+ import com.google.common.collect.Sets;
++import com.google.common.net.HostAndPort;
+ import com.google.protobuf.ServiceException;
+ 
+ import java.io.IOException;
+@@ -51,7 +54,6 @@ import org.apache.hadoop.hbase.HRegionInfo;
+ import org.apache.hadoop.hbase.HTableDescriptor;
+ import org.apache.hadoop.hbase.MetaTableAccessor;
+ import org.apache.hadoop.hbase.MetaTableAccessor.DefaultVisitorBase;
+-import org.apache.hadoop.hbase.classification.InterfaceAudience;
+ import org.apache.hadoop.hbase.NamespaceDescriptor;
+ import org.apache.hadoop.hbase.ServerName;
+ import org.apache.hadoop.hbase.TableName;
+@@ -79,7 +81,6 @@ import org.apache.hadoop.hbase.protobuf.generated.ZooKeeperProtos;
+ import org.apache.hadoop.hbase.regionserver.DisabledRegionSplitPolicy;
+ import org.apache.hadoop.hbase.security.access.AccessControlLists;
+ import org.apache.hadoop.hbase.util.Bytes;
+-import org.apache.hadoop.hbase.util.Address;
+ import org.apache.hadoop.hbase.util.ModifyRegionUtils;
+ import org.apache.hadoop.hbase.zookeeper.ZKUtil;
+ import org.apache.hadoop.hbase.zookeeper.ZooKeeperWatcher;
+@@ -90,12 +91,7 @@ import org.apache.zookeeper.KeeperException;
+  * use of an HBase table as the persistence store for the group information.
+  * It also makes use of zookeeper to store group information needed
+  * for bootstrapping during offline mode.
+- * 
+- * <p>Only one modifier is allowed at a time so all access is synchronized.
+- * We do this to protect data member Maps but also so only one writer of
+- * persisted state out to zk where we keep cache.
+  */
+-@InterfaceAudience.Private
+ public class RSGroupInfoManagerImpl implements RSGroupInfoManager, ServerListener {
+   private static final Log LOG = LogFactory.getLog(RSGroupInfoManagerImpl.class);
+ 
+@@ -161,7 +157,7 @@ public class RSGroupInfoManagerImpl implements RSGroupInfoManager, ServerListene
+   }
+ 
+   @Override
+-  public synchronized boolean moveServers(Set<Address> hostPorts, String srcGroup,
++  public synchronized boolean moveServers(Set<HostAndPort> hostPorts, String srcGroup,
+                                           String dstGroup) throws IOException {
+     if (!rsGroupMap.containsKey(srcGroup)) {
+       throw new DoNotRetryIOException("Group "+srcGroup+" does not exist");
+@@ -173,7 +169,7 @@ public class RSGroupInfoManagerImpl implements RSGroupInfoManager, ServerListene
+     RSGroupInfo src = new RSGroupInfo(getRSGroup(srcGroup));
+     RSGroupInfo dst = new RSGroupInfo(getRSGroup(dstGroup));
+     boolean foundOne = false;
+-    for(Address el: hostPorts) {
++    for(HostAndPort el: hostPorts) {
+       foundOne = src.removeServer(el) || foundOne;
+       dst.addServer(el);
+     }
+@@ -193,8 +189,7 @@ public class RSGroupInfoManagerImpl implements RSGroupInfoManager, ServerListene
+    * @return An instance of GroupInfo.
+    */
+   @Override
+-  public synchronized RSGroupInfo getRSGroupOfServer(Address hostPort)
+-  throws IOException {
++  public RSGroupInfo getRSGroupOfServer(HostAndPort hostPort) throws IOException {
+     for (RSGroupInfo info : rsGroupMap.values()) {
+       if (info.containsServer(hostPort)){
+         return info;
+@@ -211,14 +206,15 @@ public class RSGroupInfoManagerImpl implements RSGroupInfoManager, ServerListene
+    * @return An instance of GroupInfo
+    */
+   @Override
+-  public synchronized RSGroupInfo getRSGroup(String groupName) throws IOException {
+-    return this.rsGroupMap.get(groupName);
++  public RSGroupInfo getRSGroup(String groupName) throws IOException {
++    RSGroupInfo RSGroupInfo = rsGroupMap.get(groupName);
++    return RSGroupInfo;
+   }
+ 
+ 
+ 
+   @Override
+-  public synchronized String getRSGroupOfTable(TableName tableName) throws IOException {
++  public String getRSGroupOfTable(TableName tableName) throws IOException {
+     return tableMap.get(tableName);
+   }
+ 
+@@ -264,12 +260,13 @@ public class RSGroupInfoManagerImpl implements RSGroupInfoManager, ServerListene
+   }
+ 
+   @Override
+-  public synchronized List<RSGroupInfo> listRSGroups() throws IOException {
+-    return Lists.newLinkedList(rsGroupMap.values());
++  public List<RSGroupInfo> listRSGroups() throws IOException {
++    List<RSGroupInfo> list = Lists.newLinkedList(rsGroupMap.values());
++    return list;
+   }
+ 
+   @Override
+-  public synchronized boolean isOnline() {
++  public boolean isOnline() {
+     return rsGroupStartupWorker.isOnline();
+   }
+ 
+@@ -329,6 +326,7 @@ public class RSGroupInfoManagerImpl implements RSGroupInfoManager, ServerListene
+         Sets.newHashSet(getDefaultServers()),
+         orphanTables));
+ 
++
+     // populate the data
+     HashMap<String, RSGroupInfo> newGroupMap = Maps.newHashMap();
+     HashMap<TableName, String> newTableMap = Maps.newHashMap();
+@@ -454,10 +452,10 @@ public class RSGroupInfoManagerImpl implements RSGroupInfoManager, ServerListene
+     }
+   }
+ 
+-  private List<Address> getDefaultServers() throws IOException {
+-    List<Address> defaultServers = new LinkedList<>();
++  private List<HostAndPort> getDefaultServers() throws IOException {
++    List<HostAndPort> defaultServers = new LinkedList<HostAndPort>();
+     for(ServerName server : getOnlineRS()) {
+-      Address hostPort = Address.fromParts(server.getHostname(), server.getPort());
++      HostAndPort hostPort = HostAndPort.fromParts(server.getHostname(), server.getPort());
+       boolean found = false;
+       for(RSGroupInfo RSGroupInfo : rsGroupMap.values()) {
+         if(!RSGroupInfo.DEFAULT_GROUP.equals(RSGroupInfo.getName()) &&
+@@ -474,7 +472,7 @@ public class RSGroupInfoManagerImpl implements RSGroupInfoManager, ServerListene
+   }
+ 
+   private synchronized void updateDefaultServers(
+-      Set<Address> hostPort) throws IOException {
++      Set<HostAndPort> hostPort) throws IOException {
+     RSGroupInfo info = rsGroupMap.get(RSGroupInfo.DEFAULT_GROUP);
+     RSGroupInfo newInfo = new RSGroupInfo(info.getName(), hostPort, info.getTables());
+     HashMap<String, RSGroupInfo> newGroupMap = Maps.newHashMap(rsGroupMap);
+@@ -484,13 +482,11 @@ public class RSGroupInfoManagerImpl implements RSGroupInfoManager, ServerListene
+ 
+   @Override
+   public void serverAdded(ServerName serverName) {
+-    // #serverChanged is internally synchronized
+     defaultServerUpdater.serverChanged();
+   }
+ 
+   @Override
+   public void serverRemoved(ServerName serverName) {
+-    // #serverChanged is internally synchronized
+     defaultServerUpdater.serverChanged();
+   }
+ 
+@@ -505,15 +501,15 @@ public class RSGroupInfoManagerImpl implements RSGroupInfoManager, ServerListene
+ 
+     @Override
+     public void run() {
+-      List<Address> prevDefaultServers = new LinkedList<>();
++      List<HostAndPort> prevDefaultServers = new LinkedList<HostAndPort>();
+       while(!mgr.master.isAborted() || !mgr.master.isStopped()) {
+         try {
+           LOG.info("Updating default servers.");
+-          List<Address> servers = mgr.getDefaultServers();
+-          Collections.sort(servers, new Comparator<Address>() {
++          List<HostAndPort> servers = mgr.getDefaultServers();
++          Collections.sort(servers, new Comparator<HostAndPort>() {
+             @Override
+-            public int compare(Address o1, Address o2) {
+-              int diff = o1.getHostname().compareTo(o2.getHostname());
++            public int compare(HostAndPort o1, HostAndPort o2) {
++              int diff = o1.getHostText().compareTo(o2.getHostText());
+               if (diff != 0) {
+                 return diff;
+               }
+@@ -521,7 +517,7 @@ public class RSGroupInfoManagerImpl implements RSGroupInfoManager, ServerListene
+             }
+           });
+           if(!servers.equals(prevDefaultServers)) {
+-            mgr.updateDefaultServers(Sets.<Address>newHashSet(servers));
++            mgr.updateDefaultServers(Sets.<HostAndPort>newHashSet(servers));
+             prevDefaultServers = servers;
+             LOG.info("Updated with servers: "+servers.size());
+           }
+@@ -756,4 +752,4 @@ public class RSGroupInfoManagerImpl implements RSGroupInfoManager, ServerListene
+       throw new ConstraintException("Group name should only contain alphanumeric characters");
+     }
+   }
+-}
+\ No newline at end of file
++}
+diff --git a/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupSerDe.java b/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupSerDe.java
+index c98984a..530db58 100644
+--- a/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupSerDe.java
++++ b/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupSerDe.java
+@@ -1,4 +1,6 @@
+ /**
++ * Copyright The Apache Software Foundation
++ *
+  * Licensed to the Apache Software Foundation (ASF) under one
+  * or more contributor license agreements.  See the NOTICE file
+  * distributed with this work for additional information
+@@ -26,7 +28,6 @@ import java.util.List;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+-import org.apache.hadoop.hbase.classification.InterfaceAudience;
+ import org.apache.hadoop.hbase.client.Result;
+ import org.apache.hadoop.hbase.client.Scan;
+ import org.apache.hadoop.hbase.client.Table;
+@@ -38,7 +39,6 @@ import org.apache.hadoop.hbase.zookeeper.ZooKeeperWatcher;
+ import org.apache.zookeeper.KeeperException;
+ 
+ //TODO do better encapsulation of SerDe logic from GroupInfoManager and GroupTracker
+-@InterfaceAudience.Private
+ public class RSGroupSerDe {
+   private static final Log LOG = LogFactory.getLog(RSGroupSerDe.class);
+ 
+@@ -85,4 +85,4 @@ public class RSGroupSerDe {
+     }
+     return RSGroupInfoList;
+   }
+-}
+\ No newline at end of file
++}
+diff --git a/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupableBalancer.java b/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupableBalancer.java
+index bff392b..ec86dda 100644
+--- a/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupableBalancer.java
++++ b/hbase-rsgroup/src/main/java/org/apache/hadoop/hbase/rsgroup/RSGroupableBalancer.java
+@@ -1,4 +1,6 @@
+ /**
++ * Copyright The Apache Software Foundation
++ *
+  * Licensed to the Apache Software Foundation (ASF) under one
+  * or more contributor license agreements.  See the NOTICE file
+  * distributed with this work for additional information
+@@ -21,9 +23,7 @@ package org.apache.hadoop.hbase.rsgroup;
+ import org.apache.hadoop.hbase.classification.InterfaceAudience;
+ import org.apache.hadoop.hbase.master.LoadBalancer;
+ 
+-/**
+- * Marker Interface. RSGroups feature will check for a LoadBalancer
+- * marked with this Interface before it runs.
+- */
++
+ @InterfaceAudience.Private
+-public interface RSGroupableBalancer extends LoadBalancer {}
+\ No newline at end of file
++public interface RSGroupableBalancer extends LoadBalancer {
++}
+diff --git a/hbase-rsgroup/src/test/java/org/apache/hadoop/hbase/master/balancer/TestRSGroupBasedLoadBalancer.java b/hbase-rsgroup/src/test/java/org/apache/hadoop/hbase/master/balancer/TestRSGroupBasedLoadBalancer.java
+index 4bbb146..1539f73 100644
+--- a/hbase-rsgroup/src/test/java/org/apache/hadoop/hbase/master/balancer/TestRSGroupBasedLoadBalancer.java
++++ b/hbase-rsgroup/src/test/java/org/apache/hadoop/hbase/master/balancer/TestRSGroupBasedLoadBalancer.java
+@@ -1,4 +1,6 @@
+ /**
++ * Copyright The Apache Software Foundation
++ *
+  * Licensed to the Apache Software Foundation (ASF) under one
+  * or more contributor license agreements.  See the NOTICE file
+  * distributed with this work for additional information
+@@ -19,6 +21,7 @@ package org.apache.hadoop.hbase.master.balancer;
+ 
+ import com.google.common.collect.ArrayListMultimap;
+ import com.google.common.collect.Lists;
++import com.google.common.net.HostAndPort;
+ import org.apache.commons.lang.StringUtils;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+@@ -37,7 +40,6 @@ import org.apache.hadoop.hbase.master.HMaster;
+ import org.apache.hadoop.hbase.master.MasterServices;
+ import org.apache.hadoop.hbase.master.RegionPlan;
+ import org.apache.hadoop.hbase.testclassification.SmallTests;
+-import org.apache.hadoop.hbase.util.Address;
+ import org.apache.hadoop.hbase.util.Bytes;
+ import org.junit.BeforeClass;
+ import org.junit.Test;
+@@ -179,7 +181,7 @@ public class TestRSGroupBasedLoadBalancer {
+       assertTrue(StringUtils.isNotEmpty(groupName));
+       RSGroupInfo gInfo = getMockedGroupInfoManager().getRSGroup(groupName);
+       assertTrue("Region is not correctly assigned to group servers.",
+-          gInfo.containsServer(server.getAddress()));
++          gInfo.containsServer(server.getHostPort()));
+     }
+   }
+ 
+@@ -214,7 +216,7 @@ public class TestRSGroupBasedLoadBalancer {
+             groupName);
+         assertTrue(
+             "Region is not correctly assigned to group servers.",
+-            gInfo.containsServer(sn.getAddress()));
++            gInfo.containsServer(sn.getHostPort()));
+       }
+     }
+     ArrayListMultimap<String, ServerAndLoad> loadMap = convertToGroupBasedMap(assignments);
+@@ -293,15 +295,15 @@ public class TestRSGroupBasedLoadBalancer {
+             groupName);
+         assertTrue(
+             "Region is not correctly assigned to group servers.",
+-            gInfo.containsServer(currentServer.getAddress()));
++            gInfo.containsServer(currentServer.getHostPort()));
+         if (oldAssignedServer != null
+             && onlineHostNames.contains(oldAssignedServer
+             .getHostname())) {
+           // this region was previously assigned somewhere, and that
+           // host is still around, then the host must have been is a
+           // different group.
+-          if (!oldAssignedServer.getAddress().equals(currentServer.getAddress())) {
+-            assertFalse(gInfo.containsServer(oldAssignedServer.getAddress()));
++          if (!oldAssignedServer.getHostPort().equals(currentServer.getHostPort())) {
++            assertFalse(gInfo.containsServer(oldAssignedServer.getHostPort()));
+           }
+         }
+       }
+@@ -344,11 +346,11 @@ public class TestRSGroupBasedLoadBalancer {
+     ArrayListMultimap<String, ServerAndLoad> loadMap = ArrayListMultimap
+         .create();
+     for (RSGroupInfo gInfo : getMockedGroupInfoManager().listRSGroups()) {
+-      Set<Address> groupServers = gInfo.getServers();
+-      for (Address hostPort : groupServers) {
++      Set<HostAndPort> groupServers = gInfo.getServers();
++      for (HostAndPort hostPort : groupServers) {
+         ServerName actual = null;
+         for(ServerName entry: servers) {
+-          if(entry.getAddress().equals(hostPort)) {
++          if(entry.getHostPort().equals(hostPort)) {
+             actual = entry;
+             break;
+           }
+@@ -484,14 +486,14 @@ public class TestRSGroupBasedLoadBalancer {
+     Map<String, RSGroupInfo> groupMap = new HashMap<String, RSGroupInfo>();
+     for (String grpName : groups) {
+       RSGroupInfo RSGroupInfo = new RSGroupInfo(grpName);
+-      RSGroupInfo.addServer(servers.get(index).getAddress());
++      RSGroupInfo.addServer(servers.get(index).getHostPort());
+       groupMap.put(grpName, RSGroupInfo);
+       index++;
+     }
+     while (index < servers.size()) {
+       int grpIndex = rand.nextInt(groups.length);
+       groupMap.get(groups[grpIndex]).addServer(
+-          servers.get(index).getAddress());
++          servers.get(index).getHostPort());
+       index++;
+     }
+     return groupMap;
+@@ -556,7 +558,7 @@ public class TestRSGroupBasedLoadBalancer {
+     RSGroupInfoManager gm = getMockedGroupInfoManager();
+     RSGroupInfo groupOfServer = null;
+     for(RSGroupInfo gInfo : gm.listRSGroups()){
+-      if(gInfo.containsServer(sn.getAddress())){
++      if(gInfo.containsServer(sn.getHostPort())){
+         groupOfServer = gInfo;
+         break;
+       }
+diff --git a/hbase-rsgroup/src/test/java/org/apache/hadoop/hbase/rsgroup/TestRSGroups.java b/hbase-rsgroup/src/test/java/org/apache/hadoop/hbase/rsgroup/TestRSGroups.java
+index 7c14a23..34add63 100644
+--- a/hbase-rsgroup/src/test/java/org/apache/hadoop/hbase/rsgroup/TestRSGroups.java
++++ b/hbase-rsgroup/src/test/java/org/apache/hadoop/hbase/rsgroup/TestRSGroups.java
+@@ -1,4 +1,6 @@
+ /**
++ * Copyright The Apache Software Foundation
++ *
+  * Licensed to the Apache Software Foundation (ASF) under one
+  * or more contributor license agreements.  See the NOTICE file
+  * distributed with this work for additional information
+@@ -17,13 +19,10 @@
+  */
+ package org.apache.hadoop.hbase.rsgroup;
+ 
+-import static org.junit.Assert.assertEquals;
+-import static org.junit.Assert.assertTrue;
+-import static org.junit.Assert.fail;
+-
+-import java.io.IOException;
+-import java.util.Iterator;
++import com.google.common.collect.Lists;
++import com.google.common.collect.Sets;
+ 
++import com.google.common.net.HostAndPort;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.hbase.HBaseTestingUtility;
+@@ -38,11 +37,11 @@ import org.apache.hadoop.hbase.Waiter;
+ import org.apache.hadoop.hbase.Waiter.Predicate;
+ import org.apache.hadoop.hbase.coprocessor.CoprocessorHost;
+ import org.apache.hadoop.hbase.master.HMaster;
++import org.apache.hadoop.hbase.master.MasterServices;
+ import org.apache.hadoop.hbase.master.ServerManager;
+ import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
+ import org.apache.hadoop.hbase.protobuf.generated.AdminProtos;
+ import org.apache.hadoop.hbase.testclassification.MediumTests;
+-import org.apache.hadoop.hbase.util.Address;
+ import org.apache.hadoop.hbase.util.Bytes;
+ import org.junit.After;
+ import org.junit.AfterClass;
+@@ -51,8 +50,22 @@ import org.junit.Before;
+ import org.junit.BeforeClass;
+ import org.junit.Test;
+ import org.junit.experimental.categories.Category;
++import org.mockito.Mockito;
++import org.mockito.invocation.InvocationOnMock;
++import org.mockito.stubbing.Answer;
+ 
+-import com.google.common.collect.Sets;
++import javax.management.MBeanServer;
++import javax.management.ObjectName;
++import java.io.IOException;
++import java.lang.management.ManagementFactory;
++import java.util.Iterator;
++import java.util.List;
++import java.util.concurrent.atomic.AtomicReference;
++
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertNotNull;
++import static org.junit.Assert.assertTrue;
++import static org.junit.Assert.fail;
+ 
+ @Category({MediumTests.class})
+ public class TestRSGroups extends TestRSGroupsBase {
+@@ -91,15 +104,14 @@ public class TestRSGroups extends TestRSGroupsBase {
+       }
+     });
+     admin.setBalancerRunning(false,true);
+-    rsGroupAdmin = new VerifyingRSGroupAdminClient(
+-        new RSGroupAdminClient(TEST_UTIL.getConnection()), TEST_UTIL.getConfiguration());
++    rsGroupAdmin = new VerifyingRSGroupAdminClient(rsGroupAdmin.newClient(TEST_UTIL.getConnection()),
++        TEST_UTIL.getConfiguration());
+     RSGroupAdminEndpoint =
+         master.getMasterCoprocessorHost().findCoprocessors(RSGroupAdminEndpoint.class).get(0);
+   }
+ 
+   @AfterClass
+   public static void tearDown() throws Exception {
+-    rsGroupAdmin.close();
+     TEST_UTIL.shutdownMiniCluster();
+   }
+ 
+@@ -130,7 +142,7 @@ public class TestRSGroups extends TestRSGroupsBase {
+ 
+     try {
+       rsGroupAdmin.moveServers(
+-          Sets.newHashSet(masterServerName.getAddress()),
++          Sets.newHashSet(masterServerName.getHostPort()),
+           "master");
+     } catch (Exception ex) {
+       // ignore
+@@ -242,7 +254,7 @@ public class TestRSGroups extends TestRSGroupsBase {
+     final RSGroupInfo defaultGroup = manager.getRSGroup("default");
+     // getRSGroup updates default group's server list
+     // this process must not affect other threads iterating the list
+-    Iterator<Address> it = defaultGroup.getServers().iterator();
++    Iterator<HostAndPort> it = defaultGroup.getServers().iterator();
+     manager.getRSGroup("default");
+     it.next();
+   }
+diff --git a/hbase-rsgroup/src/test/java/org/apache/hadoop/hbase/rsgroup/TestRSGroupsBase.java b/hbase-rsgroup/src/test/java/org/apache/hadoop/hbase/rsgroup/TestRSGroupsBase.java
+index 81be4d2..9225e09 100644
+--- a/hbase-rsgroup/src/test/java/org/apache/hadoop/hbase/rsgroup/TestRSGroupsBase.java
++++ b/hbase-rsgroup/src/test/java/org/apache/hadoop/hbase/rsgroup/TestRSGroupsBase.java
+@@ -1,4 +1,6 @@
+ /**
++ * Copyright The Apache Software Foundation
++ *
+  * Licensed to the Apache Software Foundation (ASF) under one
+  * or more contributor license agreements.  See the NOTICE file
+  * distributed with this work for additional information
+@@ -17,21 +19,9 @@
+  */
+ package org.apache.hadoop.hbase.rsgroup;
+ 
+-import static org.junit.Assert.assertEquals;
+-import static org.junit.Assert.assertFalse;
+-import static org.junit.Assert.assertNull;
+-import static org.junit.Assert.assertTrue;
+-import static org.junit.Assert.fail;
+-
+-import java.io.IOException;
+-import java.security.SecureRandom;
+-import java.util.HashSet;
+-import java.util.LinkedList;
+-import java.util.List;
+-import java.util.Map;
+-import java.util.Set;
+-import java.util.TreeMap;
+-
++import com.google.common.collect.Maps;
++import com.google.common.collect.Sets;
++import com.google.common.net.HostAndPort;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.hbase.ClusterStatus;
+@@ -49,13 +39,23 @@ import org.apache.hadoop.hbase.client.HBaseAdmin;
+ import org.apache.hadoop.hbase.constraint.ConstraintException;
+ import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
+ import org.apache.hadoop.hbase.protobuf.generated.AdminProtos;
+-import org.apache.hadoop.hbase.util.Address;
+ import org.apache.hadoop.hbase.util.Bytes;
+ import org.junit.Assert;
+ import org.junit.Test;
+ 
+-import com.google.common.collect.Maps;
+-import com.google.common.collect.Sets;
++import java.io.IOException;
++import java.security.SecureRandom;
++import java.util.HashSet;
++import java.util.LinkedList;
++import java.util.List;
++import java.util.Map;
++import java.util.Set;
++import java.util.TreeMap;
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertFalse;
++import static org.junit.Assert.assertNull;
++import static org.junit.Assert.assertTrue;
++import static org.junit.Assert.fail;
+ 
+ public abstract class TestRSGroupsBase {
+   protected static final Log LOG = LogFactory.getLog(TestRSGroupsBase.class);
+@@ -84,8 +84,8 @@ public abstract class TestRSGroupsBase {
+     assertTrue(defaultInfo.getServers().size() >= serverCount);
+     gAdmin.addRSGroup(groupName);
+ 
+-    Set<Address> set = new HashSet<Address>();
+-    for(Address server: defaultInfo.getServers()) {
++    Set<HostAndPort> set = new HashSet<HostAndPort>();
++    for(HostAndPort server: defaultInfo.getServers()) {
+       if(set.size() == serverCount) {
+         break;
+       }
+@@ -119,14 +119,12 @@ public abstract class TestRSGroupsBase {
+   }
+ 
+   protected void deleteGroups() throws IOException {
+-    try (RSGroupAdmin groupAdmin =
+-        new RSGroupAdminClient(TEST_UTIL.getConnection())) {
+-      for(RSGroupInfo group: groupAdmin.listRSGroups()) {
+-        if(!group.getName().equals(RSGroupInfo.DEFAULT_GROUP)) {
+-          groupAdmin.moveTables(group.getTables(), RSGroupInfo.DEFAULT_GROUP);
+-          groupAdmin.moveServers(group.getServers(), RSGroupInfo.DEFAULT_GROUP);
+-          groupAdmin.removeRSGroup(group.getName());
+-        }
++    RSGroupAdmin groupAdmin = rsGroupAdmin.newClient(TEST_UTIL.getConnection());
++    for(RSGroupInfo group: groupAdmin.listRSGroups()) {
++      if(!group.getName().equals(RSGroupInfo.DEFAULT_GROUP)) {
++        groupAdmin.moveTables(group.getTables(), RSGroupInfo.DEFAULT_GROUP);
++        groupAdmin.moveServers(group.getServers(), RSGroupInfo.DEFAULT_GROUP);
++        groupAdmin.removeRSGroup(group.getName());
+       }
+     }
+   }
+@@ -168,7 +166,7 @@ public abstract class TestRSGroupsBase {
+   @Test
+   public void testBogusArgs() throws Exception {
+     assertNull(rsGroupAdmin.getRSGroupInfoOfTable(TableName.valueOf("nonexistent")));
+-    assertNull(rsGroupAdmin.getRSGroupOfServer(Address.fromParts("bogus",123)));
++    assertNull(rsGroupAdmin.getRSGroupOfServer(HostAndPort.fromParts("bogus",123)));
+     assertNull(rsGroupAdmin.getRSGroupInfo("bogus"));
+ 
+     try {
+@@ -186,7 +184,7 @@ public abstract class TestRSGroupsBase {
+     }
+ 
+     try {
+-      rsGroupAdmin.moveServers(Sets.newHashSet(Address.fromParts("bogus",123)), "bogus");
++      rsGroupAdmin.moveServers(Sets.newHashSet(HostAndPort.fromParts("bogus",123)), "bogus");
+       fail("Expected move with bogus group to fail");
+     } catch(ConstraintException ex) {
+       //expected
+@@ -277,7 +275,7 @@ public abstract class TestRSGroupsBase {
+ 
+     //test fail bogus server move
+     try {
+-      rsGroupAdmin.moveServers(Sets.newHashSet(Address.fromString("foo:9999")),"foo");
++      rsGroupAdmin.moveServers(Sets.newHashSet(HostAndPort.fromString("foo:9999")),"foo");
+       fail("Bogus servers shouldn't have been successfully moved.");
+     } catch(IOException ex) {
+       String exp = "Server foo:9999 does not have a group.";
+@@ -355,7 +353,7 @@ public abstract class TestRSGroupsBase {
+         int count = 0;
+         if (serverMap != null) {
+           for (ServerName rs : serverMap.keySet()) {
+-            if (newGroup.containsServer(rs.getAddress())) {
++            if (newGroup.containsServer(rs.getHostPort())) {
+               count += serverMap.get(rs).size();
+             }
+           }
+@@ -477,7 +475,7 @@ public abstract class TestRSGroupsBase {
+     //get server which is not a member of new group
+     ServerName targetServer = null;
+     for(ServerName server : admin.getClusterStatus().getServers()) {
+-      if(!newGroup.containsServer(server.getAddress())) {
++      if(!newGroup.containsServer(server.getHostPort())) {
+         targetServer = server;
+         break;
+       }
+@@ -487,7 +485,7 @@ public abstract class TestRSGroupsBase {
+         admin.getConnection().getAdmin(targetServer);
+ 
+     //move target server to group
+-    rsGroupAdmin.moveServers(Sets.newHashSet(targetServer.getAddress()),
++    rsGroupAdmin.moveServers(Sets.newHashSet(targetServer.getHostPort()),
+         newGroup.getName());
+     TEST_UTIL.waitFor(WAIT_TIMEOUT, new Waiter.Predicate<Exception>() {
+       @Override
+@@ -593,7 +591,7 @@ public abstract class TestRSGroupsBase {
+         return cluster.getClusterStatus().getRegionsInTransition().size() == 0;
+       }
+     });
+-    Set<Address> newServers = Sets.newHashSet();
++    Set<HostAndPort> newServers = Sets.newHashSet();
+     newServers.add(
+         rsGroupAdmin.getRSGroupInfo(RSGroupInfo.DEFAULT_GROUP).getServers().iterator().next());
+     rsGroupAdmin.moveServers(newServers, appInfo.getName());
+diff --git a/hbase-rsgroup/src/test/java/org/apache/hadoop/hbase/rsgroup/TestRSGroupsOfflineMode.java b/hbase-rsgroup/src/test/java/org/apache/hadoop/hbase/rsgroup/TestRSGroupsOfflineMode.java
+index bdb5163..b89ea0e 100644
+--- a/hbase-rsgroup/src/test/java/org/apache/hadoop/hbase/rsgroup/TestRSGroupsOfflineMode.java
++++ b/hbase-rsgroup/src/test/java/org/apache/hadoop/hbase/rsgroup/TestRSGroupsOfflineMode.java
+@@ -1,4 +1,6 @@
+ /**
++ * Copyright The Apache Software Foundation
++ *
+  * Licensed to the Apache Software Foundation (ASF) under one
+  * or more contributor license agreements.  See the NOTICE file
+  * distributed with this work for additional information
+@@ -98,48 +100,50 @@ public class TestRSGroupsOfflineMode {
+     //so it gets assigned later
+     final TableName failoverTable = TableName.valueOf("testOffline");
+     TEST_UTIL.createTable(failoverTable, Bytes.toBytes("f"));
++
++    RSGroupAdmin groupAdmin = RSGroupAdmin.newClient(TEST_UTIL.getConnection());
++
+     final HRegionServer killRS = ((MiniHBaseCluster)cluster).getRegionServer(0);
+     final HRegionServer groupRS = ((MiniHBaseCluster)cluster).getRegionServer(1);
+     final HRegionServer failoverRS = ((MiniHBaseCluster)cluster).getRegionServer(2);
++
+     String newGroup =  "my_group";
+-    try (RSGroupAdmin groupAdmin = new RSGroupAdminClient(TEST_UTIL.getConnection())) {
+-      groupAdmin.addRSGroup(newGroup);
+-      if(master.getAssignmentManager().getRegionStates().getRegionAssignments()
+-          .containsValue(failoverRS.getServerName())) {
+-        for(HRegionInfo regionInfo: hbaseAdmin.getOnlineRegions(failoverRS.getServerName())) {
+-          hbaseAdmin.move(regionInfo.getEncodedNameAsBytes(),
+-              Bytes.toBytes(failoverRS.getServerName().getServerName()));
+-        }
+-        LOG.info("Waiting for region unassignments on failover RS...");
+-        TEST_UTIL.waitFor(WAIT_TIMEOUT, new Waiter.Predicate<Exception>() {
+-          @Override
+-          public boolean evaluate() throws Exception {
+-            return master.getServerManager().getLoad(failoverRS.getServerName())
+-                .getRegionsLoad().size() > 0;
+-          }
+-        });
++    groupAdmin.addRSGroup(newGroup);
++    if(master.getAssignmentManager().getRegionStates().getRegionAssignments()
++        .containsValue(failoverRS.getServerName())) {
++      for(HRegionInfo regionInfo: hbaseAdmin.getOnlineRegions(failoverRS.getServerName())) {
++        hbaseAdmin.move(regionInfo.getEncodedNameAsBytes(),
++            Bytes.toBytes(failoverRS.getServerName().getServerName()));
+       }
+-
+-      //move server to group and make sure all tables are assigned
+-      groupAdmin.moveServers(Sets.newHashSet(groupRS.getServerName().getAddress()), newGroup);
+-      TEST_UTIL.waitFor(WAIT_TIMEOUT, new Waiter.Predicate<Exception>() {
+-        @Override
+-        public boolean evaluate() throws Exception {
+-          return groupRS.getNumberOfOnlineRegions() < 1 &&
+-              master.getAssignmentManager().getRegionStates().getRegionsInTransition().size() < 1;
+-        }
+-      });
+-      //move table to group and wait
+-      groupAdmin.moveTables(Sets.newHashSet(RSGroupInfoManager.RSGROUP_TABLE_NAME), newGroup);
+-      LOG.info("Waiting for move table...");
++      LOG.info("Waiting for region unassignments on failover RS...");
+       TEST_UTIL.waitFor(WAIT_TIMEOUT, new Waiter.Predicate<Exception>() {
+         @Override
+         public boolean evaluate() throws Exception {
+-          return groupRS.getNumberOfOnlineRegions() == 1;
++          return master.getServerManager().getLoad(failoverRS.getServerName())
++              .getRegionsLoad().size() > 0;
+         }
+       });
+     }
+ 
++    //move server to group and make sure all tables are assigned
++    groupAdmin.moveServers(Sets.newHashSet(groupRS.getServerName().getHostPort()), newGroup);
++    TEST_UTIL.waitFor(WAIT_TIMEOUT, new Waiter.Predicate<Exception>() {
++      @Override
++      public boolean evaluate() throws Exception {
++        return groupRS.getNumberOfOnlineRegions() < 1 &&
++            master.getAssignmentManager().getRegionStates().getRegionsInTransition().size() < 1;
++      }
++    });
++    //move table to group and wait
++    groupAdmin.moveTables(Sets.newHashSet(RSGroupInfoManager.RSGROUP_TABLE_NAME), newGroup);
++    LOG.info("Waiting for move table...");
++    TEST_UTIL.waitFor(WAIT_TIMEOUT, new Waiter.Predicate<Exception>() {
++      @Override
++      public boolean evaluate() throws Exception {
++        return groupRS.getNumberOfOnlineRegions() == 1;
++      }
++    });
++
+     groupRS.stop("die");
+     //race condition here
+     TEST_UTIL.getHBaseCluster().getMaster().stopMaster();
+diff --git a/hbase-rsgroup/src/test/java/org/apache/hadoop/hbase/rsgroup/VerifyingRSGroupAdminClient.java b/hbase-rsgroup/src/test/java/org/apache/hadoop/hbase/rsgroup/VerifyingRSGroupAdminClient.java
+index 0241dc5..d1f4898 100644
+--- a/hbase-rsgroup/src/test/java/org/apache/hadoop/hbase/rsgroup/VerifyingRSGroupAdminClient.java
++++ b/hbase-rsgroup/src/test/java/org/apache/hadoop/hbase/rsgroup/VerifyingRSGroupAdminClient.java
+@@ -1,4 +1,6 @@
+ /**
++ * Copyright The Apache Software Foundation
++ *
+  * Licensed to the Apache Software Foundation (ASF) under one
+  * or more contributor license agreements.  See the NOTICE file
+  * distributed with this work for additional information
+@@ -19,9 +21,9 @@ package org.apache.hadoop.hbase.rsgroup;
+ 
+ import com.google.common.collect.Maps;
+ import com.google.common.collect.Sets;
++import com.google.common.net.HostAndPort;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hbase.TableName;
+-import org.apache.hadoop.hbase.classification.InterfaceAudience;
+ import org.apache.hadoop.hbase.client.ConnectionFactory;
+ import org.apache.hadoop.hbase.client.Result;
+ import org.apache.hadoop.hbase.client.Scan;
+@@ -29,7 +31,6 @@ import org.apache.hadoop.hbase.client.Table;
+ import org.apache.hadoop.hbase.exceptions.DeserializationException;
+ import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
+ import org.apache.hadoop.hbase.protobuf.generated.RSGroupProtos;
+-import org.apache.hadoop.hbase.util.Address;
+ import org.apache.hadoop.hbase.zookeeper.ZKUtil;
+ import org.apache.hadoop.hbase.zookeeper.ZooKeeperWatcher;
+ import org.apache.zookeeper.KeeperException;
+@@ -41,10 +42,10 @@ import java.util.List;
+ import java.util.Map;
+ import java.util.Set;
+ 
+-@InterfaceAudience.Private
+-public class VerifyingRSGroupAdminClient implements RSGroupAdmin {
++public class VerifyingRSGroupAdminClient extends RSGroupAdmin {
+   private Table table;
+   private ZooKeeperWatcher zkw;
++  private RSGroupSerDe serDe;
+   private RSGroupAdmin wrapped;
+ 
+   public VerifyingRSGroupAdminClient(RSGroupAdmin RSGroupAdmin, Configuration conf)
+@@ -52,6 +53,7 @@ public class VerifyingRSGroupAdminClient implements RSGroupAdmin {
+     wrapped = RSGroupAdmin;
+     table = ConnectionFactory.createConnection(conf).getTable(RSGroupInfoManager.RSGROUP_TABLE_NAME);
+     zkw = new ZooKeeperWatcher(conf, this.getClass().getSimpleName(), null);
++    serDe = new RSGroupSerDe();
+   }
+ 
+   @Override
+@@ -71,7 +73,7 @@ public class VerifyingRSGroupAdminClient implements RSGroupAdmin {
+   }
+ 
+   @Override
+-  public void moveServers(Set<Address> servers, String targetGroup) throws IOException {
++  public void moveServers(Set<HostAndPort> servers, String targetGroup) throws IOException {
+     wrapped.moveServers(servers, targetGroup);
+     verify();
+   }
+@@ -99,7 +101,7 @@ public class VerifyingRSGroupAdminClient implements RSGroupAdmin {
+   }
+ 
+   @Override
+-  public RSGroupInfo getRSGroupOfServer(Address hostPort) throws IOException {
++  public RSGroupInfo getRSGroupOfServer(HostAndPort hostPort) throws IOException {
+     return wrapped.getRSGroupOfServer(hostPort);
+   }
+ 
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/coprocessor/BaseMasterAndRegionObserver.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/coprocessor/BaseMasterAndRegionObserver.java
+index 470ac4e..4ea82f9 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/coprocessor/BaseMasterAndRegionObserver.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/coprocessor/BaseMasterAndRegionObserver.java
+@@ -35,7 +35,8 @@ import org.apache.hadoop.hbase.master.procedure.MasterProcedureEnv;
+ import org.apache.hadoop.hbase.procedure2.ProcedureExecutor;
+ import org.apache.hadoop.hbase.protobuf.generated.HBaseProtos.SnapshotDescription;
+ import org.apache.hadoop.hbase.protobuf.generated.QuotaProtos.Quotas;
+-import org.apache.hadoop.hbase.util.Address;
++
++import com.google.common.net.HostAndPort;
+ 
+ import java.io.IOException;
+ import java.util.List;
+@@ -568,7 +569,7 @@ public abstract class BaseMasterAndRegionObserver extends BaseRegionObserver
+   }
+ 
+   @Override
+-  public void postMoveServers(ObserverContext<MasterCoprocessorEnvironment> ctx, Set<Address>
++  public void postMoveServers(ObserverContext<MasterCoprocessorEnvironment> ctx, Set<HostAndPort>
+       servers, String targetGroup) throws IOException {
+   }
+ 
+@@ -594,7 +595,7 @@ public abstract class BaseMasterAndRegionObserver extends BaseRegionObserver
+ 
+   @Override
+   public void preMoveServers(ObserverContext<MasterCoprocessorEnvironment> ctx,
+-      Set<Address> servers, String targetGroup) throws IOException {
++      Set<HostAndPort> servers, String targetGroup) throws IOException {
+   }
+ 
+   @Override
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/coprocessor/BaseMasterObserver.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/coprocessor/BaseMasterObserver.java
+index 84728bd..d403813 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/coprocessor/BaseMasterObserver.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/coprocessor/BaseMasterObserver.java
+@@ -35,7 +35,8 @@ import org.apache.hadoop.hbase.master.procedure.MasterProcedureEnv;
+ import org.apache.hadoop.hbase.procedure2.ProcedureExecutor;
+ import org.apache.hadoop.hbase.protobuf.generated.HBaseProtos.SnapshotDescription;
+ import org.apache.hadoop.hbase.protobuf.generated.QuotaProtos.Quotas;
+-import org.apache.hadoop.hbase.util.Address;
++
++import com.google.common.net.HostAndPort;
+ 
+ import java.io.IOException;
+ import java.util.List;
+@@ -562,12 +563,12 @@ public class BaseMasterObserver implements MasterObserver {
+   }
+ 
+   @Override
+-  public void preMoveServers(ObserverContext<MasterCoprocessorEnvironment> ctx, Set<Address>
++  public void preMoveServers(ObserverContext<MasterCoprocessorEnvironment> ctx, Set<HostAndPort>
+       servers, String targetGroup) throws IOException {
+   }
+ 
+   @Override
+-  public void postMoveServers(ObserverContext<MasterCoprocessorEnvironment> ctx, Set<Address>
++  public void postMoveServers(ObserverContext<MasterCoprocessorEnvironment> ctx, Set<HostAndPort>
+       servers, String targetGroup) throws IOException {
+   }
+ 
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/coprocessor/MasterObserver.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/coprocessor/MasterObserver.java
+index b645bec..5e36f3f 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/coprocessor/MasterObserver.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/coprocessor/MasterObserver.java
+@@ -19,6 +19,8 @@
+ 
+ package org.apache.hadoop.hbase.coprocessor;
+ 
++import com.google.common.net.HostAndPort;
++
+ import java.io.IOException;
+ import java.util.List;
+ import java.util.Set;
+@@ -39,7 +41,6 @@ import org.apache.hadoop.hbase.master.procedure.MasterProcedureEnv;
+ import org.apache.hadoop.hbase.procedure2.ProcedureExecutor;
+ import org.apache.hadoop.hbase.protobuf.generated.HBaseProtos.SnapshotDescription;
+ import org.apache.hadoop.hbase.protobuf.generated.QuotaProtos.Quotas;
+-import org.apache.hadoop.hbase.util.Address;
+ 
+ /**
+  * Defines coprocessor hooks for interacting with operations on the
+@@ -1015,7 +1016,7 @@ public interface MasterObserver extends Coprocessor {
+    * @throws IOException on failure
+    */
+   void preMoveServers(final ObserverContext<MasterCoprocessorEnvironment> ctx,
+-                      Set<Address> servers, String targetGroup) throws IOException;
++                      Set<HostAndPort> servers, String targetGroup) throws IOException;
+ 
+   /**
+    * Called after servers are moved to target region server group
+@@ -1025,7 +1026,7 @@ public interface MasterObserver extends Coprocessor {
+    * @throws IOException on failure
+    */
+   void postMoveServers(final ObserverContext<MasterCoprocessorEnvironment> ctx,
+-                       Set<Address> servers, String targetGroup) throws IOException;
++                       Set<HostAndPort> servers, String targetGroup) throws IOException;
+ 
+   /**
+    * Called before tables are moved to target region server group
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java
+index 4cf5ac3..c333848 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java
+@@ -129,7 +129,7 @@ public class AssignmentManager extends ZooKeeperListener {
+   private static final Log LOG = LogFactory.getLog(AssignmentManager.class);
+ 
+   public static final ServerName HBCK_CODE_SERVERNAME = ServerName.valueOf(HConstants.HBCK_CODE_NAME,
+-      0, -1L);
++      -1, -1L);
+ 
+   static final String ALREADY_IN_TRANSITION_WAITTIME
+     = "hbase.assignment.already.intransition.waittime";
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/LoadBalancer.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/LoadBalancer.java
+index bf51a9c..441f03c 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/LoadBalancer.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/LoadBalancer.java
+@@ -21,6 +21,9 @@ package org.apache.hadoop.hbase.master;
+ import java.util.List;
+ import java.util.Map;
+ 
++import edu.umd.cs.findbugs.annotations.Nullable;
++import org.apache.hadoop.hbase.classification.InterfaceAudience;
++import org.apache.hadoop.hbase.conf.ConfigurationObserver;
+ import org.apache.hadoop.conf.Configurable;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hbase.ClusterStatus;
+@@ -28,8 +31,6 @@ import org.apache.hadoop.hbase.HBaseIOException;
+ import org.apache.hadoop.hbase.HRegionInfo;
+ import org.apache.hadoop.hbase.ServerName;
+ import org.apache.hadoop.hbase.Stoppable;
+-import org.apache.hadoop.hbase.classification.InterfaceAudience;
+-import org.apache.hadoop.hbase.conf.ConfigurationObserver;
+ 
+ /**
+  * Makes decisions about the placement and movement of Regions across
+@@ -51,7 +52,7 @@ import org.apache.hadoop.hbase.conf.ConfigurationObserver;
+ public interface LoadBalancer extends Configurable, Stoppable, ConfigurationObserver {
+ 
+   //used to signal to the caller that the region(s) cannot be assigned
+-  ServerName BOGUS_SERVER_NAME = ServerName.parseServerName("bogus.example.com,1,1");
++  ServerName BOGUS_SERVER_NAME = ServerName.parseServerName("localhost,1,1");
+ 
+   /**
+    * Set the current cluster status.  This allows a LoadBalancer to map host name to a server
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MasterCoprocessorHost.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MasterCoprocessorHost.java
+index 88ae50b..dbf777f 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MasterCoprocessorHost.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MasterCoprocessorHost.java
+@@ -19,6 +19,8 @@
+ 
+ package org.apache.hadoop.hbase.master;
+ 
++import com.google.common.net.HostAndPort;
++
+ import java.io.IOException;
+ import java.util.List;
+ import java.util.Set;
+@@ -41,7 +43,6 @@ import org.apache.hadoop.hbase.master.procedure.MasterProcedureEnv;
+ import org.apache.hadoop.hbase.procedure2.ProcedureExecutor;
+ import org.apache.hadoop.hbase.protobuf.generated.HBaseProtos.SnapshotDescription;
+ import org.apache.hadoop.hbase.protobuf.generated.QuotaProtos.Quotas;
+-import org.apache.hadoop.hbase.util.Address;
+ 
+ /**
+  * Provides the coprocessor framework and environment for master oriented
+@@ -1160,7 +1161,7 @@ public class MasterCoprocessorHost
+     return bypass;
+   }
+ 
+-  public void preMoveServers(final Set<Address> servers, final String targetGroup)
++  public void preMoveServers(final Set<HostAndPort> servers, final String targetGroup)
+       throws IOException {
+     execOperation(coprocessors.isEmpty() ? null : new CoprocessorOperation() {
+       @Override
+@@ -1173,7 +1174,7 @@ public class MasterCoprocessorHost
+     });
+   }
+ 
+-  public void postMoveServers(final Set<Address> servers, final String targetGroup)
++  public void postMoveServers(final Set<HostAndPort> servers, final String targetGroup)
+       throws IOException {
+     execOperation(coprocessors.isEmpty() ? null : new CoprocessorOperation() {
+       @Override
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
+index 81a74e6..256f2db 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
+@@ -21,6 +21,7 @@ package org.apache.hadoop.hbase.regionserver;
+ import java.io.IOException;
+ import java.io.InterruptedIOException;
+ import java.lang.Thread.UncaughtExceptionHandler;
++import java.lang.management.ManagementFactory;
+ import java.lang.management.MemoryUsage;
+ import java.lang.reflect.Constructor;
+ import java.net.BindException;
+@@ -189,7 +190,6 @@ import com.google.protobuf.RpcCallback;
+ import com.google.protobuf.RpcController;
+ import com.google.protobuf.Service;
+ import com.google.protobuf.ServiceException;
+-
+ import sun.misc.Signal;
+ import sun.misc.SignalHandler;
+ 
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/security/access/AccessController.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/security/access/AccessController.java
+index 7b45b84..c4bbbf7 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/security/access/AccessController.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/security/access/AccessController.java
+@@ -18,6 +18,8 @@
+  */
+ package org.apache.hadoop.hbase.security.access;
+ 
++import com.google.common.net.HostAndPort;
++
+ import java.io.IOException;
+ import java.net.InetAddress;
+ import java.security.PrivilegedExceptionAction;
+@@ -114,7 +116,6 @@ import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
+ import org.apache.hadoop.hbase.util.Pair;
+ import org.apache.hadoop.hbase.util.SimpleMutableByteRange;
+ import org.apache.hadoop.hbase.zookeeper.ZooKeeperWatcher;
+-import org.apache.hadoop.hbase.util.Address;
+ 
+ import com.google.common.collect.ArrayListMultimap;
+ import com.google.common.collect.ImmutableSet;
+@@ -2636,7 +2637,7 @@ public class AccessController extends BaseMasterAndRegionObserver
+ 
+   @Override
+   public void preMoveServers(ObserverContext<MasterCoprocessorEnvironment> ctx,
+-                             Set<Address> servers, String targetGroup) throws IOException {
++                             Set<HostAndPort> servers, String targetGroup) throws IOException {
+     requirePermission("moveServers", Action.ADMIN);
+   }
+ 
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/TestServerName.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/TestServerName.java
+index 7ec5d64..2c90f34 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/TestServerName.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/TestServerName.java
+@@ -89,14 +89,25 @@ public class TestServerName {
+     assertFalse(sn.equals(sn3));
+     assertEquals(sn.hashCode(), sn2.hashCode());
+     assertNotSame(sn.hashCode(), sn3.hashCode());
+-    assertEquals(sn.toString(), ServerName.valueOf("www.example.org", 1234, 5678).toString());
+-    assertEquals(sn.toString(), ServerName.valueOf("www.example.org:1234", 5678).toString());
++    assertEquals(sn.toString(),
++      ServerName.getServerName("www.example.org", 1234, 5678));
++    assertEquals(sn.toString(),
++      ServerName.getServerName("www.example.org:1234", 5678));
+     assertEquals(sn.toString(),
+       "www.example.org" + ServerName.SERVERNAME_SEPARATOR + "1234" +
+       ServerName.SERVERNAME_SEPARATOR + "5678");
+   }
+ 
+   @Test
++  public void getServerStartcodeFromServerName() {
++    ServerName sn = ServerName.valueOf("www.example.org", 1234, 5678);
++    assertEquals(5678,
++      ServerName.getServerStartcodeFromServerName(sn.toString()));
++    assertNotSame(5677,
++      ServerName.getServerStartcodeFromServerName(sn.toString()));
++  }
++
++  @Test
+   public void testHostNameCaseSensitivity() {
+     ServerName lower = ServerName.valueOf("www.example.org", 1234, 5678);
+     ServerName upper = ServerName.valueOf("www.EXAMPLE.org", 1234, 5678);
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/coprocessor/TestMasterObserver.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/coprocessor/TestMasterObserver.java
+index 7455d66..632a620 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/coprocessor/TestMasterObserver.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/coprocessor/TestMasterObserver.java
+@@ -70,8 +70,8 @@ import org.junit.Rule;
+ import org.junit.Test;
+ import org.junit.experimental.categories.Category;
+ import org.junit.rules.TestName;
+-import org.apache.hadoop.hbase.util.Address;
+ 
++import com.google.common.net.HostAndPort;
+ 
+ /**
+  * Tests invocation of the {@link org.apache.hadoop.hbase.coprocessor.MasterObserver}
+@@ -1221,12 +1221,12 @@ public class TestMasterObserver {
+ 
+     @Override
+     public void preMoveServers(ObserverContext<MasterCoprocessorEnvironment> ctx,
+-                               Set<Address> servers, String targetGroup) throws IOException {
++                               Set<HostAndPort> servers, String targetGroup) throws IOException {
+     }
+ 
+     @Override
+     public void postMoveServers(ObserverContext<MasterCoprocessorEnvironment> ctx,
+-                                Set<Address> servers, String targetGroup) throws IOException {
++                                Set<HostAndPort> servers, String targetGroup) throws IOException {
+     }
+ 
+     @Override
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/balancer/TestRegionLocationFinder.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/balancer/TestRegionLocationFinder.java
+index 87cc2ca..bdbdc9f 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/balancer/TestRegionLocationFinder.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/balancer/TestRegionLocationFinder.java
+@@ -27,14 +27,15 @@ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.hbase.HBaseTestingUtility;
+ import org.apache.hadoop.hbase.HDFSBlocksDistribution;
++import org.apache.hadoop.hbase.HRegionInfo;
+ import org.apache.hadoop.hbase.MiniHBaseCluster;
+ import org.apache.hadoop.hbase.ServerName;
+ import org.apache.hadoop.hbase.TableName;
+ import org.apache.hadoop.hbase.client.Table;
+-import org.apache.hadoop.hbase.regionserver.HRegionServer;
+ import org.apache.hadoop.hbase.regionserver.Region;
+-import org.apache.hadoop.hbase.testclassification.SmallTests;
++import org.apache.hadoop.hbase.regionserver.HRegionServer;
+ import org.apache.hadoop.hbase.util.Bytes;
++import org.apache.hadoop.hbase.testclassification.SmallTests;
+ import org.junit.AfterClass;
+ import org.junit.BeforeClass;
+ import org.junit.Test;
+diff --git a/hbase-shell/src/main/ruby/hbase/rsgroup_admin.rb b/hbase-shell/src/main/ruby/hbase/rsgroup_admin.rb
+index 4b3dc70..51a4efb 100644
+--- a/hbase-shell/src/main/ruby/hbase/rsgroup_admin.rb
++++ b/hbase-shell/src/main/ruby/hbase/rsgroup_admin.rb
+@@ -1,3 +1,6 @@
++#
++# Copyright The Apache Software Foundation
++#
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+ # distributed with this work for additional information
+@@ -26,7 +29,7 @@ module Hbase
+     include HBaseConstants
+ 
+     def initialize(connection, formatter)
+-      @admin = org.apache.hadoop.hbase.rsgroup.RSGroupAdminClient.new(connection)
++      @admin = org.apache.hadoop.hbase.rsgroup.RSGroupAdmin.newClient(connection)
+       @formatter = formatter
+     end
+ 
+@@ -106,7 +109,7 @@ module Hbase
+     def move_servers(dest, *args)
+       servers = java.util.HashSet.new
+       args[0].each do |s|
+-        servers.add(org.apache.hadoop.hbase.util.Address.fromString(s))
++        servers.add(com.google.common.net.HostAndPort.fromString(s))
+       end
+       @admin.moveServers(servers, dest)
+     end
+@@ -125,7 +128,7 @@ module Hbase
+     # get group of server
+     def get_rsgroup_of_server(server)
+       res = @admin.getRSGroupOfServer(
+-        org.apache.hadoop.hbase.util.Address.fromString(server))
++          com.google.common.net.HostAndPort.fromString(server))
+       if res.nil?
+         raise(ArgumentError,'Server has no group: ' + server)
+       end
+diff --git a/hbase-shell/src/main/ruby/shell/commands/balance_rsgroup.rb b/hbase-shell/src/main/ruby/shell/commands/balance_rsgroup.rb
+index dbf8f3d..bee139f 100644
+--- a/hbase-shell/src/main/ruby/shell/commands/balance_rsgroup.rb
++++ b/hbase-shell/src/main/ruby/shell/commands/balance_rsgroup.rb
+@@ -1,3 +1,6 @@
++#
++# Copyright The Apache Software Foundation
++#
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+ # distributed with this work for additional information
+diff --git a/hbase-shell/src/main/ruby/shell/commands/get_rsgroup.rb b/hbase-shell/src/main/ruby/shell/commands/get_rsgroup.rb
+index caa56bf..6772aa1 100644
+--- a/hbase-shell/src/main/ruby/shell/commands/get_rsgroup.rb
++++ b/hbase-shell/src/main/ruby/shell/commands/get_rsgroup.rb
+@@ -1,3 +1,6 @@
++#
++# Copyright The Apache Software Foundation
++#
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+ # distributed with this work for additional information
+@@ -30,8 +33,8 @@ EOF
+ 
+       def command(group_name)
+         now = Time.now
+-        formatter.header(['REGIONSERVER GROUP INFORMATION'])
+-        rsgroup_admin.get_rsgroup(group_name) do |s|
++        formatter.header(['GROUP INFORMATION'])
++        group_admin.get_rsgroup(group_name) do |s|
+           formatter.row([s])
+         end
+         formatter.footer(now)
+diff --git a/hbase-shell/src/main/ruby/shell/commands/get_server_rsgroup.rb b/hbase-shell/src/main/ruby/shell/commands/get_server_rsgroup.rb
+index 1df655e..322f6bb 100644
+--- a/hbase-shell/src/main/ruby/shell/commands/get_server_rsgroup.rb
++++ b/hbase-shell/src/main/ruby/shell/commands/get_server_rsgroup.rb
+@@ -1,3 +1,6 @@
++#
++# Copyright The Apache Software Foundation
++#
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+ # distributed with this work for additional information
+@@ -28,7 +31,7 @@ EOF
+ 
+       def command(server)
+         now = Time.now
+-        group_name = rsgroup_admin.get_rsgroup_of_server(server).getName
++        group_name = rsgroup_admin.getGroupOfServer(server).getName
+         formatter.row([group_name])
+         formatter.footer(now, 1)
+       end
+diff --git a/hbase-shell/src/main/ruby/shell/commands/get_table_rsgroup.rb b/hbase-shell/src/main/ruby/shell/commands/get_table_rsgroup.rb
+index 50debb3..d15cffa 100644
+--- a/hbase-shell/src/main/ruby/shell/commands/get_table_rsgroup.rb
++++ b/hbase-shell/src/main/ruby/shell/commands/get_table_rsgroup.rb
+@@ -1,3 +1,6 @@
++#
++# Copyright The Apache Software Foundation
++#
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+ # distributed with this work for additional information
+diff --git a/hbase-shell/src/main/ruby/shell/commands/list_rsgroups.rb b/hbase-shell/src/main/ruby/shell/commands/list_rsgroups.rb
+index 497cb7c..6ea1d45 100644
+--- a/hbase-shell/src/main/ruby/shell/commands/list_rsgroups.rb
++++ b/hbase-shell/src/main/ruby/shell/commands/list_rsgroups.rb
+@@ -1,3 +1,6 @@
++#
++# Copyright The Apache Software Foundation
++#
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+ # distributed with this work for additional information
+@@ -32,7 +35,7 @@ EOF
+ 
+       def command(regex = '.*')
+         now = Time.now
+-        formatter.header(['REGIONSERVER GROUPS'])
++        formatter.header(['GROUPS'])
+ 
+         regex = /#{regex}/ unless regex.is_a?(Regexp)
+         list = rsgroup_admin.list_rs_groups.grep(regex)
+diff --git a/hbase-shell/src/main/ruby/shell/commands/move_rsgroup_servers.rb b/hbase-shell/src/main/ruby/shell/commands/move_rsgroup_servers.rb
+index e391e2d..6f48400 100644
+--- a/hbase-shell/src/main/ruby/shell/commands/move_rsgroup_servers.rb
++++ b/hbase-shell/src/main/ruby/shell/commands/move_rsgroup_servers.rb
+@@ -1,3 +1,6 @@
++#
++# Copyright The Apache Software Foundation
++#
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+ # distributed with this work for additional information
+diff --git a/hbase-shell/src/main/ruby/shell/commands/move_rsgroup_tables.rb b/hbase-shell/src/main/ruby/shell/commands/move_rsgroup_tables.rb
+index 902cb43..3c1555a 100644
+--- a/hbase-shell/src/main/ruby/shell/commands/move_rsgroup_tables.rb
++++ b/hbase-shell/src/main/ruby/shell/commands/move_rsgroup_tables.rb
+@@ -1,3 +1,6 @@
++#
++# Copyright The Apache Software Foundation
++#
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+ # distributed with this work for additional information
+diff --git a/hbase-shell/src/main/ruby/shell/commands/remove_rsgroup.rb b/hbase-shell/src/main/ruby/shell/commands/remove_rsgroup.rb
+index c9af112..9407732 100644
+--- a/hbase-shell/src/main/ruby/shell/commands/remove_rsgroup.rb
++++ b/hbase-shell/src/main/ruby/shell/commands/remove_rsgroup.rb
+@@ -1,3 +1,6 @@
++#
++# Copyright The Apache Software Foundation
++#
+ # Licensed to the Apache Software Foundation (ASF) under one
+ # or more contributor license agreements.  See the NOTICE file
+ # distributed with this work for additional information
+diff --git a/hbase-shell/src/test/ruby/shell/rsgroup_shell_test.rb b/hbase-shell/src/test/ruby/shell/rsgroup_shell_test.rb
+index 31c7596..d892775 100644
+--- a/hbase-shell/src/test/ruby/shell/rsgroup_shell_test.rb
++++ b/hbase-shell/src/test/ruby/shell/rsgroup_shell_test.rb
+@@ -29,7 +29,7 @@ module Hbase
+       @shell = Shell::Shell.new(@hbase, @formatter)
+       connection = $TEST_CLUSTER.getConnection
+       @rsgroup_admin =
+-          org.apache.hadoop.hbase.rsgroup.RSGroupAdminClient.new(connection)
++          org.apache.hadoop.hbase.rsgroup.RSGroupAdmin.newClient(connection)
+     end
+ 
+     define_test 'Test Basic RSGroup Commands' do
+-- 
+1.7.9.5
+

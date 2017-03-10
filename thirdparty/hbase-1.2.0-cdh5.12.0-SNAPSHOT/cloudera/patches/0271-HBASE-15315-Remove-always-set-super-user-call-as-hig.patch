@@ -1,0 +1,85 @@
+From 16e6ec9d1e977535c82572a635fbe2e6a08e042f Mon Sep 17 00:00:00 2001
+From: Elliott Clark <eclark@apache.org>
+Date: Tue, 1 Mar 2016 15:34:02 -0800
+Subject: [PATCH 271/308] HBASE-15315 Remove always set super user call as
+ high priority (Yong Zhang)
+
+(cherry picked from commit 32a7f2c4b80b4d5f05889f1669aa1538450b6d7a)
+
+Change-Id: Ibbcb1a3169f43ca02108f4a19d687927fa51c96b
+Reason: Bug
+Author: Yong Zhang
+Ref: CDH-50423
+---
+ .../AnnotationReadingPriorityFunction.java         |   14 -------------
+ .../hadoop/hbase/regionserver/TestPriorityRpc.java |   22 --------------------
+ 2 files changed, 36 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/AnnotationReadingPriorityFunction.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/AnnotationReadingPriorityFunction.java
+index cfdbce0..7084f56 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/AnnotationReadingPriorityFunction.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/AnnotationReadingPriorityFunction.java
+@@ -44,7 +44,6 @@ import org.apache.hadoop.hbase.protobuf.generated.RPCProtos.RequestHeader;
+ import com.google.common.annotations.VisibleForTesting;
+ import com.google.protobuf.Message;
+ import com.google.protobuf.TextFormat;
+-import org.apache.hadoop.hbase.security.Superusers;
+ import org.apache.hadoop.hbase.security.User;
+ 
+ /**
+@@ -177,19 +176,6 @@ public class AnnotationReadingPriorityFunction implements PriorityFunction {
+     if (priorityByAnnotation >= 0) {
+       return priorityByAnnotation;
+     }
+-
+-    // all requests executed by super users have high QoS
+-    try {
+-      if (Superusers.isSuperUser(user)) {
+-        return HConstants.ADMIN_QOS;
+-      }
+-    } catch (IllegalStateException ex) {
+-      // Not good throwing an exception out of here, a runtime anyways.  Let the query go into the
+-      // server and have it throw the exception if still an issue.  Just mark it normal priority.
+-      if (LOG.isTraceEnabled()) LOG.trace("Marking normal priority after getting exception=" + ex);
+-      return HConstants.NORMAL_QOS;
+-    }
+-
+     return getBasePriority(header, param);
+   }
+ 
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestPriorityRpc.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestPriorityRpc.java
+index a0fabcb..f201d57 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestPriorityRpc.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestPriorityRpc.java
+@@ -115,28 +115,6 @@ public class TestPriorityRpc {
+   }
+ 
+   @Test
+-  public void testQosFunctionForRequestCalledBySuperUser() throws Exception {
+-    RequestHeader.Builder headerBuilder = RequestHeader.newBuilder();
+-    headerBuilder.setMethodName("foo");
+-    RequestHeader header = headerBuilder.build();
+-    PriorityFunction qosFunc = regionServer.rpcServices.getPriority();
+-
+-    //test superusers
+-    regionServer.conf.set(Superusers.SUPERUSER_CONF_KEY, "samplesuperuser");
+-    Superusers.initialize(regionServer.conf);
+-    assertEquals(HConstants.ADMIN_QOS, qosFunc.getPriority(header, null,
+-      User.createUserForTesting(regionServer.conf, "samplesuperuser",
+-        new String[]{"somegroup"})));
+-
+-    //test supergroups
+-    regionServer.conf.set(Superusers.SUPERUSER_CONF_KEY, "@samplesupergroup");
+-    Superusers.initialize(regionServer.conf);
+-    assertEquals(HConstants.ADMIN_QOS, qosFunc.getPriority(header, null,
+-      User.createUserForTesting(regionServer.conf, "regularuser",
+-        new String[]{"samplesupergroup"})));
+-  }
+-
+-  @Test
+   public void testQosFunctionForScanMethod() throws IOException {
+     RequestHeader.Builder headerBuilder = RequestHeader.newBuilder();
+     headerBuilder.setMethodName("Scan");
+-- 
+1.7.9.5
+

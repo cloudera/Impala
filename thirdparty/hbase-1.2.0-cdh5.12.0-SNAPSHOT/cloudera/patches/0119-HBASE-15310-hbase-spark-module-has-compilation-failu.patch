@@ -1,0 +1,63 @@
+From 23ed388215e6ff2ed53974ded60f2a7165affe21 Mon Sep 17 00:00:00 2001
+From: Jonathan M Hsieh <jon@cloudera.com>
+Date: Wed, 24 Feb 2016 10:20:59 -0800
+Subject: [PATCH 119/308] HBASE-15310 hbase-spark module has compilation
+ failures with clover profile
+
+Change-Id: Ib127a4e6de1690130c70b24f99acedd4093aa8f4
+Reason: Unit Test failures
+Author: Jonathan Hsieh
+Ref: CDH-37394
+---
+ hbase-spark/pom.xml |   35 +++++++++++++++++++++++++++++++++++
+ 1 file changed, 35 insertions(+)
+
+diff --git a/hbase-spark/pom.xml b/hbase-spark/pom.xml
+index 94d5c9a..bc75eba 100644
+--- a/hbase-spark/pom.xml
++++ b/hbase-spark/pom.xml
+@@ -605,6 +605,41 @@
+                     </execution>
+                 </executions>
+             </plugin>
++
++            <!-- clover fails due to scala/java cross compile.  This guarantees that the scala is
++             compiled before the java that will be evaluated by code coverage (scala will not be).
++            https://confluence.atlassian.com/display/CLOVERKB/Java-+Scala+cross-compilation+error+-+cannot+find+symbol
++            -->
++            <plugin>
++                <groupId>org.codehaus.mojo</groupId>
++                <artifactId>build-helper-maven-plugin</artifactId>
++                <executions>
++                    <execution>
++                        <id>add-source</id>
++                        <phase>validate</phase>
++                        <goals>
++                            <goal>add-source</goal>
++                        </goals>
++                        <configuration>
++                            <sources>
++                                <source>src/main/scala</source>
++                            </sources>
++                        </configuration>
++                    </execution>
++                    <execution>
++                        <id>add-test-source</id>
++                        <phase>validate</phase>
++                        <goals>
++                            <goal>add-test-source</goal>
++                        </goals>
++                        <configuration>
++                            <sources>
++                                <source>src/test/scala</source>
++                            </sources>
++                        </configuration>
++                    </execution>
++                </executions>
++            </plugin>
+         </plugins>
+     </build>
+ 
+-- 
+1.7.9.5
+

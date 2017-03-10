@@ -1,0 +1,219 @@
+From 08f5f5c43660a28a253a8a217a96203b99ee0ec9 Mon Sep 17 00:00:00 2001
+From: Huaxiang Sun <hsun@cloudera.com>
+Date: Fri, 8 Jan 2016 18:22:02 -0800
+Subject: [PATCH 087/308] HBASE-6778 Deprecate Chore; its a thread per task
+ when we should have one thread to do all tasks
+ (addendum)
+
+Reason: Cleanup
+Author: Jonathan Lawlor
+Ref: CDH-35507
+
+Change-Id: I74c075154f09b525aaf53b8a5d481286a06cf33b
+---
+ .../hbase/master/ExpiredMobFileCleanerChore.java   |   10 +++++----
+ .../org/apache/hadoop/hbase/master/HMaster.java    |    8 +++----
+ .../hbase/master/MobFileCompactionChore.java       |   11 +++++-----
+ .../java/org/apache/hadoop/hbase/mob/MobUtils.java |   10 ++++-----
+ .../PartitionedMobFileCompactor.java               |   23 ++++++++++----------
+ 5 files changed, 31 insertions(+), 31 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/ExpiredMobFileCleanerChore.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/ExpiredMobFileCleanerChore.java
+index 25c9a71..1be4ec4 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/ExpiredMobFileCleanerChore.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/ExpiredMobFileCleanerChore.java
+@@ -24,7 +24,7 @@ import java.util.Map;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.classification.InterfaceAudience;
+-import org.apache.hadoop.hbase.Chore;
++import org.apache.hadoop.hbase.ScheduledChore;
+ import org.apache.hadoop.hbase.HColumnDescriptor;
+ import org.apache.hadoop.hbase.HTableDescriptor;
+ import org.apache.hadoop.hbase.TableDescriptors;
+@@ -39,7 +39,7 @@ import org.apache.hadoop.hbase.mob.MobUtils;
+  * mob files.
+  */
+ @InterfaceAudience.Private
+-public class ExpiredMobFileCleanerChore extends Chore {
++public class ExpiredMobFileCleanerChore extends ScheduledChore {
+ 
+   private static final Log LOG = LogFactory.getLog(ExpiredMobFileCleanerChore.class);
+   private final HMaster master;
+@@ -47,8 +47,10 @@ public class ExpiredMobFileCleanerChore extends Chore {
+   private ExpiredMobFileCleaner cleaner;
+ 
+   public ExpiredMobFileCleanerChore(HMaster master) {
+-    super(master.getServerName() + "-ExpiredMobFileCleanerChore", master.getConfiguration().getInt(
+-        MobConstants.MOB_CLEANER_PERIOD, MobConstants.DEFAULT_MOB_CLEANER_PERIOD), master);
++    super(master.getServerName() + "-ExpiredMobFileCleanerChore", master,
++      master.getConfiguration().getInt(MobConstants.MOB_CLEANER_PERIOD,
++        MobConstants.DEFAULT_MOB_CLEANER_PERIOD));
++
+     this.master = master;
+     this.tableLockManager = master.getTableLockManager();
+     cleaner = new ExpiredMobFileCleaner();
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
+index cdcf6ad..f8e353f 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
+@@ -814,9 +814,9 @@ public class HMaster extends HRegionServer implements MasterServices, Server {
+     status.setStatus("Calling postStartMaster coprocessors");
+     
+     this.expiredMobFileCleanerChore = new ExpiredMobFileCleanerChore(this);
+-    Threads.setDaemonThreadRunning(expiredMobFileCleanerChore.getThread());
++    getChoreService().scheduleChore(this.expiredMobFileCleanerChore);
+     this.mobFileCompactChore = new MobFileCompactionChore(this);
+-    Threads.setDaemonThreadRunning(mobFileCompactChore.getThread());
++    getChoreService().scheduleChore(this.mobFileCompactChore);
+     this.mobFileCompactThread = new MasterMobFileCompactionThread(this);
+ 
+     if (this.cpHost != null) {
+@@ -1187,10 +1187,10 @@ public class HMaster extends HRegionServer implements MasterServices, Server {
+ 
+   private void stopChores() {
+     if (this.expiredMobFileCleanerChore != null) {
+-      this.expiredMobFileCleanerChore.interrupt();
++      this.expiredMobFileCleanerChore.cancel(true);
+     }
+     if (this.mobFileCompactChore != null) {
+-      this.mobFileCompactChore.interrupt();
++      this.mobFileCompactChore.cancel(true);
+     }
+     if (this.balancerChore != null) {
+       this.balancerChore.cancel(true);
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MobFileCompactionChore.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MobFileCompactionChore.java
+index 721cdf0..6f8d9a7 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MobFileCompactionChore.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MobFileCompactionChore.java
+@@ -26,7 +26,7 @@ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.classification.InterfaceAudience;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileSystem;
+-import org.apache.hadoop.hbase.Chore;
++import org.apache.hadoop.hbase.ScheduledChore;
+ import org.apache.hadoop.hbase.HColumnDescriptor;
+ import org.apache.hadoop.hbase.HTableDescriptor;
+ import org.apache.hadoop.hbase.TableDescriptors;
+@@ -37,7 +37,7 @@ import org.apache.hadoop.hbase.mob.MobUtils;
+  * The Class MobFileCompactChore for running compaction regularly to merge small mob files.
+  */
+ @InterfaceAudience.Private
+-public class MobFileCompactionChore extends Chore{
++public class MobFileCompactionChore extends ScheduledChore {
+ 
+   private static final Log LOG = LogFactory.getLog(MobFileCompactionChore.class);
+   private HMaster master;
+@@ -45,9 +45,10 @@ public class MobFileCompactionChore extends Chore{
+   private ExecutorService pool;
+ 
+   public MobFileCompactionChore(HMaster master) {
+-    super(master.getServerName() + "-MobFileCompactChore", master.getConfiguration().getInt(
+-      MobConstants.MOB_FILE_COMPACTION_CHORE_PERIOD,
+-      MobConstants.DEFAULT_MOB_FILE_COMPACTION_CHORE_PERIOD), master);
++    super(master.getServerName() + "-MobFileCompactChore", master,
++      master.getConfiguration().getInt(
++        MobConstants.MOB_FILE_COMPACTION_CHORE_PERIOD,
++          MobConstants.DEFAULT_MOB_FILE_COMPACTION_CHORE_PERIOD));
+     this.master = master;
+     this.tableLockManager = master.getTableLockManager();
+     this.pool = MobUtils.createMobFileCompactorThreadPool(master.getConfiguration());
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/MobUtils.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/MobUtils.java
+index 2d2f73b..e1f3dfa 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/MobUtils.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/MobUtils.java
+@@ -64,10 +64,7 @@ import org.apache.hadoop.hbase.mob.filecompactions.PartitionedMobFileCompactor;
+ import org.apache.hadoop.hbase.regionserver.BloomType;
+ import org.apache.hadoop.hbase.regionserver.HStore;
+ import org.apache.hadoop.hbase.regionserver.StoreFile;
+-import org.apache.hadoop.hbase.util.Bytes;
+-import org.apache.hadoop.hbase.util.FSUtils;
+-import org.apache.hadoop.hbase.util.ReflectionUtils;
+-import org.apache.hadoop.hbase.util.Threads;
++import org.apache.hadoop.hbase.util.*;
+ 
+ /**
+  * The mob utilities
+@@ -257,7 +254,7 @@ public class MobUtils {
+         if (!HFileLink.isHFileLink(file.getPath())) {
+           mobFileName = MobFileName.create(fileName);
+         } else {
+-          HFileLink hfileLink = new HFileLink(conf, file.getPath());
++          HFileLink hfileLink = HFileLink.buildFromHFileLinkPattern(conf, file.getPath());
+           mobFileName = MobFileName.create(hfileLink.getOriginPath().getName());
+         }
+         Date fileDate = parseDate(mobFileName.getDate());
+@@ -554,7 +551,8 @@ public class MobUtils {
+     HColumnDescriptor family, MobFileName mobFileName, Path basePath, long maxKeyCount,
+     Compression.Algorithm compression, CacheConfig cacheConfig) throws IOException {
+     HFileContext hFileContext = new HFileContextBuilder().withCompression(compression)
+-      .withIncludesMvcc(true).withIncludesTags(true).withChecksumType(HFile.DEFAULT_CHECKSUM_TYPE)
++      .withIncludesMvcc(true).withIncludesTags(true).withChecksumType(
++            ChecksumType.getDefaultChecksumType())
+       .withBytesPerCheckSum(HFile.DEFAULT_BYTES_PER_CHECKSUM).withBlockSize(family.getBlocksize())
+       .withHBaseCheckSum(true).withDataBlockEncoding(family.getDataBlockEncoding()).build();
+ 
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/filecompactions/PartitionedMobFileCompactor.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/filecompactions/PartitionedMobFileCompactor.java
+index 355ba69..be7cca1 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/filecompactions/PartitionedMobFileCompactor.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/filecompactions/PartitionedMobFileCompactor.java
+@@ -58,15 +58,9 @@ import org.apache.hadoop.hbase.mob.MobUtils;
+ import org.apache.hadoop.hbase.mob.filecompactions.MobFileCompactionRequest.CompactionType;
+ import org.apache.hadoop.hbase.mob.filecompactions.PartitionedMobFileCompactionRequest.CompactionPartition;
+ import org.apache.hadoop.hbase.mob.filecompactions.PartitionedMobFileCompactionRequest.CompactionPartitionId;
+-import org.apache.hadoop.hbase.regionserver.BloomType;
+-import org.apache.hadoop.hbase.regionserver.HStore;
+-import org.apache.hadoop.hbase.regionserver.ScanInfo;
+-import org.apache.hadoop.hbase.regionserver.ScanType;
+-import org.apache.hadoop.hbase.regionserver.StoreFile;
++import org.apache.hadoop.hbase.regionserver.*;
+ import org.apache.hadoop.hbase.regionserver.StoreFile.Writer;
+-import org.apache.hadoop.hbase.regionserver.StoreFileInfo;
+-import org.apache.hadoop.hbase.regionserver.StoreFileScanner;
+-import org.apache.hadoop.hbase.regionserver.StoreScanner;
++import org.apache.hadoop.hbase.regionserver.ScannerContext;
+ import org.apache.hadoop.hbase.util.Bytes;
+ import org.apache.hadoop.hbase.util.Pair;
+ 
+@@ -392,8 +386,11 @@ public class PartitionedMobFileCompactor extends MobFileCompactor {
+       refFilePath = refFileWriter.getPath();
+       List<Cell> cells = new ArrayList<Cell>();
+       boolean hasMore = false;
++
++      ScannerContext scannerContext =
++          ScannerContext.newBuilder().setBatchLimit(compactionKVMax).build();
+       do {
+-        hasMore = scanner.next(cells, compactionKVMax);
++        hasMore = scanner.next(cells, scannerContext);
+         for (Cell cell : cells) {
+           // TODO remove this after the new code are introduced.
+           KeyValue kv = KeyValueUtil.ensureKeyValue(cell);
+@@ -498,8 +495,10 @@ public class PartitionedMobFileCompactor extends MobFileCompactor {
+       filePath = writer.getPath();
+       List<Cell> cells = new ArrayList<Cell>();
+       boolean hasMore = false;
++      ScannerContext scannerContext =
++          ScannerContext.newBuilder().setBatchLimit(compactionKVMax).build();
+       do {
+-        hasMore = scanner.next(cells, compactionKVMax);
++        hasMore = scanner.next(cells, scannerContext);
+         for (Cell cell : cells) {
+           // TODO remove this after the new code are introduced.
+           KeyValue kv = KeyValueUtil.ensureKeyValue(cell);
+@@ -538,11 +537,11 @@ public class PartitionedMobFileCompactor extends MobFileCompactor {
+   private StoreScanner createScanner(List<StoreFile> filesToCompact, ScanType scanType)
+     throws IOException {
+     List scanners = StoreFileScanner.getScannersForStoreFiles(filesToCompact, false, true, false,
+-      null, HConstants.LATEST_TIMESTAMP);
++      false, HConstants.LATEST_TIMESTAMP);
+     Scan scan = new Scan();
+     scan.setMaxVersions(column.getMaxVersions());
+     long ttl = HStore.determineTTLFromFamily(column);
+-    ScanInfo scanInfo = new ScanInfo(column, ttl, 0, KeyValue.COMPARATOR);
++    ScanInfo scanInfo = new ScanInfo(conf, column, ttl, 0, KeyValue.COMPARATOR);
+     StoreScanner scanner = new StoreScanner(scan, scanInfo, scanType, null, scanners, 0L,
+       HConstants.LATEST_TIMESTAMP);
+     return scanner;
+-- 
+1.7.9.5
+

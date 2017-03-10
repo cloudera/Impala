@@ -1,0 +1,249 @@
+From f63ebb508db9b5d4f980368c1a200505cec8161c Mon Sep 17 00:00:00 2001
+From: Ben Lau <benlau@yahoo-inc.com>
+Date: Thu, 22 Sep 2016 19:16:51 +0000
+Subject: [PATCH 273/308] HBASE-16662 Fix open POODLE vulnerabilities
+
+Signed-off-by: Andrew Purtell <apurtell@apache.org>
+(cherry picked from commit e382b2c9f48cd896d525025c3965fa252f344e08)
+
+Change-Id: Ib5f3438e8b24298f012f007ed63d6cb92c907326
+Reason: Security
+Author: Ben Lau
+Ref: CDH-50440
+---
+ .../org/apache/hadoop/hbase/rest/RESTServer.java   |    4 +-
+ .../java/org/apache/hadoop/hbase/JMXListener.java  |    4 +-
+ .../hbase/SslRMIClientSocketFactorySecure.java     |   38 +++++++++++++
+ .../hbase/SslRMIServerSocketFactorySecure.java     |   57 ++++++++++++++++++++
+ .../jetty/SslSelectChannelConnectorSecure.java     |   36 +++++++++++++
+ .../hadoop/hbase/thrift/ThriftServerRunner.java    |    4 +-
+ 6 files changed, 137 insertions(+), 6 deletions(-)
+ create mode 100644 hbase-server/src/main/java/org/apache/hadoop/hbase/SslRMIClientSocketFactorySecure.java
+ create mode 100644 hbase-server/src/main/java/org/apache/hadoop/hbase/SslRMIServerSocketFactorySecure.java
+ create mode 100644 hbase-server/src/main/java/org/apache/hadoop/hbase/jetty/SslSelectChannelConnectorSecure.java
+
+diff --git a/hbase-rest/src/main/java/org/apache/hadoop/hbase/rest/RESTServer.java b/hbase-rest/src/main/java/org/apache/hadoop/hbase/rest/RESTServer.java
+index ad8c65d..76bb2ac 100644
+--- a/hbase-rest/src/main/java/org/apache/hadoop/hbase/rest/RESTServer.java
++++ b/hbase-rest/src/main/java/org/apache/hadoop/hbase/rest/RESTServer.java
+@@ -36,6 +36,7 @@ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hbase.HBaseConfiguration;
+ import org.apache.hadoop.hbase.HBaseInterfaceAudience;
+ import org.apache.hadoop.hbase.http.InfoServer;
++import org.apache.hadoop.hbase.jetty.SslSelectChannelConnectorSecure;
+ import org.apache.hadoop.hbase.rest.filter.AuthFilter;
+ import org.apache.hadoop.hbase.security.UserProvider;
+ import org.apache.hadoop.hbase.util.DNS;
+@@ -45,7 +46,6 @@ import org.apache.hadoop.hbase.util.VersionInfo;
+ import org.mortbay.jetty.Connector;
+ import org.mortbay.jetty.Server;
+ import org.mortbay.jetty.nio.SelectChannelConnector;
+-import org.mortbay.jetty.security.SslSelectChannelConnector;
+ import org.mortbay.jetty.servlet.Context;
+ import org.mortbay.jetty.servlet.FilterHolder;
+ import org.mortbay.jetty.servlet.ServletHolder;
+@@ -190,7 +190,7 @@ public class RESTServer implements Constants {
+ 
+     Connector connector = new SelectChannelConnector();
+     if(conf.getBoolean(REST_SSL_ENABLED, false)) {
+-      SslSelectChannelConnector sslConnector = new SslSelectChannelConnector();
++      SslSelectChannelConnectorSecure sslConnector = new SslSelectChannelConnectorSecure();
+       String keystore = conf.get(REST_SSL_KEYSTORE_STORE);
+       String password = HBaseConfiguration.getPassword(conf,
+         REST_SSL_KEYSTORE_PASSWORD, null);
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/JMXListener.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/JMXListener.java
+index 1a2f6bb..2872cfa 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/JMXListener.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/JMXListener.java
+@@ -110,8 +110,8 @@ public class JMXListener implements Coprocessor {
+         throw new IOException("SSL is enabled. " +
+             "rmiConnectorPort cannot share with the rmiRegistryPort!");
+       }
+-      csf = new SslRMIClientSocketFactory();
+-      ssf = new SslRMIServerSocketFactory();
++      csf = new SslRMIClientSocketFactorySecure();
++      ssf = new SslRMIServerSocketFactorySecure();
+     }
+ 
+     if (csf != null) {
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/SslRMIClientSocketFactorySecure.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/SslRMIClientSocketFactorySecure.java
+new file mode 100644
+index 0000000..e1bc4ef
+--- /dev/null
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/SslRMIClientSocketFactorySecure.java
+@@ -0,0 +1,38 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one or more contributor license
++ * agreements. See the NOTICE file distributed with this work for additional information regarding
++ * copyright ownership. The ASF licenses this file to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance with the License. You may obtain a
++ * copy of the License at http://www.apache.org/licenses/LICENSE-2.0 Unless required by applicable
++ * law or agreed to in writing, software distributed under the License is distributed on an "AS IS"
++ * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
++ * for the specific language governing permissions and limitations under the License.
++ */
++package org.apache.hadoop.hbase;
++
++import java.io.IOException;
++import java.net.Socket;
++import java.util.ArrayList;
++
++import javax.net.ssl.SSLSocket;
++import javax.rmi.ssl.SslRMIClientSocketFactory;
++
++/**
++ * Avoid SSL V3.0 "Poodle" Vulnerability - CVE-2014-3566
++ */
++@SuppressWarnings("serial")
++public class SslRMIClientSocketFactorySecure extends SslRMIClientSocketFactory {
++  @Override
++  public Socket createSocket(String host, int port) throws IOException {
++    SSLSocket socket = (SSLSocket) super.createSocket(host, port);
++    ArrayList<String> secureProtocols = new ArrayList<String>();
++    for (String p : socket.getEnabledProtocols()) {
++      if (!p.contains("SSLv3")) {
++        secureProtocols.add(p);
++      }
++    }
++    socket.setEnabledProtocols(secureProtocols.toArray(
++            new String[secureProtocols.size()]));
++    return socket;
++  }
++}
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/SslRMIServerSocketFactorySecure.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/SslRMIServerSocketFactorySecure.java
+new file mode 100644
+index 0000000..bd94625
+--- /dev/null
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/SslRMIServerSocketFactorySecure.java
+@@ -0,0 +1,57 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one or more contributor license
++ * agreements. See the NOTICE file distributed with this work for additional information regarding
++ * copyright ownership. The ASF licenses this file to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance with the License. You may obtain a
++ * copy of the License at http://www.apache.org/licenses/LICENSE-2.0 Unless required by applicable
++ * law or agreed to in writing, software distributed under the License is distributed on an "AS IS"
++ * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
++ * for the specific language governing permissions and limitations under the License.
++ */
++package org.apache.hadoop.hbase;
++
++import java.io.IOException;
++import java.net.ServerSocket;
++import java.net.Socket;
++import java.util.ArrayList;
++
++import javax.net.ssl.SSLSocket;
++import javax.net.ssl.SSLSocketFactory;
++import javax.rmi.ssl.SslRMIServerSocketFactory;
++
++/**
++ * Avoid SSL V3.0 "Poodle" Vulnerability - CVE-2014-3566
++ */
++public class SslRMIServerSocketFactorySecure extends SslRMIServerSocketFactory {
++  // If you add more constructors, you may have to change the rest of this implementation,
++  // which assumes an empty constructor, i.e. there are no specially enabled protocols or
++  // cipher suites on this RMI factory nor a provided SSLContext
++  public SslRMIServerSocketFactorySecure() {
++    super();
++  }
++
++  @Override
++  public ServerSocket createServerSocket(int port) throws IOException {
++    return new ServerSocket(port) {
++      public Socket accept() throws IOException {
++        Socket socket = super.accept();
++        SSLSocketFactory sslSocketFactory = (SSLSocketFactory) SSLSocketFactory.getDefault();
++        SSLSocket sslSocket =
++            (SSLSocket) sslSocketFactory.createSocket(socket,
++              socket.getInetAddress().getHostName(), socket.getPort(), true);
++        sslSocket.setUseClientMode(false);
++        sslSocket.setNeedClientAuth(false);
++
++        ArrayList<String> secureProtocols = new ArrayList<String>();
++        for (String p : sslSocket.getEnabledProtocols()) {
++          if (!p.contains("SSLv3")) {
++            secureProtocols.add(p);
++          }
++        }
++        sslSocket.setEnabledProtocols(secureProtocols.toArray(new String[secureProtocols.size()]));
++
++        return sslSocket;
++      }
++    };
++  }
++}
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/jetty/SslSelectChannelConnectorSecure.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/jetty/SslSelectChannelConnectorSecure.java
+new file mode 100644
+index 0000000..712b4f1
+--- /dev/null
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/jetty/SslSelectChannelConnectorSecure.java
+@@ -0,0 +1,36 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one or more contributor license
++ * agreements. See the NOTICE file distributed with this work for additional information regarding
++ * copyright ownership. The ASF licenses this file to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance with the License. You may obtain a
++ * copy of the License at http://www.apache.org/licenses/LICENSE-2.0 Unless required by applicable
++ * law or agreed to in writing, software distributed under the License is distributed on an "AS IS"
++ * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
++ * for the specific language governing permissions and limitations under the License.
++ */
++package org.apache.hadoop.hbase.jetty;
++
++import java.io.IOException;
++import java.util.ArrayList;
++
++import javax.net.ssl.SSLEngine;
++
++import org.mortbay.jetty.security.SslSelectChannelConnector;
++
++/**
++ * Avoid SSL V3.0 "Poodle" Vulnerability - CVE-2014-3566
++ */
++public class SslSelectChannelConnectorSecure extends SslSelectChannelConnector {
++  @Override
++  protected SSLEngine createSSLEngine() throws IOException {
++    SSLEngine sslEngine = super.createSSLEngine();
++    ArrayList<String> secureProtocols = new ArrayList<String>();
++    for (String p : sslEngine.getEnabledProtocols()) {
++      if (!p.contains("SSLv3")) {
++        secureProtocols.add(p);
++      }
++    }
++    sslEngine.setEnabledProtocols(secureProtocols.toArray(new String[secureProtocols.size()]));
++    return sslEngine;
++  }
++}
+diff --git a/hbase-thrift/src/main/java/org/apache/hadoop/hbase/thrift/ThriftServerRunner.java b/hbase-thrift/src/main/java/org/apache/hadoop/hbase/thrift/ThriftServerRunner.java
+index 61a9bad..d2f1012 100644
+--- a/hbase-thrift/src/main/java/org/apache/hadoop/hbase/thrift/ThriftServerRunner.java
++++ b/hbase-thrift/src/main/java/org/apache/hadoop/hbase/thrift/ThriftServerRunner.java
+@@ -80,6 +80,7 @@ import org.apache.hadoop.hbase.filter.Filter;
+ import org.apache.hadoop.hbase.filter.ParseFilter;
+ import org.apache.hadoop.hbase.filter.PrefixFilter;
+ import org.apache.hadoop.hbase.filter.WhileMatchFilter;
++import org.apache.hadoop.hbase.jetty.SslSelectChannelConnectorSecure;
+ import org.apache.hadoop.hbase.security.SecurityUtil;
+ import org.apache.hadoop.hbase.security.UserProvider;
+ import org.apache.hadoop.hbase.thrift.CallQueue.Call;
+@@ -125,7 +126,6 @@ import org.apache.thrift.transport.TTransportFactory;
+ import org.mortbay.jetty.Connector;
+ import org.mortbay.jetty.Server;
+ import org.mortbay.jetty.nio.SelectChannelConnector;
+-import org.mortbay.jetty.security.SslSelectChannelConnector;
+ import org.mortbay.jetty.servlet.Context;
+ import org.mortbay.jetty.servlet.ServletHolder;
+ import org.mortbay.thread.QueuedThreadPool;
+@@ -404,7 +404,7 @@ public class ThriftServerRunner implements Runnable {
+     // set up Jetty and run the embedded server
+     Connector connector = new SelectChannelConnector();
+     if(conf.getBoolean(THRIFT_SSL_ENABLED, false)) {
+-      SslSelectChannelConnector sslConnector = new SslSelectChannelConnector();
++      SslSelectChannelConnectorSecure sslConnector = new SslSelectChannelConnectorSecure();
+       String keystore = conf.get(THRIFT_SSL_KEYSTORE_STORE);
+       String password = HBaseConfiguration.getPassword(conf,
+           THRIFT_SSL_KEYSTORE_PASSWORD, null);
+-- 
+1.7.9.5
+

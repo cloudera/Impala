@@ -1,0 +1,177 @@
+From 3d3aaaefbef15597e31bb1a3bca95dc23e8e732b Mon Sep 17 00:00:00 2001
+From: Yu Li <liyu@apache.org>
+Date: Sun, 10 Jul 2016 14:09:02 +0800
+Subject: [PATCH 204/308] HBASE-16194 Should count in MSLAB chunk allocation
+ into heap size change when adding duplicate cells
+
+(cherry picked from commit b96b042043d96cbb348b538a7abc9d44157948b9)
+
+Change-Id: I3950120bb0f26ad2e7fb4b03ebd7db0d79a51897
+Reason: Supportability
+Author: Yu Li
+Ref: CDH-42164
+---
+ .../hadoop/hbase/regionserver/DefaultMemStore.java |   38 ++++++++++++++------
+ .../hadoop/hbase/regionserver/HeapMemStoreLAB.java |   11 ++++++
+ .../hbase/regionserver/TestDefaultMemStore.java    |   21 +++++++++++
+ 3 files changed, 60 insertions(+), 10 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/DefaultMemStore.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/DefaultMemStore.java
+index e343f55..9a0b9de 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/DefaultMemStore.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/DefaultMemStore.java
+@@ -49,6 +49,8 @@ import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
+ import org.apache.hadoop.hbase.util.ReflectionUtils;
+ import org.apache.htrace.Trace;
+ 
++import com.google.common.annotations.VisibleForTesting;
++
+ /**
+  * The MemStore holds in-memory modifications to the Store.  Modifications
+  * are {@link Cell}s.  When asked to flush, current memstore is moved
+@@ -226,7 +228,8 @@ public class DefaultMemStore implements MemStore {
+   @Override
+   public long add(Cell cell) {
+     Cell toAdd = maybeCloneWithAllocator(cell);
+-    return internalAdd(toAdd);
++    boolean mslabUsed = (toAdd != cell);
++    return internalAdd(toAdd, mslabUsed);
+   }
+ 
+   @Override
+@@ -264,20 +267,38 @@ public class DefaultMemStore implements MemStore {
+    * allocator, and doesn't take the lock.
+    *
+    * Callers should ensure they already have the read lock taken
++   * @param toAdd the cell to add
++   * @param mslabUsed whether using MSLAB
++   * @return the heap size change in bytes
+    */
+-  private long internalAdd(final Cell toAdd) {
+-    long s = heapSizeChange(toAdd, addToCellSet(toAdd));
++  private long internalAdd(final Cell toAdd, boolean mslabUsed) {
++    boolean notPresent = addToCellSet(toAdd);
++    long s = heapSizeChange(toAdd, notPresent);
++    // If there's already a same cell in the CellSet and we are using MSLAB, we must count in the
++    // MSLAB allocation size as well, or else there will be memory leak (occupied heap size larger
++    // than the counted number)
++    if (!notPresent && mslabUsed) {
++      s += getCellLength(toAdd);
++    }
+     timeRangeTracker.includeTimestamp(toAdd);
+     this.size.addAndGet(s);
+     return s;
+   }
+ 
++  /**
++   * Get cell length after serialized in {@link KeyValue}
++   */
++  @VisibleForTesting
++  int getCellLength(Cell cell) {
++    return KeyValueUtil.length(cell);
++  }
++
+   private Cell maybeCloneWithAllocator(Cell cell) {
+     if (allocator == null) {
+       return cell;
+     }
+ 
+-    int len = KeyValueUtil.length(cell);
++    int len = getCellLength(cell);
+     ByteRange alloc = allocator.allocateBytes(len);
+     if (alloc == null) {
+       // The allocation was too large, allocator decided
+@@ -328,12 +349,9 @@ public class DefaultMemStore implements MemStore {
+    */
+   @Override
+   public long delete(Cell deleteCell) {
+-    long s = 0;
+     Cell toAdd = maybeCloneWithAllocator(deleteCell);
+-    s += heapSizeChange(toAdd, addToCellSet(toAdd));
+-    timeRangeTracker.includeTimestamp(toAdd);
+-    this.size.addAndGet(s);
+-    return s;
++    boolean mslabUsed = (toAdd != deleteCell);
++    return internalAdd(toAdd, mslabUsed);
+   }
+ 
+   /**
+@@ -574,7 +592,7 @@ public class DefaultMemStore implements MemStore {
+     // hitting OOME - see TestMemStore.testUpsertMSLAB for a
+     // test that triggers the pathological case if we don't avoid MSLAB
+     // here.
+-    long addedSize = internalAdd(cell);
++    long addedSize = internalAdd(cell, false);
+ 
+     // Get the Cells for the row/family/qualifier regardless of timestamp.
+     // For this case we want to clean up any other puts
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HeapMemStoreLAB.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HeapMemStoreLAB.java
+index f22a6e5..625811a 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HeapMemStoreLAB.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HeapMemStoreLAB.java
+@@ -29,6 +29,7 @@ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hbase.util.ByteRange;
+ import org.apache.hadoop.hbase.util.SimpleMutableByteRange;
+ 
++import com.google.common.annotations.VisibleForTesting;
+ import com.google.common.base.Preconditions;
+ 
+ /**
+@@ -206,6 +207,11 @@ public class HeapMemStoreLAB implements MemStoreLAB {
+     }
+   }
+ 
++  @VisibleForTesting
++  Chunk getCurrentChunk() {
++    return this.curChunk.get();
++  }
++
+   /**
+    * A chunk of memory out of which allocations are sliced.
+    */
+@@ -311,5 +317,10 @@ public class HeapMemStoreLAB implements MemStoreLAB {
+         " allocs=" + allocCount.get() + "waste=" +
+         (data.length - nextFreeOffset.get());
+     }
++
++    @VisibleForTesting
++    int getNextFreeOffset() {
++      return this.nextFreeOffset.get();
++    }
+   }
+ }
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestDefaultMemStore.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestDefaultMemStore.java
+index c8d9ef4..c4d7f91 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestDefaultMemStore.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestDefaultMemStore.java
+@@ -91,6 +91,27 @@ public class TestDefaultMemStore extends TestCase {
+     assertTrue(Bytes.toString(found.getValue()), CellUtil.matchingValue(samekey, found));
+   }
+ 
++  public void testPutSameCell() {
++    byte[] bytes = Bytes.toBytes(getName());
++    KeyValue kv = new KeyValue(bytes, bytes, bytes, bytes);
++    long sizeChangeForFirstCell = this.memstore.add(kv);
++    long sizeChangeForSecondCell = this.memstore.add(kv);
++    // make sure memstore size increase won't double-count MSLAB chunk size
++    assertEquals(DefaultMemStore.heapSizeChange(kv, true), sizeChangeForFirstCell);
++    if (this.memstore.allocator != null) {
++      // make sure memstore size increased when using MSLAB
++      assertEquals(memstore.getCellLength(kv), sizeChangeForSecondCell);
++      // make sure chunk size increased even when writing the same cell, if using MSLAB
++      if (this.memstore.allocator instanceof HeapMemStoreLAB) {
++        assertEquals(2 * memstore.getCellLength(kv),
++          ((HeapMemStoreLAB) this.memstore.allocator).getCurrentChunk().getNextFreeOffset());
++      }
++    } else {
++      // make sure no memstore size change w/o MSLAB
++      assertEquals(0, sizeChangeForSecondCell);
++    }
++  }
++
+   /**
+    * Test memstore snapshot happening while scanning.
+    * @throws IOException
+-- 
+1.7.9.5
+

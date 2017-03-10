@@ -1,0 +1,31 @@
+From a5c661012b800405864f0f4b4b82709419a471de Mon Sep 17 00:00:00 2001
+From: Andrew Purtell <apurtell@apache.org>
+Date: Tue, 2 Aug 2016 15:46:05 -0700
+Subject: [PATCH 187/308] HBASE-16319 Fix TestCacheOnWrite after HBASE-16288
+
+(cherry picked from commit e1f6de747009f9c616cfcea1dcea6ae7ff28a654)
+
+Change-Id: Ied87629c63fef2052c2035ea3cbd7e7dd13dadc3
+Reason: Bugfix
+Author: Andrew Purtell
+Ref: CDH-42824
+---
+ .../hadoop/hbase/io/hfile/TestCacheOnWrite.java    |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/io/hfile/TestCacheOnWrite.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/io/hfile/TestCacheOnWrite.java
+index 91a00e4..c89ef92 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/io/hfile/TestCacheOnWrite.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/io/hfile/TestCacheOnWrite.java
+@@ -314,7 +314,7 @@ public class TestCacheOnWrite {
+     String countByType = blockCountByType.toString();
+     if (useTags) {
+       assertEquals("{" + BlockType.DATA
+-          + "=2663, LEAF_INDEX=297, BLOOM_CHUNK=9, INTERMEDIATE_INDEX=34}", countByType);
++          + "=2663, LEAF_INDEX=297, BLOOM_CHUNK=9, INTERMEDIATE_INDEX=32}", countByType);
+     } else {
+       assertEquals("{" + BlockType.DATA
+           + "=2498, LEAF_INDEX=278, BLOOM_CHUNK=9, INTERMEDIATE_INDEX=31}", countByType);
+-- 
+1.7.9.5
+

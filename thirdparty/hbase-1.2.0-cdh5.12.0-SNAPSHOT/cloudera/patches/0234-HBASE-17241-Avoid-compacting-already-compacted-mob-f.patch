@@ -1,0 +1,116 @@
+From eaef77df9382c492832bc9fd16ece114b03c8d41 Mon Sep 17 00:00:00 2001
+From: Huaxiang Sun <hsun@cloudera.com>
+Date: Wed, 7 Dec 2016 14:14:19 -0800
+Subject: [PATCH 234/308] HBASE-17241 Avoid compacting already compacted mob
+ files with _del files (huaxiang sun)
+
+Author: Huaxiang Sun
+Reason: Improvement
+Ref: CDH-47944
+
+Change-Id: Iefccbcc2f71f3e0d71ac8cdac066f7f8aacfccf3
+---
+ .../PartitionedMobFileCompactionRequest.java       |    4 ++++
+ .../PartitionedMobFileCompactor.java               |   20 ++++++++++++++++
+ .../TestPartitionedMobFileCompactor.java           |   25 ++++++++++++++++++--
+ 3 files changed, 47 insertions(+), 2 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/filecompactions/PartitionedMobFileCompactionRequest.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/filecompactions/PartitionedMobFileCompactionRequest.java
+index d2ac1db..d0c519c 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/filecompactions/PartitionedMobFileCompactionRequest.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/filecompactions/PartitionedMobFileCompactionRequest.java
+@@ -86,6 +86,10 @@ public class PartitionedMobFileCompactionRequest extends MobFileCompactionReques
+     public List<FileStatus> listFiles() {
+       return Collections.unmodifiableList(files);
+     }
++
++    public int getFileCount () {
++      return files.size();
++    }
+   }
+ 
+   /**
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/filecompactions/PartitionedMobFileCompactor.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/filecompactions/PartitionedMobFileCompactor.java
+index 66e5969..424892d 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/filecompactions/PartitionedMobFileCompactor.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/filecompactions/PartitionedMobFileCompactor.java
+@@ -25,6 +25,7 @@ import java.util.Collection;
+ import java.util.Collections;
+ import java.util.Date;
+ import java.util.HashMap;
++import java.util.Iterator;
+ import java.util.List;
+ import java.util.Map;
+ import java.util.Map.Entry;
+@@ -166,6 +167,25 @@ public class PartitionedMobFileCompactor extends MobFileCompactor {
+         selectedFileCount++;
+       }
+     }
++
++    /*
++     * If it is not a major mob compaction with del files, and the file number in Partition is 1,
++     * remove the partition from filesToCompact list to avoid re-compacting files which has been
++     * compacted with del files.
++     */
++    if (!isForceAllFiles && (allDelFiles.size() > 0)) {
++      Iterator<Map.Entry<CompactionPartitionId, CompactionPartition>> it =
++          filesToCompact.entrySet().iterator();
++
++      while(it.hasNext()) {
++        Map.Entry<CompactionPartitionId, CompactionPartition> entry = it.next();
++        if (entry.getValue().getFileCount() == 1) {
++          it.remove();
++          --selectedFileCount;
++        }
++      }
++    }
++
+     PartitionedMobFileCompactionRequest request = new PartitionedMobFileCompactionRequest(
+       filesToCompact.values(), allDelFiles);
+     if (candidates.size() == (allDelFiles.size() + selectedFileCount + irrelevantFileCount)) {
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/mob/filecompactions/TestPartitionedMobFileCompactor.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/mob/filecompactions/TestPartitionedMobFileCompactor.java
+index 4725640..561cf0f 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/mob/filecompactions/TestPartitionedMobFileCompactor.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/mob/filecompactions/TestPartitionedMobFileCompactor.java
+@@ -124,8 +124,8 @@ public class TestPartitionedMobFileCompactor {
+     int count = 10;
+     // create 10 mob files.
+     createStoreFiles(basePath, family, qf, count, Type.Put);
+-    // create 10 del files
+-    createStoreFiles(basePath, family, qf, count, Type.Delete);
++    // If there is only 1 file, it will not be compacted with _del files, so
++    // It wont be CompactionType.ALL_FILES in this case, do not create with _del files.
+     listFiles();
+     long mergeSize = MobConstants.DEFAULT_MOB_FILE_COMPACTION_MERGEABLE_THRESHOLD;
+     List<String> expectedStartKeys = new ArrayList<>();
+@@ -140,6 +140,27 @@ public class TestPartitionedMobFileCompactor {
+   }
+ 
+   @Test
++  public void testCompactionSelectToAvoidCompactOneFileWithDelete() throws Exception {
++    // If there is only 1 file, it will not be compacted with _del files, so
++    // It wont be CompactionType.ALL_FILES in this case, and expected compact file count will be 0.
++    resetConf();
++    String tableName = "testCompactionSelectToAvoidCompactOneFileWithDelete";
++    init(tableName);
++    int count = 10;
++    // create 10 mob files.
++    createStoreFiles(basePath, family, qf, count, Type.Put);
++    // If there is only 1 file, it will not be compacted with _del files, so
++    // It wont be CompactionType.ALL_FILES in this case, and expected compact file count will be 0.
++    // create 10 del files
++    createStoreFiles(basePath, family, qf, count, Type.Delete);
++
++    listFiles();
++    long mergeSize = MobConstants.DEFAULT_MOB_FILE_COMPACTION_MERGEABLE_THRESHOLD;
++    List<String> expectedStartKeys = new ArrayList<>();
++    testSelectFiles(tableName, CompactionType.PART_FILES, false, expectedStartKeys);
++  }
++
++  @Test
+   public void testCompactionSelectWithPartFiles() throws Exception {
+     resetConf();
+     String tableName = "testCompactionSelectWithPartFiles";
+-- 
+1.7.9.5
+

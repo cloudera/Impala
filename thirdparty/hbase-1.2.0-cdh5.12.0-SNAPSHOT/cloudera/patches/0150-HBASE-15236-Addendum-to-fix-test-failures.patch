@@ -1,0 +1,48 @@
+From 26cfccf027bc037bc065881473c703a761659d07 Mon Sep 17 00:00:00 2001
+From: Apekshit <apeksharma@gmail.com>
+Date: Mon, 16 May 2016 16:04:07 -0700
+Subject: [PATCH 150/308] HBASE-15236 Addendum to fix test failures.
+
+Change-Id: Id11fd523269b90e58de7fed199a2cc193d59616b
+Reason: Bug
+Ref: CDH-38479
+Author: Apekshit Sharma
+---
+ .../hbase/regionserver/StoreFileScanner.java       |    5 ++++-
+ .../hbase/regionserver/TestStripeCompactor.java    |    2 +-
+ 2 files changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/StoreFileScanner.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/StoreFileScanner.java
+index cb6d6ba..ce6f93d 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/StoreFileScanner.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/StoreFileScanner.java
+@@ -140,9 +140,12 @@ public class StoreFileScanner implements KeyValueScanner {
+     List<StoreFileScanner> scanners = new ArrayList<StoreFileScanner>(
+         files.size());
+     List<StoreFile> sorted_files = new ArrayList<>(files);
++    for (int i = 0; i < sorted_files.size(); i++) {
++      sorted_files.get(i).createReader(canUseDrop);
++    }
+     Collections.sort(sorted_files, StoreFile.Comparators.SEQ_ID);
+     for (int i = 0; i < sorted_files.size(); i++) {
+-      StoreFile.Reader r = sorted_files.get(i).createReader(canUseDrop);
++      StoreFile.Reader r = sorted_files.get(i).getReader();
+       r.setReplicaStoreFile(isPrimaryReplica);
+       StoreFileScanner scanner = r.getStoreFileScanner(cacheBlocks, usePread,
+           isCompaction, readPt, i);
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestStripeCompactor.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestStripeCompactor.java
+index 10f8af2..0a1b7fb 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestStripeCompactor.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestStripeCompactor.java
+@@ -222,7 +222,7 @@ public class TestStripeCompactor {
+     when(r.length()).thenReturn(1L);
+     when(r.getBloomFilterType()).thenReturn(BloomType.NONE);
+     when(r.getHFileReader()).thenReturn(mock(HFile.Reader.class));
+-    when(r.getStoreFileScanner(anyBoolean(), anyBoolean(), anyBoolean(), anyLong()))
++    when(r.getStoreFileScanner(anyBoolean(), anyBoolean(), anyBoolean(), anyLong(), anyLong()))
+       .thenReturn(mock(StoreFileScanner.class));
+     when(sf.getReader()).thenReturn(r);
+     when(sf.createReader()).thenReturn(r);
+-- 
+1.7.9.5
+

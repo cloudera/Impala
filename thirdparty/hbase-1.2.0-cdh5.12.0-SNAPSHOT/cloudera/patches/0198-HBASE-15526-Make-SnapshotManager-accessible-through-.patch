@@ -1,0 +1,117 @@
+From 44b131ba8aa6541f211f794ed9cbbc25c3fe1640 Mon Sep 17 00:00:00 2001
+From: tedyu <yuzhihong@gmail.com>
+Date: Thu, 24 Mar 2016 15:59:46 -0700
+Subject: [PATCH 198/308] HBASE-15526 Make SnapshotManager accessible through
+ MasterServices
+
+Change-Id: Ie93916bf54fa987edd4dff1c08871a8d5f503dec
+---
+ .../org/apache/hadoop/hbase/master/HMaster.java    |    3 +--
+ .../apache/hadoop/hbase/master/MasterServices.java |    6 ++++++
+ .../hbase-webapps/master/snapshotsStats.jsp        |    2 +-
+ .../hadoop/hbase/master/TestCatalogJanitor.java    |    6 ++++++
+ .../master/cleaner/TestSnapshotFromMaster.java     |    4 ++--
+ 5 files changed, 16 insertions(+), 5 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
+index a04f296..75d85db 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
+@@ -2464,10 +2464,9 @@ public class HMaster extends HRegionServer implements MasterServices, Server {
+   }
+ 
+   /**
+-   * Exposed for TESTING!
+    * @return the underlying snapshot manager
+    */
+-  public SnapshotManager getSnapshotManagerForTesting() {
++  public SnapshotManager getSnapshotManager() {
+     return this.snapshotManager;
+   }
+ 
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MasterServices.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MasterServices.java
+index 93c7244..8c9a540 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MasterServices.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MasterServices.java
+@@ -33,6 +33,7 @@ import org.apache.hadoop.hbase.TableName;
+ import org.apache.hadoop.hbase.TableNotDisabledException;
+ import org.apache.hadoop.hbase.TableNotFoundException;
+ import org.apache.hadoop.hbase.master.procedure.MasterProcedureEnv;
++import org.apache.hadoop.hbase.master.snapshot.SnapshotManager;
+ import org.apache.hadoop.hbase.procedure2.ProcedureExecutor;
+ import org.apache.hadoop.hbase.executor.ExecutorService;
+ import org.apache.hadoop.hbase.quotas.MasterQuotaManager;
+@@ -45,6 +46,11 @@ import com.google.protobuf.Service;
+ @InterfaceAudience.Private
+ public interface MasterServices extends Server {
+   /**
++   * @return the underlying snapshot manager
++   */
++  SnapshotManager getSnapshotManager();
++
++  /**
+    * @return Master's instance of the {@link AssignmentManager}
+    */
+   AssignmentManager getAssignmentManager();
+diff --git a/hbase-server/src/main/resources/hbase-webapps/master/snapshotsStats.jsp b/hbase-server/src/main/resources/hbase-webapps/master/snapshotsStats.jsp
+index d499f15..1ac2ffd 100644
+--- a/hbase-server/src/main/resources/hbase-webapps/master/snapshotsStats.jsp
++++ b/hbase-server/src/main/resources/hbase-webapps/master/snapshotsStats.jsp
+@@ -43,7 +43,7 @@
+   Map<Path, Integer> filesMap = null;
+ 
+   List<SnapshotDescription> snapshots = master.isInitialized() ?
+-    master.getSnapshotManagerForTesting().getCompletedSnapshots() : null;
++    master.getSnapshotManager().getCompletedSnapshots() : null;
+ 
+   Admin admin = null;
+   boolean tableExists = false;
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/TestCatalogJanitor.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/TestCatalogJanitor.java
+index 8c05fab..f81dd53 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/TestCatalogJanitor.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/TestCatalogJanitor.java
+@@ -64,6 +64,7 @@ import org.apache.hadoop.hbase.executor.ExecutorService;
+ import org.apache.hadoop.hbase.io.Reference;
+ import org.apache.hadoop.hbase.master.CatalogJanitor.SplitParentFirstComparator;
+ import org.apache.hadoop.hbase.master.procedure.MasterProcedureEnv;
++import org.apache.hadoop.hbase.master.snapshot.SnapshotManager;
+ import org.apache.hadoop.hbase.procedure2.ProcedureExecutor;
+ import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
+ import org.apache.hadoop.hbase.protobuf.generated.AdminProtos;
+@@ -235,6 +236,11 @@ public class TestCatalogJanitor {
+     }
+ 
+     @Override
++    public SnapshotManager getSnapshotManager() {
++      return null;
++    }
++
++    @Override
+     public AssignmentManager getAssignmentManager() {
+       return this.asm;
+     }
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/cleaner/TestSnapshotFromMaster.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/cleaner/TestSnapshotFromMaster.java
+index 08bafdc..c2a19bb 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/cleaner/TestSnapshotFromMaster.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/cleaner/TestSnapshotFromMaster.java
+@@ -126,7 +126,7 @@ public class TestSnapshotFromMaster {
+   @Before
+   public void setup() throws Exception {
+     UTIL.createTable(TABLE_NAME, TEST_FAM);
+-    master.getSnapshotManagerForTesting().setSnapshotHandlerForTesting(TABLE_NAME, null);
++    master.getSnapshotManager().setSnapshotHandlerForTesting(TABLE_NAME, null);
+   }
+ 
+   @After
+@@ -180,7 +180,7 @@ public class TestSnapshotFromMaster {
+     Mockito.when(mockHandler.getCompletionTimestamp())
+       .thenReturn(EnvironmentEdgeManager.currentTime());
+ 
+-    master.getSnapshotManagerForTesting()
++    master.getSnapshotManager()
+         .setSnapshotHandlerForTesting(TABLE_NAME, mockHandler);
+ 
+     // if we do a lookup without a snapshot name, we should fail - you should always know your name
+-- 
+1.7.9.5
+

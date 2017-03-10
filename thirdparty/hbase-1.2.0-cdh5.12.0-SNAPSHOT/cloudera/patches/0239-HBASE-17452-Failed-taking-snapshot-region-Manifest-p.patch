@@ -1,0 +1,250 @@
+From 3714670db63b7933465c093d1c3d0e69bb27ce83 Mon Sep 17 00:00:00 2001
+From: tedyu <yuzhihong@gmail.com>
+Date: Fri, 13 Jan 2017 07:59:31 -0800
+Subject: [PATCH 239/308] HBASE-17452 Failed taking snapshot - region Manifest
+ proto-message too large (huaxiang sun)
+
+Author: Huaxiang Sun
+Reason: Bug
+Ref: CDH-49074
+
+Change-Id: Ib9ad4d2d8218c7794270852c7c79a989900781b8
+---
+ .../hadoop/hbase/snapshot/SnapshotManifest.java    |    6 +-
+ .../hadoop/hbase/snapshot/SnapshotManifestV2.java  |    9 +-
+ .../hbase/snapshot/TestSnapshotManifest.java       |  110 +++++++++++++++-----
+ 3 files changed, 97 insertions(+), 28 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/SnapshotManifest.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/SnapshotManifest.java
+index eebe7da..7817520 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/SnapshotManifest.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/SnapshotManifest.java
+@@ -362,7 +362,8 @@ public class SnapshotManifest {
+           ThreadPoolExecutor tpool = createExecutor("SnapshotManifestLoader");
+           try {
+             v1Regions = SnapshotManifestV1.loadRegionManifests(conf, tpool, fs, workingDir, desc);
+-            v2Regions = SnapshotManifestV2.loadRegionManifests(conf, tpool, fs, workingDir, desc);
++            v2Regions = SnapshotManifestV2.loadRegionManifests(conf, tpool, fs, workingDir, desc,
++                manifestSizeLimit);
+           } catch (InvalidProtocolBufferException e) {
+             throw new CorruptedSnapshotException("unable to parse region manifest " +
+                 e.getMessage(), e);
+@@ -454,7 +455,8 @@ public class SnapshotManifest {
+     ThreadPoolExecutor tpool = createExecutor("SnapshotManifestLoader");
+     try {
+       v1Regions = SnapshotManifestV1.loadRegionManifests(conf, tpool, fs, workingDir, desc);
+-      v2Regions = SnapshotManifestV2.loadRegionManifests(conf, tpool, fs, workingDir, desc);
++      v2Regions = SnapshotManifestV2.loadRegionManifests(conf, tpool, fs, workingDir, desc,
++          manifestSizeLimit);
+     } finally {
+       tpool.shutdown();
+     }
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/SnapshotManifestV2.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/SnapshotManifestV2.java
+index 933f9d9..95262c7 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/SnapshotManifestV2.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/SnapshotManifestV2.java
+@@ -18,6 +18,8 @@
+ 
+ package org.apache.hadoop.hbase.snapshot;
+ 
++
++import com.google.protobuf.CodedInputStream;
+ import com.google.protobuf.InvalidProtocolBufferException;
+ import java.io.IOException;
+ import java.io.InterruptedIOException;
+@@ -124,7 +126,7 @@ public class SnapshotManifestV2 {
+ 
+   static List<SnapshotRegionManifest> loadRegionManifests(final Configuration conf,
+       final Executor executor,final FileSystem fs, final Path snapshotDir,
+-      final SnapshotDescription desc) throws IOException {
++      final SnapshotDescription desc, final int manifestSizeLimit) throws IOException {
+     FileStatus[] manifestFiles = FSUtils.listStatus(fs, snapshotDir, new PathFilter() {
+       @Override
+       public boolean accept(Path path) {
+@@ -141,8 +143,11 @@ public class SnapshotManifestV2 {
+         @Override
+         public SnapshotRegionManifest call() throws IOException {
+           FSDataInputStream stream = fs.open(st.getPath());
++          CodedInputStream cin = CodedInputStream.newInstance(stream);
++          cin.setSizeLimit(manifestSizeLimit);
++
+           try {
+-            return SnapshotRegionManifest.parseFrom(stream);
++            return SnapshotRegionManifest.parseFrom(cin);
+           } finally {
+             stream.close();
+           }
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/snapshot/TestSnapshotManifest.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/snapshot/TestSnapshotManifest.java
+index dfe26b2..89337ba 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/snapshot/TestSnapshotManifest.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/snapshot/TestSnapshotManifest.java
+@@ -51,6 +51,7 @@ public class TestSnapshotManifest {
+   private static final String TABLE_NAME_STR = "testSnapshotManifest";
+   private static final TableName TABLE_NAME = TableName.valueOf(TABLE_NAME_STR);
+   private static final int TEST_NUM_REGIONS = 16000;
++  private static final int TEST_NUM_REGIONFILES = 1000000;
+ 
+   private static HBaseTestingUtility TEST_UTIL;
+   private Configuration conf;
+@@ -58,6 +59,7 @@ public class TestSnapshotManifest {
+   private Path rootDir;
+   private Path snapshotDir;
+   private SnapshotDescription snapshotDesc;
++  private SnapshotTestingUtils.SnapshotMock.SnapshotBuilder builder;
+ 
+   @Before
+   public void setup() throws Exception {
+@@ -69,20 +71,63 @@ public class TestSnapshotManifest {
+ 
+     SnapshotTestingUtils.SnapshotMock snapshotMock =
+       new SnapshotTestingUtils.SnapshotMock(conf, fs, rootDir);
+-    SnapshotTestingUtils.SnapshotMock.SnapshotBuilder builder =
+-      snapshotMock.createSnapshotV2("snapshot", TABLE_NAME_STR, 0);
++    builder = snapshotMock.createSnapshotV2("snapshot", TABLE_NAME_STR, 0);
+     snapshotDir = builder.commit();
+     snapshotDesc = builder.getSnapshotDescription();
++  }
++
++  @After
++  public void tearDown() throws Exception {
++    fs.delete(rootDir,true);
++  }
++
++  @Test
++  public void testReadSnapshotManifest() throws IOException {
+ 
++    Path p = createDataManifest();
++    try {
++      SnapshotManifest.open(conf, fs, snapshotDir, snapshotDesc);
++      fail("fail to test snapshot manifest because message size is too small.");
++    } catch (CorruptedSnapshotException cse) {
++      try {
++        conf.setInt(SnapshotManifest.SNAPSHOT_MANIFEST_SIZE_LIMIT_CONF_KEY, 128 * 1024 * 1024);
++        SnapshotManifest.open(conf, fs, snapshotDir, snapshotDesc);
++        LOG.info("open snapshot manifest succeed.");
++      } catch (CorruptedSnapshotException cse2) {
++        fail("fail to take snapshot because Manifest proto-message too large.");
++      }
++    } finally {
++      fs.delete(p, false);
++    }
++  }
++
++  @Test
++  public void testReadSnapshotRegionManifest() throws IOException {
++
++    // remove datamanifest file
++    fs.delete(new Path(snapshotDir, SnapshotManifest.DATA_MANIFEST_NAME), true);
++    Path regionPath = createRegionManifest();
++
++    try {
++      conf.setInt(SnapshotManifest.SNAPSHOT_MANIFEST_SIZE_LIMIT_CONF_KEY, 128 * 1024 * 1024);
++      SnapshotManifest.open(conf, fs, snapshotDir, snapshotDesc);
++    } catch (CorruptedSnapshotException e) {
++      fail("fail to test snapshot manifest because region message size is too small.");
++    } finally {
++      fs.delete(regionPath, false);
++    }
++  }
++
++  private Path createDataManifest() throws IOException {
+     SnapshotDataManifest.Builder dataManifestBuilder =
+-      SnapshotDataManifest.newBuilder();
++        SnapshotDataManifest.newBuilder();
+     byte[] startKey = null;
+     byte[] stopKey = null;
+     for (int i = 1; i <= TEST_NUM_REGIONS; i++) {
+       stopKey = Bytes.toBytes(String.format("%016d", i));
+       HRegionInfo regionInfo = new HRegionInfo(TABLE_NAME, startKey, stopKey, false);
+       SnapshotRegionManifest.Builder dataRegionManifestBuilder =
+-        SnapshotRegionManifest.newBuilder();
++          SnapshotRegionManifest.newBuilder();
+ 
+       for (HColumnDescriptor hcd: builder.getTableDescriptor().getFamilies()) {
+         SnapshotRegionManifest.FamilyFiles.Builder family =
+@@ -90,7 +135,7 @@ public class TestSnapshotManifest {
+         family.setFamilyName(ByteStringer.wrap(hcd.getName()));
+         for (int j = 0; j < 100; ++j) {
+           SnapshotRegionManifest.StoreFile.Builder sfManifest =
+-            SnapshotRegionManifest.StoreFile.newBuilder();
++              SnapshotRegionManifest.StoreFile.newBuilder();
+           sfManifest.setName(String.format("%032d", i));
+           sfManifest.setFileSize((1 + i) * (1 + i) * 1024);
+           family.addStoreFiles(sfManifest.build());
+@@ -107,37 +152,54 @@ public class TestSnapshotManifest {
+     dataManifestBuilder.setTableSchema(builder.getTableDescriptor().convert());
+ 
+     SnapshotDataManifest dataManifest = dataManifestBuilder.build();
+-    writeDataManifest(dataManifest);
++    return writeDataManifest(dataManifest);
+   }
+ 
+-  @After
+-  public void tearDown() throws Exception {
+-    fs.delete(rootDir,true);
+-  }
++  private Path createRegionManifest() throws IOException {
++    byte[] startKey = Bytes.toBytes("AAAAAA");
++    byte[] stopKey = Bytes.toBytes("BBBBBB");
++    HRegionInfo regionInfo = new HRegionInfo(TABLE_NAME, startKey, stopKey, false);
++    SnapshotRegionManifest.Builder dataRegionManifestBuilder = SnapshotRegionManifest.newBuilder();
++    dataRegionManifestBuilder.setRegionInfo(HRegionInfo.convert(regionInfo));
++
++    for (HColumnDescriptor hcd: builder.getTableDescriptor().getFamilies()) {
++      SnapshotRegionManifest.FamilyFiles.Builder family =
++          SnapshotRegionManifest.FamilyFiles.newBuilder();
++      family.setFamilyName(ByteStringer.wrap(hcd.getName()));
++      for (int j = 0; j < TEST_NUM_REGIONFILES; ++j) {
++        SnapshotRegionManifest.StoreFile.Builder sfManifest =
++              SnapshotRegionManifest.StoreFile.newBuilder();
++        sfManifest.setName(String.format("%064d", j));
++        sfManifest.setFileSize(j * 1024);
++        family.addStoreFiles(sfManifest.build());
++      }
++      dataRegionManifestBuilder.addFamilyFiles(family.build());
++    }
+ 
+-  @Test
+-  public void testReadSnapshotManifest() throws IOException {
++    SnapshotRegionManifest manifest = dataRegionManifestBuilder.build();
++    Path regionPath = new Path(snapshotDir,
++        SnapshotManifestV2.SNAPSHOT_MANIFEST_PREFIX + regionInfo.getEncodedName());
++
++    FSDataOutputStream stream = fs.create(regionPath);
+     try {
+-      SnapshotManifest.open(conf, fs, snapshotDir, snapshotDesc);
+-      fail("fail to test snapshot manifest because message size is too small.");
+-    } catch (CorruptedSnapshotException ipbe) {
+-      try {
+-        conf.setInt(SnapshotManifest.SNAPSHOT_MANIFEST_SIZE_LIMIT_CONF_KEY, 128 * 1024 * 1024);
+-        SnapshotManifest.open(conf, fs, snapshotDir, snapshotDesc);
+-        LOG.info("open snapshot manifest succeed.");
+-      } catch (CorruptedSnapshotException ipbe2) {
+-        fail("fail to take snapshot because Manifest proto-message too large.");
+-      }
++      manifest.writeTo(stream);
++    } finally {
++      stream.close();
+     }
++
++    return regionPath;
+   }
+ 
+-  private void writeDataManifest(final SnapshotDataManifest manifest)
++  private Path writeDataManifest(final SnapshotDataManifest manifest)
+       throws IOException {
+-    FSDataOutputStream stream = fs.create(new Path(snapshotDir, SnapshotManifest.DATA_MANIFEST_NAME));
++    Path dataRegionPath = new Path(snapshotDir, SnapshotManifest.DATA_MANIFEST_NAME);
++    FSDataOutputStream stream = fs.create(dataRegionPath);
+     try {
+       manifest.writeTo(stream);
+     } finally {
+       stream.close();
+     }
++
++    return dataRegionPath;
+   }
+ }
+-- 
+1.7.9.5
+

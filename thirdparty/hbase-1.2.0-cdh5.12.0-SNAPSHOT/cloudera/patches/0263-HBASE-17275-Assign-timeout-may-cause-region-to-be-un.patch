@@ -1,0 +1,47 @@
+From fbe81c14ffabee5ab15f9774cf920d6385e47e62 Mon Sep 17 00:00:00 2001
+From: tedyu <yuzhihong@gmail.com>
+Date: Tue, 7 Feb 2017 12:59:01 -0800
+Subject: [PATCH 263/308] HBASE-17275 Assign timeout may cause region to be
+ unassigned forever (Allan yang)
+
+(cherry picked from commit 2aaf7851a4de28e40b1a0d641d8fc98e54f5342d)
+
+Change-Id: Iac80af2600a3ef8f1f06a36946b9b55567a89a8a
+Author: Balazs Meszaros
+Reason: Bug
+Ref: CDH-50444
+---
+ .../hadoop/hbase/master/AssignmentManager.java     |   17 +++++++++++++----
+ 1 file changed, 13 insertions(+), 4 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java
+index 95514f6..8aacc03 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java
+@@ -1102,10 +1102,19 @@ public class AssignmentManager extends ZooKeeperListener {
+               + regionStates.getRegionState(encodedName));
+ 
+             if (regionState != null) {
+-              // Close it without updating the internal region states,
+-              // so as not to create double assignments in unlucky scenarios
+-              // mentioned in OpenRegionHandler#process
+-              unassign(regionState.getRegion(), null, -1, null, false, sn);
++              if(regionState.isOpened() && regionState.getServerName().equals(sn)) {
++                //if this region was opened before on this rs, we don't have to unassign it. It won't cause
++                //double assign. One possible scenario of what happened is HBASE-17275
++                failedOpenTracker.remove(encodedName); // reset the count, if any
++                new OpenedRegionHandler(
++                    server, this, regionState.getRegion(), coordination, ord).process();
++                updateOpenedRegionHandlerTracker(regionState.getRegion());
++              } else {
++                // Close it without updating the internal region states,
++                // so as not to create double assignments in unlucky scenarios
++                // mentioned in OpenRegionHandler#process
++                unassign(regionState.getRegion(), null, -1, null, false, sn);
++              }
+             }
+             return;
+           }
+-- 
+1.7.9.5
+

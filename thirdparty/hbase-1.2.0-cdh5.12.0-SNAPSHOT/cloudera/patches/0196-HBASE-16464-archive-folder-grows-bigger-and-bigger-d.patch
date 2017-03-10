@@ -1,0 +1,191 @@
+From f41cab51be99b3f7182466bd7798e3ee45e823a4 Mon Sep 17 00:00:00 2001
+From: chenheng <chenheng@apache.org>
+Date: Mon, 22 Aug 2016 16:45:20 +0800
+Subject: [PATCH 196/308] HBASE-16464 archive folder grows bigger and bigger
+ due to corrupt snapshot under tmp dir
+
+Reason: Bug
+Author: Heng Chen
+Ref: CDH-43658
+
+Change-Id: Ifd575c50d677c73eda2b10f11f1f6bb02f4c7224
+---
+ .../hbase/master/snapshot/SnapshotFileCache.java   |   17 ++++++++++++++++-
+ .../hbase/master/snapshot/TakeSnapshotHandler.java |    2 +-
+ .../hbase/snapshot/SnapshotDescriptionUtils.java   |   14 ++++++++++++++
+ .../hadoop/hbase/snapshot/SnapshotManifestV2.java  |   18 ++++++++++++------
+ .../master/snapshot/TestSnapshotHFileCleaner.java  |   20 ++++++++++++++++++++
+ .../hbase/snapshot/SnapshotTestingUtils.java       |   12 ++++++++++++
+ 6 files changed, 75 insertions(+), 8 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/SnapshotFileCache.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/SnapshotFileCache.java
+index dfd3cb5..5b367c5 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/SnapshotFileCache.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/SnapshotFileCache.java
+@@ -39,6 +39,7 @@ import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.hbase.Stoppable;
++import org.apache.hadoop.hbase.snapshot.CorruptedSnapshotException;
+ import org.apache.hadoop.hbase.snapshot.SnapshotDescriptionUtils;
+ import org.apache.hadoop.hbase.util.FSUtils;
+ 
+@@ -300,7 +301,21 @@ public class SnapshotFileCache implements Stoppable {
+     FileStatus[] running = FSUtils.listStatus(fs, snapshotTmpDir);
+     if (running != null) {
+       for (FileStatus run : running) {
+-        snapshotInProgress.addAll(fileInspector.filesUnderSnapshot(run.getPath()));
++        try {
++          snapshotInProgress.addAll(fileInspector.filesUnderSnapshot(run.getPath()));
++        } catch (CorruptedSnapshotException e) {
++          // See HBASE-16464
++          if (e.getCause() instanceof FileNotFoundException) {
++            // If the snapshot is not in progress, we will delete it
++            if (!fs.exists(new Path(run.getPath(),
++              SnapshotDescriptionUtils.SNAPSHOT_IN_PROGRESS))) {
++              fs.delete(run.getPath(), true);
++              LOG.warn("delete the " + run.getPath() + " due to exception:", e.getCause());
++            }
++          } else {
++            throw e;
++          }
++        }
+       }
+     }
+     return snapshotInProgress;
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/TakeSnapshotHandler.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/TakeSnapshotHandler.java
+index 7c87ea1..39387cb 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/TakeSnapshotHandler.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/TakeSnapshotHandler.java
+@@ -164,7 +164,7 @@ public abstract class TakeSnapshotHandler extends EventHandler implements Snapsh
+     try {
+       // If regions move after this meta scan, the region specific snapshot should fail, triggering
+       // an external exception that gets captured here.
+-
++      SnapshotDescriptionUtils.createInProgressTag(workingDir, fs);
+       // write down the snapshot info in the working directory
+       SnapshotDescriptionUtils.writeSnapshotInfo(snapshot, workingDir, fs);
+       snapshotManifest.addTableDescriptor(this.htd);
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/SnapshotDescriptionUtils.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/SnapshotDescriptionUtils.java
+index 79e7312..7677e0a 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/SnapshotDescriptionUtils.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/SnapshotDescriptionUtils.java
+@@ -17,6 +17,7 @@
+  */
+ package org.apache.hadoop.hbase.snapshot;
+ 
++import java.io.FileNotFoundException;
+ import java.io.IOException;
+ import java.util.Collections;
+ 
+@@ -101,6 +102,9 @@ public class SnapshotDescriptionUtils {
+ 
+   /** Temporary directory under the snapshot directory to store in-progress snapshots */
+   public static final String SNAPSHOT_TMP_DIR_NAME = ".tmp";
++
++  /** This tag will be created in in-progess snapshots */
++  public static final String SNAPSHOT_IN_PROGRESS = ".inprogress";
+   // snapshot operation values
+   /** Default value if no start time is specified */
+   public static final long NO_SNAPSHOT_START_TIME_SPECIFIED = 0;
+@@ -290,6 +294,16 @@ public class SnapshotDescriptionUtils {
+   }
+ 
+   /**
++   * Create in-progress tag under .tmp of in-progress snapshot
++   * */
++  public static void createInProgressTag(Path workingDir, FileSystem fs) throws IOException {
++    FsPermission perms = FSUtils.getFilePermissions(fs, fs.getConf(),
++      HConstants.DATA_FILE_UMASK_KEY);
++    Path snapshot_in_progress = new Path(workingDir, SnapshotDescriptionUtils.SNAPSHOT_IN_PROGRESS);
++    FSUtils.create(fs, snapshot_in_progress, perms, true);
++  }
++
++  /**
+    * Read in the {@link org.apache.hadoop.hbase.protobuf.generated.HBaseProtos.SnapshotDescription} stored for the snapshot in the passed directory
+    * @param fs filesystem where the snapshot was taken
+    * @param snapshotDir directory where the snapshot was stored
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/SnapshotManifestV2.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/SnapshotManifestV2.java
+index 0f65f18..933f9d9 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/SnapshotManifestV2.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/SnapshotManifestV2.java
+@@ -80,12 +80,18 @@ public class SnapshotManifestV2 {
+     }
+ 
+     public void regionClose(final SnapshotRegionManifest.Builder region) throws IOException {
+-      SnapshotRegionManifest manifest = region.build();
+-      FSDataOutputStream stream = fs.create(getRegionManifestPath(snapshotDir, manifest));
+-      try {
+-        manifest.writeTo(stream);
+-      } finally {
+-        stream.close();
++      // we should ensure the snapshot dir exist, maybe it has been deleted by master
++      // see HBASE-16464
++      if (fs.exists(snapshotDir)) {
++        SnapshotRegionManifest manifest = region.build();
++        FSDataOutputStream stream = fs.create(getRegionManifestPath(snapshotDir, manifest));
++        try {
++          manifest.writeTo(stream);
++        } finally {
++          stream.close();
++        }
++      } else {
++        LOG.warn("can't write manifest without parent dir, maybe it has been deleted by master?");
+       }
+     }
+ 
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/snapshot/TestSnapshotHFileCleaner.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/snapshot/TestSnapshotHFileCleaner.java
+index 616907c..78be717 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/snapshot/TestSnapshotHFileCleaner.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/snapshot/TestSnapshotHFileCleaner.java
+@@ -166,4 +166,24 @@ public class TestSnapshotHFileCleaner {
+       fs.delete(SnapshotDescriptionUtils.getWorkingSnapshotDir(rootDir), true);
+     }
+   }
++
++
++  /**
++   * HBASE-16464
++   */
++  @Test
++  public void testMissedTmpSnapshot() throws IOException {
++    SnapshotTestingUtils.SnapshotMock
++      snapshotMock = new SnapshotTestingUtils.SnapshotMock(TEST_UTIL.getConfiguration(), fs, rootDir);
++    SnapshotTestingUtils.SnapshotMock.SnapshotBuilder builder = snapshotMock.createSnapshotV2(
++      SNAPSHOT_NAME_STR, TABLE_NAME_STR);
++    builder.addRegionV2();
++    builder.missOneRegionSnapshotFile();
++
++    long period = Long.MAX_VALUE;
++    SnapshotFileCache cache = new SnapshotFileCache(fs, rootDir, period, 10000000,
++      "test-snapshot-file-cache-refresh", new SnapshotFiles());
++    cache.getSnapshotsInProgress();
++    assertFalse(fs.exists(builder.getSnapshotsDir()));
++  }
+ }
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/snapshot/SnapshotTestingUtils.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/snapshot/SnapshotTestingUtils.java
+index 5807dbf..c369201 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/snapshot/SnapshotTestingUtils.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/snapshot/SnapshotTestingUtils.java
+@@ -573,6 +573,18 @@ public class SnapshotTestingUtils {
+         corruptFile(p);
+       }
+ 
++      public void missOneRegionSnapshotFile() throws IOException {
++        FileStatus[] manifestFiles = FSUtils.listStatus(fs, snapshotDir);
++        for (FileStatus fileStatus : manifestFiles) {
++          String fileName = fileStatus.getPath().getName();
++          if (fileName.endsWith(SnapshotDescriptionUtils.SNAPSHOTINFO_FILE)
++            || fileName.endsWith(".tabledesc")
++            || fileName.endsWith(SnapshotDescriptionUtils.SNAPSHOT_TMP_DIR_NAME)) {
++              fs.delete(fileStatus.getPath(), true);
++          }
++        }
++      }
++
+       /**
+        * Corrupt data-manifest file
+        *
+-- 
+1.7.9.5
+

@@ -1,0 +1,31 @@
+From 97a06dd7f21faa7565495eb04c4a3d77a44d55d5 Mon Sep 17 00:00:00 2001
+From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
+Date: Fri, 1 Apr 2016 20:55:21 -0700
+Subject: [PATCH 132/308] HBASE-15582 SnapshotManifestV1 too verbose when
+ there are no regions
+
+Reason: Improvement
+Author: Matteo Bertozzi
+Ref: CDH-39000
+
+Change-Id: If210924edbc38b0474fa8dda912b10bcd8b5f3e8
+---
+ .../hadoop/hbase/snapshot/SnapshotManifestV1.java  |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/SnapshotManifestV1.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/SnapshotManifestV1.java
+index 137acf3..6f00692 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/SnapshotManifestV1.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/SnapshotManifestV1.java
+@@ -116,7 +116,7 @@ public class SnapshotManifestV1 {
+       final SnapshotDescription desc) throws IOException {
+     FileStatus[] regions = FSUtils.listStatus(fs, snapshotDir, new FSUtils.RegionDirFilter(fs));
+     if (regions == null) {
+-      LOG.info("No regions under directory:" + snapshotDir);
++      LOG.debug("No regions under directory:" + snapshotDir);
+       return null;
+     }
+ 
+-- 
+1.7.9.5
+

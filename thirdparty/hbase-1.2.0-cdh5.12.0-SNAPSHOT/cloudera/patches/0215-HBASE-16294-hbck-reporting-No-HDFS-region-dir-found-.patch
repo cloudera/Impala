@@ -1,0 +1,39 @@
+From b4fceaa32c9d7139b8e62409af142cf007779e7b Mon Sep 17 00:00:00 2001
+From: Umesh Agashe <uagashe@cloudera.com>
+Date: Wed, 21 Sep 2016 10:05:33 -0700
+Subject: [PATCH 215/308] HBASE-16294 hbck reporting "No HDFS region dir
+ found" for replicas
+
+Warning message is display only for default/ primary replicas and not for
+non-default/ non-primary replicas if HDFS region directory is not found.
+
+Signed-off-by: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
+(cherry picked from commit 6a4c292a901386fd0b8c800f00a05572f0cb5cb5)
+
+Change-Id: I75c7fb7b26c6ed0a89b0bf597355d8d5b233cbe8
+Reason: Supportability
+Author: Umesh Agashe
+Ref: CDH-45422
+---
+ .../org/apache/hadoop/hbase/util/HBaseFsck.java    |    5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/util/HBaseFsck.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/util/HBaseFsck.java
+index 0ed88b8..907b6dc 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/util/HBaseFsck.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/util/HBaseFsck.java
+@@ -1099,7 +1099,10 @@ public class HBaseFsck extends Configured implements Closeable {
+   private void loadHdfsRegioninfo(HbckInfo hbi) throws IOException {
+     Path regionDir = hbi.getHdfsRegionDir();
+     if (regionDir == null) {
+-      LOG.warn("No HDFS region dir found: " + hbi + " meta=" + hbi.metaEntry);
++      if (hbi.getReplicaId() == HRegionInfo.DEFAULT_REPLICA_ID) {
++        // Log warning only for default/ primary replica with no region dir
++        LOG.warn("No HDFS region dir found: " + hbi + " meta=" + hbi.metaEntry);
++      }
+       return;
+     }
+ 
+-- 
+1.7.9.5
+

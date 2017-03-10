@@ -1,0 +1,44 @@
+From 4719ff7551a0b74ee4b62c5d1cca6480b0e3e8f4 Mon Sep 17 00:00:00 2001
+From: Jonathan M Hsieh <jmhsieh@apache.org>
+Date: Thu, 17 Dec 2015 14:19:36 -0800
+Subject: [PATCH 110/308] HBASE-14991 Fix the '-feature' warning in scala
+ build (Zhan Zhang)
+
+Change-Id: Ia412fd123ac9b7b5c263a3bb968f71461564c688
+Reason: New Feature
+Author: Zhan Zhang
+Ref: CDH-35578
+---
+ hbase-spark/pom.xml                                |    3 +++
+ .../hbase/spark/datasources/HBaseResources.scala   |    1 +
+ 2 files changed, 4 insertions(+)
+
+diff --git a/hbase-spark/pom.xml b/hbase-spark/pom.xml
+index 86c3c07..3888fed 100644
+--- a/hbase-spark/pom.xml
++++ b/hbase-spark/pom.xml
+@@ -537,6 +537,9 @@
+                 <configuration>
+                     <charset>${project.build.sourceEncoding}</charset>
+                     <scalaVersion>${scala.version}</scalaVersion>
++                    <args>
++                        <arg>-feature</arg>
++                    </args>
+                 </configuration>
+                 <executions>
+                     <execution>
+diff --git a/hbase-spark/src/main/scala/org/apache/hadoop/hbase/spark/datasources/HBaseResources.scala b/hbase-spark/src/main/scala/org/apache/hadoop/hbase/spark/datasources/HBaseResources.scala
+index 4417520..19a6ea7 100644
+--- a/hbase-spark/src/main/scala/org/apache/hadoop/hbase/spark/datasources/HBaseResources.scala
++++ b/hbase-spark/src/main/scala/org/apache/hadoop/hbase/spark/datasources/HBaseResources.scala
+@@ -20,6 +20,7 @@ package org.apache.hadoop.hbase.spark.datasources
+ import org.apache.hadoop.hbase.TableName
+ import org.apache.hadoop.hbase.client._
+ import org.apache.hadoop.hbase.spark.HBaseRelation
++import scala.language.implicitConversions
+ 
+ // Resource and ReferencedResources are defined for extensibility,
+ // e.g., consolidate scan and bulkGet in the future work.
+-- 
+1.7.9.5
+

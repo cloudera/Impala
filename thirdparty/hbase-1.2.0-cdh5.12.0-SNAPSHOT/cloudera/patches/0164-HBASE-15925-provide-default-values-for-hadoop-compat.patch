@@ -1,0 +1,42 @@
+From 293db902109ac7a9474c5f030f28de06a9c9885b Mon Sep 17 00:00:00 2001
+From: Sean Busbey <busbey@apache.org>
+Date: Thu, 9 Jun 2016 13:30:45 -0500
+Subject: [PATCH 164/308] HBASE-15925 provide default values for hadoop compat
+ module related properties that match default hadoop
+ profile.
+
+Signed-off-by: Mikhail Antonov <antonov@apache.org>
+(cherry picked from commit f245fe106e80d3eb08c172903cbc70900a5b8a51)
+
+ Conflicts:
+	pom.xml
+
+Change-Id: Ic855fbd9669136ddca1b10c139f0791d9fc6441f
+Reason: Bug
+Author: Sean Busbey
+Ref: CDH-41228
+---
+ pom.xml |    7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/pom.xml b/pom.xml
+index 1572e10..bc047f6 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -1230,6 +1230,13 @@
+     <hadoop-two.mr1.version>${cdh.mr1.version}</hadoop-two.mr1.version>
+     <hadoop-two.yarn.version>${cdh.hadoop.version}</hadoop-two.yarn.version>
+     <hadoop-one.version>1.2.1</hadoop-one.version>
++    <!-- These must be defined here for downstream build tools that don't look at profiles.
++         They ought to match the values found in our default hadoop profile, which is
++         currently "hadoop-2.0". See HBASE-15925 for more info. -->
++    <hadoop.version>${hadoop-two.version}</hadoop.version>
++    <compat.module>hbase-hadoop2-compat</compat.module>
++    <assembly.file>src/main/assembly/hadoop-two-compat.xml</assembly.file>
++    <!-- end HBASE-15925 default hadoop compatibility values -->
+     <commons-cli.version>1.2</commons-cli.version>
+     <commons-codec.version>1.9</commons-codec.version>
+     <!-- pretty outdated -->
+-- 
+1.7.9.5
+

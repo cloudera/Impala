@@ -1,0 +1,131 @@
+From b3da8d38b245262c92c36115b554ccaf1b9bac0d Mon Sep 17 00:00:00 2001
+From: tedyu <yuzhihong@gmail.com>
+Date: Wed, 24 Aug 2016 11:28:59 -0700
+Subject: [PATCH 285/308] HBASE-16304
+ HRegion#RegionScannerImpl#handleFileNotFoundException
+ may lead to deadlock when trying to obtain write
+ lock on updatesLock
+
+Change-Id: I689453fde9f0f8835b1e155df1c85a9dd92ec7ef
+Reason: Bug
+Author: Ted Yu
+Ref: CDH-50408
+---
+ .../apache/hadoop/hbase/regionserver/HRegion.java  |   52 ++++++++++++++++++--
+ 1 file changed, 49 insertions(+), 3 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
+index aa14006..562f9b6 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
+@@ -252,6 +252,9 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+   protected volatile long lastReplayedOpenRegionSeqId = -1L;
+   protected volatile long lastReplayedCompactionSeqId = -1L;
+ 
++  // collects Map(s) of Store to sequence Id when handleFileNotFound() is involved
++  protected List<Map> storeSeqIds = new ArrayList<>();
++
+   //////////////////////////////////////////////////////////////////////////////
+   // Members
+   //////////////////////////////////////////////////////////////////////////////
+@@ -4883,6 +4886,7 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+ 
+     startRegionOperation(); // obtain region close lock
+     try {
++      Map<Store, Long> map = new HashMap<Store, Long>();
+       synchronized (writestate) {
+         for (Store store : getStores()) {
+           // TODO: some stores might see new data from flush, while others do not which
+@@ -4915,8 +4919,7 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+               }
+             }
+ 
+-            // Drop the memstore contents if they are now smaller than the latest seen flushed file
+-            totalFreedSize += dropMemstoreContentsForSeqId(storeSeqId, store);
++            map.put(store, storeSeqId);
+           }
+         }
+ 
+@@ -4939,6 +4942,19 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+           this.lastReplayedOpenRegionSeqId = smallestSeqIdInStores;
+         }
+       }
++      if (!map.isEmpty()) {
++        if (!force) {
++          for (Map.Entry<Store, Long> entry : map.entrySet()) {
++            // Drop the memstore contents if they are now smaller than the latest seen flushed file
++            totalFreedSize += dropMemstoreContentsForSeqId(entry.getValue(), entry.getKey());
++          }
++        } else {
++          synchronized (storeSeqIds) {
++            // don't try to acquire write lock of updatesLock now
++            storeSeqIds.add(map);
++          }
++        }
++      }
+       // C. Finally notify anyone waiting on memstore to clear:
+       // e.g. checkResources().
+       synchronized (this) {
+@@ -7134,6 +7150,28 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+   // We should refactor append and increment as local get-mutate-put
+   // transactions, so all stores only go through one code path for puts.
+ 
++  // dropMemstoreContentsForSeqId() would acquire write lock of updatesLock
++  // We perform this operation outside of the read lock of updatesLock to avoid dead lock
++  // See HBASE-16304
++  @SuppressWarnings("unchecked")
++  private void dropMemstoreContents() throws IOException {
++    long totalFreedSize = 0;
++    while (!storeSeqIds.isEmpty()) {
++      Map<Store, Long> map = null;
++      synchronized (storeSeqIds) {
++        if (storeSeqIds.isEmpty()) break;
++        map = storeSeqIds.remove(storeSeqIds.size()-1);
++      }
++      for (Map.Entry<Store, Long> entry : map.entrySet()) {
++        // Drop the memstore contents if they are now smaller than the latest seen flushed file
++        totalFreedSize += dropMemstoreContentsForSeqId(entry.getValue(), entry.getKey());
++      }
++    }
++    if (totalFreedSize > 0) {
++      LOG.debug("Freed " + totalFreedSize + " bytes from memstore");
++    }
++  }
++
+   @Override
+   public Result append(Append mutate, long nonceGroup, long nonce) throws IOException {
+     Operation op = Operation.APPEND;
+@@ -7286,6 +7324,10 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+           }
+         } finally {
+           this.updatesLock.readLock().unlock();
++          // For increment/append, a region scanner for doing a get operation could throw
++          // FileNotFoundException. So we call dropMemstoreContents() in finally block
++          // after releasing read lock
++          dropMemstoreContents();
+         }
+ 
+       } finally {
+@@ -7504,6 +7546,10 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+           }
+         } finally {
+           this.updatesLock.readLock().unlock();
++          // For increment/append, a region scanner for doing a get operation could throw
++          // FileNotFoundException. So we call dropMemstoreContents() in finally block
++          // after releasing read lock
++          dropMemstoreContents();
+         }
+       } finally {
+         rowLock.release();
+@@ -7687,7 +7733,7 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+   public static final long FIXED_OVERHEAD = ClassSize.align(
+       ClassSize.OBJECT +
+       ClassSize.ARRAY +
+-      44 * ClassSize.REFERENCE + 3 * Bytes.SIZEOF_INT +
++      45 * ClassSize.REFERENCE + 3 * Bytes.SIZEOF_INT +
+       (14 * Bytes.SIZEOF_LONG) +
+       5 * Bytes.SIZEOF_BOOLEAN);
+ 
+-- 
+1.7.9.5
+

@@ -1,0 +1,175 @@
+From d73ebcc554016f18d673ce3501dfe80e58a6d285 Mon Sep 17 00:00:00 2001
+From: Jerry He <jerryjch@apache.org>
+Date: Tue, 2 Aug 2016 11:40:47 -0700
+Subject: [PATCH 195/308] HBASE-16284 Unauthorized client can shutdown the
+ cluster (Deokwoo Han)
+
+(cherry picked from commit db3b27f6b5b79fe147754d8c51c0303f1967f549)
+
+Change-Id: I585839cd3e50362834dcb33d3447b706061ffc50
+Reason: Security
+Author: Deokwoo Han
+Ref: CDH-43411
+---
+ .../org/apache/hadoop/hbase/master/HMaster.java    |   16 +++--------
+ .../hadoop/hbase/master/MasterRpcServices.java     |   15 +++++++++--
+ .../apache/hadoop/hbase/util/JVMClusterUtil.java   |   15 ++++++++---
+ .../security/access/TestAccessController.java      |   28 ++++++++++++++++++++
+ 4 files changed, 57 insertions(+), 17 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
+index 5d9b56d..a04f296 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
+@@ -2280,13 +2280,9 @@ public class HMaster extends HRegionServer implements MasterServices, Server {
+     return rsFatals;
+   }
+ 
+-  public void shutdown() {
++  public void shutdown() throws IOException {
+     if (cpHost != null) {
+-      try {
+-        cpHost.preShutdown();
+-      } catch (IOException ioe) {
+-        LOG.error("Error call master coprocessor preShutdown()", ioe);
+-      }
++      cpHost.preShutdown();
+     }
+ 
+     if (this.serverManager != null) {
+@@ -2301,13 +2297,9 @@ public class HMaster extends HRegionServer implements MasterServices, Server {
+     }
+   }
+ 
+-  public void stopMaster() {
++  public void stopMaster() throws IOException {
+     if (cpHost != null) {
+-      try {
+-        cpHost.preStopMaster();
+-      } catch (IOException ioe) {
+-        LOG.error("Error call master coprocessor preStopMaster()", ioe);
+-      }
++      cpHost.preStopMaster();
+     }
+     stop("Stopped by " + Thread.currentThread().getName());
+   }
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MasterRpcServices.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MasterRpcServices.java
+index 4389302..54c3030 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MasterRpcServices.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MasterRpcServices.java
+@@ -183,6 +183,7 @@ import org.apache.hadoop.hbase.protobuf.generated.RegionServerStatusProtos.Repor
+ import org.apache.hadoop.hbase.protobuf.generated.RegionServerStatusProtos.ReportRegionStateTransitionRequest;
+ import org.apache.hadoop.hbase.protobuf.generated.RegionServerStatusProtos.ReportRegionStateTransitionResponse;
+ import org.apache.hadoop.hbase.regionserver.RSRpcServices;
++import org.apache.hadoop.hbase.security.AccessDeniedException;
+ import org.apache.hadoop.hbase.security.User;
+ import org.apache.hadoop.hbase.security.access.AccessController;
+ import org.apache.hadoop.hbase.security.visibility.VisibilityController;
+@@ -1306,7 +1307,12 @@ public class MasterRpcServices extends RSRpcServices
+   public ShutdownResponse shutdown(RpcController controller,
+       ShutdownRequest request) throws ServiceException {
+     LOG.info(master.getClientIdAuditPrefix() + " shutdown");
+-    master.shutdown();
++    try {
++      master.shutdown();
++    } catch (IOException e) {
++      LOG.error("Exception occurred in HMaster.shutdown()", e);
++      throw new ServiceException(e);
++    }
+     return ShutdownResponse.newBuilder().build();
+   }
+ 
+@@ -1343,7 +1349,12 @@ public class MasterRpcServices extends RSRpcServices
+   public StopMasterResponse stopMaster(RpcController controller,
+       StopMasterRequest request) throws ServiceException {
+     LOG.info(master.getClientIdAuditPrefix() + " stop");
+-    master.stopMaster();
++    try {
++      master.stopMaster();
++    } catch (IOException e) {
++      LOG.error("Exception occurred while stopping master", e);
++      throw new ServiceException(e);
++    }
+     return StopMasterResponse.newBuilder().build();
+   }
+ 
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/util/JVMClusterUtil.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/util/JVMClusterUtil.java
+index 4db20f2..7bb8e21 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/util/JVMClusterUtil.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/util/JVMClusterUtil.java
+@@ -244,14 +244,23 @@ public class JVMClusterUtil {
+       JVMClusterUtil.MasterThread activeMaster = null;
+       for (JVMClusterUtil.MasterThread t : masters) {
+         if (!t.master.isActiveMaster()) {
+-          t.master.stopMaster();
++          try {
++            t.master.stopMaster();
++          } catch (IOException e) {
++            LOG.error("Exception occurred while stopping master", e);
++          }
+         } else {
+           activeMaster = t;
+         }
+       }
+       // Do active after.
+-      if (activeMaster != null)
+-        activeMaster.master.shutdown();
++      if (activeMaster != null) {
++        try {
++          activeMaster.master.shutdown();
++        } catch (IOException e) {
++          LOG.error("Exception occurred in HMaster.shutdown()", e);
++        }
++      }
+ 
+     }
+     boolean wasInterrupted = false;
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/security/access/TestAccessController.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/security/access/TestAccessController.java
+index 157e41b..f6f1349 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/security/access/TestAccessController.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/security/access/TestAccessController.java
+@@ -98,6 +98,7 @@ import org.apache.hadoop.hbase.io.hfile.HFileContext;
+ import org.apache.hadoop.hbase.io.hfile.HFileContextBuilder;
+ import org.apache.hadoop.hbase.ipc.protobuf.generated.TestProcedureProtos;
+ import org.apache.hadoop.hbase.mapreduce.LoadIncrementalHFiles;
++import org.apache.hadoop.hbase.master.HMaster;
+ import org.apache.hadoop.hbase.master.MasterCoprocessorHost;
+ import org.apache.hadoop.hbase.master.procedure.MasterProcedureEnv;
+ import org.apache.hadoop.hbase.master.procedure.TableProcedureInterface;
+@@ -331,6 +332,33 @@ public class TestAccessController extends SecureTestUtil {
+   }
+ 
+   @Test (timeout=180000)
++  public void testUnauthorizedShutdown() throws Exception {
++    AccessTestAction action = new AccessTestAction() {
++      @Override public Object run() throws Exception {
++        HMaster master = TEST_UTIL.getHBaseCluster().getMaster();
++        master.shutdown();
++        return null;
++      }
++    };
++    verifyDenied(action, USER_CREATE, USER_OWNER, USER_RW, USER_RO, USER_NONE, USER_GROUP_READ,
++        USER_GROUP_WRITE, USER_GROUP_CREATE);
++  }
++
++  @Test (timeout=180000)
++  public void testUnauthorizedStopMaster() throws Exception {
++    AccessTestAction action = new AccessTestAction() {
++      @Override public Object run() throws Exception {
++        HMaster master = TEST_UTIL.getHBaseCluster().getMaster();
++        master.stopMaster();
++        return null;
++      }
++    };
++
++    verifyDenied(action, USER_CREATE, USER_OWNER, USER_RW, USER_RO, USER_NONE, USER_GROUP_READ,
++        USER_GROUP_WRITE, USER_GROUP_CREATE);
++  }
++
++  @Test (timeout=180000)
+   public void testSecurityCapabilities() throws Exception {
+     List<SecurityCapability> capabilities = TEST_UTIL.getConnection().getAdmin()
+       .getSecurityCapabilities();
+-- 
+1.7.9.5
+

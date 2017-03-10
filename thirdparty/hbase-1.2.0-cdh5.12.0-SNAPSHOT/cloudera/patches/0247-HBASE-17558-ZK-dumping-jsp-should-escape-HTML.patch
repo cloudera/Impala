@@ -1,0 +1,40 @@
+From 46a0afed522cb5fda84dc6ab97ce41d3840808f7 Mon Sep 17 00:00:00 2001
+From: Sean Busbey <busbey@cloudera.com>
+Date: Thu, 9 Feb 2017 18:29:32 -0800
+Subject: [PATCH 247/308] HBASE-17558 ZK dumping jsp should escape HTML.
+
+Signed-off-by: Enis Soztutar <enis@apache.org>
+(cherry picked from commit c74bf5a324ce51a139cbd4d1548c8207480ef0cf)
+
+Change-Id: I42b03eb89d51fd2161c43c831546939b985e4f4e
+Reason: Security
+Author: Sean Busbey
+Ref: CDH-49686
+---
+ .../src/main/resources/hbase-webapps/master/zk.jsp |    3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/hbase-server/src/main/resources/hbase-webapps/master/zk.jsp b/hbase-server/src/main/resources/hbase-webapps/master/zk.jsp
+index 0649554..3138487 100644
+--- a/hbase-server/src/main/resources/hbase-webapps/master/zk.jsp
++++ b/hbase-server/src/main/resources/hbase-webapps/master/zk.jsp
+@@ -18,6 +18,7 @@
+  */
+ --%>
+ <%@ page contentType="text/html;charset=UTF-8"
++  import="org.apache.commons.lang.StringEscapeUtils"
+   import="org.apache.hadoop.hbase.zookeeper.ZKUtil"
+   import="org.apache.hadoop.hbase.zookeeper.ZooKeeperWatcher"
+   import="org.apache.hadoop.hbase.HBaseConfiguration"
+@@ -80,7 +81,7 @@
+             </div>
+             <div class="row">
+                 <div class="span12">
+-                    <pre><%= ZKUtil.dump(watcher).trim() %></pre>
++                    <pre><%= StringEscapeUtils.escapeHtml(ZKUtil.dump(watcher).trim()) %></pre>
+                 </div>
+             </div>
+         </div>
+-- 
+1.7.9.5
+

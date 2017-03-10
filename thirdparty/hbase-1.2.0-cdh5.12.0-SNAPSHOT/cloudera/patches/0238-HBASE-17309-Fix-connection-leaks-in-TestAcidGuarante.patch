@@ -1,0 +1,168 @@
+From 1f5e2d1e031c3679e745b98394d9735f6549f652 Mon Sep 17 00:00:00 2001
+From: tedyu <yuzhihong@gmail.com>
+Date: Wed, 14 Dec 2016 20:03:44 -0800
+Subject: [PATCH 238/308] HBASE-17309 Fix connection leaks in
+ TestAcidGuarantees (huaxiang sun)
+
+Author: Huaxiang Sun
+Reason: Bug
+Ref: CDH-47718
+
+Change-Id: Ib4c72be2e5221ef0e707f0647fdc1bbe3e9c5411
+---
+ .../apache/hadoop/hbase/MultithreadedTestUtil.java |   10 ++++-
+ .../apache/hadoop/hbase/TestAcidGuarantees.java    |   42 ++++++++++++++++++--
+ 2 files changed, 46 insertions(+), 6 deletions(-)
+
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/MultithreadedTestUtil.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/MultithreadedTestUtil.java
+index cea10ebd..7e251e7 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/MultithreadedTestUtil.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/MultithreadedTestUtil.java
+@@ -18,6 +18,7 @@
+  */
+ package org.apache.hadoop.hbase;
+ 
++import java.io.IOException;
+ import java.util.HashSet;
+ import java.util.List;
+ import java.util.Set;
+@@ -143,12 +144,17 @@ public abstract class MultithreadedTestUtil {
+     }
+ 
+     public final void doWork() throws Exception {
+-      while (ctx.shouldRun() && !stopped) {
+-        doAnAction();
++      try {
++        while (ctx.shouldRun() && !stopped) {
++          doAnAction();
++        }
++      } finally {
++        workDone();
+       }
+     }
+ 
+     public abstract void doAnAction() throws Exception;
++    public void workDone() throws IOException {}
+   }
+ 
+   /**
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/TestAcidGuarantees.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/TestAcidGuarantees.java
+index 4b9cb10..83e9568 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/TestAcidGuarantees.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/TestAcidGuarantees.java
+@@ -29,8 +29,9 @@ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hbase.MultithreadedTestUtil.RepeatingTestThread;
+ import org.apache.hadoop.hbase.MultithreadedTestUtil.TestContext;
+ import org.apache.hadoop.hbase.client.Get;
++import org.apache.hadoop.hbase.client.Connection;
++import org.apache.hadoop.hbase.client.ConnectionFactory;
+ import org.apache.hadoop.hbase.client.HBaseAdmin;
+-import org.apache.hadoop.hbase.client.HTable;
+ import org.apache.hadoop.hbase.client.Put;
+ import org.apache.hadoop.hbase.client.Result;
+ import org.apache.hadoop.hbase.client.ResultScanner;
+@@ -113,6 +114,7 @@ public class TestAcidGuarantees implements Tool {
+     byte data[] = new byte[10];
+     byte targetRows[][];
+     byte targetFamilies[][];
++    Connection connection;
+     Table table;
+     AtomicLong numWritten = new AtomicLong();
+ 
+@@ -121,7 +123,8 @@ public class TestAcidGuarantees implements Tool {
+       super(ctx);
+       this.targetRows = targetRows;
+       this.targetFamilies = targetFamilies;
+-      table = new HTable(ctx.getConf(), TABLE_NAME);
++      connection = ConnectionFactory.createConnection(ctx.getConf());
++      table = connection.getTable(TABLE_NAME);
+     }
+     public void doAnAction() throws Exception {
+       // Pick a random row to write into
+@@ -138,6 +141,15 @@ public class TestAcidGuarantees implements Tool {
+       table.put(p);
+       numWritten.getAndIncrement();
+     }
++
++    @Override
++    public void workDone() throws IOException {
++      try {
++        table.close();
++      } finally {
++        connection.close();
++      }
++    }
+   }
+ 
+   /**
+@@ -147,6 +159,7 @@ public class TestAcidGuarantees implements Tool {
+   public static class AtomicGetReader extends RepeatingTestThread {
+     byte targetRow[];
+     byte targetFamilies[][];
++    Connection connection;
+     Table table;
+     int numVerified = 0;
+     AtomicLong numRead = new AtomicLong();
+@@ -156,7 +169,8 @@ public class TestAcidGuarantees implements Tool {
+       super(ctx);
+       this.targetRow = targetRow;
+       this.targetFamilies = targetFamilies;
+-      table = new HTable(ctx.getConf(), TABLE_NAME);
++      connection = ConnectionFactory.createConnection(ctx.getConf());
++      table = connection.getTable(TABLE_NAME);
+     }
+ 
+     public void doAnAction() throws Exception {
+@@ -184,6 +198,15 @@ public class TestAcidGuarantees implements Tool {
+       numRead.getAndIncrement();
+     }
+ 
++    @Override
++    public void workDone() throws IOException {
++      try {
++        table.close();
++      } finally {
++        connection.close();
++      }
++    }
++
+     private void gotFailure(byte[] expected, Result res) {
+       StringBuilder msg = new StringBuilder();
+       msg.append("Failed after ").append(numVerified).append("!");
+@@ -206,6 +229,7 @@ public class TestAcidGuarantees implements Tool {
+   public static class AtomicScanReader extends RepeatingTestThread {
+     byte targetFamilies[][];
+     Table table;
++    Connection connection;
+     AtomicLong numScans = new AtomicLong();
+     AtomicLong numRowsScanned = new AtomicLong();
+ 
+@@ -213,7 +237,8 @@ public class TestAcidGuarantees implements Tool {
+                            byte targetFamilies[][]) throws IOException {
+       super(ctx);
+       this.targetFamilies = targetFamilies;
+-      table = new HTable(ctx.getConf(), TABLE_NAME);
++      connection = ConnectionFactory.createConnection(ctx.getConf());
++      table = connection.getTable(TABLE_NAME);
+     }
+ 
+     public void doAnAction() throws Exception {
+@@ -241,6 +266,15 @@ public class TestAcidGuarantees implements Tool {
+       numScans.getAndIncrement();
+     }
+ 
++    @Override
++    public void workDone() throws IOException {
++      try {
++        table.close();
++      } finally {
++        connection.close();
++      }
++    }
++
+     private void gotFailure(byte[] expected, Result res) {
+       StringBuilder msg = new StringBuilder();
+       msg.append("Failed after ").append(numRowsScanned).append("!");
+-- 
+1.7.9.5
+

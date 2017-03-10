@@ -1,0 +1,49 @@
+From cc0ce6672fc38b8298340d48b8770545f3bf7078 Mon Sep 17 00:00:00 2001
+From: Stephen Yuan Jiang <syuanjiangdev@gmail.com>
+Date: Tue, 14 Jun 2016 13:30:41 -0700
+Subject: [PATCH 168/308] HBASE-15746 Remove extra RegionCoprocessor
+ preClose() in RSRpcServices#closeRegion (Stephen
+ Yuan Jiang)
+
+Reason: Bug
+Author: Stephen Yuan Jiang
+Ref: CDH-41396
+
+Change-Id: I6d73fe3365978f2df4662134da4a0cd4cd779e5b
+---
+ .../hadoop/hbase/regionserver/HRegionServer.java   |    1 +
+ .../hadoop/hbase/regionserver/RSRpcServices.java   |    6 ------
+ 2 files changed, 1 insertion(+), 6 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
+index 962bbbd..a6c61dd 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
+@@ -2787,6 +2787,7 @@ public class HRegionServer extends HasThread implements
+       throws NotServingRegionException, RegionAlreadyInTransitionException {
+     //Check for permissions to close.
+     Region actualRegion = this.getFromOnlineRegions(encodedName);
++    // Can be null if we're calling close on a region that's not online
+     if ((actualRegion != null) && (actualRegion.getCoprocessorHost() != null)) {
+       try {
+         actualRegion.getCoprocessorHost().preClose(false);
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/RSRpcServices.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/RSRpcServices.java
+index 113d913..e1bc180 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/RSRpcServices.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/RSRpcServices.java
+@@ -1179,12 +1179,6 @@ public class RSRpcServices implements HBaseRPCErrorHandler,
+       }
+       final String encodedRegionName = ProtobufUtil.getRegionEncodedName(request.getRegion());
+ 
+-      // Can be null if we're calling close on a region that's not online
+-      final Region region = regionServer.getFromOnlineRegions(encodedRegionName);
+-      if ((region  != null) && (region .getCoprocessorHost() != null)) {
+-        region.getCoprocessorHost().preClose(false);
+-      }
+-
+       requestCount.increment();
+       LOG.info("Close " + encodedRegionName + ", moving to " + sn);
+       CloseRegionCoordination.CloseRegionDetails crd = regionServer.getCoordinatedStateManager()
+-- 
+1.7.9.5
+

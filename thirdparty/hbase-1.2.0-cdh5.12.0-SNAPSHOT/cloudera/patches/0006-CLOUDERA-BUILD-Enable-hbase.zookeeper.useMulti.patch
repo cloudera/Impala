@@ -1,0 +1,31 @@
+From 2fe9a0d75737a5c424929e03622753f64e2585fd Mon Sep 17 00:00:00 2001
+From: Esteban Gutierrez <esteban@cloudera.com>
+Date: Fri, 3 Oct 2014 16:54:26 -0700
+Subject: [PATCH 006/308] CLOUDERA-BUILD Enable hbase.zookeeper.useMulti
+
+Ref: CDH-22176
+Reason: Backwards compatibility
+Author: Esteban Gutierrez
+---
+ .../org/apache/hadoop/hbase/zookeeper/ZKUtil.java  |    5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/zookeeper/ZKUtil.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/zookeeper/ZKUtil.java
+index bf803be..ad43253 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/zookeeper/ZKUtil.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/zookeeper/ZKUtil.java
+@@ -1660,7 +1660,10 @@ public class ZKUtil {
+   public static void multiOrSequential(ZooKeeperWatcher zkw, List<ZKUtilOp> ops,
+       boolean runSequentialOnMultiFailure) throws KeeperException {
+     if (ops == null) return;
+-    boolean useMulti = zkw.getConfiguration().getBoolean(HConstants.ZOOKEEPER_USEMULTI, false);
++    // NOTE: this and future versions of HBase are only supported to work
++    // with versions of ZooKeeper with multi support (CDH4+), so it is safe
++    // to use ZK.multi.
++    boolean useMulti = zkw.getConfiguration().getBoolean(HConstants.ZOOKEEPER_USEMULTI, true);
+ 
+     if (useMulti) {
+       List<Op> zkOps = new LinkedList<Op>();
+-- 
+1.7.9.5
+

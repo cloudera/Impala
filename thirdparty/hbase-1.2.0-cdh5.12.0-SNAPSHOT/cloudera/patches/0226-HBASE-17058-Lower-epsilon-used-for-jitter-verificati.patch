@@ -1,0 +1,46 @@
+From d04d0c0a2c7fb039fb806395031122976c9104d8 Mon Sep 17 00:00:00 2001
+From: Esteban Gutierrez <esteban@apache.org>
+Date: Thu, 17 Nov 2016 11:11:30 -0800
+Subject: [PATCH 226/308] HBASE-17058 Lower epsilon used for jitter
+ verification from HBASE-15324
+
+Change-Id: I9954faa6dcb0f54d9b12a9360d393de2f4e0c82c
+Author: Esteban Gutierrez
+Reason: Bug
+Ref: CDH-47169
+---
+ .../ConstantSizeRegionSplitPolicy.java             |    5 ++---
+ 1 file changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/ConstantSizeRegionSplitPolicy.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/ConstantSizeRegionSplitPolicy.java
+index 836cec5..d915f2e 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/ConstantSizeRegionSplitPolicy.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/ConstantSizeRegionSplitPolicy.java
+@@ -39,7 +39,6 @@ import org.apache.hadoop.hbase.classification.InterfaceAudience;
+ @InterfaceAudience.LimitedPrivate(HBaseInterfaceAudience.CONFIG)
+ public class ConstantSizeRegionSplitPolicy extends RegionSplitPolicy {
+   private static final Random RANDOM = new Random();
+-  private static final double EPSILON = 1E-6;
+ 
+   private long desiredMaxFileSize;
+   private double jitterRate;
+@@ -60,7 +59,7 @@ public class ConstantSizeRegionSplitPolicy extends RegionSplitPolicy {
+     this.jitterRate = (RANDOM.nextFloat() - 0.5D) * jitter;
+     long jitterValue = (long) (this.desiredMaxFileSize * this.jitterRate);
+     // make sure the long value won't overflow with jitter
+-    if (this.jitterRate > EPSILON && jitterValue > (Long.MAX_VALUE - this.desiredMaxFileSize)) {
++    if (this.jitterRate > 0 && jitterValue > (Long.MAX_VALUE - this.desiredMaxFileSize)) {
+       this.desiredMaxFileSize = Long.MAX_VALUE;
+     } else {
+       this.desiredMaxFileSize += jitterValue;
+@@ -94,6 +93,6 @@ public class ConstantSizeRegionSplitPolicy extends RegionSplitPolicy {
+ 
+   @VisibleForTesting
+   public boolean positiveJitterRate() {
+-    return this.jitterRate > EPSILON;
++    return this.jitterRate > 0;
+   }
+ }
+-- 
+1.7.9.5
+

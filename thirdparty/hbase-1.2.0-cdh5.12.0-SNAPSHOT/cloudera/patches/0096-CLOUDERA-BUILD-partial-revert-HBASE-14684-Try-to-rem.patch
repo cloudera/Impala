@@ -1,0 +1,75 @@
+From 1f5ee6a143266507de02eb998cdc82e38fc428f6 Mon Sep 17 00:00:00 2001
+From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
+Date: Mon, 11 Jan 2016 16:59:07 -0800
+Subject: [PATCH 096/308] CLOUDERA-BUILD partial revert HBASE-14684 Try to
+ remove all MiniMapReduceCluster in unit tests
+
+---
+ .../hbase/mapreduce/TestHFileOutputFormat.java     |    3 ++-
+ .../hadoop/hbase/mapreduce/TestHashTable.java      |    3 ++-
+ .../hadoop/hbase/mapreduce/TestSyncTable.java      |    3 ++-
+ 3 files changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/mapreduce/TestHFileOutputFormat.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/mapreduce/TestHFileOutputFormat.java
+index abe8d5c..0e0f22a 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/mapreduce/TestHFileOutputFormat.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/mapreduce/TestHFileOutputFormat.java
+@@ -389,8 +389,8 @@ public class TestHFileOutputFormat  {
+     byte[][] splitKeys = generateRandomSplitKeys(4);
+     HBaseAdmin admin = null;
+     try {
+-      util.setJobWithoutMRCluster();
+       util.startMiniCluster();
++      util.startMiniMapReduceCluster();
+       Path testDir = util.getDataTestDirOnTestFS("testLocalMRIncrementalLoad");
+       admin = util.getHBaseAdmin();
+       HTable table = util.createTable(TABLE_NAME, FAMILIES, splitKeys);
+@@ -471,6 +471,7 @@ public class TestHFileOutputFormat  {
+           tableDigestBefore, util.checksumRows(table));
+     } finally {
+       if (admin != null) admin.close();
++      util.shutdownMiniMapReduceCluster();
+       util.shutdownMiniCluster();
+     }
+   }
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/mapreduce/TestHashTable.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/mapreduce/TestHashTable.java
+index eae33a6..762f530 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/mapreduce/TestHashTable.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/mapreduce/TestHashTable.java
+@@ -56,12 +56,13 @@ public class TestHashTable {
+   
+   @BeforeClass
+   public static void beforeClass() throws Exception {
+-    TEST_UTIL.setJobWithoutMRCluster();
+     TEST_UTIL.startMiniCluster(3);
++    TEST_UTIL.startMiniMapReduceCluster();
+   }
+   
+   @AfterClass
+   public static void afterClass() throws Exception {
++    TEST_UTIL.shutdownMiniMapReduceCluster();
+     TEST_UTIL.shutdownMiniCluster();
+   }
+   
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/mapreduce/TestSyncTable.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/mapreduce/TestSyncTable.java
+index 1b356e6..2f1bee3 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/mapreduce/TestSyncTable.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/mapreduce/TestSyncTable.java
+@@ -64,12 +64,13 @@ public class TestSyncTable {
+   
+   @BeforeClass
+   public static void beforeClass() throws Exception {
+-    TEST_UTIL.setJobWithoutMRCluster();
+     TEST_UTIL.startMiniCluster(3);
++    TEST_UTIL.startMiniMapReduceCluster();
+   }
+   
+   @AfterClass
+   public static void afterClass() throws Exception {
++    TEST_UTIL.shutdownMiniMapReduceCluster();
+     TEST_UTIL.shutdownMiniCluster();
+   }
+   
+-- 
+1.7.9.5
+

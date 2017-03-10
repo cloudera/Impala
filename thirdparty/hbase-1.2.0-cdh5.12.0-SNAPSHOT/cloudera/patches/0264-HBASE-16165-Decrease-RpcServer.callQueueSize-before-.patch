@@ -1,0 +1,30 @@
+From 859e43dd2f8ee6a8d5043f45a6bab52866a73f03 Mon Sep 17 00:00:00 2001
+From: zhangduo <zhangduo@apache.org>
+Date: Sun, 18 Sep 2016 10:05:27 +0800
+Subject: [PATCH 264/308] HBASE-16165 Decrease RpcServer.callQueueSize before
+ writeResponse causes OOM (Guanghao Zhang)
+
+Change-Id: Ibb4f72de499063e2aa0319af5989c43a5ef718d2
+Reason: Bug
+Author: Guanghao Zhang
+Ref: CDH-44989
+---
+ .../org/apache/hadoop/hbase/ipc/RpcServer.java     |    2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/RpcServer.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/RpcServer.java
+index 23a2f25..26d9414 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/RpcServer.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/RpcServer.java
+@@ -514,6 +514,8 @@ public class RpcServer implements RpcServerInterface, ConfigurationObserver {
+     }
+ 
+     public synchronized void sendResponseIfReady() throws IOException {
++      // set param null to reduce memory pressure
++      this.param = null;
+       this.responder.doRespond(this);
+     }
+ 
+-- 
+1.7.9.5
+

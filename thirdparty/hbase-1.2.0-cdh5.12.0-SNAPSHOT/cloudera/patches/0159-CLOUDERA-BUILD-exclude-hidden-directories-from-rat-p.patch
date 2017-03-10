@@ -1,0 +1,31 @@
+From 558a4ed744b5d38176a1284c8071a242e23e85dd Mon Sep 17 00:00:00 2001
+From: Sean Busbey <busbey@cloudera.com>
+Date: Thu, 26 May 2016 12:28:10 -0700
+Subject: [PATCH 159/308] CLOUDERA-BUILD exclude hidden directories from rat
+ plugin.
+
+Reason: Build infra
+Author: Sean Busbey
+Ref: CDH-39296
+
+Change-Id: Ib80b0933c12fefe41a83c07cb0420c8866c4e67c
+---
+ pom.xml |    2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/pom.xml b/pom.xml
+index e75df2d..1572e10 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -760,6 +760,8 @@
+               <exclude>**/*.versionsBackup</exclude>
+               <exclude>**/*.log</exclude>
+               <exclude>**/.*</exclude>
++              <!-- Also exclude hidden directories. -->
++              <exclude>**/.*/*</exclude>
+               <exclude>**/*.tgz</exclude>
+               <exclude>**/*.orig</exclude>
+               <exclude>**/8e8ab58dcf39412da19833fcd8f687ac</exclude>
+-- 
+1.7.9.5
+

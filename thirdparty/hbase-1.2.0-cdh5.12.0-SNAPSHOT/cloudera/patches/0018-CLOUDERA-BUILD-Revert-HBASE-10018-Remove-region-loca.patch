@@ -1,0 +1,46 @@
+From c1974e5822b82a5564119bf2c21c51f5bfbd93c1 Mon Sep 17 00:00:00 2001
+From: Esteban Gutierrez <esteban@cloudera.com>
+Date: Mon, 20 Apr 2015 20:52:55 -0700
+Subject: [PATCH 018/308] CLOUDERA-BUILD Revert "HBASE-10018 Remove region
+ location prefetching" - ADDENDUM
+
+Author: Esteban Gutierrez
+Reason: Backward compatibility
+Ref: CDH-27098
+---
+ .../hadoop/hbase/client/ConnectionManager.java     |    5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ConnectionManager.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ConnectionManager.java
+index e837c40..c60a8cd 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ConnectionManager.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ConnectionManager.java
+@@ -1189,7 +1189,7 @@ class ConnectionManager {
+             "table name cannot be null or zero length");
+       }
+       if (tableName.equals(TableName.META_TABLE_NAME)) {
+-        return locateMeta(tableName, useCache, replicaId);
++        return this.registry.getMetaRegionLocation();
+       } else {
+         // Region not in the cache - have to go to the meta RS
+         return locateRegionInMeta(tableName, row, useCache, retry, replicaId);
+@@ -1328,7 +1328,7 @@ class ConnectionManager {
+         // Query the meta region
+         try {
+           // locate the meta region
+-          metaLocation = locateRegion(TableName.META_TABLE_NAME, metaKey, true, false);
++          metaLocation = locateRegion(TableName.META_TABLE_NAME, metaKey, false, false);
+           // If null still, go around again.
+           if (metaLocation == null) continue;
+           ClientService.BlockingInterface service = getClient(metaLocation.getDefaultRegionLocation().getServerName());
+@@ -1353,6 +1353,7 @@ class ConnectionManager {
+             if (locations != null) {
+               return locations;
+             }
++          } else {
+             // If we are not supposed to be using the cache, delete any existing cached location
+             // so it won't interfere.
+             metaCache.clearCache(tableName, row);
+-- 
+1.7.9.5
+

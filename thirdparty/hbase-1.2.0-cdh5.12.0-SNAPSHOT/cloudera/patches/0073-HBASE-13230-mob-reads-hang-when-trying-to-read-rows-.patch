@@ -1,0 +1,185 @@
+From 38695909ea072c91452957730b931b711c37275b Mon Sep 17 00:00:00 2001
+From: Jonathan M Hsieh <jmhsieh@apache.org>
+Date: Fri, 13 Mar 2015 10:37:52 -0700
+Subject: [PATCH 073/308] HBASE-13230 [mob] reads hang when trying to read
+ rows with large mobs (>10MB)
+
+Conflicts:
+	hbase-client/src/main/java/org/apache/hadoop/hbase/ipc/AsyncServerResponseHandler.java
+	hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestMobStoreScanner.java
+
+Change-Id: Iffd6473dc8502deaa96e4040e07c9153dee3df45
+Reason: Mob feature
+Author: Jonathan Hsieh
+Ref: CDH-26016
+---
+ .../apache/hadoop/hbase/protobuf/ProtobufUtil.java |   63 ++++++++++++++++++--
+ .../hbase/regionserver/TestMobStoreScanner.java    |   30 +++++++---
+ 2 files changed, 82 insertions(+), 11 deletions(-)
+
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/protobuf/ProtobufUtil.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/protobuf/ProtobufUtil.java
+index 9527e31..0ea729a 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/protobuf/ProtobufUtil.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/protobuf/ProtobufUtil.java
+@@ -21,6 +21,7 @@ package org.apache.hadoop.hbase.protobuf;
+ import static org.apache.hadoop.hbase.protobuf.generated.HBaseProtos.RegionSpecifier.RegionSpecifierType.REGION_NAME;
+ 
+ import java.io.ByteArrayOutputStream;
++import java.io.FilterInputStream;
+ import java.io.IOException;
+ import java.io.InputStream;
+ import java.lang.reflect.Constructor;
+@@ -37,7 +38,7 @@ import java.util.Map;
+ import java.util.Map.Entry;
+ import java.util.NavigableSet;
+ import java.util.concurrent.TimeUnit;
+-
++import org.apache.hadoop.hbase.classification.InterfaceAudience;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.hbase.Cell;
+@@ -53,7 +54,6 @@ import org.apache.hadoop.hbase.NamespaceDescriptor;
+ import org.apache.hadoop.hbase.ServerName;
+ import org.apache.hadoop.hbase.TableName;
+ import org.apache.hadoop.hbase.Tag;
+-import org.apache.hadoop.hbase.classification.InterfaceAudience;
+ import org.apache.hadoop.hbase.client.Append;
+ import org.apache.hadoop.hbase.client.Consistency;
+ import org.apache.hadoop.hbase.client.Delete;
+@@ -69,7 +69,6 @@ import org.apache.hadoop.hbase.client.security.SecurityCapability;
+ import org.apache.hadoop.hbase.exceptions.DeserializationException;
+ import org.apache.hadoop.hbase.filter.ByteArrayComparable;
+ import org.apache.hadoop.hbase.filter.Filter;
+-import org.apache.hadoop.hbase.io.LimitInputStream;
+ import org.apache.hadoop.hbase.io.TimeRange;
+ import org.apache.hadoop.hbase.protobuf.generated.AccessControlProtos;
+ import org.apache.hadoop.hbase.protobuf.generated.AccessControlProtos.AccessControlService;
+@@ -3097,7 +3096,7 @@ public final class ProtobufUtil {
+     final int firstByte = in.read();
+     if (firstByte != -1) {
+       final int size = CodedInputStream.readRawVarint32(firstByte, in);
+-      final InputStream limitedInput = new LimitInputStream(in, size);
++      final InputStream limitedInput = new LimitedInputStream(in, size);
+       final CodedInputStream codedInput = CodedInputStream.newInstance(limitedInput);
+       codedInput.setSizeLimit(size);
+       builder.mergeFrom(codedInput);
+@@ -3256,4 +3255,60 @@ public final class ProtobufUtil {
+     return new TimeRange(minStamp, maxStamp);
+   }
+ 
++  /**
++   * This is cut and paste from protobuf's package private AbstractMessageLite.
++   *
++   * An InputStream implementations which reads from some other InputStream
++   * but is limited to a particular number of bytes.  Used by
++   * mergeDelimitedFrom().  This is intentionally package-private so that
++   * UnknownFieldSet can share it.
++   */
++  static final class LimitedInputStream extends FilterInputStream {
++    private int limit;
++
++    LimitedInputStream(InputStream in, int limit) {
++      super(in);
++      this.limit = limit;
++    }
++
++    @Override
++    public int available() throws IOException {
++      return Math.min(super.available(), limit);
++    }
++
++    @Override
++    public int read() throws IOException {
++      if (limit <= 0) {
++        return -1;
++      }
++      final int result = super.read();
++      if (result >= 0) {
++        --limit;
++      }
++      return result;
++    }
++
++    @Override
++    public int read(final byte[] b, final int off, int len)
++            throws IOException {
++      if (limit <= 0) {
++        return -1;
++      }
++      len = Math.min(len, limit);
++      final int result = super.read(b, off, len);
++      if (result >= 0) {
++        limit -= result;
++      }
++      return result;
++    }
++
++    @Override
++    public long skip(final long n) throws IOException {
++      final long result = super.skip(Math.min(n, limit));
++      if (result >= 0) {
++        limit -= result;
++      }
++      return result;
++    }
++  }
+ }
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestMobStoreScanner.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestMobStoreScanner.java
+index 6955ca6..8835dac 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestMobStoreScanner.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestMobStoreScanner.java
+@@ -31,14 +31,9 @@ import org.apache.hadoop.hbase.HBaseTestingUtility;
+ import org.apache.hadoop.hbase.HColumnDescriptor;
+ import org.apache.hadoop.hbase.HRegionInfo;
+ import org.apache.hadoop.hbase.HTableDescriptor;
+-import org.apache.hadoop.hbase.MediumTests;
++import org.apache.hadoop.hbase.client.*;
++import org.apache.hadoop.hbase.testclassification.MediumTests;
+ import org.apache.hadoop.hbase.TableName;
+-import org.apache.hadoop.hbase.client.HBaseAdmin;
+-import org.apache.hadoop.hbase.client.HTable;
+-import org.apache.hadoop.hbase.client.Put;
+-import org.apache.hadoop.hbase.client.Result;
+-import org.apache.hadoop.hbase.client.ResultScanner;
+-import org.apache.hadoop.hbase.client.Scan;
+ import org.apache.hadoop.hbase.mob.MobConstants;
+ import org.apache.hadoop.hbase.mob.MobUtils;
+ import org.apache.hadoop.hbase.util.Bytes;
+@@ -71,6 +66,7 @@ public class TestMobStoreScanner {
+     TEST_UTIL.getConfiguration().setInt("hfile.format.version", 3);
+     TEST_UTIL.getConfiguration().setInt("hbase.master.info.port", 0);
+     TEST_UTIL.getConfiguration().setBoolean("hbase.regionserver.info.port.auto", true);
++    TEST_UTIL.getConfiguration().setInt("hbase.client.keyvalue.maxsize", 100*1024*1024);
+ 
+     TEST_UTIL.startMiniCluster(1);
+   }
+@@ -137,6 +133,26 @@ public class TestMobStoreScanner {
+     testGetFromArchive(true);
+   }
+ 
++  @Test(timeout=60000)
++  public void testGetMassive() throws Exception {
++    String TN = "testGetMassive";
++    setUp(defaultThreshold, TN);
++
++    // Put some data 5 10, 15, 20  mb ok  (this would be right below protobuf default max size of 64MB.
++    // 25, 30, 40 fail.  these is above protobuf max size of 64MB
++    byte[] bigValue = new byte[25*1024*1024];
++
++    Put put = new Put(row1);
++    put.add(family, qf1, bigValue);
++    put.add(family, qf2, bigValue);
++    put.add(family, qf3, bigValue);
++    table.put(put);
++
++    Get g = new Get(row1);
++    Result r = table.get(g);
++    // should not have blown up.
++  }
++
+   public void testGetFromFiles(boolean reversed) throws Exception {
+     String TN = "testGetFromFiles" + reversed;
+     setUp(defaultThreshold, TN);
+-- 
+1.7.9.5
+

@@ -1,0 +1,54 @@
+From 738022a3f28e50c6f6b77643d827483940c332ef Mon Sep 17 00:00:00 2001
+From: tedyu <yuzhihong@gmail.com>
+Date: Thu, 9 Feb 2017 12:43:37 -0800
+Subject: [PATCH 295/308] HBASE-17265 Region left unassigned in master
+ failover when region failed to open (Allan Yang)
+
+(cherry picked from commit 77d604951d43d8e6994d5a66d9a4d8a77835e80d)
+
+Change-Id: I67ce54cc9a2318d3d96bd5324e8983ce283256d2
+Author: Balazs Meszaros
+Feature: Bug
+Ref: CDH-50446
+---
+ .../hadoop/hbase/master/AssignmentManager.java     |    2 +-
+ .../apache/hadoop/hbase/master/RegionStates.java   |   10 ++++++++++
+ 2 files changed, 11 insertions(+), 1 deletion(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java
+index cee0fd2..c1c0894 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java
+@@ -1064,7 +1064,7 @@ public class AssignmentManager extends ZooKeeperListener {
+             failedOpenTracker.remove(encodedName);
+           } else {
+             // Handle this the same as if it were opened and then closed.
+-            regionState = regionStates.updateRegionState(rt, State.CLOSED);
++            regionState = regionStates.setRegionStateTOCLOSED(rt.getRegionName(), sn);
+             if (regionState != null) {
+               // When there are more than one region server a new RS is selected as the
+               // destination and the same is updated in the regionplan. (HBASE-5546)
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/RegionStates.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/RegionStates.java
+index c209d35..efb9f48 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/RegionStates.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/RegionStates.java
+@@ -380,6 +380,16 @@ public class RegionStates {
+    * Set the region state to CLOSED
+    */
+   public RegionState setRegionStateTOCLOSED(
++      final byte[] regionName,
++      final ServerName serverName) {
++    HRegionInfo regionInfo = getRegionInfo(regionName);
++    return setRegionStateTOCLOSED(regionInfo, serverName);
++  }
++
++  /**
++   * Set the region state to CLOSED
++   */
++  public RegionState setRegionStateTOCLOSED(
+       final HRegionInfo regionInfo,
+       final ServerName serverName) {
+     ServerName sn = serverName;
+-- 
+1.7.9.5
+

@@ -1,0 +1,52 @@
+From 6fc70cdb3546db59b27cf91ae9dfbb25ac2e70e2 Mon Sep 17 00:00:00 2001
+From: tedyu <yuzhihong@gmail.com>
+Date: Mon, 20 Jun 2016 16:25:50 -0700
+Subject: [PATCH 176/308] HBASE-16035 Nested AutoCloseables might not all get
+ closed (Sean Mackrory)
+
+Reason: Bug
+Author: Sean Mackrory
+Ref: CDH-40539
+
+Change-Id: Ia46dca5291bf7f4b94a5aec1ded4cedc3a04b5af
+---
+ .../org/apache/hadoop/hbase/http/log/LogLevel.java |    6 +++---
+ .../apache/hadoop/hbase/mapreduce/JarFinder.java   |    5 +++--
+ 2 files changed, 6 insertions(+), 5 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/http/log/LogLevel.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/http/log/LogLevel.java
+index 1a95c70..1d674b4 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/http/log/LogLevel.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/http/log/LogLevel.java
+@@ -72,9 +72,9 @@ public class LogLevel {
+       System.out.println("Connecting to " + url);
+       URLConnection connection = url.openConnection();
+       connection.connect();
+-      try (BufferedReader in = new BufferedReader(new InputStreamReader(
+-               connection.getInputStream()))) {
+-        for(String line; (line = in.readLine()) != null; ) {
++      try (InputStreamReader streamReader = new InputStreamReader(connection.getInputStream());
++           BufferedReader bufferedReader = new BufferedReader(streamReader)) {
++        for(String line; (line = bufferedReader.readLine()) != null; ) {
+           if (line.startsWith(MARKER)) {
+             System.out.println(TAG.matcher(line).replaceAll(""));
+           }
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/JarFinder.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/JarFinder.java
+index cf334db..7d0216a 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/JarFinder.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/JarFinder.java
+@@ -124,8 +124,9 @@ public class JarFinder {
+                                                    jarDir));
+       }
+     }
+-    try (JarOutputStream zos = new JarOutputStream(new FileOutputStream(jarFile))) {
+-      jarDir(dir, "", zos);
++    try (FileOutputStream fos = new FileOutputStream(jarFile);
++         JarOutputStream jos = new JarOutputStream(fos)) {
++      jarDir(dir, "", jos);
+     }
+   }
+ 
+-- 
+1.7.9.5
+

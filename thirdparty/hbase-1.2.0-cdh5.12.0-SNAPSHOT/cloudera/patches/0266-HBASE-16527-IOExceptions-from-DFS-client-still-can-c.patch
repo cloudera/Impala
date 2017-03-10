@@ -1,0 +1,87 @@
+From 47ba3b78fcf5baf4742a4a1619c0a7744e4a2daf Mon Sep 17 00:00:00 2001
+From: tedyu <yuzhihong@gmail.com>
+Date: Thu, 1 Sep 2016 12:39:08 -0700
+Subject: [PATCH 266/308] HBASE-16527 IOExceptions from DFS client still can
+ cause CatalogJanitor to delete referenced files
+ (Vladimir Rodionov)
+
+Change-Id: I2b6538d7c8dbb5829246c4cbc27ce8e08fc0cce9
+Reason: Bug
+Author: Vladimir Rodionov
+Ref: CDH-50438
+---
+ .../apache/hadoop/hbase/master/CatalogJanitor.java |   20 ++++++++++----------
+ .../hbase/regionserver/HRegionFileSystem.java      |   15 ++++++++++++---
+ 2 files changed, 22 insertions(+), 13 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/CatalogJanitor.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/CatalogJanitor.java
+index d43e71a..9d935b5 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/CatalogJanitor.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/CatalogJanitor.java
+@@ -382,27 +382,27 @@ public class CatalogJanitor extends ScheduledChore {
+         return new Pair<Boolean, Boolean>(Boolean.FALSE, Boolean.FALSE);
+       }
+     } catch (IOException ioe) {
+-      LOG.warn("Error trying to determine if daughter region exists, " +
++      LOG.error("Error trying to determine if daughter region exists, " +
+                "assuming exists and has references", ioe);
+       return new Pair<Boolean, Boolean>(Boolean.TRUE, Boolean.TRUE);
+     }
+ 
++    boolean references = false;
++    HTableDescriptor parentDescriptor = getTableDescriptor(parent.getTable());
+     try {
+       regionFs = HRegionFileSystem.openRegionFromFileSystem(
+           this.services.getConfiguration(), fs, tabledir, daughter, true);
++      
++      for (HColumnDescriptor family: parentDescriptor.getFamilies()) {
++        if ((references = regionFs.hasReferences(family.getNameAsString()))) {
++          break;
++        }
++      }
+     } catch (IOException e) {
+-      LOG.warn("Error trying to determine referenced files from : " + daughter.getEncodedName()
++      LOG.error("Error trying to determine referenced files from : " + daughter.getEncodedName()
+           + ", to: " + parent.getEncodedName() + " assuming has references", e);
+       return new Pair<Boolean, Boolean>(Boolean.TRUE, Boolean.TRUE);
+     }
+-
+-    boolean references = false;
+-    HTableDescriptor parentDescriptor = getTableDescriptor(parent.getTable());
+-    for (HColumnDescriptor family: parentDescriptor.getFamilies()) {
+-      if ((references = regionFs.hasReferences(family.getNameAsString()))) {
+-        break;
+-      }
+-    }
+     return new Pair<Boolean, Boolean>(Boolean.TRUE, Boolean.valueOf(references));
+   }
+ 
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionFileSystem.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionFileSystem.java
+index 397ae7b..19e8c45 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionFileSystem.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionFileSystem.java
+@@ -249,9 +249,18 @@ public class HRegionFileSystem {
+    * @throws IOException
+    */
+   public boolean hasReferences(final String familyName) throws IOException {
+-    FileStatus[] files = FSUtils.listStatus(fs, getStoreDir(familyName),
+-        new FSUtils.ReferenceFileFilter(fs));
+-    return files != null && files.length > 0;
++    FileStatus[] files = FSUtils.listStatus(fs, getStoreDir(familyName));
++    if (files != null) {
++      for(FileStatus stat: files) {
++        if(stat.isDirectory()) {
++          continue;
++        }
++        if(StoreFileInfo.isReference(stat.getPath())) {
++          return true;
++        }
++      }
++    }
++    return false;
+   }
+ 
+   /**
+-- 
+1.7.9.5
+
