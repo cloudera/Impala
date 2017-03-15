@@ -38,7 +38,7 @@ function print_usage(){
   echo "  credential           interact with credential providers"
   echo "                       Hadoop jar and the required libraries"
   echo "  daemonlog            get/set the log level for each daemon"
-  echo "  s3a                  manage data on S3"
+  echo "  s3guard              manage data on S3"
   echo "  trace                view and modify Hadoop tracing settings"
   echo " or"
   echo "  CLASSNAME            run the class named CLASSNAME"
@@ -116,7 +116,7 @@ case $COMMAND in
       CLASSPATH=${CLASSPATH}:${TOOL_PATH}
     elif [ "$COMMAND" = "credential" ] ; then
       CLASS=org.apache.hadoop.security.alias.CredentialShell
-    elif [ "$COMMAND" = "s3a" ] ; then
+    elif [ "$COMMAND" = "s3guard" ] ; then
       CLASS=org.apache.hadoop.fs.s3a.s3guard.S3GuardTool
       CLASSPATH=${CLASSPATH}:${TOOL_PATH}
     elif [ "$COMMAND" = "trace" ] ; then
