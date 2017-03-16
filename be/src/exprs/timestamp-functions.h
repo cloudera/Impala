@@ -42,7 +42,7 @@ class TimestampFunctions {
   /// equal to the interval that would definitely result in an out of bounds value. The
   /// min and max year are also defined for manual error checking. The min / max years
   /// are derived from date(min_date_time).year() / date(max_date_time).year().
-  static const int64_t MAX_YEAR = 9999;
+  static const int64_t MAX_YEAR = 10000;
   static const int64_t MIN_YEAR = 1400;
   static const int64_t MAX_YEAR_INTERVAL = MAX_YEAR - MIN_YEAR;
   static const int64_t MAX_MONTH_INTERVAL = MAX_YEAR_INTERVAL * 12;
