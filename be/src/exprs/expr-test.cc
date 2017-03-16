@@ -1476,6 +1476,9 @@ TEST_F(ExprTest, CastExprs) {
   TestValue("cast(cast('1400-01-01' as timestamp) as double)", TYPE_DOUBLE,
       -17987443200);
   TestIsNull("cast(cast(-17987443201.03 as double) as timestamp)", TYPE_TIMESTAMP);
+  // Use 4 digit years otherwise string parsing will fail.
+  TestValue("cast(cast('9999-12-31 23:59:59' as timestamp) + interval 1 year as bigint)",
+      TYPE_BIGINT, 253433923199);
   TestTimestampValue("cast(253433923199 as timestamp) - interval 1 year",
       TimestampValue("9999-12-31 23:59:59", 19));
   TestIsNull("cast(253433923200 as timestamp)", TYPE_TIMESTAMP);

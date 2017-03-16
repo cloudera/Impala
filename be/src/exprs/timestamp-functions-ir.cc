@@ -682,7 +682,6 @@ template <bool is_add, typename AnyIntVal, typename Interval,
     bool is_add_months_keep_last_day>
 TimestampVal TimestampFunctions::AddSub(FunctionContext* context,
     const TimestampVal& timestamp, const AnyIntVal& num_interval_units) {
-  DCHECK_EQ(Date(max_date_time).year(), MAX_YEAR);
   DCHECK_EQ(Date(min_date_time).year(), MIN_YEAR);
   if (timestamp.is_null || num_interval_units.is_null) return TimestampVal::null();
   const TimestampValue& value = TimestampValue::FromTimestampVal(timestamp);
