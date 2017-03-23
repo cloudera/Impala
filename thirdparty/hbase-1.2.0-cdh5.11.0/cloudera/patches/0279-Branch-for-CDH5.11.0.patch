@@ -1,7 +1,7 @@
 From 77f7036e3acb41fbc21ed3ca4095d06079529b61 Mon Sep 17 00:00:00 2001
 From: Jenkins <dev-kitchen@cloudera.com>
 Date: Mon, 27 Feb 2017 15:19:20 -0800
-Subject: [PATCH 279/299] Branch for CDH5.11.0
+Subject: [PATCH 279/279] Branch for CDH5.11.0
 
 ---
  hbase-annotations/pom.xml                |    2 +-
