@@ -216,10 +216,10 @@ void HdfsParquetScanner::Close(RowBatch* row_batch) {
   if (row_batch != NULL) {
     FlushRowGroupResources(row_batch);
     if (add_batches_to_queue_) scan_node_->AddMaterializedRowBatch(row_batch);
-  } else if (!FLAGS_enable_partitioned_hash_join ||
-      !FLAGS_enable_partitioned_aggregation) {
-    // With the legacy aggs/joins the tuple ptrs of the scratch batch are allocated
-    // from the scratch batch's mem pool. We can get into this case if Open() fails.
+  } else {
+    // The scratch batch may still contain tuple data (or tuple ptrs if the legacy joins
+    // or aggs are enabled). We can get into this case if Open() fails or if the query is
+    // cancelled.
     scratch_batch_->mem_pool()->FreeAll();
   }
   // Verify all resources (if any) have been transferred.
@@ -550,8 +550,11 @@ Status HdfsParquetScanner::CommitRows(RowBatch* dst_batch, int num_rows) {
 
   // We need to pass the row batch to the scan node if there is too much memory attached,
   // which can happen if the query is very selective. We need to release memory even
-  // if no rows passed predicates.
-  if (dst_batch->AtCapacity() || context_->num_completed_io_buffers() > 0) {
+  // if no rows passed predicates. We should only do this when all rows have been copied
+  // from the scratch batch, since those rows may reference completed I/O buffers in
+  // 'context_'.
+  if (scratch_batch_->AtEnd()
+      && (dst_batch->AtCapacity() || context_->num_completed_io_buffers() > 0)) {
     context_->ReleaseCompletedResources(dst_batch, /* done */ false);
   }
   if (context_->cancelled()) return Status::CANCELLED;
