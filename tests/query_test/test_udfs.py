@@ -358,6 +358,7 @@ drop function if exists {database}.var_sum(decimal(4,2)...);
 drop function if exists {database}.var_sum_multiply(double, int...);
 drop function if exists {database}.var_sum_multiply2(double, int...);
 drop function if exists {database}.to_lower(string);
+drop function if exists {database}.to_upper(string);
 drop function if exists {database}.constant_timestamp();
 drop function if exists {database}.validate_arg_type(string);
 drop function if exists {database}.count_rows();
