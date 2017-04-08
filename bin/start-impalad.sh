@@ -103,4 +103,5 @@ if ${CLUSTER_DIR}/admin is_kerberized; then
 fi
 
 . ${IMPALA_HOME}/bin/set-classpath.sh
+export ASAN_OPTIONS="handle_segv=0 detect_leaks=0"
 exec ${TOOL_PREFIX} ${IMPALA_CMD} ${IMPALAD_ARGS}
