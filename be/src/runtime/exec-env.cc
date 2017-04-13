@@ -232,12 +232,6 @@ ExecEnv::ExecEnv(const string& hostname, int backend_port, int subscriber_port,
           statestore_subscriber_->id(), backend_address_, metrics_.get(),
           webserver_.get(), request_pool_service_.get()));
     }
-
-    if (FLAGS_disable_admission_control) LOG(INFO) << "Admission control is disabled.";
-    if (!FLAGS_disable_admission_control) {
-      admission_controller_.reset(new AdmissionController(statestore_subscriber_.get(),
-          request_pool_service_.get(), metrics_.get(), backend_address_));
-    }
   } else if (FLAGS_is_coordinator) {
     vector<TNetworkAddress> addresses;
     addresses.push_back(MakeNetworkAddress(hostname, backend_port));
