@@ -408,7 +408,7 @@ Status HdfsScanNode::CreateAndOpenScanner(HdfsPartitionDescriptor* partition,
           partition->file_format()));
   }
   DCHECK(scanner->get() != NULL);
-  Status status = ExecDebugAction(TExecNodePhase::PREPARE_SCANNER, runtime_state_);
+  Status status = ScanNodeDebugAction(TExecNodePhase::PREPARE_SCANNER);
   if (status.ok()) {
     status = scanner->get()->Open(context);
     if (!status.ok()) scanner->get()->Close(scanner->get()->batch());
@@ -452,8 +452,8 @@ void HdfsScanNode::TransferToScanNodePool(MemPool* pool) {
   scan_node_pool_->AcquireData(pool, false);
 }
 
-Status HdfsScanNode::TriggerDebugAction() {
-  return ExecDebugAction(TExecNodePhase::GETNEXT, runtime_state_);
+Status HdfsScanNode::ScanNodeDebugAction(TExecNodePhase::type phase) {
+  return ExecDebugAction(phase, runtime_state_);
 }
 
 Status HdfsScanNode::Prepare(RuntimeState* state) {

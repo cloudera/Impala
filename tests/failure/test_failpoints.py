@@ -30,7 +30,7 @@ from tests.common.test_dimensions import create_exec_option_dimension
 from tests.common.test_vector import TestDimension
 
 FAILPOINT_ACTION = ['FAIL', 'CANCEL', 'MEM_LIMIT_EXCEEDED']
-FAILPOINT_LOCATION = ['PREPARE', 'PREPARE_SCANNER', 'OPEN', 'GETNEXT', 'CLOSE']
+FAILPOINT_LOCATION = ['PREPARE', 'PREPARE_SCANNER', 'OPEN', 'GETNEXT', 'GETNEXT_SCANNER', 'CLOSE']
 # Map debug actions to their corresponding query options' values.
 FAILPOINT_ACTION_MAP = {'FAIL': 'FAIL', 'CANCEL': 'WAIT',
                         'MEM_LIMIT_EXCEEDED': 'MEM_LIMIT_EXCEEDED'}
@@ -144,6 +144,8 @@ class TestFailpoints(ImpalaTestSuite):
       assert 'Expected Failure'
     except ImpalaBeeswaxException as e:
       LOG.debug(e)
+      # IMPALA-5197: None of the debug actions should trigger corrupted file message
+      assert 'Corrupt Parquet file' not in str(e)
 
   def __execute_cancel_action(self, query, vector):
     LOG.info('Starting async query execution')

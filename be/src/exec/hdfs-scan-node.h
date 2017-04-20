@@ -579,9 +579,9 @@ class HdfsScanNode : public ScanNode {
   /// RuntimeFilterBank::RegisterFilter()), false otherwise.
   bool WaitForRuntimeFilters(int32_t time_ms);
 
-  /// Calls ExecDebugAction(). Returns the status based on the debug action specified
-  /// for the query.
-  Status TriggerDebugAction();
+  /// Calls ExecNode::ExecDebugAction() with 'phase'. Returns the status based on the
+  /// debug action specified for the query.
+  Status ScanNodeDebugAction(TExecNodePhase::type phase);
 };
 
 }
