@@ -2537,4 +2537,35 @@ where  (cast(a.string_col as string) > 'a');
 ---- TYPES
 INT
 ====
-
+---- QUERY
+# IMPALA-4779: Regression test to verify built-in is found when codegen is enabled.
+select count(*) from functional.alltypesagg where isTrue(bool_col);
+---- RESULTS
+6000
+---- TYPES
+BIGINT
+====
+---- QUERY
+# IMPALA-4779: Regression test to verify built-in is found when codegen is enabled.
+select count(*) from functional.alltypesagg where isFalse(bool_col);
+---- RESULTS
+5000
+---- TYPES
+BIGINT
+====
+---- QUERY
+# IMPALA-4779: Regression test to verify built-in is found when codegen is enabled.
+select count(*) from functional.alltypesagg where isNotTrue(bool_col);
+---- RESULTS
+5000
+---- TYPES
+BIGINT
+====
+---- QUERY
+# IMPALA-4779: Regression test to verify built-in is found when codegen is enabled.
+select count(*) from functional.alltypesagg where isNotFalse(bool_col);
+---- RESULTS
+6000
+---- TYPES
+BIGINT
+====
