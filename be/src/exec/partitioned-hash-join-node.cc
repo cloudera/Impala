@@ -495,7 +495,11 @@ Status PartitionedHashJoinNode::GetNext(RuntimeState* state, RowBatch* out_batch
 
   Status status = Status::OK();
   *eos = false;
-  while (!ReachedLimit()) {
+  // Save the number of rows in case GetNext() is called with a non-empty batch,
+  // which can happen in a subplan.
+  int num_rows_before = out_batch->num_rows();
+
+  while (true) {
     DCHECK(!*eos);
     DCHECK(status.ok());
     DCHECK_NE(state_, PARTITIONING_BUILD) << "Should not be in GetNext()";
@@ -569,11 +573,9 @@ Status PartitionedHashJoinNode::GetNext(RuntimeState* state, RowBatch* out_batch
       }
       DCHECK(status.ok());
       out_batch->CommitRows(rows_added);
-      num_rows_returned_ += rows_added;
-      if (out_batch->AtCapacity() || ReachedLimit()) break;
+      if (out_batch->AtCapacity()) break;
 
       DCHECK(current_probe_row_ == NULL);
-      COUNTER_SET(rows_returned_counter_, num_rows_returned_);
     }
 
     // Try to continue from the current probe side input.
@@ -632,10 +634,20 @@ Status PartitionedHashJoinNode::GetNext(RuntimeState* state, RowBatch* out_batch
     break;
   }
 
-  if (ReachedLimit()) {
+  int num_rows_added = out_batch->num_rows() - num_rows_before;
+  DCHECK_GE(num_rows_added, 0);
+
+  if (limit_ != -1 && num_rows_returned_ + num_rows_added > limit_) {
+    // Truncate the row batch if we went over the limit.
+    num_rows_added = limit_ - num_rows_returned_;
+    DCHECK_GE(num_rows_added, 0);
+    out_batch->set_num_rows(num_rows_before + num_rows_added);
     probe_batch_->TransferResourceOwnership(out_batch);
     *eos = true;
   }
+
+  num_rows_returned_ += num_rows_added;
+  COUNTER_SET(rows_returned_counter_, num_rows_returned_);
   return Status::OK();
 }
 
@@ -643,7 +655,6 @@ Status PartitionedHashJoinNode::OutputUnmatchedBuild(RowBatch* out_batch) {
   SCOPED_TIMER(probe_timer_);
   DCHECK(NeedToProcessUnmatchedBuildRows());
   DCHECK(!output_build_partitions_.empty());
-  const int start_num_rows = out_batch->num_rows();
 
   if (output_unmatched_batch_iter_.get() != NULL) {
     // There were no probe rows so we skipped building the hash table. In this case, all
@@ -654,8 +665,6 @@ Status PartitionedHashJoinNode::OutputUnmatchedBuild(RowBatch* out_batch) {
     RETURN_IF_ERROR(OutputUnmatchedBuildFromHashTable(out_batch));
   }
 
-  num_rows_returned_ += out_batch->num_rows() - start_num_rows;
-  COUNTER_SET(rows_returned_counter_, num_rows_returned_);
   return Status::OK();
 }
 
