@@ -154,6 +154,12 @@ Status HdfsTextScanner::ProcessSplit() {
   // Reset state for new scan range
   RETURN_IF_ERROR(InitNewRange());
 
+  // Update the decompressor depending on the compression type of the file in the
+  // context.
+  DCHECK(stream_->file_desc()->file_compression != THdfsCompression::SNAPPY)
+      << "FE should have generated SNAPPY_BLOCKED instead.";
+  RETURN_IF_ERROR(UpdateDecompressor(stream_->file_desc()->file_compression));
+
   // Find the first tuple.  If tuple_found is false, it means we went through the entire
   // scan range without finding a single tuple.  The bytes will be picked up by the scan
   // range before.
@@ -161,12 +167,6 @@ Status HdfsTextScanner::ProcessSplit() {
   RETURN_IF_ERROR(FindFirstTuple(&tuple_found));
 
   if (tuple_found) {
-    // Update the decompressor depending on the compression type of the file in the
-    // context.
-    DCHECK(stream_->file_desc()->file_compression != THdfsCompression::SNAPPY)
-        << "FE should have generated SNAPPY_BLOCKED instead.";
-    RETURN_IF_ERROR(UpdateDecompressor(stream_->file_desc()->file_compression));
-
     // Process the scan range.
     int dummy_num_tuples;
     RETURN_IF_ERROR(ProcessRange(&dummy_num_tuples, false));
