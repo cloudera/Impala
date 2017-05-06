@@ -605,10 +605,12 @@ class TestTextScanRangeLengths(ImpalaTestSuite):
   def add_test_dimensions(cls):
     super(TestTextScanRangeLengths, cls).add_test_dimensions()
     cls.TestMatrix.add_constraint(
-      lambda v: v.get_value('table_format').file_format == 'text')
+      lambda v: v.get_value('table_format').file_format == 'text' and
+        v.get_value('table_format').compression_codec in ['none', 'gzip'])
 
   def test_text_scanner_with_header(self, vector, unique_database):
-    self.run_test_case('QueryTest/hdfs-text-scan-with-header', vector, unique_database)
+    self.run_test_case('QueryTest/hdfs-text-scan-with-header', vector,
+                       test_file_vars={'$UNIQUE_DB': unique_database})
 
 
 # Missing Coverage: No coverage for truncated files errors or scans.
