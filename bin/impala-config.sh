@@ -57,7 +57,7 @@ fi
 # moving to a different build of the toolchain, e.g. when a version is bumped or a
 # compile option is changed. The build id can be found in the output of the toolchain
 # build jobs, it is constructed from the build number and toolchain git hash prefix.
-: ${IMPALA_TOOLCHAIN_BUILD_ID=367-66911b9cde}
+: ${IMPALA_TOOLCHAIN_BUILD_ID=382-b737f9ef27}
 
 # This flag is used in $IMPALA_HOME/cmake_modules/toolchain.cmake.
 # If it's 0, Impala will be built with the compiler in the toolchain directory.
@@ -291,10 +291,10 @@ export IMPALA_THRIFT_JAVA_VERSION=0.9.0
 export IMPALA_ZLIB_VERSION=1.2.8
 
 # Kudu version in the toolchain; provides libkudu_client.so and minicluster binaries.
-export IMPALA_KUDU_VERSION=kudu5.11.0-rc1
+export IMPALA_KUDU_VERSION=ddaab4a
 
 # Kudu version used to identify Java client jar from maven
-export KUDU_JAVA_VERSION=1.3.0-cdh5.11.0
+export KUDU_JAVA_VERSION=1.3.0-cdh5.11.1-SNAPSHOT
 
 export KUDU_MASTER="${KUDU_MASTER:-127.0.0.1}"
 export KUDU_MASTER_PORT="${KUDU_MASTER_PORT:-7051}"
