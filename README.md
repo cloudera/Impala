@@ -1,5 +1,4 @@
-# Welcome to Impala 
-
+# Welcome to Impala
 
 Lightning-fast, distributed [SQL](http://en.wikipedia.org/wiki/SQL) queries for petabytes
 of data stored in Apache Hadoop clusters.
