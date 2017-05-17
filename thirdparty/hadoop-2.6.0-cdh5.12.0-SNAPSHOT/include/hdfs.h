@@ -139,6 +139,33 @@ extern  "C" {
      */
     void hdfsFileFreeReadStatistics(struct hdfsReadStatistics *stats);
 
+    struct hdfsHedgedReadMetrics {
+      uint64_t hedgedReadOps;
+      uint64_t hedgedReadOpsWin;
+      uint64_t hedgedReadOpsInCurThread;
+    };
+
+    /**
+     * Get cluster wide hedged read metrics.
+     *
+     * @param fs       The configured filesystem handle
+     * @param metrics  (out parameter) on a successful return, the hedged read
+     *                 metrics. Unchanged otherwise. You must free the returned
+     *                 statistics with hdfsFreeHedgedReadMetrics.
+     * @return         0 if the metrics were successfully returned, -1 otherwise.
+     *                 On a failure, please check errno against
+     *                 ENOTSUP. webhdfs, LocalFilesystem, and so forth may
+     *                 not support hedged read metrics.
+     */
+    int hdfsGetHedgedReadMetrics(hdfsFS fs, struct hdfsHedgedReadMetrics **metrics);
+
+    /**
+     * Free HDFS Hedged read metrics.
+     *
+     * @param metrics  The HDFS Hedged read metrics to free
+     */
+    void hdfsFreeHedgedReadMetrics(struct hdfsHedgedReadMetrics *metrics);
+
     /** 
      * hdfsConnectAsUser - Connect to a hdfs file system as a specific user
      * Connect to the hdfs.
@@ -901,6 +928,36 @@ extern  "C" {
      * @param buffer     The buffer to release.
      */
     void hadoopRzBufferFree(hdfsFile file, struct hadoopRzBuffer *buffer);
+
+    /**
+     * Get the last exception root cause that happened in the context of the
+     * current thread, i.e. the thread that called into libHDFS.
+     *
+     * The pointer returned by this function is guaranteed to be valid until
+     * the next call into libHDFS by the current thread.
+     * Users of this function should not free the pointer.
+     *
+     * A NULL will be returned if no exception information could be retrieved
+     * for the previous call.
+     *
+     * @return           The root cause as a C-string.
+     */
+    char* hdfsGetLastExceptionRootCause();
+
+    /**
+     * Get the last exception stack trace that happened in the context of the
+     * current thread, i.e. the thread that called into libHDFS.
+     *
+     * The pointer returned by this function is guaranteed to be valid until
+     * the next call into libHDFS by the current thread.
+     * Users of this function should not free the pointer.
+     *
+     * A NULL will be returned if no exception information could be retrieved
+     * for the previous call.
+     *
+     * @return           The stack trace as a C-string.
+     */
+    char* hdfsGetLastExceptionStackTrace();
 
 #ifdef __cplusplus
 }

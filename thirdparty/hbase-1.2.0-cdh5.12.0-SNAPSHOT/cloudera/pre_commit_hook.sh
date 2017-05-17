@@ -94,8 +94,8 @@ if [ -d "${COMPONENT}/dev-support/test-patch.d" ]; then
 fi
 
 # If we have our personality defined, use it.
-if [ -r "${COMPONENT}/dev-support/hbase-personality.sh" ]; then
-  YETUS_ARGS=("--personality=${COMPONENT}/dev-support/hbase-personality.sh" ${YETUS_ARGS[@]})
+if [ -r "${COMPONENT}/cloudera/cdh-personality.sh" ]; then
+  YETUS_ARGS=("--personality=${COMPONENT}/cloudera/cdh-personality.sh" ${YETUS_ARGS[@]})
 fi
 
 # work around YETUS-61, manually create a patch file and move the repo to the correct branch.
