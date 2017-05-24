@@ -96,6 +96,9 @@ DEFINE_string(webserver_authentication_domain, "",
 DEFINE_string(webserver_password_file, "",
     "(Optional) Location of .htpasswd file containing user names and hashed passwords for"
     " debug webserver authentication");
+    
+DEFINE_string(webserver_x_frame_options, "DENY", 
+    "Webserver sets X-Frame-Options HTTP header to this value. Default is 'DENY'");
 
 DEFINE_string(webserver_x_frame_options, "DENY",
     "webserver will add X-Frame-Options HTTP header with this value");
