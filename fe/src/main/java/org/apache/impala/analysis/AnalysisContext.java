@@ -55,7 +55,7 @@ import com.google.common.collect.Maps;
  */
 public class AnalysisContext {
   private final static Logger LOG = LoggerFactory.getLogger(AnalysisContext.class);
-  private final ImpaladCatalog catalog_;
+  private ImpaladCatalog catalog_;
   private final TQueryCtx queryCtx_;
   private final AuthorizationConfig authzConfig_;
   private final ExprRewriter rewriter_;
@@ -65,7 +65,7 @@ public class AnalysisContext {
 
   public AnalysisContext(ImpaladCatalog catalog, TQueryCtx queryCtx,
       AuthorizationConfig authzConfig) {
-    catalog_ = catalog;
+    setCatalog(catalog);
     queryCtx_ = queryCtx;
     authzConfig_ = authzConfig;
     // BetweenPredicates must be rewritten to be executable. Other non-essential
@@ -84,10 +84,16 @@ public class AnalysisContext {
    */
   protected AnalysisContext(ImpaladCatalog catalog, TQueryCtx queryCtx,
       AuthorizationConfig authzConfig, ExprRewriter rewriter) {
-    catalog_ = catalog;
+    setCatalog(catalog);
     queryCtx_ = queryCtx;
     authzConfig_ = authzConfig;
     rewriter_ = rewriter;
+  }
+
+  // Catalog may change between analysis attempts (e.g. when missing tables are loaded).
+  public void setCatalog(ImpaladCatalog catalog) {
+    Preconditions.checkNotNull(catalog);
+    catalog_ = catalog;
   }
 
   static public class AnalysisResult {
