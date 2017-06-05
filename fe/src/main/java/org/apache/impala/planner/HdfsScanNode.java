@@ -681,7 +681,7 @@ public class HdfsScanNode extends ScanNode {
         // ignore partitions with missing stats in the hope they don't matter
         // enough to change the planning outcome
         if (p.getNumRows() > -1) {
-          cardinality_ = addCardinalities(cardinality_, p.getNumRows());
+          cardinality_ = checkedAdd(cardinality_, p.getNumRows());
           hasValidPartitionCardinality = true;
         } else {
           ++numPartitionsMissingStats_;
@@ -936,7 +936,8 @@ public class HdfsScanNode extends ScanNode {
     long perThreadIoBuffers =
         Math.min((long) Math.ceil(avgScanRangeBytes / (double) readSize),
             MAX_IO_BUFFERS_PER_THREAD) + 1;
-    long perInstanceMemEstimate = maxScannerThreads * perThreadIoBuffers * readSize;
+    long perInstanceMemEstimate = checkedMultiply(
+        checkedMultiply(maxScannerThreads, perThreadIoBuffers), readSize);
 
     // Sanity check: the tighter estimation should not exceed the per-host maximum.
     long perHostUpperBound = getPerHostMemUpperBound();
