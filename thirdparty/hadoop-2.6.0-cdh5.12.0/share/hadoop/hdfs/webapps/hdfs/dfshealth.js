@@ -211,6 +211,15 @@
         for (var i = 0, e = nodes.length; i < e; ++i) {
           var n = nodes[i];
           n.usedPercentage = Math.round((n.used + n.nonDfsUsedSpace) * 1.0 / n.capacity * 100);
+
+          var port = n.infoAddr.split(":")[1];
+          var securePort = n.infoSecureAddr.split(":")[1];
+          var dnHost = n.name.split(":")[0];
+          n.dnWebAddress = dnHost + ":" + port;
+          if (securePort != 0) {
+            n.dnWebAddress = dnHost + ":" + securePort;
+          }
+
           if (n.adminState === "In Service") {
             n.state = "alive";
           } else if (nodes[i].adminState === "Decommission In Progress") {

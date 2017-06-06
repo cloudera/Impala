@@ -1,3 +1,19 @@
+commit 0cd13b94dd73f91f3b96dc62d0170309407ad988
+Author: Jerry He <jerryjch@apache.org>
+Date:   Tue Feb 7 12:31:38 2017 -0800
+
+    HBASE-17574 Clean up how to run tests under hbase-spark module (Yi Liang)
+    
+    Reviewed-By: stack
+    Reviewed-By: busbey
+    
+    (cherry picked from commit 8088aa3733539a09cb258f98cb12c1d96ea2463a)
+    
+    Change-Id: Ibb047e9628ee8194e6869bc65851343daa113218
+    Reason:    Testing
+    Author:    Jerry He <jerryjch@apache.org>
+    Ref:       CDH-54446
+
 commit 746ffe2d638afba35588d80bd8c6b06782d70936
 Author: Jenkins <dev-kitchen@cloudera.com>
 Date:   Thu May 25 10:26:04 2017 -0700
