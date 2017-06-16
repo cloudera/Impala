@@ -1,7 +1,7 @@
 From 0cd13b94dd73f91f3b96dc62d0170309407ad988 Mon Sep 17 00:00:00 2001
 From: Jerry He <jerryjch@apache.org>
 Date: Tue, 7 Feb 2017 12:31:38 -0800
-Subject: [PATCH 355/355] HBASE-17574 Clean up how to run tests under
+Subject: [PATCH 355/357] HBASE-17574 Clean up how to run tests under
  hbase-spark module (Yi Liang)
 
 Reviewed-By: stack

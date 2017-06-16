@@ -1,3 +1,29 @@
+commit 695e6d35f0d15ecf1318ccb01c613f67b83bf565
+Author: tedyu <yuzhihong@gmail.com>
+Date:   Mon Oct 3 06:44:58 2016 -0700
+
+    HBASE-16739 Timed out exception message should include encoded region name
+    
+    (cherry picked from commit 252d7fae0ac43dae04d2c9708374593a6ae87a89)
+    
+    Change-Id: If383571cc8f597ae132f5d296ba3439f8b4f9939
+    Author: tedyu
+    Reason: Bug
+    Ref: CDH-55070
+
+commit bf18d9f1c7849c2baf1dafaa2b8c345dab726cc8
+Author: Sean Busbey <busbey@cloudera.com>
+Date:   Thu Apr 13 10:37:18 2017 -0500
+
+    CDH-37937 Fix hbase-spark credential handling
+    
+    Remove custom credential handling in hbase-spark module so that we don't
+    interfere with the native spark token handling.
+    
+    Amending Author: Mike Drob <mdrob@apache.org>
+    
+    Change-Id: I48d90d8ac30a33f2f88f4f49d2f79481292bf47e
+
 commit 0cd13b94dd73f91f3b96dc62d0170309407ad988
 Author: Jerry He <jerryjch@apache.org>
 Date:   Tue Feb 7 12:31:38 2017 -0800
