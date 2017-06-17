@@ -1011,6 +1011,7 @@ public class Frontend {
     // or if all tables have stats.
     boolean disableSpilling =
         queryCtx.request.query_options.isDisable_unsafe_spills()
+          && queryCtx.isSetTables_missing_stats()
           && !queryCtx.tables_missing_stats.isEmpty()
           && !analysisResult.getAnalyzer().hasPlanHints();
     queryCtx.setDisable_spilling(disableSpilling);

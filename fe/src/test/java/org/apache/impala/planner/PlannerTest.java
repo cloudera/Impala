@@ -360,4 +360,23 @@ public class PlannerTest extends PlannerTestBase {
     // Check that the effective MT_DOP is as expected.
     Assert.assertEquals(actualMtDop, expectedMtDop);
   }
+
+  @Test
+  public void testComputeStatsDisableSpill() throws ImpalaException {
+    TQueryCtx queryCtx = TestUtils.createQueryContext(Catalog.DEFAULT_DB,
+        System.getProperty("user.name"));
+    TExecRequest requestWithDisableSpillOn = null;
+    // Setting up a table with computed stats
+    queryCtx.request.setStmt("compute stats functional.alltypes");
+    queryCtx.request.query_options = defaultQueryOptions();
+    StringBuilder explainBuilder = new StringBuilder();
+    frontend_.createExecRequest(queryCtx, explainBuilder);
+    // Setting up an arbitrary query involving a table with stats.
+    queryCtx.request.setStmt("select * from functional.alltypes");
+    // Setting disable_unsafe_spills = true to verify that it no longer
+    // throws a NPE with computed stats (IMPALA-5524)
+    queryCtx.request.query_options.setDisable_unsafe_spills(true);
+    requestWithDisableSpillOn = frontend_.createExecRequest(queryCtx, explainBuilder);
+    Assert.assertNotNull(requestWithDisableSpillOn);
+  }
 }
