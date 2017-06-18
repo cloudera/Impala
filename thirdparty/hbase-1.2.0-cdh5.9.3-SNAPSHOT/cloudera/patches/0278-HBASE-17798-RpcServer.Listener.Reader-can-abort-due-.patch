@@ -1,0 +1,33 @@
+From e5023d1cf0a81ddb55c02a166f7e3a3c9a954ede Mon Sep 17 00:00:00 2001
+From: tedyu <yuzhihong@gmail.com>
+Date: Tue, 21 Mar 2017 08:06:56 -0700
+Subject: [PATCH 278/287] HBASE-17798 RpcServer.Listener.Reader can abort due
+ to CancelledKeyException (Guangxu Cheng)
+
+(cherry picked from commit 9726c71681c0b8b22e83b056102803646b8d50c2)
+
+Change-Id: I6ffe1fb2413b3b5fe86eeb30ecc7bc2e53ae9358
+Author: tedyu
+Reason: Bug
+Ref: CDH-53422
+---
+ .../org/apache/hadoop/hbase/ipc/RpcServer.java     |    3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/RpcServer.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/RpcServer.java
+index 368c58e..52c1701 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/RpcServer.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/RpcServer.java
+@@ -626,7 +626,8 @@ public class RpcServer implements RpcServerInterface, ConfigurationObserver {
+             }
+           } catch (InterruptedException e) {
+             LOG.debug("Interrupted while sleeping");
+-            return;
++          } catch (CancelledKeyException e) {
++            LOG.error(getName() + ": CancelledKeyException in Reader", e);
+           } catch (IOException ex) {
+             LOG.info(getName() + ": IOException in Reader", ex);
+           }
+-- 
+1.7.9.5
+
