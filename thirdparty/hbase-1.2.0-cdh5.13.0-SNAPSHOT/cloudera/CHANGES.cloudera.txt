@@ -1,3 +1,111 @@
+commit 11dbfd74ea762428ea087e41ef8dd6f41da2007c
+Author: Alex Leblang <alex.leblang@cloudera.com>
+Date:   Thu Mar 30 14:29:32 2017 -0700
+
+    [CLOUDERA-BUILD] CDH-51748 Fix JavaACC Checker
+    
+    While the old behavior of our Java ACC checker was to
+    always fail when any issue was found. This patch allows
+    us to specify, either in a dictionary directly in the
+    code of through an inputted json file or the dictionary
+    at the top of the file.
+    
+    Change-Id: I56d2033f12cb3532bc293b6cdfc3bf585f1751b8
+
+commit 035ea4c748043aa5444623e2f6cedca2c663c52f
+Author: tedyu <yuzhihong@gmail.com>
+Date:   Mon Oct 3 06:44:58 2016 -0700
+
+    HBASE-16739 Timed out exception message should include encoded region name
+    
+    (cherry picked from commit 252d7fae0ac43dae04d2c9708374593a6ae87a89)
+    
+    Change-Id: Ifd43a6bdb6f190c422a8e13e7dff4cf45b336fd9
+    Author: tedyu
+    Reason: Bug
+    Ref: CDH-55070
+
+commit 0a8306c1caf06b2cd4e520bfae509e9f210c2133
+Author: Sean Busbey <busbey@cloudera.com>
+Date:   Thu Apr 13 10:37:18 2017 -0500
+
+    CDH-37937 Fix hbase-spark credential handling
+    
+    Remove custom credential handling in hbase-spark module so that we don't
+    interfere with the native spark token handling.
+    
+    Amending Author: Mike Drob <mdrob@apache.org>
+    
+    Change-Id: I48d90d8ac30a33f2f88f4f49d2f79481292bf47e
+
+commit ea7eb1394759457421eb7de8a4814ad1d230d8f4
+Author: Guanghao Zhang <zghao@apache.org>
+Date:   Mon Mar 13 17:53:43 2017 +0800
+
+    HBASE-17773 VerifyReplication tool wrongly emits Invalid arguments error (Tom Tsuruhara)
+    
+    (cherry picked from commit 759d63b15ca63464dd51d1eeff0f6b7763ab6e01)
+    
+    Change-Id: Id23b8cd2b42fdd2dc52ffb88f45550ca6465825c
+    Reason:    Bug
+    Author:    Guanghao Zhang <zghao@apache.org>
+    Ref:       CDH-53567
+
+commit 7c2785ff1734e0a5b03b93dbc50113481ea8c161
+Author: tedyu <yuzhihong@gmail.com>
+Date:   Thu Oct 6 11:19:58 2016 -0700
+
+    HBASE-16772 Add verbose option to VerifyReplication for logging good rows
+    
+    (cherry picked from commit a8fe9ed64f88c19b65eda9826408f05c09c33e63)
+    
+    Change-Id: I00de80dc2e9b5e10ef3b0bd1cbb798a37879ead8
+    Reason:    Supportability
+    Author:    tedyu <yuzhihong@gmail.com>
+    Ref:       CDH-54607
+
+commit 8ebf5156572292862fa4310f15e2d72f52e2e724
+Author: tedyu <yuzhihong@gmail.com>
+Date:   Fri Sep 23 05:08:19 2016 -0700
+
+    HBASE-16423 Add re-compare option to VerifyReplication to avoid occasional inconsistent rows (Jianwei Cui)
+    
+    (cherry picked from commit b503843bae2b5baa6e5c6ef9dad3395c9caa2e9f)
+    
+    Change-Id: I06126bc161e08c22cc376b06dcdbc93ff8363bef
+    Reason:    Supportability
+    Author:    Jianwei Cui
+    Ref:       CDH-54823
+
+commit d29b84fe5076fa0af9606a8462fc8cf2bc3001ce
+Author: tedyu <yuzhihong@gmail.com>
+Date:   Sat Aug 20 17:18:27 2016 -0700
+
+    HBASE-16409 Row key for bad row should be properly delimited in VerifyReplication
+    
+    HBASE-16409 Addendum fixes the case where delimiter is not specified by user
+    
+    (cherry picked from commit d260108e39eb41853fa5856885db82236cf3dbca)
+    (cherry picked from commit c78a5fd6500f18c99b203b7d85684d2e5e6d346e)
+    
+    Change-Id: I90dfdde32437bf3161f650e19b0feefc514b3929
+    Reason:    Supportability
+    Author:    tedyu <yuzhihong@gmail.com>
+    Ref:       CDH-54606
+
+commit d916cb769de046fca501c9c7826479acf1782bea
+Author: tedyu <yuzhihong@gmail.com>
+Date:   Thu Jun 16 15:52:16 2016 -0700
+
+    HBASE-16045 endtime argument for VerifyReplication was incorrectly specified in usage
+    
+    (cherry picked from commit 4c1db3cb03)
+    
+    Change-Id: Ia880597002c3d46432af9ae2477fb38283db3b46
+    Reason:    Documentation
+    Author:    tedyu <yuzhihong@gmail.com>
+    Ref:       CDH-54704
+
 commit 591ec043eccc3efc5aa635c4fb3b9808632c5a8b
 Author: Jerry He <jerryjch@apache.org>
 Date:   Tue Feb 7 12:31:38 2017 -0800

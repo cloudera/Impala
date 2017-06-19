@@ -1,0 +1,52 @@
+From ea7eb1394759457421eb7de8a4814ad1d230d8f4 Mon Sep 17 00:00:00 2001
+From: Guanghao Zhang <zghao@apache.org>
+Date: Mon, 13 Mar 2017 17:53:43 +0800
+Subject: [PATCH 359/362] HBASE-17773 VerifyReplication tool wrongly emits
+ Invalid arguments error (Tom Tsuruhara)
+
+(cherry picked from commit 759d63b15ca63464dd51d1eeff0f6b7763ab6e01)
+
+Change-Id: Id23b8cd2b42fdd2dc52ffb88f45550ca6465825c
+Reason:    Bug
+Author:    Guanghao Zhang <zghao@apache.org>
+Ref:       CDH-53567
+---
+ .../mapreduce/replication/VerifyReplication.java   |    9 +++++----
+ 1 file changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/replication/VerifyReplication.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/replication/VerifyReplication.java
+index d0ea218..0809a79 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/replication/VerifyReplication.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/replication/VerifyReplication.java
+@@ -380,10 +380,6 @@ public class VerifyReplication extends Configured implements Tool {
+           continue;
+         }
+ 
+-        if (cmd.startsWith("--")) {
+-          printUsage("Invalid argument '" + cmd + "'");
+-        }
+-
+         final String delimiterArgKey = "--delimiter=";
+         if (cmd.startsWith(delimiterArgKey)) {
+           delimiter = cmd.substring(delimiterArgKey.length());
+@@ -395,12 +391,17 @@ public class VerifyReplication extends Configured implements Tool {
+           sleepMsBeforeReCompare = Integer.parseInt(cmd.substring(sleepToReCompareKey.length()));
+           continue;
+         }
++
+         final String verboseKey = "--verbose";
+         if (cmd.startsWith(verboseKey)) {
+           verbose = true;
+           continue;
+         }
+ 
++        if (cmd.startsWith("--")) {
++          printUsage("Invalid argument '" + cmd + "'");
++        }
++
+         if (i == args.length-2) {
+           peerId = cmd;
+         }
+-- 
+1.7.9.5
+

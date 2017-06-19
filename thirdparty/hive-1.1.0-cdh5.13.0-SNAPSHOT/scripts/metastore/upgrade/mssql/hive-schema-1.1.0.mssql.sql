@@ -948,4 +948,4 @@ ALTER TABLE VERSION ADD SCHEMA_VERSION_V2 VARCHAR(255);
 -- -----------------------------------------------------------------------------------------------------------------------------------------
 -- Record schema version. Should be the last step in the init script. Starting CDH-5.13.0 CDH version must be included in the schema version
 -- -----------------------------------------------------------------------------------------------------------------------------------------
-INSERT INTO VERSION (VER_ID, SCHEMA_VERSION, SCHEMA_VERSION_V2, VERSION_COMMENT) VALUES (1, '1.1.0', '1.1.0-cdh5.13.0', 'Hive release version 1.1.0-cdh5.13.0');
+INSERT INTO VERSION (VER_ID, SCHEMA_VERSION, SCHEMA_VERSION_V2, VERSION_COMMENT) VALUES (1, '1.1.0', '1.1.0-cdh5.12.0', 'Hive release version 1.1.0');
