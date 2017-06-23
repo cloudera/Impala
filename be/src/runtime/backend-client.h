@@ -19,7 +19,6 @@
 #define IMPALA_BACKEND_CLIENT_H
 
 #include "runtime/client-cache.h"
-#include "testutil/fault-injection-util.h"
 #include "util/runtime-profile-counters.h"
 
 #include "gen-cpp/ImpalaInternalService.h"
@@ -41,14 +40,12 @@ class ImpalaBackendClient : public ImpalaInternalServiceClient {
   }
 
   void TransmitData(TTransmitDataResult& _return, const TTransmitDataParams& params) {
-    FAULT_INJECTION_RPC_EXCEPTION(RPC_TRANSMITDATA, true /* is_send */);
     if (transmit_csw_ != NULL) {
       SCOPED_CONCURRENT_COUNTER(transmit_csw_);
       ImpalaInternalServiceClient::send_TransmitData(params);
     } else {
       ImpalaInternalServiceClient::send_TransmitData(params);
     }
-    FAULT_INJECTION_RPC_EXCEPTION(RPC_TRANSMITDATA, false /* is_send */);
     ImpalaInternalServiceClient::recv_TransmitData(_return);
   }
 

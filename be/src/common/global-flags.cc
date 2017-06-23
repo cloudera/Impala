@@ -106,9 +106,6 @@ DEFINE_int32(fault_injection_rpc_delay_ms, 0, "A fault injection option that cau
     "Effective in debug builds only.");
 DEFINE_int32(fault_injection_rpc_type, 0, "A fault injection option that specifies "
     "which rpc call will be injected with the delay. Effective in debug builds only.");
-DEFINE_int32(fault_injection_rpc_exception_type, 0, "A fault injection option that "
-    "specifies the exception to be thrown in the caller side of an RPC call. Effective "
-    "in debug builds only");
 #endif
 
 DEFINE_bool(disable_kudu, false, "If true, Kudu features will be disabled.");
