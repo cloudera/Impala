@@ -37,8 +37,6 @@ DEFAULT_IMPALA_MAX_LOG_FILES = os.environ.get('IMPALA_MAX_LOG_FILES', 10)
 parser = OptionParser()
 parser.add_option("-s", "--cluster_size", type="int", dest="cluster_size", default=3,
                   help="Size of the cluster (number of impalad instances to start).")
-parser.add_option("-c", "--num_coordinators", type="int", dest="num_coordinators",
-                  default=3, help="Number of coordinators.")
 parser.add_option("--build_type", dest="build_type", default= 'latest',
                   help="Build type to use - debug / release / latest")
 parser.add_option("--impalad_args", dest="impalad_args", action="append", type="string",
@@ -207,7 +205,7 @@ def build_jvm_args(instance_num):
   BASE_JVM_DEBUG_PORT = 30000
   return JVM_ARGS % (BASE_JVM_DEBUG_PORT + instance_num, options.jvm_args)
 
-def start_impalad_instances(cluster_size, num_coordinators):
+def start_impalad_instances(cluster_size):
   if cluster_size == 0:
     # No impalad instances should be started.
     return
@@ -242,10 +240,6 @@ def start_impalad_instances(cluster_size, num_coordinators):
     if options.kudu_masters:
       # Must be prepended, otherwise the java options interfere.
       args = "-kudu_master_hosts %s %s" % (options.kudu_masters, args)
-
-    if i >= num_coordinators:
-      args = "-is_coordinator=false %s" % (args)
-
     stderr_log_file_path = os.path.join(options.log_dir, '%s-error.log' % service_name)
     exec_impala_process(IMPALAD_PATH, args, stderr_log_file_path)
 
@@ -286,10 +280,9 @@ def wait_for_cluster_web(timeout_in_seconds=CLUSTER_WAIT_TIMEOUT_IN_SECONDS):
   # impalad processes may take a while to come up.
   wait_for_impala_process_count(impala_cluster)
   for impalad in impala_cluster.impalads:
-    if impalad._get_arg_value('is_coordinator', default='true') == 'true':
-      impalad.service.wait_for_num_known_live_backends(options.cluster_size,
-          timeout=CLUSTER_WAIT_TIMEOUT_IN_SECONDS, interval=2)
-      wait_for_catalog(impalad, timeout_in_seconds=CLUSTER_WAIT_TIMEOUT_IN_SECONDS)
+    impalad.service.wait_for_num_known_live_backends(options.cluster_size,
+        timeout=CLUSTER_WAIT_TIMEOUT_IN_SECONDS, interval=2)
+    wait_for_catalog(impalad, timeout_in_seconds=CLUSTER_WAIT_TIMEOUT_IN_SECONDS)
 
 def wait_for_catalog(impalad, timeout_in_seconds):
   """Waits for the impalad catalog to become ready"""
@@ -332,10 +325,6 @@ if __name__ == "__main__":
 
   if options.cluster_size < 0:
     print 'Please specify a cluster size >= 0'
-    sys.exit(1)
-
-  if options.num_coordinators <= 0:
-    print 'Please specify a valid number of coordinators > 0'
     sys.exit(1)
 
   if not os.path.isdir(options.log_dir):
@@ -384,7 +373,7 @@ if __name__ == "__main__":
       if not options.restart_impalad_only:
         start_statestore()
         start_catalogd()
-      start_impalad_instances(options.cluster_size, options.num_coordinators)
+      start_impalad_instances(options.cluster_size)
       # Sleep briefly to reduce log spam: the cluster takes some time to start up.
       sleep(3)
       wait_for_cluster()
@@ -392,5 +381,4 @@ if __name__ == "__main__":
       print 'Error starting cluster: %s' % e
       sys.exit(1)
 
-  print 'Impala Cluster Running with %d nodes and %d coordinators.' % (
-      options.cluster_size, options.num_coordinators)
+  print 'Impala Cluster Running with %d nodes.' % options.cluster_size

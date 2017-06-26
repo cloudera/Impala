@@ -178,8 +178,7 @@ class ExecEnv;
 ///       better idea of what is perhaps unnecessary.
 class AdmissionController {
  public:
-  AdmissionController(StatestoreSubscriber* subscriber,
-      RequestPoolService* request_pool_service, MetricGroup* metrics,
+  AdmissionController(RequestPoolService* request_pool_service, MetricGroup* metrics,
       const TNetworkAddress& host_addr);
   ~AdmissionController();
 
@@ -197,8 +196,8 @@ class AdmissionController {
   /// This does not block.
   Status ReleaseQuery(QuerySchedule* schedule);
 
-  /// Registers the request queue topic with the statestore.
-  Status Init();
+  /// Registers with the subscription manager.
+  Status Init(StatestoreSubscriber* subscriber);
 
  private:
   class PoolStats;
@@ -206,10 +205,6 @@ class AdmissionController {
 
   /// Statestore topic name.
   static const std::string IMPALA_REQUEST_QUEUE_TOPIC;
-
-  /// Subscription manager used to handle admission control updates. This is not
-  /// owned by this class.
-  StatestoreSubscriber* subscriber_;
 
   /// Used for user-to-pool resolution and looking up pool configurations. Not owned by
   /// the AdmissionController.

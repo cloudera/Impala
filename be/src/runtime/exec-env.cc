@@ -37,7 +37,6 @@
 #include "runtime/mem-tracker.h"
 #include "runtime/thread-resource-mgr.h"
 #include "runtime/tmp-file-mgr.h"
-#include "scheduling/admission-controller.h"
 #include "scheduling/request-pool-service.h"
 #include "scheduling/simple-scheduler.h"
 #include "service/fragment-mgr.h"
@@ -77,14 +76,12 @@ DEFINE_int32(state_store_subscriber_port, 23000,
     "port where StatestoreSubscriberService should be exported");
 DEFINE_int32(num_hdfs_worker_threads, 16,
     "(Advanced) The number of threads in the global HDFS operation pool");
-DEFINE_bool(disable_admission_control, false, "Disables admission control.");
 
 DECLARE_int32(state_store_port);
 DECLARE_int32(num_threads_per_core);
 DECLARE_int32(num_cores);
 DECLARE_int32(be_port);
 DECLARE_string(mem_limit);
-DECLARE_bool(is_coordinator);
 
 // TODO: Remove the following RM-related flags in Impala 3.0.
 DEFINE_bool(enable_rm, false, "Deprecated");
@@ -123,7 +120,7 @@ const static string DEFAULT_FS = "fs.defaultFS";
 
 namespace impala {
 
-ExecEnv* ExecEnv::exec_env_ = nullptr;
+ExecEnv* ExecEnv::exec_env_ = NULL;
 
 ExecEnv::ExecEnv()
   : metrics_(new MetricGroup("impala-metrics")),
@@ -139,7 +136,7 @@ ExecEnv::ExecEnv()
     htable_factory_(new HBaseTableFactory()),
     disk_io_mgr_(new DiskIoMgr()),
     webserver_(new Webserver()),
-    mem_tracker_(nullptr),
+    mem_tracker_(NULL),
     thread_mgr_(new ThreadResourceMgr),
     hdfs_op_thread_pool_(
         CreateHdfsOpThreadPool("hdfs-worker-pool", FLAGS_num_hdfs_worker_threads, 1024)),
@@ -165,19 +162,10 @@ ExecEnv::ExecEnv()
         Substitute("impalad@$0", TNetworkAddressToString(backend_address_)),
         subscriber_address, statestore_address, metrics_.get()));
 
-    if (FLAGS_is_coordinator) {
-      scheduler_.reset(new SimpleScheduler(statestore_subscriber_.get(),
-          statestore_subscriber_->id(), backend_address_, metrics_.get(),
-          webserver_.get(), request_pool_service_.get()));
-    }
-
-    if (!FLAGS_disable_admission_control) {
-      admission_controller_.reset(new AdmissionController(statestore_subscriber_.get(),
-          request_pool_service_.get(), metrics_.get(), backend_address_));
-    } else {
-      LOG(INFO) << "Admission control is disabled.";
-    }
-  } else if (FLAGS_is_coordinator) {
+    scheduler_.reset(new SimpleScheduler(statestore_subscriber_.get(),
+        statestore_subscriber_->id(), backend_address_, metrics_.get(), webserver_.get(),
+        request_pool_service_.get()));
+  } else {
     vector<TNetworkAddress> addresses;
     addresses.push_back(MakeNetworkAddress(FLAGS_hostname, FLAGS_be_port));
     scheduler_.reset(new SimpleScheduler(
@@ -202,7 +190,7 @@ ExecEnv::ExecEnv(const string& hostname, int backend_port, int subscriber_port,
     htable_factory_(new HBaseTableFactory()),
     disk_io_mgr_(new DiskIoMgr()),
     webserver_(new Webserver(webserver_port)),
-    mem_tracker_(nullptr),
+    mem_tracker_(NULL),
     thread_mgr_(new ThreadResourceMgr),
     hdfs_op_thread_pool_(
         CreateHdfsOpThreadPool("hdfs-worker-pool", FLAGS_num_hdfs_worker_threads, 1024)),
@@ -227,18 +215,10 @@ ExecEnv::ExecEnv(const string& hostname, int backend_port, int subscriber_port,
         Substitute("impalad@$0", TNetworkAddressToString(backend_address_)),
         subscriber_address, statestore_address, metrics_.get()));
 
-    if (FLAGS_is_coordinator) {
-      scheduler_.reset(new SimpleScheduler(statestore_subscriber_.get(),
-          statestore_subscriber_->id(), backend_address_, metrics_.get(),
-          webserver_.get(), request_pool_service_.get()));
-    }
-
-    if (FLAGS_disable_admission_control) LOG(INFO) << "Admission control is disabled.";
-    if (!FLAGS_disable_admission_control) {
-      admission_controller_.reset(new AdmissionController(statestore_subscriber_.get(),
-          request_pool_service_.get(), metrics_.get(), backend_address_));
-    }
-  } else if (FLAGS_is_coordinator) {
+    scheduler_.reset(new SimpleScheduler(statestore_subscriber_.get(),
+        statestore_subscriber_->id(), backend_address_, metrics_.get(), webserver_.get(),
+        request_pool_service_.get()));
+  } else {
     vector<TNetworkAddress> addresses;
     addresses.push_back(MakeNetworkAddress(hostname, backend_port));
     scheduler_.reset(new SimpleScheduler(
@@ -306,7 +286,7 @@ Status ExecEnv::StartServices() {
                  << PrettyPrinter::Print(min_requirement, TUnit::BYTES);
   }
 
-  metrics_->Init(enable_webserver_ ? webserver_.get() : nullptr);
+  metrics_->Init(enable_webserver_ ? webserver_.get() : NULL);
   impalad_client_cache_->InitMetrics(metrics_.get(), "impala-server.backends");
   catalogd_client_cache_->InitMetrics(metrics_.get(), "catalog.server");
   RETURN_IF_ERROR(RegisterMemoryMetrics(metrics_.get(), true));
@@ -348,8 +328,7 @@ Status ExecEnv::StartServices() {
     LOG(INFO) << "Not starting webserver";
   }
 
-  if (scheduler_ != nullptr) RETURN_IF_ERROR(scheduler_->Init());
-  if (admission_controller_ != nullptr) RETURN_IF_ERROR(admission_controller_->Init());
+  if (scheduler_ != NULL) RETURN_IF_ERROR(scheduler_->Init());
 
   // Get the fs.defaultFS value set in core-site.xml and assign it to
   // configured_defaultFs
@@ -363,7 +342,7 @@ Status ExecEnv::StartServices() {
     default_fs_ = "hdfs://";
   }
   // Must happen after all topic registrations / callbacks are done
-  if (statestore_subscriber_.get() != nullptr) {
+  if (statestore_subscriber_.get() != NULL) {
     Status status = statestore_subscriber_->Start();
     if (!status.ok()) {
       status.AddDetail("Statestore subscriber did not start up.");

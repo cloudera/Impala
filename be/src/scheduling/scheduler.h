@@ -51,6 +51,9 @@ class Scheduler {
   /// returning.
   virtual Status Schedule(QuerySchedule* schedule) = 0;
 
+  /// Releases the reserved resources (if any) from the given schedule.
+  virtual Status Release(QuerySchedule* schedule) = 0;
+
   /// Initialises the scheduler, acquiring all resources needed to make
   /// scheduling decisions once this method returns.
   virtual Status Init() = 0;
