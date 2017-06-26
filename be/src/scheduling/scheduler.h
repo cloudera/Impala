@@ -34,6 +34,11 @@
 
 namespace impala {
 
+/// Abstract scheduler and nameservice class.
+/// Given a list of resources and locations returns a list of hosts on which
+/// to execute plan fragments requiring those resources.
+/// At the moment, this simply returns a list of registered backends running
+/// on those hosts.
 class Scheduler {
  public:
   virtual ~Scheduler() { }

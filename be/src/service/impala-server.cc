@@ -85,7 +85,6 @@
 using boost::adopt_lock_t;
 using boost::algorithm::is_any_of;
 using boost::algorithm::istarts_with;
-using boost::algorithm::join;
 using boost::algorithm::replace_all_copy;
 using boost::algorithm::split;
 using boost::algorithm::token_compress_on;
@@ -96,7 +95,6 @@ using boost::uuids::uuid;
 using namespace apache::thrift;
 using namespace boost::posix_time;
 using namespace beeswax;
-using namespace rapidjson;
 using namespace strings;
 
 DECLARE_int32(be_port);
@@ -179,9 +177,8 @@ DEFINE_int32(idle_query_timeout, 0, "The time, in seconds, that a query may be i
     " the maximum allowable timeout.");
 
 DEFINE_bool(is_coordinator, true, "If true, this Impala daemon can accept and coordinate "
-    "queries from clients. If false, it will refuse client connections.");
-DEFINE_bool(is_executor, true, "If true, this Impala daemon will execute query "
-    "fragments.");
+    "queries from clients. If false, this daemon will only execute query fragments, and "
+    "will refuse client connections.");
 
 // TODO: Remove for Impala 3.0.
 DEFINE_string(local_nodemanager_url, "", "Deprecated");
@@ -372,7 +369,6 @@ ImpalaServer::ImpalaServer(ExecEnv* exec_env)
       bind<void>(&ImpalaServer::ExpireQueries, this)));
 
   is_coordinator_ = FLAGS_is_coordinator;
-  is_executor_ = FLAGS_is_executor;
   exec_env_->SetImpalaServer(this);
 }
 
@@ -408,11 +404,6 @@ Status ImpalaServer::LogLineageRecord(const QueryExecState& query_exec_state) {
 }
 
 bool ImpalaServer::IsCoordinator() { return is_coordinator_; }
-bool ImpalaServer::IsExecutor() { return is_executor_; }
-
-const ImpalaServer::BackendDescriptorMap& ImpalaServer::GetKnownBackends() {
-  return known_backends_;
-}
 
 bool ImpalaServer::IsLineageLoggingEnabled() {
   return !FLAGS_lineage_event_log_dir.empty();
@@ -516,7 +507,7 @@ Status ImpalaServer::InitAuditEventLogging() {
     return Status::OK();
   }
   audit_event_logger_.reset(new SimpleLogger(FLAGS_audit_event_log_dir,
-     impala::AUDIT_EVENT_LOG_FILE_PREFIX, FLAGS_max_audit_event_log_file_size));
+     AUDIT_EVENT_LOG_FILE_PREFIX, FLAGS_max_audit_event_log_file_size));
   RETURN_IF_ERROR(audit_event_logger_->Init());
   audit_event_logger_flush_thread_.reset(new Thread("impala-server",
         "audit-event-log-flush", &ImpalaServer::AuditEventLoggerFlushThread, this));
@@ -1593,8 +1584,6 @@ void ImpalaServer::AddLocalBackendToStatestore(
   if (known_backends_.find(local_backend_id) != known_backends_.end()) return;
 
   TBackendDescriptor local_backend_descriptor;
-  local_backend_descriptor.__set_is_coordinator(FLAGS_is_coordinator);
-  local_backend_descriptor.__set_is_executor(FLAGS_is_executor);
   local_backend_descriptor.__set_address(
       MakeNetworkAddress(FLAGS_hostname, FLAGS_be_port));
   IpAddr ip;
@@ -1898,9 +1887,6 @@ Status CreateImpalaServer(ExecEnv* exec_env, int beeswax_port, int hs2_port, int
   DCHECK((beeswax_port == 0) == (beeswax_server == nullptr));
   DCHECK((hs2_port == 0) == (hs2_server == nullptr));
   DCHECK((be_port == 0) == (be_server == nullptr));
-  if (!FLAGS_is_coordinator && !FLAGS_is_executor) {
-    return Status("Impala server needs to have a role (EXECUTOR, COORDINATOR)");
-  }
 
   impala_server->reset(new ImpalaServer(exec_env));
 
@@ -1922,10 +1908,8 @@ Status CreateImpalaServer(ExecEnv* exec_env, int beeswax_port, int hs2_port, int
 
     LOG(INFO) << "ImpalaInternalService listening on " << be_port;
   }
-
   if (!FLAGS_is_coordinator) {
-
-    LOG(INFO) << "Started executor Impala server on "
+    LOG(INFO) << "Started worker Impala server on "
               << ExecEnv::GetInstance()->backend_address();
     return Status::OK();
   }
@@ -1975,7 +1959,7 @@ Status CreateImpalaServer(ExecEnv* exec_env, int beeswax_port, int hs2_port, int
     LOG(INFO) << "Impala HiveServer2 Service listening on " << hs2_port;
   }
 
-  LOG(INFO) << "Started coordinator/executor Impala server on "
+  LOG(INFO) << "Started coordinator Impala server on "
             << ExecEnv::GetInstance()->backend_address();
   return Status::OK();
 }
