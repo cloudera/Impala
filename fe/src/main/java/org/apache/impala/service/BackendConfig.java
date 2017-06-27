@@ -57,6 +57,9 @@ public class BackendConfig {
 
   public int getImpalaLogLevel() { return backendCfg_.impala_log_lvl; }
   public int getNonImpalaJavaVlogLevel() { return backendCfg_.non_impala_java_vlog; }
+  public long getSentryCatalogPollingFrequency() {
+    return backendCfg_.sentry_catalog_polling_frequency_s;
+  }
 
   // Inits the auth_to_local configuration in the static KerberosName class.
   private static void initAuthToLocal() {

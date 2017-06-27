@@ -54,4 +54,6 @@ struct TBackendGflags {
   16: required i32 kudu_operation_timeout_ms
 
   17: required i32 initial_hms_cnxn_timeout_s
+
+  18: required i64 sentry_catalog_polling_frequency_s
 }
