@@ -323,7 +323,8 @@ class PartitionedHashJoinNode : public BlockingJoinNode {
   /// rows in build. This updates matched_null_probe_, short-circuiting if one of the
   /// conjuncts pass (i.e. there is a match).
   /// This is used for NAAJ, when there are NULL probe rows.
-  Status EvaluateNullProbe(BufferedTupleStream* build);
+  Status EvaluateNullProbe(
+      RuntimeState* state, BufferedTupleStream* build);
 
   /// Prepares to output NULLs on the probe side for NAAJ. Before calling this,
   /// matched_null_probe_ should have been fully evaluated.
@@ -342,7 +343,7 @@ class PartitionedHashJoinNode : public BlockingJoinNode {
   ///    unmatched rows.
   ///  - If the build partition did not have a hash table, meaning both build and probe
   ///    rows were spilled, move the partition to 'spilled_partitions_'.
-  Status CleanUpHashPartitions(RowBatch* batch);
+  Status CleanUpHashPartitions(RuntimeState* state, RowBatch* batch);
 
   /// Get the next row batch from the probe (left) side (child(0)). If we are done
   /// consuming the input, sets 'probe_batch_pos_' to -1, otherwise, sets it to 0.
