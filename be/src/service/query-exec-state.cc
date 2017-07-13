@@ -145,7 +145,7 @@ Status ImpalaServer::QueryExecState::Exec(TExecRequest* exec_request) {
   summary_profile_.AddInfoString("Query Type", PrintTStmtType(stmt_type()));
   summary_profile_.AddInfoString("Query State", PrintQueryState(query_state_));
   summary_profile_.AddInfoString("Query Options (non default)",
-      DebugQueryOptions(query_ctx_.request.query_options));
+      DebugQueryOptions(exec_request_.query_options));
 
   switch (exec_request->stmt_type) {
     case TStmtType::QUERY:
