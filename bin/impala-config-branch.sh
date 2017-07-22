@@ -22,3 +22,5 @@
 #
 # E.g. to override IMPALA_HADOOP_VERSION, you could uncomment this line:
 # IMPALA_HADOOP_VERSION=3.0.0
+
+export IMPALA_SENTRY_VERSION=2.0.0-cdh6.x-SNAPSHOT
