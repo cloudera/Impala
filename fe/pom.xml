@@ -139,16 +139,15 @@ under the License.
       <artifactId>sentry-policy-common</artifactId>
       <version>${sentry.version}</version>
     </dependency>
-
     <dependency>
       <groupId>org.apache.sentry</groupId>
-      <artifactId>sentry-policy-db</artifactId>
+      <artifactId>sentry-policy-engine</artifactId>
       <version>${sentry.version}</version>
     </dependency>
 
     <dependency>
       <groupId>org.apache.sentry</groupId>
-      <artifactId>sentry-binding-hive</artifactId>
+      <artifactId>sentry-binding-hive-v2</artifactId>
       <version>${sentry.version}</version>
       <exclusions>
         <exclusion>
