@@ -20,10 +20,12 @@ package org.apache.impala.catalog;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Collections;
 
 import org.apache.commons.net.ntp.TimeStamp;
 import org.apache.log4j.Logger;
 import org.apache.sentry.core.common.ActiveRoleSet;
+import org.apache.sentry.core.common.Authorizable;
 import org.apache.sentry.provider.cache.PrivilegeCache;
 
 import org.apache.impala.thrift.TColumn;
@@ -296,6 +298,26 @@ public class AuthorizationPolicy implements PrivilegeCache {
   @Override
   public void close() {
     // Nothing to do, but required by PrivilegeCache.
+  }
+
+  /**
+   * Returns a set of privilege strings in Sentry format.
+   */
+  @Override
+   public Set<String> listPrivileges(Set<String> groups, Set<String> users, ActiveRoleSet roleSet,
+      Authorizable... authorizationhierarchy) {
+    // TODO Need to be implemented if impala needs this functionality
+    return Collections.emptySet();
+  }
+
+  /**
+   * Returns a set of privilege strings in Sentry format.
+   */
+  @Override
+  public Set<String> listPrivileges(Set<String> groups, Set<String> users,
+      ActiveRoleSet roleSet) {
+   // TODO Need to be implemented if impala needs this functionality
+   return Collections.emptySet();
   }
 
   /**
