@@ -29,7 +29,7 @@ import org.apache.sentry.core.common.ActiveRoleSet;
 import org.apache.sentry.core.common.Subject;
 import org.apache.sentry.core.model.db.DBModelAction;
 import org.apache.sentry.core.model.db.DBModelAuthorizable;
-import org.apache.sentry.policy.db.SimpleDBPolicyEngine;
+import org.apache.sentry.policy.engine.common.CommonPolicyEngine;
 import org.apache.sentry.provider.cache.SimpleCacheProviderBackend;
 import org.apache.sentry.provider.common.ProviderBackend;
 import org.apache.sentry.provider.common.ProviderBackendContext;
@@ -86,8 +86,8 @@ public class AuthorizationChecker {
         providerBe.initialize(context);
       }
 
-      SimpleDBPolicyEngine engine =
-          new SimpleDBPolicyEngine(config.getServerName(), providerBe);
+      CommonPolicyEngine engine =
+          new CommonPolicyEngine(providerBe);
 
       // Try to create an instance of the specified policy provider class.
       // Re-throw any exceptions that are encountered.
