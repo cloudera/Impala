@@ -281,7 +281,7 @@ void RuntimeState::ReleaseResources() {
   instance_mem_tracker_->UnregisterFromParent();
   if (instance_mem_tracker_->consumption() != 0) {
     LOG(WARNING) << "Query " << query_id() << " may have leaked memory." << endl
-                 << instance_mem_tracker_->LogUsage();
+                 << instance_mem_tracker_->LogUsage(MemTracker::UNLIMITED_DEPTH);
   }
   instance_mem_tracker_.reset();
 
