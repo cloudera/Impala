@@ -1556,6 +1556,10 @@ public class AnalyzeDDLTest extends FrontendTestBase {
         "partition value = 30) stored as kudu as select id, bool_col, tinyint_col, " +
         "smallint_col, int_col, bigint_col, float_col, double_col, date_string_col, " +
         "string_col from functional.alltypestiny");
+    // IMPALA-5796: CTAS into a Kudu table with expr rewriting.
+    AnalyzesOk("create table t primary key(id) partition by hash(id) partitions 8 " +
+        "stored as kudu as select id, bool_col from functional.alltypestiny where id " +
+        "between 0 and 10");
     // CTAS in an external Kudu table
     AnalysisError("create external table t stored as kudu " +
         "tblproperties('kudu.table_name'='t') as select id, int_col from " +
