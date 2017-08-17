@@ -71,7 +71,7 @@ int CatalogdMain(int argc, char** argv) {
 
   metrics->Init(FLAGS_enable_webserver ? webserver.get() : nullptr);
   ABORT_IF_ERROR(RegisterMemoryMetrics(metrics.get(), true, nullptr, nullptr));
-  StartThreadInstrumentation(metrics.get(), webserver.get(), true);
+  ABORT_IF_ERROR(StartThreadInstrumentation(metrics.get(), webserver.get(), true));
 
   InitRpcEventTracing(webserver.get());
   metrics->AddProperty<string>("catalog.version", GetVersionString(true));

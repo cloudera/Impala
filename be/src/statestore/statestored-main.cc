@@ -72,6 +72,7 @@ int StatestoredMain(int argc, char** argv) {
   metrics->AddProperty<string>("statestore.version", GetVersionString(true));
 
   Statestore statestore(metrics.get());
+  ABORT_IF_ERROR(statestore.Init());
   statestore.RegisterWebpages(webserver.get());
   boost::shared_ptr<TProcessor> processor(
       new StatestoreServiceProcessor(statestore.thrift_iface()));

@@ -318,6 +318,7 @@ void HdfsScanNode::ThreadTokenAvailableCb(ThreadResourceMgr::ResourcePool* pool)
   // TODO: It would be good to have a test case for that.
   if (!initial_ranges_issued_) return;
 
+  Status status = Status::OK();
   while (true) {
     // The lock must be given up between loops in order to give writers to done_,
     // all_ranges_started_ etc. a chance to grab the lock.
@@ -345,11 +346,29 @@ void HdfsScanNode::ThreadTokenAvailableCb(ThreadResourceMgr::ResourcePool* pool)
     }
 
     COUNTER_ADD(&active_scanner_thread_counter_, 1);
-    COUNTER_ADD(num_scanner_threads_started_counter_, 1);
     stringstream ss;
     ss << "scanner-thread(" << num_scanner_threads_started_counter_->value() << ")";
-    scanner_threads_.AddThread(
-        new Thread("hdfs-scan-node", ss.str(), &HdfsScanNode::ScannerThread, this));
+    std::unique_ptr<Thread> t;
+    status = Thread::Create("hdfs-scan-node", ss.str(), &HdfsScanNode::ScannerThread,
+        this, &t, true);
+    if (!status.ok()) {
+      COUNTER_ADD(&active_scanner_thread_counter_, -1);
+      // Release the token and skip running callbacks to find a replacement. Skipping
+      // serves two purposes. First, it prevents a mutual recursion between this function
+      // and ReleaseThreadToken()->InvokeCallbacks(). Second, Thread::Create() failed and
+      // is likely to continue failing for future callbacks.
+      pool->ReleaseThreadToken(false, true);
+
+      // Abort the query. This is still holding the lock_, so done_ is known to be
+      // false and status_ must be ok.
+      DCHECK(status_.ok());
+      status_ = status;
+      SetDoneInternal();
+      break;
+    }
+    // Thread successfully started
+    COUNTER_ADD(num_scanner_threads_started_counter_, 1);
+    scanner_threads_.AddThread(move(t));
   }
 }
 
@@ -414,21 +433,18 @@ void HdfsScanNode::ScannerThread() {
     }
 
     if (!status.ok()) {
-      {
-        unique_lock<mutex> l(lock_);
-        // If there was already an error, the main thread will do the cleanup
-        if (!status_.ok()) break;
+      unique_lock<mutex> l(lock_);
+      // If there was already an error, the main thread will do the cleanup
+      if (!status_.ok()) break;
 
-        if (status.IsCancelled() && done_) {
-          // Scan node initiated scanner thread cancellation.  No need to do anything.
-          break;
-        }
-        // Set status_ before calling SetDone() (which shuts down the RowBatchQueue),
-        // to ensure that GetNextInternal() notices the error status.
-        status_ = status;
+      if (status.IsCancelled() && done_) {
+        // Scan node initiated scanner thread cancellation.  No need to do anything.
+        break;
       }
-
-      SetDone();
+      // Set status_ before calling SetDone() (which shuts down the RowBatchQueue),
+      // to ensure that GetNextInternal() notices the error status.
+      status_ = status;
+      SetDoneInternal();
       break;
     }
 
@@ -536,14 +552,16 @@ Status HdfsScanNode::ProcessSplit(const vector<FilterContext>& filter_ctxs,
   return status;
 }
 
-void HdfsScanNode::SetDone() {
-  {
-    unique_lock<mutex> l(lock_);
-    if (done_) return;
-    done_ = true;
-  }
+void HdfsScanNode::SetDoneInternal() {
+  if (done_) return;
+  done_ = true;
   if (reader_context_ != NULL) {
     runtime_state_->io_mgr()->CancelContext(reader_context_);
   }
   materialized_row_batches_->Shutdown();
+}
+
+void HdfsScanNode::SetDone() {
+  unique_lock<mutex> l(lock_);
+  SetDoneInternal();
 }

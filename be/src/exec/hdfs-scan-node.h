@@ -177,8 +177,11 @@ class HdfsScanNode : public HdfsScanNodeBase {
   /// Checks for eos conditions and returns batches from materialized_row_batches_.
   Status GetNextInternal(RuntimeState* state, RowBatch* row_batch, bool* eos);
 
-  /// sets done_ to true and triggers threads to cleanup. Cannot be called with
-  /// any locks taken. Calling it repeatedly ignores subsequent calls.
+  /// Sets done_ to true and triggers threads to cleanup. Must be called with lock_
+  /// taken. Calling it repeatedly ignores subsequent calls.
+  void SetDoneInternal();
+
+  /// Gets lock_ and calls SetDoneInternal()
   void SetDone();
 };
 

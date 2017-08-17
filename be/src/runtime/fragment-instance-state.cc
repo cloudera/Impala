@@ -225,9 +225,8 @@ Status FragmentInstanceState::Prepare() {
   // since it may block.
   if (FLAGS_status_report_interval > 0) {
     unique_lock<mutex> l(report_thread_lock_);
-    report_thread_.reset(
-        new Thread("plan-fragment-executor", "report-profile",
-            &FragmentInstanceState::ReportProfileThread, this));
+    RETURN_IF_ERROR(Thread::Create("plan-fragment-executor", "report-profile",
+        &FragmentInstanceState::ReportProfileThread, this, &report_thread_, true));
     // Make sure the thread started up, otherwise ReportProfileThread() might get into
     // a race with StopReportThread().
     while (!report_thread_active_) report_thread_started_cv_.wait(l);

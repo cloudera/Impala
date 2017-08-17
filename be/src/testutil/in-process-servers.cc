@@ -158,7 +158,8 @@ InProcessStatestore::InProcessStatestore(int statestore_port, int webserver_port
 }
 
 Status InProcessStatestore::Start() {
-  webserver_->Start();
+  RETURN_IF_ERROR(statestore_->Init());
+  RETURN_IF_ERROR(webserver_->Start());
   boost::shared_ptr<TProcessor> processor(
       new StatestoreServiceProcessor(statestore_->thrift_iface()));
 
@@ -169,8 +170,8 @@ Status InProcessStatestore::Start() {
     ABORT_IF_ERROR(statestore_server_->EnableSsl(
         FLAGS_ssl_server_certificate, FLAGS_ssl_private_key));
   }
-  statestore_main_loop_.reset(
-      new Thread("statestore", "main-loop", &Statestore::MainLoop, statestore_.get()));
+  RETURN_IF_ERROR(Thread::Create("statestore", "main-loop",
+      &Statestore::MainLoop, statestore_.get(), &statestore_main_loop_));
 
   RETURN_IF_ERROR(statestore_server_->Start());
   return WaitForServer("localhost", statestore_port_, 10, 100);

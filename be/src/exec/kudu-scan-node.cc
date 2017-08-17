@@ -108,9 +108,7 @@ Status KuduScanNode::GetNext(RuntimeState* state, RowBatch* row_batch, bool* eos
       COUNTER_SET(rows_returned_counter_, num_rows_returned_);
       *eos = true;
 
-      unique_lock<mutex> l(lock_);
-      done_ = true;
-      materialized_row_batches_->Shutdown();
+      SetDone();
     }
     delete materialized_batch;
   } else {
@@ -128,11 +126,7 @@ void KuduScanNode::Close(RuntimeState* state) {
     state->resource_pool()->RemoveThreadAvailableCb(thread_avail_cb_id_);
   }
 
-  if (!done_) {
-    unique_lock<mutex> l(lock_);
-    done_ = true;
-    materialized_row_batches_->Shutdown();
-  }
+  SetDone();
 
   scanner_threads_.JoinAll();
   DCHECK_EQ(num_active_scanners_, 0);
@@ -149,17 +143,34 @@ void KuduScanNode::ThreadAvailableCb(ThreadResourceMgr::ResourcePool* pool) {
     // Check if we can get a token.
     if (!pool->TryAcquireThreadToken()) break;
 
-    ++num_active_scanners_;
-    COUNTER_ADD(num_scanner_threads_started_counter_, 1);
-
     // Reserve the first token so no other thread picks it up.
     const string* token = GetNextScanToken();
     string name = Substitute("scanner-thread($0)",
         num_scanner_threads_started_counter_->value());
 
+    std::unique_ptr<Thread> t;
+    Status status =
+        Thread::Create("kudu-scan-node", name, &KuduScanNode::RunScannerThread, this,
+            name, token, &t, true);
+    if (!status.ok()) {
+      // Release the token and skip running callbacks to find a replacement. Skipping
+      // serves two purposes. First, it prevents a mutual recursion between this function
+      // and ReleaseThreadToken()->InvokeCallbacks(). Second, Thread::Create() failed and
+      // is likely to continue failing for future callbacks.
+      pool->ReleaseThreadToken(false, true);
+
+      // Abort the query. This is still holding the lock_, so done_ is known to be
+      // false and status_ must be ok.
+      DCHECK(status_.ok());
+      status_ = status;
+      SetDoneInternal();
+      break;
+    }
+    // Thread successfully started
+    COUNTER_ADD(num_scanner_threads_started_counter_, 1);
+    ++num_active_scanners_;
     VLOG_RPC << "Thread started: " << name;
-    scanner_threads_.AddThread(new Thread("kudu-scan-node", name,
-        &KuduScanNode::RunScannerThread, this, name, token));
+    scanner_threads_.AddThread(move(t));
   }
 }
 
@@ -225,14 +236,13 @@ void KuduScanNode::RunScannerThread(const string& name, const string* initial_to
     unique_lock<mutex> l(lock_);
     if (!status.ok() && status_.ok()) {
       status_ = status;
-      done_ = true;
+      SetDoneInternal();
     }
     // Decrement num_active_scanners_ unless handling the case of an early exit when
     // optional threads have been exceeded, in which case it already was decremented.
     if (!optional_thread_exiting) --num_active_scanners_;
     if (num_active_scanners_ == 0) {
-      done_ = true;
-      materialized_row_batches_->Shutdown();
+      SetDoneInternal();
     }
   }
 
@@ -240,6 +250,17 @@ void KuduScanNode::RunScannerThread(const string& name, const string* initial_to
   // invokes ThreadAvailableCb() which attempts to take the same lock.
   VLOG_RPC << "Thread done: " << name;
   runtime_state_->resource_pool()->ReleaseThreadToken(false);
+}
+
+void KuduScanNode::SetDoneInternal() {
+  if (done_) return;
+  done_ = true;
+  materialized_row_batches_->Shutdown();
+}
+
+void KuduScanNode::SetDone() {
+  unique_lock<mutex> l(lock_);
+  SetDoneInternal();
 }
 
 }  // namespace impala
