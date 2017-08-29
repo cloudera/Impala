@@ -173,7 +173,7 @@ public class Planner {
       LOG.trace("finalize plan fragments");
     }
     for (PlanFragment fragment: fragments) {
-      fragment.finalize(ctx_.getRootAnalyzer());
+      fragment.finalizeExchanges(ctx_.getRootAnalyzer());
     }
 
     Collections.reverse(fragments);
