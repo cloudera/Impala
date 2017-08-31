@@ -383,12 +383,7 @@ void HdfsScanNode::ScannerThread() {
           // ThreadTokenAvailableCb().
           l.unlock();
           runtime_state_->resource_pool()->ReleaseThreadToken(false);
-          if (filter_status.ok()) {
-            for (auto& ctx: filter_ctxs) {
-              ctx.expr_ctx->FreeLocalAllocations();
-              ctx.expr_ctx->Close(runtime_state_);
-            }
-          }
+          for (auto& ctx: filter_ctxs) ctx.expr_ctx->Close(runtime_state_);
           return;
         }
       } else {
@@ -455,12 +450,7 @@ void HdfsScanNode::ScannerThread() {
     }
   }
 
-  if (filter_status.ok()) {
-    for (auto& ctx: filter_ctxs) {
-      ctx.expr_ctx->FreeLocalAllocations();
-      ctx.expr_ctx->Close(runtime_state_);
-    }
-  }
+  for (auto& ctx: filter_ctxs) ctx.expr_ctx->Close(runtime_state_);
 
   COUNTER_ADD(&active_scanner_thread_counter_, -1);
   runtime_state_->resource_pool()->ReleaseThreadToken(false);
