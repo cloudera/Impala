@@ -1,0 +1,129 @@
+From cc36e460f2cd99dc723c5bcc330a3e7207f9a612 Mon Sep 17 00:00:00 2001
+From: Apekshit <apeksharma@gmail.com>
+Date: Tue, 23 Feb 2016 15:16:42 -0800
+Subject: [PATCH 001/410] CLOUDERA-BUILD Compatability revert HBASE-15285.
+ Revert "HBASE-15285 ADDENDUM make RETURN_RESULTS
+ attribute name protected to match branch-1.1 and
+ deprecated to warn of 2.0 (Sean Busbey)" Revert
+ "HBASE-15285 Forward-port respect for
+ isReturnResult from HBASE-15095"
+
+This reverts commit d4388ba0101928d1d272b2e88dddfd5203400ee8.
+This reverts commit e610655e5c622d081a2b7d6fee494159c2d1e179.
+---
+ .../org/apache/hadoop/hbase/client/Append.java     |    7 +++---
+ .../org/apache/hadoop/hbase/client/Increment.java  |   11 ++++++----
+ .../org/apache/hadoop/hbase/client/Mutation.java   |   23 --------------------
+ 3 files changed, 11 insertions(+), 30 deletions(-)
+
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/Append.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/Append.java
+index f20f727..58c204b 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/Append.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/Append.java
+@@ -47,6 +47,7 @@ import org.apache.hadoop.hbase.util.Bytes;
+ @InterfaceAudience.Public
+ @InterfaceStability.Stable
+ public class Append extends Mutation {
++  private static final String RETURN_RESULTS = "_rr_";
+   /**
+    * @param returnResults
+    *          True (default) if the append operation should return the results.
+@@ -54,16 +55,16 @@ public class Append extends Mutation {
+    *          bandwidth setting this to false.
+    */
+   public Append setReturnResults(boolean returnResults) {
+-    super.setReturnResults(returnResults);
++    setAttribute(RETURN_RESULTS, Bytes.toBytes(returnResults));
+     return this;
+   }
+ 
+   /**
+    * @return current setting for returnResults
+    */
+-  // This method makes public the superclasses's protected method.
+   public boolean isReturnResults() {
+-    return super.isReturnResults();
++    byte[] v = getAttribute(RETURN_RESULTS);
++    return v == null ? true : Bytes.toBoolean(v);
+   }
+ 
+   /**
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/Increment.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/Increment.java
+index b60cbde..1857533 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/Increment.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/Increment.java
+@@ -52,6 +52,9 @@ import org.apache.hadoop.hbase.util.ClassSize;
+ @InterfaceStability.Stable
+ public class Increment extends Mutation implements Comparable<Row> {
+   private static final long HEAP_OVERHEAD =  ClassSize.REFERENCE + ClassSize.TIMERANGE;
++
++  private static final String RETURN_RESULTS = "_rr_";
++
+   private TimeRange tr = new TimeRange();
+ 
+   /**
+@@ -167,16 +170,16 @@ public class Increment extends Mutation implements Comparable<Row> {
+    *          to false.
+    */
+   public Increment setReturnResults(boolean returnResults) {
+-    super.setReturnResults(returnResults);
++    setAttribute(RETURN_RESULTS, Bytes.toBytes(returnResults));
+     return this;
+   }
+ 
+   /**
+-   * @return current setting for returnResults
++   * @return current value for returnResults
+    */
+-  // This method makes public the superclasses's protected method.
+   public boolean isReturnResults() {
+-    return super.isReturnResults();
++    byte[] v = getAttribute(RETURN_RESULTS);
++    return v == null ? true : Bytes.toBoolean(v);
+   }
+ 
+   /**
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/Mutation.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/Mutation.java
+index d11c459..2b88ffc 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/Mutation.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/Mutation.java
+@@ -83,12 +83,6 @@ public abstract class Mutation extends OperationWithAttributes implements Row, C
+    */
+   private static final String OP_ATTRIBUTE_TTL = "_ttl";
+ 
+-  /**
+-   * @deprecated this field is private as of HBase 2.0.
+-   */
+-  @Deprecated
+-  protected static final String RETURN_RESULTS = "_rr_";
+-
+   protected byte [] row = null;
+   protected long ts = HConstants.LATEST_TIMESTAMP;
+   protected Durability durability = Durability.USE_DEFAULT;
+@@ -514,23 +508,6 @@ public abstract class Mutation extends OperationWithAttributes implements Row, C
+   }
+ 
+   /**
+-   * @return current value for returnResults
+-   */
+-  // Used by Increment and Append only.
+-  @InterfaceAudience.Private
+-  protected boolean isReturnResults() {
+-    byte[] v = getAttribute(RETURN_RESULTS);
+-    return v == null ? true : Bytes.toBoolean(v);
+-  }
+-
+-  @InterfaceAudience.Private
+-  // Used by Increment and Append only.
+-  protected Mutation setReturnResults(boolean returnResults) {
+-    setAttribute(RETURN_RESULTS, Bytes.toBytes(returnResults));
+-    return this;
+-  }
+-
+-  /**
+    * Subclasses should override this method to add the heap size of their own fields.
+    * @return the heap size to add (will be aligned).
+    */
+-- 
+1.7.9.5
+

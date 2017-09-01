@@ -1,0 +1,35 @@
+From e19c09f6a1c93b57f905bffb5ae8e98d0ebd54c0 Mon Sep 17 00:00:00 2001
+From: Michael Stack <stack@apache.org>
+Date: Thu, 15 Jun 2017 22:03:34 -0700
+Subject: [PATCH 363/410] CDH-55446 Investigate deadlock in HBase 5.12 Fix a
+ bad backport identified by Huaxiang Sun
+
+Change-Id: Id3d2dce7402e4475887f752c62848d080ed0f3bd
+Author: stack
+Reason: Bug
+Ref: CDH-55446
+---
+ .../hadoop/hbase/master/AssignmentManager.java     |    7 -------
+ 1 file changed, 7 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java
+index c1c0894..b15bdb5 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java
+@@ -2446,13 +2446,6 @@ public class AssignmentManager extends ZooKeeperListener {
+           || existingPlan.getDestination() == null
+           || !destServers.contains(existingPlan.getDestination())) {
+         newPlan = true;
+-        try {
+-          randomPlan = new RegionPlan(region, null,
+-              balancer.randomAssignment(region, destServers));
+-        } catch (IOException ex) {
+-          LOG.warn("Failed to create new plan.",ex);
+-          return null;
+-        }
+       }
+     }
+ 
+-- 
+1.7.9.5
+

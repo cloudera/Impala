@@ -1,0 +1,97 @@
+From ed03208f921494ed70075d5219afafe60bfe4395 Mon Sep 17 00:00:00 2001
+From: Srikanth Srungarapu <ssrungarapu@cloudera.com>
+Date: Mon, 16 Mar 2015 13:37:16 -0700
+Subject: [PATCH 025/410] CLOUDERA-BUILD Binary incompatibilities between our
+ HBase 0.98.6 and 1.0 branches --ADDENDUM
+
+Change-Id: Ibe275e0bae4120b18ff56ea54de0d654f689ab6e
+Reason: Product Requirement (Compatibility)
+Author: Srikanth Srungarapu
+Ref: CDH-24305
+---
+ .../org/apache/hadoop/hbase/HTableDescriptor.java  |   28 +++++++-------------
+ .../hbase/mapreduce/TableRecordReaderImpl.java     |   16 +++++++++++
+ 2 files changed, 26 insertions(+), 18 deletions(-)
+
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/HTableDescriptor.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/HTableDescriptor.java
+index b874156..3a626f7 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/HTableDescriptor.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/HTableDescriptor.java
+@@ -672,30 +672,22 @@ public class HTableDescriptor implements WritableComparable<HTableDescriptor> {
+   }
+ 
+   /**
+-   * Check if async log edits are enabled on the table.
+-   *
+-   * @return true if that async log flush is enabled on the table
+-   * @deprecated Since 0.96 we no longer have an explicity deferred log flush/sync functionality.
+-   * Use {@link #getDurability()}.
++   * This method is no longer being used in CDH5.4. Please see HBASE-10471 for more details.
++   * Retaining this so as not to break compatability with earlier CDH5.x versions.
++   * @deprecated
+    */
+-  public synchronized boolean isAsyncLogFlush() {
++  @Deprecated
++  public synchronized boolean isDeferredLogFlush() {
+     return getDurability() == Durability.ASYNC_WAL;
+   }
+ 
+   /**
+-   * This is used to allowing the log edits syncing to the file system. Everytime
+-   * an edit is sent to the server it is first sync'd to the file system by the
+-   * log writer. This sync is an expensive operation and thus can be deferred so
+-   * that the edits are kept in memory until the background async writer-sync-notifier
+-   * threads do the sync and not explicitly flushed for every edit.
+-   * <p>
+-   * NOTE:- This option might result in data loss if the region server crashes
+-   * before these pending edits in memory are flushed onto the filesystem.
+-   * </p>
+-   *
+-   * @param isAsyncLogFlush
++   * This method is no longer being used in CDH5.4. Please see HBASE-10471 for more details.
++   * Retaining this so as not to break compatability with earlier CDH5.x versions.
++   * @deprecated
+    */
+-  public synchronized void setAsyncLogFlush(final boolean isAsyncLogFlush) {
++  @Deprecated
++  public synchronized void setDeferredLogFlush(final boolean isAsyncLogFlush) {
+     this.setDurability(isAsyncLogFlush ? Durability.ASYNC_WAL : DEFAULT_DURABLITY);
+   }
+ 
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/TableRecordReaderImpl.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/TableRecordReaderImpl.java
+index e4015a7..ed126ad 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/TableRecordReaderImpl.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/TableRecordReaderImpl.java
+@@ -26,6 +26,7 @@ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.hbase.classification.InterfaceAudience;
+ import org.apache.hadoop.hbase.classification.InterfaceStability;
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.hbase.client.HTable;
+ import org.apache.hadoop.hbase.client.Result;
+ import org.apache.hadoop.hbase.client.ResultScanner;
+ import org.apache.hadoop.hbase.client.Scan;
+@@ -129,6 +130,21 @@ public class TableRecordReaderImpl {
+   }
+ 
+   /**
++   * Sets the HBase table.
++   *
++   * @param htable  The {@link org.apache.hadoop.hbase.client.HTable} to scan.
++   * @deprecated Use {@link #setHTable(org.apache.hadoop.hbase.client.HTable htable)} instead.
++   */
++  @Deprecated
++  public void setHTable(HTable htable) {
++    Configuration conf = htable.getConfiguration();
++    logScannerActivity = conf.getBoolean(
++        ScannerCallable.LOG_SCANNER_ACTIVITY, false);
++    logPerRowCount = conf.getInt(LOG_PER_ROW_COUNT, 100);
++    this.htable = htable;
++  }
++
++  /**
+    * Sets the scan defining the actual details like columns etc.
+    *
+    * @param scan  The scan to set.
+-- 
+1.7.9.5
+

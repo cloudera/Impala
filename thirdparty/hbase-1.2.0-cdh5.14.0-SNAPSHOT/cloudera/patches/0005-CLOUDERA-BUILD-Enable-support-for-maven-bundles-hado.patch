@@ -1,0 +1,46 @@
+From 23a38a87b38fb4528b454a6f23bed1a567c0e724 Mon Sep 17 00:00:00 2001
+From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
+Date: Mon, 15 Dec 2014 10:40:25 +0000
+Subject: [PATCH 005/410] CLOUDERA-BUILD Enable support for maven bundles
+ (hadoop-common dependency)
+
+Ref: CDH-21268
+Reason: Product Requirement (Compatibility)
+Author: Esteban Gutierrez
+---
+ pom.xml |   12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/pom.xml b/pom.xml
+index ef1b755..f5045d6 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -820,6 +820,13 @@
+           </configuration>
+         </plugin>
+         <plugin>
++          <groupId>org.apache.felix</groupId>
++          <artifactId>maven-bundle-plugin</artifactId>
++          <extensions>true</extensions>
++          <inherited>true</inherited>
++          <version>2.4.0</version>
++        </plugin>
++        <plugin>
+           <groupId>org.apache.maven.plugins</groupId>
+           <artifactId>maven-checkstyle-plugin</artifactId>
+           <version>2.13</version>
+@@ -1038,6 +1045,11 @@
+         </configuration>
+       </plugin>
+       <plugin>
++        <groupId>org.apache.felix</groupId>
++        <artifactId>maven-bundle-plugin</artifactId>
++        <version>2.4.0</version>
++      </plugin>
++      <plugin>
+         <groupId>org.apache.maven.plugins</groupId>
+         <artifactId>maven-site-plugin</artifactId>
+         <version>3.4</version>
+-- 
+1.7.9.5
+

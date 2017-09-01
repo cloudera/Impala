@@ -1,0 +1,162 @@
+From 1e205fc83d43b4623018d68139f9bd919d150d97 Mon Sep 17 00:00:00 2001
+From: tedyu <yuzhihong@gmail.com>
+Date: Tue, 17 May 2016 13:26:45 -0700
+Subject: [PATCH 230/410] HBASE-15769 Perform validation on cluster key for
+ add_peer (Matt Warhaftig)
+
+Change-Id: I1919ec2adf48dfd39ef3d8324aa289dfdee485e0
+Author: Matt Warhaftig
+Reason: Bug
+Ref: CDH-45543
+---
+ .../hbase/replication/ReplicationPeersZKImpl.java  |    9 ++++++
+ .../apache/hadoop/hbase/zookeeper/ZKConfig.java    |   11 +++++++
+ .../hadoop/hbase/zookeeper/TestZKConfig.java       |   20 ++++++-------
+ .../replication/TestReplicationStateBasic.java     |   31 ++++++++++++++++++++
+ 4 files changed, 61 insertions(+), 10 deletions(-)
+
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/replication/ReplicationPeersZKImpl.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/replication/ReplicationPeersZKImpl.java
+index f2270fe..937698c 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/replication/ReplicationPeersZKImpl.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/replication/ReplicationPeersZKImpl.java
+@@ -41,6 +41,7 @@ import org.apache.hadoop.hbase.protobuf.generated.ZooKeeperProtos;
+ import org.apache.hadoop.hbase.replication.ReplicationPeer.PeerState;
+ import org.apache.hadoop.hbase.util.Bytes;
+ import org.apache.hadoop.hbase.util.Pair;
++import org.apache.hadoop.hbase.zookeeper.ZKConfig;
+ import org.apache.hadoop.hbase.zookeeper.ZKUtil;
+ import org.apache.hadoop.hbase.zookeeper.ZooKeeperWatcher;
+ import org.apache.hadoop.hbase.zookeeper.ZKUtil.ZKUtilOp;
+@@ -115,6 +116,14 @@ public class ReplicationPeersZKImpl extends ReplicationStateZKBase implements Re
+         throw new IllegalArgumentException("Found invalid peer name:" + id);
+       }
+ 
++      if (peerConfig.getClusterKey() != null) {
++        try {
++          ZKConfig.validateClusterKey(peerConfig.getClusterKey());
++        } catch (IOException ioe) {
++          throw new IllegalArgumentException(ioe.getMessage());
++        }
++      }
++
+       checkQueuesDeleted(id);
+       
+       ZKUtil.createWithParents(this.zookeeper, this.peersZNode);
+diff --git a/hbase-common/src/main/java/org/apache/hadoop/hbase/zookeeper/ZKConfig.java b/hbase-common/src/main/java/org/apache/hadoop/hbase/zookeeper/ZKConfig.java
+index 787b5cc..17bf300 100644
+--- a/hbase-common/src/main/java/org/apache/hadoop/hbase/zookeeper/ZKConfig.java
++++ b/hbase-common/src/main/java/org/apache/hadoop/hbase/zookeeper/ZKConfig.java
+@@ -384,12 +384,23 @@ public final class ZKConfig {
+     String[] parts = key.split(":");
+ 
+     if (parts.length == 3) {
++      if (!parts[2].matches("/.*[^/]")) {
++        throw new IOException("Cluster key passed " + key + " is invalid, the format should be:" +
++            HConstants.ZOOKEEPER_QUORUM + ":" + HConstants.ZOOKEEPER_CLIENT_PORT + ":"
++            + HConstants.ZOOKEEPER_ZNODE_PARENT);
++      }
+       return new ZKClusterKey(parts [0], Integer.parseInt(parts [1]), parts [2]);
+     }
+ 
+     if (parts.length > 3) {
+       // The quorum could contain client port in server:clientport format, try to transform more.
+       String zNodeParent = parts [parts.length - 1];
++      if (!zNodeParent.matches("/.*[^/]")) {
++        throw new IOException("Cluster key passed " + key + " is invalid, the format should be:"
++            + HConstants.ZOOKEEPER_QUORUM + ":" + HConstants.ZOOKEEPER_CLIENT_PORT + ":"
++            + HConstants.ZOOKEEPER_ZNODE_PARENT);
++      }
++
+       String clientPort = parts [parts.length - 2];
+ 
+       // The first part length is the total length minus the lengths of other parts and minus 2 ":"
+diff --git a/hbase-common/src/test/java/org/apache/hadoop/hbase/zookeeper/TestZKConfig.java b/hbase-common/src/test/java/org/apache/hadoop/hbase/zookeeper/TestZKConfig.java
+index 7879aea..945b291 100644
+--- a/hbase-common/src/test/java/org/apache/hadoop/hbase/zookeeper/TestZKConfig.java
++++ b/hbase-common/src/test/java/org/apache/hadoop/hbase/zookeeper/TestZKConfig.java
+@@ -60,10 +60,10 @@ public class TestZKConfig {
+ 
+   @Test
+   public void testClusterKey() throws Exception {
+-    testKey("server", 2181, "hbase");
+-    testKey("server1,server2,server3", 2181, "hbase");
++    testKey("server", 2181, "/hbase");
++    testKey("server1,server2,server3", 2181, "/hbase");
+     try {
+-      ZKConfig.validateClusterKey("2181:hbase");
++      ZKConfig.validateClusterKey("2181:/hbase");
+     } catch (IOException ex) {
+       // OK
+     }
+@@ -72,19 +72,19 @@ public class TestZKConfig {
+   @Test
+   public void testClusterKeyWithMultiplePorts() throws Exception {
+     // server has different port than the default port
+-    testKey("server1:2182", 2181, "hbase", true);
++    testKey("server1:2182", 2181, "/hbase", true);
+     // multiple servers have their own port
+-    testKey("server1:2182,server2:2183,server3:2184", 2181, "hbase", true);
++    testKey("server1:2182,server2:2183,server3:2184", 2181, "/hbase", true);
+     // one server has no specified port, should use default port
+-    testKey("server1:2182,server2,server3:2184", 2181, "hbase", true);
++    testKey("server1:2182,server2,server3:2184", 2181, "/hbase", true);
+     // the last server has no specified port, should use default port
+-    testKey("server1:2182,server2:2183,server3", 2181, "hbase", true);
++    testKey("server1:2182,server2:2183,server3", 2181, "/hbase", true);
+     // multiple servers have no specified port, should use default port for those servers
+-    testKey("server1:2182,server2,server3:2184,server4", 2181, "hbase", true);
++    testKey("server1:2182,server2,server3:2184,server4", 2181, "/hbase", true);
+     // same server, different ports
+-    testKey("server1:2182,server1:2183,server1", 2181, "hbase", true);
++    testKey("server1:2182,server1:2183,server1", 2181, "/hbase", true);
+     // mix of same server/different port and different server
+-    testKey("server1:2182,server2:2183,server1", 2181, "hbase", true);
++    testKey("server1:2182,server2:2183,server1", 2181, "/hbase", true);
+   }
+ 
+   private void testKey(String ensemble, int port, String znode)
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/replication/TestReplicationStateBasic.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/replication/TestReplicationStateBasic.java
+index 7c51794..a69aab2 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/replication/TestReplicationStateBasic.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/replication/TestReplicationStateBasic.java
+@@ -192,6 +192,37 @@ public abstract class TestReplicationStateBasic {
+   }
+ 
+   @Test
++  public void testHfileRefsReplicationQueues() throws ReplicationException, KeeperException {
++    rp.init();
++
++    try {
++      rp.addPeer(ID_ONE,
++        new ReplicationPeerConfig().setClusterKey("hostname1.example.org:1234:hbase"));
++      fail("Should throw an IllegalArgumentException because "
++            + "zookeeper.znode.parent is missing leading '/'.");
++    } catch (IllegalArgumentException e) {
++      // Expected.
++    }
++
++    try {
++      rp.addPeer(ID_ONE,
++        new ReplicationPeerConfig().setClusterKey("hostname1.example.org:1234:/"));
++      fail("Should throw an IllegalArgumentException because zookeeper.znode.parent is missing.");
++    } catch (IllegalArgumentException e) {
++      // Expected.
++    }
++
++    try {
++      rp.addPeer(ID_ONE,
++        new ReplicationPeerConfig().setClusterKey("hostname1.example.org::/hbase"));
++      fail("Should throw an IllegalArgumentException because "
++          + "hbase.zookeeper.property.clientPort is missing.");
++    } catch (IllegalArgumentException e) {
++      // Expected.
++    }
++  }
++
++  @Test
+   public void testReplicationPeers() throws Exception {
+     rp.init();
+ 
+-- 
+1.7.9.5
+

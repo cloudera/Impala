@@ -1,0 +1,108 @@
+From 0d14b78ded6191be2d5d6b503ae4e538eb00bca7 Mon Sep 17 00:00:00 2001
+From: stack <stack@apache.org>
+Date: Wed, 30 Mar 2016 13:31:09 -0700
+Subject: [PATCH 220/410] HBASE-15324 Jitter may cause desiredMaxFileSize
+ overflow in ConstantSizeRegionSplitPolicy and
+ trigger unexpected split (Yu Li)
+
+Change-Id: I09a4710d41d2ac68b89b8c2d0fdd457fc3246a09
+Reason: Bug
+Author: Yu Li
+Ref: CDH-47035
+---
+ .../ConstantSizeRegionSplitPolicy.java             |   24 ++++++++++++++++----
+ .../hbase/regionserver/TestRegionSplitPolicy.java  |   20 ++++++++++++++++
+ 2 files changed, 40 insertions(+), 4 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/ConstantSizeRegionSplitPolicy.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/ConstantSizeRegionSplitPolicy.java
+index 66ef712..836cec5 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/ConstantSizeRegionSplitPolicy.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/ConstantSizeRegionSplitPolicy.java
+@@ -17,13 +17,15 @@
+  */
+ package org.apache.hadoop.hbase.regionserver;
+ 
+-import org.apache.hadoop.hbase.classification.InterfaceAudience;
++import com.google.common.annotations.VisibleForTesting;
++
++import java.util.Random;
++
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hbase.HBaseInterfaceAudience;
+ import org.apache.hadoop.hbase.HConstants;
+ import org.apache.hadoop.hbase.HTableDescriptor;
+-
+-import java.util.Random;
++import org.apache.hadoop.hbase.classification.InterfaceAudience;
+ 
+ /**
+  * A {@link RegionSplitPolicy} implementation which splits a region
+@@ -37,8 +39,10 @@ import java.util.Random;
+ @InterfaceAudience.LimitedPrivate(HBaseInterfaceAudience.CONFIG)
+ public class ConstantSizeRegionSplitPolicy extends RegionSplitPolicy {
+   private static final Random RANDOM = new Random();
++  private static final double EPSILON = 1E-6;
+ 
+   private long desiredMaxFileSize;
++  private double jitterRate;
+ 
+   @Override
+   protected void configureForRegion(HRegion region) {
+@@ -53,7 +57,14 @@ public class ConstantSizeRegionSplitPolicy extends RegionSplitPolicy {
+         HConstants.DEFAULT_MAX_FILE_SIZE);
+     }
+     double jitter = conf.getDouble("hbase.hregion.max.filesize.jitter", 0.25D);
+-    this.desiredMaxFileSize += (long)(desiredMaxFileSize * (RANDOM.nextFloat() - 0.5D) * jitter);
++    this.jitterRate = (RANDOM.nextFloat() - 0.5D) * jitter;
++    long jitterValue = (long) (this.desiredMaxFileSize * this.jitterRate);
++    // make sure the long value won't overflow with jitter
++    if (this.jitterRate > EPSILON && jitterValue > (Long.MAX_VALUE - this.desiredMaxFileSize)) {
++      this.desiredMaxFileSize = Long.MAX_VALUE;
++    } else {
++      this.desiredMaxFileSize += jitterValue;
++    }
+   }
+ 
+   @Override
+@@ -80,4 +91,9 @@ public class ConstantSizeRegionSplitPolicy extends RegionSplitPolicy {
+   long getDesiredMaxFileSize() {
+     return desiredMaxFileSize;
+   }
++
++  @VisibleForTesting
++  public boolean positiveJitterRate() {
++    return this.jitterRate > EPSILON;
++  }
+ }
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestRegionSplitPolicy.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestRegionSplitPolicy.java
+index 1168a3e..624f27d 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestRegionSplitPolicy.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestRegionSplitPolicy.java
+@@ -320,4 +320,24 @@ public class TestRegionSplitPolicy {
+     assertEquals("ijk", Bytes.toString(policy.getSplitPoint()));
+   }
+ 
++  @Test
++  public void testConstantSizePolicyWithJitter() throws IOException {
++    conf.set(HConstants.HBASE_REGION_SPLIT_POLICY_KEY,
++      ConstantSizeRegionSplitPolicy.class.getName());
++    htd.setMaxFileSize(Long.MAX_VALUE);
++    boolean positiveJitter = false;
++    ConstantSizeRegionSplitPolicy policy = null;
++    while (!positiveJitter) {
++      policy = (ConstantSizeRegionSplitPolicy) RegionSplitPolicy.create(mockRegion, conf);
++      positiveJitter = policy.positiveJitterRate();
++    }
++    // add a store
++    HStore mockStore = Mockito.mock(HStore.class);
++    Mockito.doReturn(2000L).when(mockStore).getSize();
++    Mockito.doReturn(true).when(mockStore).canSplit();
++    stores.add(mockStore);
++    // Jitter shouldn't cause overflow when HTableDescriptor.MAX_FILESIZE set to Long.MAX_VALUE
++    assertFalse(policy.shouldSplit());
++  }
++
+ }
+-- 
+1.7.9.5
+

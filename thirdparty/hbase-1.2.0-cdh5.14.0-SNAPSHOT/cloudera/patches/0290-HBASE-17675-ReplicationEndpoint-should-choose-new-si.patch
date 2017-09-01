@@ -1,0 +1,44 @@
+From 3809c06183b0932e802db599dc652d9f7fcd6442 Mon Sep 17 00:00:00 2001
+From: rgidwani <rgidwani@salesforce.com>
+Date: Tue, 21 Feb 2017 15:17:21 -0800
+Subject: [PATCH 290/410] HBASE-17675 ReplicationEndpoint should choose new
+ sinks if a SaslException occurs
+
+Signed-off-by: Andrew Purtell <apurtell@apache.org>
+(cherry picked from commit 3c7e96a6fde2fad85483631032c7526a96e49f22)
+
+ Author:    rgidwani <rgidwani@salesforce.com>
+ Date:      Tue Feb 21 15:17:21 2017 -0800
+ Reason:    Bug
+ Ref:       CDH-50653
+
+Change-Id: I71c70be9e17b29098d0a946a7d9bc7681b8dce5d
+---
+ .../HBaseInterClusterReplicationEndpoint.java      |    4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/HBaseInterClusterReplicationEndpoint.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/HBaseInterClusterReplicationEndpoint.java
+index 9300d4b..8176384 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/HBaseInterClusterReplicationEndpoint.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/HBaseInterClusterReplicationEndpoint.java
+@@ -52,6 +52,7 @@ import org.apache.hadoop.hbase.replication.HBaseReplicationEndpoint;
+ import org.apache.hadoop.hbase.replication.ReplicationPeer.PeerState;
+ import org.apache.hadoop.hbase.replication.regionserver.ReplicationSinkManager.SinkPeer;
+ import org.apache.hadoop.ipc.RemoteException;
++import javax.security.sasl.SaslException;
+ 
+ /**
+  * A {@link org.apache.hadoop.hbase.replication.ReplicationEndpoint} 
+@@ -263,6 +264,9 @@ public class HBaseInterClusterReplicationEndpoint extends HBaseReplicationEndpoi
+                 + "Replication cannot proceed without losing data.", sleepMultiplier)) {
+               sleepMultiplier++;
+             }
++          } else if (ioe instanceof SaslException) {
++            LOG.warn("Peer encountered SaslException, rechecking all sinks: ", ioe);
++            replicationSinkMgr.chooseSinks();
+           }
+         } else {
+           if (ioe instanceof SocketTimeoutException) {
+-- 
+1.7.9.5
+

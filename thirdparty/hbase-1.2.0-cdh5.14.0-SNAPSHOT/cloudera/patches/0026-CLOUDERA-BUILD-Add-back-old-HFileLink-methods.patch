@@ -1,0 +1,44 @@
+From e232e0cea194707b05c5afc44993d7f38f7dce6b Mon Sep 17 00:00:00 2001
+From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
+Date: Mon, 20 Apr 2015 08:41:14 +0100
+Subject: [PATCH 026/410] CLOUDERA-BUILD Add back old HFileLink methods
+
+Reason: Compatibility
+Author: Matteo Bertozzi
+Ref: CDH-27131
+---
+ .../java/org/apache/hadoop/hbase/io/HFileLink.java |   18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/io/HFileLink.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/io/HFileLink.java
+index c2a25e5..f570cc9 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/io/HFileLink.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/io/HFileLink.java
+@@ -164,6 +164,24 @@ public class HFileLink extends FileLink {
+   }
+ 
+   /**
++   * Create an HFileLink instance from table/region/family/hfile location
++   * @param conf {@link Configuration} from which to extract specific archive locations
++   * @param table Table name
++   * @param region Region Name
++   * @param family Family Name
++   * @param hfile HFile Name
++   * @return Link to the file with the specified table/region/family/hfile location
++   * @throws IOException on unexpected error.
++   * @deprecated use {@link #build()} instead.
++   */
++  @Deprecated
++  public static HFileLink create(final Configuration conf, final TableName table,
++                                 final String region, final String family, final String hfile)
++          throws IOException {
++    return build(conf, table, region, family, hfile);
++  }
++
++  /**
+    * @return the origin path of the hfile.
+    */
+   public Path getOriginPath() {
+-- 
+1.7.9.5
+

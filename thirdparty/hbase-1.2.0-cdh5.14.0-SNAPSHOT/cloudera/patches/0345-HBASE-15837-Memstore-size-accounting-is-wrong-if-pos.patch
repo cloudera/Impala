@@ -1,0 +1,143 @@
+From e21c05b0462f31500c3c7e86a5d72246343bb145 Mon Sep 17 00:00:00 2001
+From: Enis Soztutar <enis@apache.org>
+Date: Wed, 25 May 2016 17:04:50 -0700
+Subject: [PATCH 345/410] HBASE-15837 Memstore size accounting is wrong if
+ postBatchMutate() throws exception
+
+Conflicts:
+	hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
+	hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestHRegion.java
+
+(cherry picked from commit bd6903b9e7bd7707a0c03f30f089b1d31f700411)
+
+Change-Id: I7bf31cb9b5bc23380bb88459e3bb39a5d5307a11
+Author: Enis Soztutar
+Reason: Improvement
+Ref: CDH-53515
+---
+ .../apache/hadoop/hbase/regionserver/HRegion.java  |   23 +++++++++---
+ .../hadoop/hbase/regionserver/TestHRegion.java     |   39 ++++++++++++++++++++
+ 2 files changed, 56 insertions(+), 6 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
+index 05f8b91..b847fda 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
+@@ -1111,7 +1111,15 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+     if (this.rsAccounting != null) {
+       rsAccounting.addAndGetGlobalMemstoreSize(memStoreSize);
+     }
+-    return this.memstoreSize.addAndGet(memStoreSize);
++    long size = this.memstoreSize.addAndGet(memStoreSize);
++    // This is extremely bad if we make memstoreSize negative. Log as much info on the offending
++    // caller as possible. (memStoreSize might be a negative value already -- freeing memory)
++    if (size < 0) {
++      LOG.error("Asked to modify this region's (" + this.toString()
++      + ") memstoreSize to a negative value which is incorrect. Current memstoreSize="
++      + (size-memStoreSize) + ", delta=" + memStoreSize, new Exception());
++    }
++    return size;
+   }
+ 
+   @Override
+@@ -2897,8 +2905,8 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+           }
+           initialized = true;
+         }
+-        long addedSize = doMiniBatchMutation(batchOp);
+-        long newSize = this.addAndGetGlobalMemstoreSize(addedSize);
++        doMiniBatchMutation(batchOp);
++        long newSize = this.getMemstoreSize();
+         if (isFlushSize(newSize)) {
+           requestFlush();
+         }
+@@ -2979,6 +2987,7 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+     int noOfPuts = 0, noOfDeletes = 0;
+     WALKey walKey = null;
+     long mvccNum = 0;
++    long addedSize = 0;
+     try {
+       // ------------------------------------
+       // STEP 1. Try to acquire as many locks as we can, and ensure
+@@ -3211,7 +3220,6 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+       // visible to scanners till we update the MVCC. The MVCC is
+       // moved only when the sync is complete.
+       // ----------------------------------
+-      long addedSize = 0;
+       for (int i = firstIndex; i < lastIndexExclusive; i++) {
+         if (batchOp.retCodeDetails[i].getOperationStatusCode()
+             != OperationStatusCode.NOT_RUN) {
+@@ -3294,8 +3302,11 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+           }
+         }
+         if (writeEntry != null) mvcc.complete(writeEntry);
+-      } else if (writeEntry != null) {
+-        mvcc.completeAndWait(writeEntry);
++      } else {
++        this.addAndGetGlobalMemstoreSize(addedSize);
++        if (writeEntry != null) {
++          mvcc.completeAndWait(writeEntry);
++        }
+       }
+ 
+       if (locked) {
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestHRegion.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestHRegion.java
+index 4d31374..558b4b3 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestHRegion.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestHRegion.java
+@@ -36,6 +36,7 @@ import static org.junit.Assert.fail;
+ import static org.mockito.Matchers.any;
+ import static org.mockito.Matchers.anyBoolean;
+ import static org.mockito.Matchers.anyLong;
++import static org.mockito.Mockito.doThrow;
+ import static org.mockito.Mockito.mock;
+ import static org.mockito.Mockito.never;
+ import static org.mockito.Mockito.spy;
+@@ -399,6 +400,44 @@ public class TestHRegion {
+     HRegion.closeHRegion(region);
+   }
+ 
++  @Test
++  public void testMemstoreSizeAccountingWithFailedPostBatchMutate() throws IOException {
++    String testName = "testMemstoreSizeAccountingWithFailedPostBatchMutate";
++    FileSystem fs = FileSystem.get(CONF);
++    Path rootDir = new Path(dir + testName);
++    FSHLog hLog = new FSHLog(fs, rootDir, testName, CONF);
++    HRegion region = initHRegion(tableName, null, null, name.getMethodName(),
++        CONF, false, Durability.SYNC_WAL, hLog, COLUMN_FAMILY_BYTES);
++    Store store = region.getStore(COLUMN_FAMILY_BYTES);
++    assertEquals(0, region.getMemstoreSize());
++
++    // Put one value
++    byte [] value = Bytes.toBytes(name.getMethodName());
++    Put put = new Put(value);
++    put.addColumn(COLUMN_FAMILY_BYTES, Bytes.toBytes("abc"), value);
++    region.put(put);
++    long onePutSize = region.getMemstoreSize();
++    assertTrue(onePutSize > 0);
++
++    RegionCoprocessorHost mockedCPHost = Mockito.mock(RegionCoprocessorHost.class);
++    doThrow(new IOException())
++       .when(mockedCPHost).postBatchMutate(Mockito.<MiniBatchOperationInProgress<Mutation>>any());
++    region.setCoprocessorHost(mockedCPHost);
++
++    put = new Put(value);
++    put.addColumn(COLUMN_FAMILY_BYTES, Bytes.toBytes("dfg"), value);
++    try {
++      region.put(put);
++      fail("Should have failed with IOException");
++    } catch (IOException expected) {
++    }
++    assertEquals("memstoreSize should be incremented", onePutSize * 2, region.getMemstoreSize());
++    assertEquals("flushable size should be incremented", onePutSize * 2, store.getFlushableSize());
++
++    region.setCoprocessorHost(null);
++    HBaseTestingUtility.closeRegionAndWAL(region);
++  }
++
+   /**
+    * Test we do not lose data if we fail a flush and then close.
+    * Part of HBase-10466.  Tests the following from the issue description:
+-- 
+1.7.9.5
+

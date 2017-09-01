@@ -1,0 +1,113 @@
+From 343ddcd517a533c154cfb521335db8eee4c6fc6a Mon Sep 17 00:00:00 2001
+From: Michael Stack <stack@apache.org>
+Date: Wed, 8 Mar 2017 15:18:32 -0800
+Subject: [PATCH 308/410] CDH-51349
+ TestJMXConnectorServer.testHMConnectorServerWhenShutdownCluster
+ fails
+
+Fixed by backporting the below:
+
+HBASE-16723 RMI registry is not destroyed after stopping JMX Connector Server
+
+Signed-off-by: Ashish Singhi <ashishsinghi@apache.org>
+
+Author Pankaj Kumar <pankaj.kr@huawei.com>
+Reason: Bug
+Ref: CDH-51349
+
+Change-Id: I62b08d61b58d22fd5100f8ec3d01bbd84be89bf1
+---
+ .../java/org/apache/hadoop/hbase/JMXListener.java  |   17 +++++++++++++----
+ .../hadoop/hbase/TestJMXConnectorServer.java       |    3 ++-
+ 2 files changed, 15 insertions(+), 5 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/JMXListener.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/JMXListener.java
+index 2872cfa..9265fb8 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/JMXListener.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/JMXListener.java
+@@ -27,8 +27,10 @@ import org.apache.hadoop.hbase.coprocessor.*;
+ import java.io.IOException;
+ import java.lang.management.ManagementFactory;
+ import java.rmi.registry.LocateRegistry;
++import java.rmi.registry.Registry;
+ import java.rmi.server.RMIClientSocketFactory;
+ import java.rmi.server.RMIServerSocketFactory;
++import java.rmi.server.UnicastRemoteObject;
+ import java.util.HashMap;
+ 
+ import javax.management.MBeanServer;
+@@ -36,8 +38,6 @@ import javax.management.remote.JMXConnectorServer;
+ import javax.management.remote.JMXConnectorServerFactory;
+ import javax.management.remote.JMXServiceURL;
+ import javax.management.remote.rmi.RMIConnectorServer;
+-import javax.rmi.ssl.SslRMIClientSocketFactory;
+-import javax.rmi.ssl.SslRMIServerSocketFactory;
+ 
+ /**
+  * Pluggable JMX Agent for HBase(to fix the 2 random TCP ports issue
+@@ -61,6 +61,7 @@ public class JMXListener implements Coprocessor {
+    * we only load regionserver coprocessor on master
+    */
+   private static JMXConnectorServer JMX_CS = null;
++  private Registry rmiRegistry = null;
+ 
+   public static JMXServiceURL buildJMXServiceURL(int rmiRegistryPort,
+       int rmiConnectorPort) throws IOException {
+@@ -128,7 +129,7 @@ public class JMXListener implements Coprocessor {
+     }
+ 
+     // Create the RMI registry
+-    LocateRegistry.createRegistry(rmiRegistryPort);
++    rmiRegistry = LocateRegistry.createRegistry(rmiRegistryPort);
+     // Retrieve the PlatformMBeanServer.
+     MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
+ 
+@@ -147,17 +148,25 @@ public class JMXListener implements Coprocessor {
+       LOG.info("ConnectorServer started!");
+     } catch (IOException e) {
+       LOG.error("fail to start connector server!", e);
++      // deregister the RMI registry
++      if (rmiRegistry != null) {
++        UnicastRemoteObject.unexportObject(rmiRegistry, true);
++      }
+     }
+ 
+   }
+ 
+   public void stopConnectorServer() throws IOException {
+-    synchronized(JMXListener.class) {
++    synchronized (JMXListener.class) {
+       if (JMX_CS != null) {
+         JMX_CS.stop();
+         LOG.info("ConnectorServer stopped!");
+         JMX_CS = null;
+       }
++      // deregister the RMI registry
++      if (rmiRegistry != null) {
++        UnicastRemoteObject.unexportObject(rmiRegistry, true);
++      }
+     }
+   }
+ 
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/TestJMXConnectorServer.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/TestJMXConnectorServer.java
+index 44220f5..3ebc662 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/TestJMXConnectorServer.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/TestJMXConnectorServer.java
+@@ -42,6 +42,7 @@ import org.junit.Before;
+ import org.junit.Test;
+ import org.junit.experimental.categories.Category;
+ 
++
+ /**
+  * Test case for JMX Connector Server.
+  */
+@@ -203,4 +204,4 @@ public class TestJMXConnectorServer {
+       }
+     }
+   }
+-}
+\ No newline at end of file
++}
+-- 
+1.7.9.5
+

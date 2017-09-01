@@ -1,0 +1,192 @@
+From 3681f74c30ec96f7de050dc34c07969400da285e Mon Sep 17 00:00:00 2001
+From: tedyu <yuzhihong@gmail.com>
+Date: Wed, 16 Mar 2016 19:52:25 -0700
+Subject: [PATCH 231/410] HBASE-12940 Expose listPeerConfigs and getPeerConfig
+ to the HBase shell (Geoffrey Jacoby)
+
+Change-Id: Ibb30acb0f001ed03c33f517f1224d728639a34a7
+Author: Geoffrey Jacoby
+Reason: Improvement
+Ref: CDH-45543
+---
+ .../src/main/ruby/hbase/replication_admin.rb       |    1 -
+ .../main/ruby/shell/commands/get_peer_config.rb    |   53 ++++++++++++++++++++
+ .../main/ruby/shell/commands/list_peer_configs.rb  |   43 ++++++++++++++++
+ .../src/test/ruby/hbase/replication_admin_test.rb  |   29 +----------
+ 4 files changed, 97 insertions(+), 29 deletions(-)
+ create mode 100644 hbase-shell/src/main/ruby/shell/commands/get_peer_config.rb
+ create mode 100644 hbase-shell/src/main/ruby/shell/commands/list_peer_configs.rb
+
+diff --git a/hbase-shell/src/main/ruby/hbase/replication_admin.rb b/hbase-shell/src/main/ruby/hbase/replication_admin.rb
+index 179b374..ae25915 100644
+--- a/hbase-shell/src/main/ruby/hbase/replication_admin.rb
++++ b/hbase-shell/src/main/ruby/hbase/replication_admin.rb
+@@ -206,7 +206,6 @@ module Hbase
+       @replication_admin.get_peer_config(id)
+     end
+     
+-    
+     def peer_added(id)
+       @replication_admin.peer_added(id)
+     end
+diff --git a/hbase-shell/src/main/ruby/shell/commands/get_peer_config.rb b/hbase-shell/src/main/ruby/shell/commands/get_peer_config.rb
+new file mode 100644
+index 0000000..ee02229
+--- /dev/null
++++ b/hbase-shell/src/main/ruby/shell/commands/get_peer_config.rb
+@@ -0,0 +1,53 @@
++# Licensed to the Apache Software Foundation (ASF) under one
++# or more contributor license agreements.  See the NOTICE file
++# distributed with this work for additional information
++# regarding copyright ownership.  The ASF licenses this file
++# to you under the Apache License, Version 2.0 (the
++# "License"); you may not use this file except in compliance
++# with the License.  You may obtain a copy of the License at
++#
++#     http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++#
++
++module Shell
++  module Commands
++    class GetPeerConfig < Command
++      def help
++        return <<-EOF
++          Outputs the cluster key, replication endpoint class (if present), and any replication configuration parameters
++        EOF
++      end
++
++      def command(id)
++          peer_config = replication_admin.get_peer_config(id)
++          format_simple_command do
++            format_peer_config(peer_config)
++          end
++      end
++
++      def format_peer_config(peer_config)
++        cluster_key = peer_config.get_cluster_key
++        endpoint = peer_config.get_replication_endpoint_impl
++
++        unless cluster_key.nil?
++          formatter.row(["Cluster Key", cluster_key])
++        end
++        unless endpoint.nil?
++          formatter.row(["Replication Endpoint", endpoint])
++        end
++        unless peer_config.get_configuration.nil?
++          peer_config.get_configuration.each do |config_entry|
++            formatter.row(config_entry)
++          end
++        end
++
++      end
++    end
++  end
++end
+\ No newline at end of file
+diff --git a/hbase-shell/src/main/ruby/shell/commands/list_peer_configs.rb b/hbase-shell/src/main/ruby/shell/commands/list_peer_configs.rb
+new file mode 100644
+index 0000000..fc6e4a7
+--- /dev/null
++++ b/hbase-shell/src/main/ruby/shell/commands/list_peer_configs.rb
+@@ -0,0 +1,43 @@
++# Licensed to the Apache Software Foundation (ASF) under one
++# or more contributor license agreements.  See the NOTICE file
++# distributed with this work for additional information
++# regarding copyright ownership.  The ASF licenses this file
++# to you under the Apache License, Version 2.0 (the
++# "License"); you may not use this file except in compliance
++# with the License.  You may obtain a copy of the License at
++#
++#     http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++#
++
++module Shell
++  module Commands
++    class ListPeerConfigs < Command
++      def help
++        return <<-EOF
++          No-argument method that outputs the replication peer configuration for each peer defined on this cluster.
++        EOF
++      end
++
++      def command
++        format_simple_command do
++          peer_configs = replication_admin.list_peer_configs
++          unless peer_configs.nil?
++            peer_configs.each do |peer_config_entry|
++              peer_id = peer_config_entry[0]
++              peer_config = peer_config_entry[1]
++              formatter.row(["PeerId", peer_id])
++              GetPeerConfig.new(@shell).format_peer_config(peer_config)
++              formatter.row([" "])
++            end
++          end
++        end
++      end
++    end
++  end
++end
+diff --git a/hbase-shell/src/test/ruby/hbase/replication_admin_test.rb b/hbase-shell/src/test/ruby/hbase/replication_admin_test.rb
+index e776582..6d14fee 100644
+--- a/hbase-shell/src/test/ruby/hbase/replication_admin_test.rb
++++ b/hbase-shell/src/test/ruby/hbase/replication_admin_test.rb
+@@ -220,11 +220,9 @@ module Hbase
+     define_test "get_peer_config: works with replicationendpointimpl peer and config params" do
+       repl_impl = "org.apache.hadoop.hbase.replication.ReplicationEndpointForTest"
+       config_params = { "config1" => "value1", "config2" => "value2" }
+-      args = { CLUSTER_KEY => cluster_key, ENDPOINT_CLASSNAME => repl_impl,
+-               CONFIG => config_params }
++      args = { ENDPOINT_CLASSNAME => repl_impl, CONFIG => config_params}
+       replication_admin.add_peer(@peer_id, args)
+       peer_config = replication_admin.get_peer_config(@peer_id)
+-      assert_equal(cluster_key, peer_config.get_cluster_key)
+       assert_equal(repl_impl, peer_config.get_replication_endpoint_impl)
+       assert_equal(2, peer_config.get_configuration.size)
+       assert_equal("value1", peer_config.get_configuration.get("config1"))
+@@ -252,31 +250,6 @@ module Hbase
+       replication_admin.remove_peer(peer_id_second)
+     end
+ 
+-    define_test "update_peer_config: can update peer config and data" do
+-      repl_impl = "org.apache.hadoop.hbase.replication.ReplicationEndpointForTest"
+-      config_params = { "config1" => "value1", "config2" => "value2" }
+-      data_params = {"data1" => "value1", "data2" => "value2"}
+-      args = { ENDPOINT_CLASSNAME => repl_impl, CONFIG => config_params, DATA => data_params}
+-      replication_admin.add_peer(@peer_id, args)
+-
+-      #Normally the ReplicationSourceManager will call ReplicationPeer#peer_added, but here we have to do it ourselves
+-      replication_admin.peer_added(@peer_id)
+-
+-      new_config_params = { "config1" => "new_value1" }
+-      new_data_params = {"data1" => "new_value1"}
+-      new_args = {CONFIG => new_config_params, DATA => new_data_params}
+-      replication_admin.update_peer_config(@peer_id, new_args)
+-
+-      #Make sure the updated key/value pairs in config and data were successfully updated, and that those we didn't
+-      #update are still there and unchanged
+-      peer_config = replication_admin.get_peer_config(@peer_id)
+-      replication_admin.remove_peer(@peer_id)
+-      assert_equal("new_value1", peer_config.get_configuration.get("config1"))
+-      assert_equal("value2", peer_config.get_configuration.get("config2"))
+-      assert_equal("new_value1", Bytes.to_string(peer_config.get_peer_data.get(Bytes.toBytes("data1"))))
+-      assert_equal("value2", Bytes.to_string(peer_config.get_peer_data.get(Bytes.toBytes("data2"))))
+-    end
+-
+     # assert_raise fails on native exceptions - https://jira.codehaus.org/browse/JRUBY-5279
+     # Can't catch native Java exception with assert_raise in JRuby 1.6.8 as in the test below.
+     # define_test "add_peer: adding a second peer with same id should error" do
+-- 
+1.7.9.5
+

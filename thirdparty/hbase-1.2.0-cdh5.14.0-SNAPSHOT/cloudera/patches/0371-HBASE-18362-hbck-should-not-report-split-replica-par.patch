@@ -1,0 +1,79 @@
+From 13873c58ab43502305a534a1a1b4ee7ab47474d7 Mon Sep 17 00:00:00 2001
+From: Esteban Gutierrez <esteban@apache.org>
+Date: Thu, 27 Jul 2017 15:59:07 -0500
+Subject: [PATCH 371/410] HBASE-18362 hbck should not report split replica
+ parent region from meta as errors (Huaxiang Sun)
+
+Signed-off-by: Esteban Gutierrez <esteban@apache.org>
+
+(cherry picked from commit 34120e896956c3e08ff51a7cd12013888f9bf93e)
+
+Change-Id: Ic9d73d8979838b811700f4bd6f61281e5cfa368a
+Author: Esteban Gutierrez
+Reason: Bug
+Ref: CDH-57674
+---
+ .../org/apache/hadoop/hbase/util/HBaseFsck.java    |   10 ++++++++
+ .../apache/hadoop/hbase/util/TestHBaseFsck.java    |   25 ++++++++++++++++++++
+ 2 files changed, 35 insertions(+)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/util/HBaseFsck.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/util/HBaseFsck.java
+index 36df83a..113c4b8 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/util/HBaseFsck.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/util/HBaseFsck.java
+@@ -2283,6 +2283,16 @@ public class HBaseFsck extends Configured implements Closeable {
+           return;
+         }
+       }
++
++      // For Replica region, we need to do a similar check. If replica is not split successfully,
++      // error is going to be reported against primary daughter region.
++      if (hbi.getReplicaId() != HRegionInfo.DEFAULT_REPLICA_ID) {
++        LOG.info("Region " + descriptiveName + " is a split parent in META, in HDFS, "
++            + "and not deployed on any region server. This may be transient.");
++        hbi.setSkipChecks(true);
++        return;
++      }
++
+       errors.reportError(ERROR_CODE.LINGERING_SPLIT_PARENT, "Region "
+           + descriptiveName + " is a split parent in META, in HDFS, "
+           + "and not deployed on any region server. This could be transient, "
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/util/TestHBaseFsck.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/util/TestHBaseFsck.java
+index fd1946e..36f2faf 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/util/TestHBaseFsck.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/util/TestHBaseFsck.java
+@@ -215,6 +215,31 @@ public class TestHBaseFsck {
+     EnvironmentEdgeManager.reset();
+   }
+ 
++  /*
++ * This creates a table with region_replica > 1, do a split, check
++ * that hbck will not report split replica parent as lingering split parent
++ */
++  @Test public void testHbckReportReplicaLingeringSplitParent() throws Exception {
++    TableName table = TableName.valueOf("testHbckReportReplicaLingeringSplitParent");
++
++    try {
++      setupTableWithRegionReplica(table, 2);
++      TEST_UTIL.getHBaseAdmin().flush(table.getName());
++
++      // disable catalog janitor
++      TEST_UTIL.getHBaseAdmin().enableCatalogJanitor(false);
++      admin.split(table, Bytes.toBytes("A1"));
++
++      Thread.sleep(1000);
++      // run hbck again to make sure we don't see any errors
++      assertNoErrors(doFsck(conf, false));
++    } finally {
++      cleanupTable(table);
++      // enable catalog janitor
++      TEST_UTIL.getHBaseAdmin().enableCatalogJanitor(true);
++    }
++  }
++
+   @Test (timeout=180000)
+   public void testHBaseFsck() throws Exception {
+     assertNoErrors(doFsck(conf, false));
+-- 
+1.7.9.5
+

@@ -1,0 +1,33 @@
+From f8b8c7fda4f0bae6ad328491cc86df58e16ca989 Mon Sep 17 00:00:00 2001
+From: Junegunn Choi <junegunn.c@gmail.com>
+Date: Wed, 21 Dec 2016 12:37:20 +0900
+Subject: [PATCH 392/410] HBASE-17352 Fix hbase-assembly build with bash 4
+
+Signed-off-by: tedyu <yuzhihong@gmail.com>
+
+(cherry picked from commit 5c82c823642b96b3eff1f586701508dc2f3525a1)
+
+Change-Id: Ifd8d603814dfbb7f672351cb5d6f677057e30fe3
+Author: Junegunn Choi
+Reason: Bug
+Ref: CDH-58154
+---
+ hbase-assembly/pom.xml |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/hbase-assembly/pom.xml b/hbase-assembly/pom.xml
+index afef672..9eeafa0 100644
+--- a/hbase-assembly/pom.xml
++++ b/hbase-assembly/pom.xml
+@@ -142,7 +142,7 @@
+                 <argument>bash</argument>
+                 <argument>-c</argument>
+                 <argument>cat maven-shared-archive-resources/META-INF/NOTICE \
+-                  `find ${project.build.directory}/dependency -iname NOTICE -or -iname NOTICE.txt` \
++                  `find ${project.build.directory}/dependency -iname NOTICE -or -iname NOTICE.txt`
+                 </argument>
+               </arguments>
+               <outputFile>${project.build.directory}/NOTICE.aggregate</outputFile>
+-- 
+1.7.9.5
+

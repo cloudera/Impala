@@ -1,0 +1,28 @@
+From fbde7d001ed9c4c08b9cdf7b4008db101b9d5fb3 Mon Sep 17 00:00:00 2001
+From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
+Date: Mon, 5 Oct 2015 11:50:21 -0700
+Subject: [PATCH 030/410] CLOUDERA-BUILD Add pre-commit hook
+
+---
+ cloudera/pre_commit_hook.sh |    9 +++++++++
+ 1 file changed, 9 insertions(+)
+ create mode 100644 cloudera/pre_commit_hook.sh
+
+diff --git a/cloudera/pre_commit_hook.sh b/cloudera/pre_commit_hook.sh
+new file mode 100644
+index 0000000..6b57433
+--- /dev/null
++++ b/cloudera/pre_commit_hook.sh
+@@ -0,0 +1,9 @@
++# CLOUDERA-BUILD
++export JAVA7_BUILD=true
++. /opt/toolchain/toolchain.sh
++
++# TODO: run binary compatibility check
++
++# Run few client tests (create/delete table, get/put data, ...)
++mvn clean test -Dtest=TestAdmin1,TestAdmin2,TestFromClientSide
++
+-- 
+1.7.9.5
+

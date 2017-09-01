@@ -1,0 +1,117 @@
+From 0cf655cb5761fd2323072358b00fc29d37deedf7 Mon Sep 17 00:00:00 2001
+From: Sean Busbey <busbey@apache.org>
+Date: Tue, 2 Aug 2016 11:36:51 -0500
+Subject: [PATCH 201/410] HBASE-16340 exclude Xerces iplementation jars from
+ coming in transitively.
+
+Signed-off-by: Esteban Gutierrez <esteban@apache.org>
+Signed-off-by: stack <stack@apache.org>
+
+ Conflicts:
+	hbase-spark/pom.xml
+
+(cherry picked from commit 262a4e666fce5eceb61f077c13b0e623f532598a)
+
+Change-Id: Ie4d7c77438416e93c103a191d15b2f491def14a5
+Reason: Bug
+Author: Sean Busbey
+Ref: CDH-42925
+---
+ pom.xml |   32 +++++++++++++++++++++++++++++++-
+ 1 file changed, 31 insertions(+), 1 deletion(-)
+
+diff --git a/pom.xml b/pom.xml
+index 38187c7..32adcca 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -861,7 +861,7 @@
+         <!-- version set by parent -->
+         <executions>
+           <execution>
+-            <id>min-maven-and-java</id>
++            <id>min-maven-min-java-banned-xerces</id>
+             <goals>
+               <goal>enforce</goal>
+             </goals>
+@@ -887,6 +887,12 @@
+   See the reference guide on building for more information: http://hbase.apache.org/book.html#build
+                   </message>
+                 </requireJavaVersion>
++                <bannedDependencies>
++                  <excludes>
++                    <exclude>xerces:xercesImpl</exclude>
++                  </excludes>
++                  <message>We avoid adding our own Xerces jars to the classpath, see HBASE-16340.</message>
++                </bannedDependencies>
+               </rules>
+             </configuration>
+           </execution>
+@@ -2111,6 +2117,10 @@
+                 <groupId>stax</groupId>
+                 <artifactId>stax-api</artifactId>
+               </exclusion>
++              <exclusion>
++                <groupId>xerces</groupId>
++                <artifactId>xercesImpl</artifactId>
++              </exclusion>
+             </exclusions>
+             <version>${hadoop-two.version}</version>
+           </dependency>
+@@ -2137,6 +2147,10 @@
+                 <groupId>stax</groupId>
+                 <artifactId>stax-api</artifactId>
+               </exclusion>
++              <exclusion>
++                <groupId>xerces</groupId>
++                <artifactId>xercesImpl</artifactId>
++              </exclusion>
+             </exclusions>
+           </dependency>
+           <dependency>
+@@ -2262,6 +2276,10 @@
+                 <groupId>stax</groupId>
+                 <artifactId>stax-api</artifactId>
+               </exclusion>
++              <exclusion>
++                <groupId>xerces</groupId>
++                <artifactId>xercesImpl</artifactId>
++              </exclusion>
+             </exclusions>
+           </dependency>
+           <dependency>
+@@ -2286,6 +2304,10 @@
+                 <groupId>stax</groupId>
+                 <artifactId>stax-api</artifactId>
+               </exclusion>
++              <exclusion>
++                <groupId>xerces</groupId>
++                <artifactId>xercesImpl</artifactId>
++              </exclusion>
+             </exclusions>
+           </dependency>
+           <dependency>
+@@ -2443,6 +2465,10 @@
+                <groupId>stax</groupId>
+                <artifactId>stax-api</artifactId>
+              </exclusion>
++             <exclusion>
++               <groupId>xerces</groupId>
++               <artifactId>xercesImpl</artifactId>
++             </exclusion>
+            </exclusions>
+            <version>${hadoop-three.version}</version>
+          </dependency>
+@@ -2465,6 +2491,10 @@
+                <groupId>stax</groupId>
+                <artifactId>stax-api</artifactId>
+              </exclusion>
++             <exclusion>
++               <groupId>xerces</groupId>
++               <artifactId>xercesImpl</artifactId>
++             </exclusion>
+            </exclusions>
+          </dependency>
+          <dependency>
+-- 
+1.7.9.5
+

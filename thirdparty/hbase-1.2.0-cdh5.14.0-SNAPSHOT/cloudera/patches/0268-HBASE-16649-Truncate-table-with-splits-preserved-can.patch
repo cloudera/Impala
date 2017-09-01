@@ -1,0 +1,179 @@
+From 89812888f6fd310940771d323a5c4358726391d9 Mon Sep 17 00:00:00 2001
+From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
+Date: Mon, 26 Sep 2016 12:58:04 -0700
+Subject: [PATCH 268/410] HBASE-16649 Truncate table with splits preserved can
+ cause both data loss and truncated data appeared
+ again
+
+Change-Id: I22fa0e249e8094d5751db4f080971b9b606837f3
+Reason: Bug
+Author: Matteo Bertozzi
+Ref: CDH-50442
+---
+ .../apache/hadoop/hbase/master/CatalogJanitor.java |    8 +++++---
+ .../apache/hadoop/hbase/master/ServerManager.java  |   18 ++++++++++++++++++
+ .../master/procedure/DeleteTableProcedure.java     |    3 +++
+ .../master/procedure/TruncateTableProcedure.java   |   10 ++++++++++
+ .../hadoop/hbase/master/TestCatalogJanitor.java    |    4 +++-
+ .../procedure/TestTruncateTableProcedure.java      |    8 ++++----
+ 6 files changed, 43 insertions(+), 8 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/CatalogJanitor.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/CatalogJanitor.java
+index 9d935b5..5b78556 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/CatalogJanitor.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/CatalogJanitor.java
+@@ -204,8 +204,9 @@ public class CatalogJanitor extends ScheduledChore {
+           + " from fs because merged region no longer holds references");
+       HFileArchiver.archiveRegion(this.services.getConfiguration(), fs, regionA);
+       HFileArchiver.archiveRegion(this.services.getConfiguration(), fs, regionB);
+-      MetaTableAccessor.deleteMergeQualifiers(server.getConnection(),
+-        mergedRegion);
++      MetaTableAccessor.deleteMergeQualifiers(services.getConnection(), mergedRegion);
++      services.getServerManager().removeRegion(regionA);
++      services.getServerManager().removeRegion(regionB);
+       return true;
+     }
+     return false;
+@@ -338,6 +339,7 @@ public class CatalogJanitor extends ScheduledChore {
+       if (LOG.isTraceEnabled()) LOG.trace("Archiving parent region: " + parent);
+       HFileArchiver.archiveRegion(this.services.getConfiguration(), fs, parent);
+       MetaTableAccessor.deleteRegion(this.connection, parent);
++      services.getServerManager().removeRegion(parent);
+       result = true;
+     }
+     return result;
+@@ -439,4 +441,4 @@ public class CatalogJanitor extends ScheduledChore {
+     return cleanMergeRegion(region, mergeRegions.getFirst(),
+         mergeRegions.getSecond());
+   }
+-}
+\ No newline at end of file
++}
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/ServerManager.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/ServerManager.java
+index a07d036..61494ec 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/ServerManager.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/ServerManager.java
+@@ -1202,4 +1202,22 @@ public class ServerManager {
+       deadservers.cleanAllPreviousInstances(serverName);
+     }
+   }
++
++  /**
++   * Called by delete table and similar to notify the ServerManager that a region was removed.
++   */
++  public void removeRegion(final HRegionInfo regionInfo) {
++    final byte[] encodedName = regionInfo.getEncodedNameAsBytes();
++    storeFlushedSequenceIdsByRegion.remove(encodedName);
++    flushedSequenceIdByRegion.remove(encodedName);
++  }
++
++  /**
++   * Called by delete table and similar to notify the ServerManager that a region was removed.
++   */
++  public void removeRegions(final List<HRegionInfo> regions) {
++    for (HRegionInfo hri: regions) {
++      removeRegion(hri);
++    }
++  }
+ }
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/DeleteTableProcedure.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/DeleteTableProcedure.java
+index a531030..203de85 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/DeleteTableProcedure.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/DeleteTableProcedure.java
+@@ -398,6 +398,9 @@ public class DeleteTableProcedure
+ 
+     // Clean any remaining rows for this table.
+     cleanAnyRemainingRows(env, tableName);
++
++    // clean region references from the server manager
++    env.getMasterServices().getServerManager().removeRegions(regions);
+   }
+ 
+   protected static void deleteAssignmentState(final MasterProcedureEnv env,
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/TruncateTableProcedure.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/TruncateTableProcedure.java
+index 3623f35..ee9d954 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/TruncateTableProcedure.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/TruncateTableProcedure.java
+@@ -105,6 +105,8 @@ public class TruncateTableProcedure
+           if (!preserveSplits) {
+             // if we are not preserving splits, generate a new single region
+             regions = Arrays.asList(ModifyRegionUtils.createHRegionInfos(hTableDescriptor, null));
++          } else {
++            regions = recreateRegionInfo(regions);
+           }
+           setNextState(TruncateTableState.TRUNCATE_TABLE_CREATE_FS_LAYOUT);
+           break;
+@@ -245,6 +247,14 @@ public class TruncateTableProcedure
+     }
+   }
+ 
++  private static List<HRegionInfo> recreateRegionInfo(final List<HRegionInfo> regions) {
++    ArrayList<HRegionInfo> newRegions = new ArrayList<HRegionInfo>(regions.size());
++    for (HRegionInfo hri: regions) {
++      newRegions.add(new HRegionInfo(hri.getTable(), hri.getStartKey(), hri.getEndKey()));
++    }
++    return newRegions;
++  }
++
+   private boolean prepareTruncate(final MasterProcedureEnv env) throws IOException {
+     try {
+       env.getMasterServices().checkTableModifiable(getTableName());
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/TestCatalogJanitor.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/TestCatalogJanitor.java
+index 5720e4f..39db0b9 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/TestCatalogJanitor.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/TestCatalogJanitor.java
+@@ -214,10 +214,12 @@ public class TestCatalogJanitor {
+   class MockMasterServices implements MasterServices {
+     private final MasterFileSystem mfs;
+     private final AssignmentManager asm;
++    private final ServerManager sm;
+ 
+     MockMasterServices(final Server server) throws IOException {
+       this.mfs = new MasterFileSystem(server, this);
+       this.asm = Mockito.mock(AssignmentManager.class);
++      this.sm = Mockito.mock(ServerManager.class);
+     }
+ 
+     @Override
+@@ -277,7 +279,7 @@ public class TestCatalogJanitor {
+ 
+     @Override
+     public ServerManager getServerManager() {
+-      return null;
++      return sm;
+     }
+ 
+     @Override
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/procedure/TestTruncateTableProcedure.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/procedure/TestTruncateTableProcedure.java
+index 08442ce..941dd2f 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/procedure/TestTruncateTableProcedure.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/procedure/TestTruncateTableProcedure.java
+@@ -162,10 +162,10 @@ public class TestTruncateTableProcedure {
+     UTIL.waitUntilAllRegionsAssigned(tableName);
+ 
+     // validate the table regions and layout
++    regions = UTIL.getHBaseAdmin().getTableRegions(tableName).toArray(new HRegionInfo[0]);
+     if (preserveSplits) {
+-      assertEquals(1 + splitKeys.length, UTIL.getHBaseAdmin().getTableRegions(tableName).size());
++      assertEquals(1 + splitKeys.length, regions.length);
+     } else {
+-      regions = UTIL.getHBaseAdmin().getTableRegions(tableName).toArray(new HRegionInfo[1]);
+       assertEquals(1, regions.length);
+     }
+     MasterProcedureTestingUtility.validateTableCreation(
+@@ -229,10 +229,10 @@ public class TestTruncateTableProcedure {
+     UTIL.waitUntilAllRegionsAssigned(tableName);
+ 
+     // validate the table regions and layout
++    regions = UTIL.getHBaseAdmin().getTableRegions(tableName).toArray(new HRegionInfo[0]);
+     if (preserveSplits) {
+-      assertEquals(1 + splitKeys.length, UTIL.getHBaseAdmin().getTableRegions(tableName).size());
++      assertEquals(1 + splitKeys.length, regions.length);
+     } else {
+-      regions = UTIL.getHBaseAdmin().getTableRegions(tableName).toArray(new HRegionInfo[1]);
+       assertEquals(1, regions.length);
+     }
+     MasterProcedureTestingUtility.validateTableCreation(
+-- 
+1.7.9.5
+

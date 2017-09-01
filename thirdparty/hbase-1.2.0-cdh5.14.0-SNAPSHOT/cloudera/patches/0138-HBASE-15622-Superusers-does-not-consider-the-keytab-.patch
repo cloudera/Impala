@@ -1,0 +1,32 @@
+From 6aa3c9138f2e8ad94da7e72ce69d5e4468978f20 Mon Sep 17 00:00:00 2001
+From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
+Date: Fri, 15 Apr 2016 08:28:39 -0700
+Subject: [PATCH 138/410] HBASE-15622 Superusers does not consider the keytab
+ credentials
+
+Reason: Bug
+Author: Matteo Bertozzi
+Ref: CDH-39154
+
+Change-Id: Ide268263df3bdc4b040bb233f80b7d54f873cc1d
+---
+ .../hadoop/hbase/regionserver/HRegionServer.java   |    3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
+index fa422f1..059b289 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
+@@ -554,6 +554,9 @@ public class HRegionServer extends HasThread implements
+       HConstants.ZK_CLIENT_KERBEROS_PRINCIPAL, hostName);
+     // login the server principal (if using secure Hadoop)
+     login(userProvider, hostName);
++    // init superusers and add the server principal (if using security)
++    // or process owner as default super user.
++    Superusers.initialize(conf);
+ 
+     regionServerAccounting = new RegionServerAccounting();
+ 
+-- 
+1.7.9.5
+

@@ -1,0 +1,80 @@
+From 591ec043eccc3efc5aa635c4fb3b9808632c5a8b Mon Sep 17 00:00:00 2001
+From: Jerry He <jerryjch@apache.org>
+Date: Tue, 7 Feb 2017 12:31:38 -0800
+Subject: [PATCH 354/410] HBASE-17574 Clean up how to run tests under
+ hbase-spark module (Yi Liang)
+
+Reviewed-By: stack
+Reviewed-By: busbey
+
+(cherry picked from commit 8088aa3733539a09cb258f98cb12c1d96ea2463a)
+
+Change-Id: Ibb047e9628ee8194e6869bc65851343daa113218
+Reason:    Testing
+Author:    Jerry He <jerryjch@apache.org>
+Ref:       CDH-54446
+---
+ hbase-spark/README.txt |   12 ++++++++++++
+ hbase-spark/pom.xml    |   13 +------------
+ 2 files changed, 13 insertions(+), 12 deletions(-)
+ create mode 100644 hbase-spark/README.txt
+
+diff --git a/hbase-spark/README.txt b/hbase-spark/README.txt
+new file mode 100644
+index 0000000..d2a1335
+--- /dev/null
++++ b/hbase-spark/README.txt
+@@ -0,0 +1,12 @@
++Running Tests under hbase-spark module
++Tests are run via ScalaTest Maven Plugin and Surefire Maven Plugin
++The following are examples to run the tests:
++
++Run tests under root dir or hbase-spark dir
++ $ mvn test                  //run all small and medium java tests, and all scala tests
++ $ mvn test -PskipSparkTests //skip all scale and java test in hbase-spark
++ $ mvn test -P runAllTests   //run all tests, including scala and all java test including the large test
++
++Run specified test case
++  $ mvn test -Dtest=TestJavaHBaseContext -DwildcardSuites=None                        //java unit test
++  $ mvn test -Dtest=None -DwildcardSuites=org.apache.hadoop.hbase.spark.BulkLoadSuite //scala unit test
+diff --git a/hbase-spark/pom.xml b/hbase-spark/pom.xml
+index 9a01438..6e16456 100644
+--- a/hbase-spark/pom.xml
++++ b/hbase-spark/pom.xml
+@@ -40,7 +40,6 @@
+         <spark.version>${cdh.spark.version}</spark.version>
+         <scala.version>2.10.4</scala.version>
+         <scala.binary.version>2.10</scala.binary.version>
+-        <surefire.skipSecondPart>true</surefire.skipSecondPart>
+         <top.dir>${project.basedir}/..</top.dir>
+     </properties>
+ 
+@@ -609,17 +608,6 @@
+                             <goal>test</goal>
+                         </goals>
+                         <configuration>
+-                            <skipTests>true</skipTests>
+-                        </configuration>
+-                    </execution>
+-                    <execution>
+-                        <id>integration-test</id>
+-                        <phase>integration-test</phase>
+-                        <goals>
+-                            <goal>test</goal>
+-                        </goals>
+-                        <configuration>
+-                            <tagsToExclude>Integration-Test</tagsToExclude>
+                             <argLine>
+                                 -Xmx1536m -XX:MaxPermSize=512m -XX:ReservedCodeCacheSize=512m
+                             </argLine>
+@@ -694,6 +682,7 @@
+             <properties>
+                 <surefire.skipFirstPart>true</surefire.skipFirstPart>
+                 <surefire.skipSecondPart>true</surefire.skipSecondPart>
++                <skipTests>true</skipTests>
+             </properties>
+         </profile>
+         <profile>
+-- 
+1.7.9.5
+

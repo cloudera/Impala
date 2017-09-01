@@ -1,0 +1,40 @@
+From 8322a0bd85398a9063b5b1ddcdfc7111256fbf9a Mon Sep 17 00:00:00 2001
+From: Apekshit Sharma <appy@apache.org>
+Date: Wed, 13 Jul 2016 14:01:38 -0700
+Subject: [PATCH 181/410] HBASE-16227 [Shell] Column value formatter not
+ working in scans. Tested : manually using shell.
+
+Change-Id: Ia3cdf54d6ef325974596e6d37a56d071455364a4
+Reason:Bug
+Ref:CDH-42144
+Author:Apekshit Sharma
+---
+ hbase-shell/src/main/ruby/hbase/table.rb |    5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/hbase-shell/src/main/ruby/hbase/table.rb b/hbase-shell/src/main/ruby/hbase/table.rb
+index 74868c2..d1d8079 100644
+--- a/hbase-shell/src/main/ruby/hbase/table.rb
++++ b/hbase-shell/src/main/ruby/hbase/table.rb
+@@ -443,6 +443,9 @@ EOF
+         # This will overwrite any startrow/stoprow settings
+         scan.setRowPrefixFilter(rowprefixfilter.to_java_bytes) if rowprefixfilter
+ 
++        # Clear converters from last scan.
++        @converters.clear()
++
+         columns.each do |c|
+           family, qualifier = parse_column_name(c.to_s)
+           if qualifier
+@@ -494,8 +497,6 @@ EOF
+       count = 0
+       res = {}
+ 
+-      @converters.clear()
+-
+       # Start the scanner
+       scan = scan == nil ? _hash_to_scan(args) : scan
+       scanner = @table.getScanner(scan)
+-- 
+1.7.9.5
+

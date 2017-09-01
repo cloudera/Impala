@@ -1,0 +1,32 @@
+From 7103e79fe7ff0d2a6cfb5fb606d08f0acb6f12c7 Mon Sep 17 00:00:00 2001
+From: tedyu <yuzhihong@gmail.com>
+Date: Mon, 28 Mar 2016 16:53:27 -0700
+Subject: [PATCH 377/410] HBASE-15548 SyncTable: sourceHashDir is supposed to
+ be optional but won't work without (Dave Latham)
+
+(cherry picked from commit 78d7efe68e3f427fd3a668307dd11c9a82522640)
+
+Change-Id: I16714d29effb5bd36712d684d287b1d7c72a4438
+Author: tedyu
+Reason: Bug
+Ref: CDH-57964
+---
+ .../apache/hadoop/hbase/mapreduce/SyncTable.java   |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/SyncTable.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/SyncTable.java
+index 23fd10e..7adf200 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/SyncTable.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/SyncTable.java
+@@ -684,7 +684,7 @@ public class SyncTable extends Configured implements Tool {
+     System.err.println();
+     System.err.println("Args:");
+     System.err.println(" sourcehashdir    path to HashTable output dir for source table");
+-    System.err.println("                  if not specified, then all data will be scanned");
++    System.err.println("                  (see org.apache.hadoop.hbase.mapreduce.HashTable)");
+     System.err.println(" sourcetable      Name of the source table to sync from");
+     System.err.println(" targettable      Name of the target table to sync to");
+     System.err.println();
+-- 
+1.7.9.5
+

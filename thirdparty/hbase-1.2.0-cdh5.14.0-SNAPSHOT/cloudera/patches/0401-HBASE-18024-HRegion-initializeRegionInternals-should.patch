@@ -1,0 +1,139 @@
+From 41e397ea6892a5f701415c565c688e73f673fcd5 Mon Sep 17 00:00:00 2001
+From: Esteban Gutierrez <esteban@apache.org>
+Date: Fri, 21 Jul 2017 13:13:00 -0500
+Subject: [PATCH 401/410] HBASE-18024 HRegion#initializeRegionInternals should
+ not re-create .hregioninfo file when the region
+ directory no longer exists
+
+Change-Id: If7ef61b050472c0cd4b653268da65af40a6d2120
+Author: Esteban Gutierrez
+Reason: Bug
+Ref: CDH-55423
+---
+ .../apache/hadoop/hbase/regionserver/HRegion.java  |   11 +++++--
+ .../hbase/regionserver/HRegionFileSystem.java      |   31 +++++++++++++++++---
+ .../hadoop/hbase/regionserver/TestHRegion.java     |    7 ++++-
+ .../regionserver/TestStoreFileRefresherChore.java  |    2 ++
+ 4 files changed, 44 insertions(+), 7 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
+index bbc7635..16c0b42 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
+@@ -829,8 +829,15 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+     }
+ 
+     // Write HRI to a file in case we need to recover hbase:meta
+-    status.setStatus("Writing region info on filesystem");
+-    fs.checkRegionInfoOnFilesystem();
++    // Only the primary replica should write .regioninfo
++    if (this.getRegionInfo().getReplicaId() == HRegionInfo.DEFAULT_REPLICA_ID) {
++      status.setStatus("Writing region info on filesystem");
++      fs.checkRegionInfoOnFilesystem();
++    } else {
++      if (LOG.isDebugEnabled()) {
++        LOG.debug("Skipping creation of .regioninfo file for " + this.getRegionInfo());
++      }
++    }
+ 
+     // Initialize all the HStores
+     status.setStatus("Initializing all the Stores");
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionFileSystem.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionFileSystem.java
+index bb62785..35c4fa9 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionFileSystem.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionFileSystem.java
+@@ -806,9 +806,19 @@ public class HRegionFileSystem {
+     // only should be sufficient. I don't want to read the file every time to check if it pb
+     // serialized.
+     byte[] content = getRegionInfoFileContent(regionInfoForFs);
++
++    // Verify if the region directory exists before opening a region. We need to do this since if
++    // the region directory doesn't exist we will re-create the region directory and a new HRI
++    // when HRegion.openHRegion() is called.
+     try {
+-      Path regionInfoFile = new Path(getRegionDir(), REGION_INFO_FILE);
++      FileStatus status = fs.getFileStatus(getRegionDir());
++    } catch (FileNotFoundException e) {
++      LOG.warn(getRegionDir() + " doesn't exist for region: " + regionInfoForFs.getEncodedName() +
++          " on table " + regionInfo.getTable());
++    }
+ 
++    try {
++      Path regionInfoFile = new Path(getRegionDir(), REGION_INFO_FILE);
+       FileStatus status = fs.getFileStatus(regionInfoFile);
+       if (status != null && status.getLen() == content.length) {
+         // Then assume the content good and move on.
+@@ -901,7 +911,13 @@ public class HRegionFileSystem {
+     }
+ 
+     // Write HRI to a file in case we need to recover hbase:meta
+-    regionFs.writeRegionInfoOnFilesystem(false);
++    // Only primary replicas should write region info
++    if (regionInfo.getReplicaId() == HRegionInfo.DEFAULT_REPLICA_ID) {
++      regionFs.writeRegionInfoOnFilesystem(false);
++    } else {
++      if (LOG.isDebugEnabled())
++        LOG.debug("Skipping creation of .regioninfo file for " + regionInfo);
++    }
+     return regionFs;
+   }
+ 
+@@ -931,8 +947,15 @@ public class HRegionFileSystem {
+       regionFs.cleanupSplitsDir();
+       regionFs.cleanupMergesDir();
+ 
+-      // if it doesn't exists, Write HRI to a file, in case we need to recover hbase:meta
+-      regionFs.checkRegionInfoOnFilesystem();
++      // If it doesn't exists, Write HRI to a file, in case we need to recover hbase:meta
++      // Only create HRI if we are the default replica
++      if (regionInfo.getReplicaId() == HRegionInfo.DEFAULT_REPLICA_ID) {
++        regionFs.checkRegionInfoOnFilesystem();
++      } else {
++        if (LOG.isDebugEnabled()) {
++          LOG.debug("Skipping creation of .regioninfo file for " + regionInfo);
++        }
++      }
+     }
+ 
+     return regionFs;
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestHRegion.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestHRegion.java
+index 558b4b3..7a20dda 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestHRegion.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestHRegion.java
+@@ -6145,6 +6145,10 @@ public class TestHRegion {
+ 
+   @Test
+   public void testCloseRegionWrittenToWAL() throws Exception {
++
++    Path rootDir = new Path(dir + name.getMethodName());
++    FSUtils.setRootDir(TEST_UTIL.getConfiguration(), rootDir);
++
+     final ServerName serverName = ServerName.valueOf("testCloseRegionWrittenToWAL", 100, 42);
+     final RegionServerServices rss = spy(TEST_UTIL.createMockRegionServerService(serverName));
+ 
+@@ -6163,7 +6167,8 @@ public class TestHRegion {
+     when(rss.getWAL((HRegionInfo) any())).thenReturn(wal);
+ 
+ 
+-    // open a region first so that it can be closed later
++    // create and then open a region first so that it can be closed later
++    region = HRegion.createHRegion(hri, rootDir, TEST_UTIL.getConfiguration(), htd, rss.getWAL(hri));
+     region = HRegion.openHRegion(hri, htd, rss.getWAL(hri),
+       TEST_UTIL.getConfiguration(), rss, null);
+ 
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestStoreFileRefresherChore.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestStoreFileRefresherChore.java
+index 439f72d..0dedc39 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestStoreFileRefresherChore.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestStoreFileRefresherChore.java
+@@ -167,6 +167,8 @@ public class TestStoreFileRefresherChore {
+     when(regionServer.getConfiguration()).thenReturn(TEST_UTIL.getConfiguration());
+ 
+     HTableDescriptor htd = getTableDesc(TableName.valueOf("testIsStale"), families);
++    htd.setRegionReplication(2);
++
+     Region primary = initHRegion(htd, HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW, 0);
+     Region replica1 = initHRegion(htd, HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW, 1);
+     regions.add(primary);
+-- 
+1.7.9.5
+

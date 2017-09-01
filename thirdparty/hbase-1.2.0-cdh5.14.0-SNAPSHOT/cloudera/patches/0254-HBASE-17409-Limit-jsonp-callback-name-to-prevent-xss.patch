@@ -1,0 +1,130 @@
+From 2791b04247ed6f807875dff3a03dea8f9610f6e0 Mon Sep 17 00:00:00 2001
+From: Josh Elser <elserj@apache.org>
+Date: Tue, 3 Jan 2017 17:46:45 -0500
+Subject: [PATCH 254/410] HBASE-17409 Limit jsonp callback name to prevent xss
+
+(cherry picked from commit 601518abbf6623bcc6ba28e41b8936372bd6afaa)
+
+Change-Id: I6bf3ede762ac76d535440cdf78ab8a9dd216fdd9
+Reason: Security
+Author: Josh Elser
+Ref: CDH-49603
+---
+ .../hadoop/hbase/http/jmx/JMXJsonServlet.java      |   29 ++++++++++++++++----
+ .../hadoop/hbase/http/jmx/TestJMXJsonServlet.java  |   25 +++++++++++++++++
+ 2 files changed, 48 insertions(+), 6 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/http/jmx/JMXJsonServlet.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/http/jmx/JMXJsonServlet.java
+index 8ba26dd..0d7d99a 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/http/jmx/JMXJsonServlet.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/http/jmx/JMXJsonServlet.java
+@@ -152,9 +152,7 @@ public class JMXJsonServlet extends HttpServlet {
+    *          The servlet response we are creating
+    */
+   @Override
+-  @edu.umd.cs.findbugs.annotations.SuppressWarnings(value="XSS_REQUEST_PARAMETER_TO_SERVLET_WRITER",
+-    justification="TODO: See HBASE-15122")
+-  public void doGet(HttpServletRequest request, HttpServletResponse response) {
++  public void doGet(HttpServletRequest request, HttpServletResponse response) throws IOException {
+     try {
+       if (!HttpServer.isInstrumentationAccessAllowed(getServletContext(), request, response)) {
+         return;
+@@ -163,10 +161,10 @@ public class JMXJsonServlet extends HttpServlet {
+       PrintWriter writer = null;
+       JSONBean.Writer beanWriter = null;
+       try {
++        jsonpcb = checkCallbackName(request.getParameter(CALLBACK_PARAM));
+         writer = response.getWriter();
+         beanWriter = this.jsonBeanWriter.open(writer);
+         // "callback" parameter implies JSONP outpout
+-        jsonpcb = request.getParameter(CALLBACK_PARAM);
+         if (jsonpcb != null) {
+           response.setContentType("application/javascript; charset=utf8");
+           writer.write(jsonpcb + "(");
+@@ -216,10 +214,29 @@ public class JMXJsonServlet extends HttpServlet {
+       }
+     } catch (IOException e) {
+       LOG.error("Caught an exception while processing JMX request", e);
+-      response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
++      response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+     } catch (MalformedObjectNameException e) {
+       LOG.error("Caught an exception while processing JMX request", e);
+-      response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
++      response.sendError(HttpServletResponse.SC_BAD_REQUEST);
+     }
+   }
++
++  /**
++   * Verifies that the callback property, if provided, is purely alphanumeric.
++   * This prevents a malicious callback name (that is javascript code) from being
++   * returned by the UI to an unsuspecting user.
++   *
++   * @param callbackName The callback name, can be null.
++   * @return The callback name
++   * @throws IOException If the name is disallowed.
++   */
++  private String checkCallbackName(String callbackName) throws IOException {
++    if (null == callbackName) {
++      return null;
++    }
++    if (callbackName.matches("[A-Za-z0-9_]+")) {
++      return callbackName;
++    }
++    throw new IOException("'callback' must be alphanumeric");
++  }
+ }
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/http/jmx/TestJMXJsonServlet.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/http/jmx/TestJMXJsonServlet.java
+index dd345fb..5e02a78 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/http/jmx/TestJMXJsonServlet.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/http/jmx/TestJMXJsonServlet.java
+@@ -17,10 +17,14 @@
+ 
+ package org.apache.hadoop.hbase.http.jmx;
+ 
++import java.net.HttpURLConnection;
+ import java.net.URL;
++import java.net.URLEncoder;
+ import java.util.regex.Matcher;
+ import java.util.regex.Pattern;
+ 
++import javax.servlet.http.HttpServletResponse;
++
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.hbase.testclassification.SmallTests;
+@@ -38,6 +42,9 @@ public class TestJMXJsonServlet extends HttpServerFunctionalTest {
+   private static URL baseUrl;
+ 
+   @BeforeClass public static void setup() throws Exception {
++    // Eclipse doesn't pick this up correctly from the plugin
++    // configuration in the pom.
++    System.setProperty(HttpServerFunctionalTest.TEST_BUILD_WEBAPPS, "target/test-classes/webapps");
+     server = createTestServer();
+     server.start();
+     baseUrl = getServerURL(server);
+@@ -105,4 +112,22 @@ public class TestJMXJsonServlet extends HttpServerFunctionalTest {
+     assertReFind("\\}\\);$", result);
+ 
+   }
++
++  @Test
++  public void testDisallowedJSONPCallback() throws Exception {
++    String callback = "function(){alert('bigproblems!')};foo";
++    URL url = new URL(
++        baseUrl, "/jmx?qry=java.lang:type=Memory&callback="+URLEncoder.encode(callback, "UTF-8"));
++    HttpURLConnection cnxn = (HttpURLConnection) url.openConnection();
++    assertEquals(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, cnxn.getResponseCode());
++  }
++
++  @Test
++  public void testUnderscoresInJSONPCallback() throws Exception {
++    String callback = "my_function";
++    URL url = new URL(
++        baseUrl, "/jmx?qry=java.lang:type=Memory&callback="+URLEncoder.encode(callback, "UTF-8"));
++    HttpURLConnection cnxn = (HttpURLConnection) url.openConnection();
++    assertEquals(HttpServletResponse.SC_OK, cnxn.getResponseCode());
++  }
+ }
+-- 
+1.7.9.5
+

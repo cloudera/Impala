@@ -1,0 +1,157 @@
+From 48c5dbb69ae954387346f1d887f16eb7839c36b8 Mon Sep 17 00:00:00 2001
+From: Michael Stack <stack@apache.org>
+Date: Thu, 16 Mar 2017 15:15:28 -0700
+Subject: [PATCH 312/410] HBASE-17792 Use a shared thread pool for
+ AtomicityWriter, AtomicGetReader,
+ AtomicScanReader's connections in
+ TestAcidGuarantees
+
+Change-Id: Id8f098aeda4cdf871a5983868006ca833437d794
+Author: Huaxiang Sun
+Reason: Bug
+Ref:    CDH-51538
+---
+ .../apache/hadoop/hbase/TestAcidGuarantees.java    |   51 ++++++++++++++++----
+ 1 file changed, 42 insertions(+), 9 deletions(-)
+
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/TestAcidGuarantees.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/TestAcidGuarantees.java
+index 83e9568..e031bb6 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/TestAcidGuarantees.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/TestAcidGuarantees.java
+@@ -21,6 +21,11 @@ package org.apache.hadoop.hbase;
+ import java.io.IOException;
+ import java.util.List;
+ import java.util.Random;
++import java.util.concurrent.BlockingQueue;
++import java.util.concurrent.ExecutorService;
++import java.util.concurrent.LinkedBlockingQueue;
++import java.util.concurrent.ThreadPoolExecutor;
++import java.util.concurrent.TimeUnit;
+ import java.util.concurrent.atomic.AtomicLong;
+ 
+ import org.apache.commons.logging.Log;
+@@ -40,6 +45,7 @@ import org.apache.hadoop.hbase.client.Table;
+ import org.apache.hadoop.hbase.regionserver.ConstantSizeRegionSplitPolicy;
+ import org.apache.hadoop.hbase.testclassification.MediumTests;
+ import org.apache.hadoop.hbase.util.Bytes;
++import org.apache.hadoop.hbase.util.Threads;
+ import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.util.Tool;
+ import org.apache.hadoop.util.ToolRunner;
+@@ -73,6 +79,7 @@ public class TestAcidGuarantees implements Tool {
+ 
+   // when run as main
+   private Configuration conf;
++  private ExecutorService sharedPool = null;
+ 
+   private void createTableIfMissing(boolean useMob)
+     throws IOException {
+@@ -100,12 +107,38 @@ public class TestAcidGuarantees implements Tool {
+             ConstantSizeRegionSplitPolicy.class.getName());
+     conf.setInt("hfile.format.version", 3); // for mob tests
+     util = new HBaseTestingUtility(conf);
++    sharedPool = createThreadPool();
+   }
+ 
+   public void setHBaseTestingUtil(HBaseTestingUtility util) {
+     this.util = util;
+   }
+ 
++  private ExecutorService createThreadPool() {
++
++    int maxThreads = 256;
++    int coreThreads = 128;
++
++    long keepAliveTime = 60;
++    BlockingQueue<Runnable> workQueue =
++          new LinkedBlockingQueue<Runnable>(maxThreads *
++              HConstants.DEFAULT_HBASE_CLIENT_MAX_TOTAL_TASKS);
++
++    ThreadPoolExecutor tpe = new ThreadPoolExecutor(
++        coreThreads,
++        maxThreads,
++        keepAliveTime,
++        TimeUnit.SECONDS,
++        workQueue,
++        Threads.newDaemonThreadFactory(toString() + "-shared"));
++    tpe.allowCoreThreadTimeOut(true);
++    return tpe;
++  }
++
++  public ExecutorService getSharedThreadPool() {
++    return sharedPool;
++  }
++
+   /**
+    * Thread that does random full-row writes into a table.
+    */
+@@ -119,11 +152,11 @@ public class TestAcidGuarantees implements Tool {
+     AtomicLong numWritten = new AtomicLong();
+ 
+     public AtomicityWriter(TestContext ctx, byte targetRows[][],
+-                           byte targetFamilies[][]) throws IOException {
++                           byte targetFamilies[][], ExecutorService pool) throws IOException {
+       super(ctx);
+       this.targetRows = targetRows;
+       this.targetFamilies = targetFamilies;
+-      connection = ConnectionFactory.createConnection(ctx.getConf());
++      connection = ConnectionFactory.createConnection(ctx.getConf(), pool);
+       table = connection.getTable(TABLE_NAME);
+     }
+     public void doAnAction() throws Exception {
+@@ -165,11 +198,11 @@ public class TestAcidGuarantees implements Tool {
+     AtomicLong numRead = new AtomicLong();
+ 
+     public AtomicGetReader(TestContext ctx, byte targetRow[],
+-                           byte targetFamilies[][]) throws IOException {
++                           byte targetFamilies[][], ExecutorService pool) throws IOException {
+       super(ctx);
+       this.targetRow = targetRow;
+       this.targetFamilies = targetFamilies;
+-      connection = ConnectionFactory.createConnection(ctx.getConf());
++      connection = ConnectionFactory.createConnection(ctx.getConf(), pool);
+       table = connection.getTable(TABLE_NAME);
+     }
+ 
+@@ -234,10 +267,10 @@ public class TestAcidGuarantees implements Tool {
+     AtomicLong numRowsScanned = new AtomicLong();
+ 
+     public AtomicScanReader(TestContext ctx,
+-                           byte targetFamilies[][]) throws IOException {
++                           byte targetFamilies[][], ExecutorService pool) throws IOException {
+       super(ctx);
+       this.targetFamilies = targetFamilies;
+-      connection = ConnectionFactory.createConnection(ctx.getConf());
++      connection = ConnectionFactory.createConnection(ctx.getConf(), pool);
+       table = connection.getTable(TABLE_NAME);
+     }
+ 
+@@ -327,7 +360,7 @@ public class TestAcidGuarantees implements Tool {
+     List<AtomicityWriter> writers = Lists.newArrayList();
+     for (int i = 0; i < numWriters; i++) {
+       AtomicityWriter writer = new AtomicityWriter(
+-          ctx, rows, FAMILIES);
++          ctx, rows, FAMILIES, getSharedThreadPool());
+       writers.add(writer);
+       ctx.addThread(writer);
+     }
+@@ -355,14 +388,14 @@ public class TestAcidGuarantees implements Tool {
+     List<AtomicGetReader> getters = Lists.newArrayList();
+     for (int i = 0; i < numGetters; i++) {
+       AtomicGetReader getter = new AtomicGetReader(
+-          ctx, rows[i % numUniqueRows], FAMILIES);
++          ctx, rows[i % numUniqueRows], FAMILIES, getSharedThreadPool());
+       getters.add(getter);
+       ctx.addThread(getter);
+     }
+ 
+     List<AtomicScanReader> scanners = Lists.newArrayList();
+     for (int i = 0; i < numScanners; i++) {
+-      AtomicScanReader scanner = new AtomicScanReader(ctx, FAMILIES);
++      AtomicScanReader scanner = new AtomicScanReader(ctx, FAMILIES, getSharedThreadPool());
+       scanners.add(scanner);
+       ctx.addThread(scanner);
+     }
+-- 
+1.7.9.5
+

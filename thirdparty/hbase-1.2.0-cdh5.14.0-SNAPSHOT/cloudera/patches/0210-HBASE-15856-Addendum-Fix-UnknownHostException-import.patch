@@ -1,0 +1,31 @@
+From 69758f5107f7cd8d8c5bd33d1bbf153349fb2d48 Mon Sep 17 00:00:00 2001
+From: Gary Helmling <garyh@apache.org>
+Date: Fri, 20 May 2016 19:31:07 -0700
+Subject: [PATCH 210/410] HBASE-15856 Addendum Fix UnknownHostException import
+ in MetaTableLocator
+
+Reason: Bug
+Author: Gary Helmling
+Ref: CDH-44157
+
+Change-Id: Ic00430bfaeb1d5d185fc5bc9d29dfc846132556f
+---
+ .../hadoop/hbase/zookeeper/MetaTableLocator.java   |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/zookeeper/MetaTableLocator.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/zookeeper/MetaTableLocator.java
+index 9dd6168..dafbb6d 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/zookeeper/MetaTableLocator.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/zookeeper/MetaTableLocator.java
+@@ -23,7 +23,7 @@ import java.net.ConnectException;
+ import java.net.NoRouteToHostException;
+ import java.net.SocketException;
+ import java.net.SocketTimeoutException;
+-import java.rmi.UnknownHostException;
++import java.net.UnknownHostException;
+ import java.util.ArrayList;
+ import java.util.List;
+ import java.util.Locale;
+-- 
+1.7.9.5
+

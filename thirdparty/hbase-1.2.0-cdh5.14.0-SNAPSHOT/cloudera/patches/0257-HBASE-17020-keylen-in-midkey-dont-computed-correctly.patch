@@ -1,0 +1,167 @@
+From c95ebeadd0f9e50581089a08f69f18729ecfbe3a Mon Sep 17 00:00:00 2001
+From: Yu Sun <sunyu1949@sina.com>
+Date: Fri, 11 Nov 2016 08:00:06 +0800
+Subject: [PATCH 257/410] HBASE-17020 keylen in midkey() dont computed
+ correctly
+
+Signed-off-by: Yu Li <liyu@apache.org>
+
+Change-Id: Id586c9d3b5b6a4d2e45187acba225bcea05da868
+Reason: Bug
+Author: Yu Sun
+Ref: CDH-50593
+---
+ .../hadoop/hbase/io/hfile/HFileBlockIndex.java     |    2 +-
+ .../hadoop/hbase/io/hfile/TestHFileBlockIndex.java |   68 ++++++++++++++++++++
+ .../hadoop/hbase/io/hfile/TestHFileWriterV2.java   |   29 +++++++++
+ 3 files changed, 98 insertions(+), 1 deletion(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/HFileBlockIndex.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/HFileBlockIndex.java
+index b88ef01..f2492af 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/HFileBlockIndex.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/HFileBlockIndex.java
+@@ -350,7 +350,7 @@ public class HFileBlockIndex {
+         int numDataBlocks = b.getInt();
+         int keyRelOffset = b.getInt(Bytes.SIZEOF_INT * (midKeyEntry + 1));
+         int keyLen = b.getInt(Bytes.SIZEOF_INT * (midKeyEntry + 2)) -
+-            keyRelOffset;
++            keyRelOffset - SECONDARY_INDEX_ENTRY_OVERHEAD;
+         int keyOffset = Bytes.SIZEOF_INT * (numDataBlocks + 2) + keyRelOffset
+             + SECONDARY_INDEX_ENTRY_OVERHEAD;
+         targetMidKey = ByteBufferUtils.toBytes(b, keyOffset, keyLen);
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/io/hfile/TestHFileBlockIndex.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/io/hfile/TestHFileBlockIndex.java
+index 7a178cb..8c9353c 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/io/hfile/TestHFileBlockIndex.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/io/hfile/TestHFileBlockIndex.java
+@@ -47,6 +47,7 @@ import org.apache.hadoop.hbase.HBaseTestingUtility;
+ import org.apache.hadoop.hbase.KeyValue;
+ import org.apache.hadoop.hbase.fs.HFileSystem;
+ import org.apache.hadoop.hbase.io.compress.Compression;
++import org.apache.hadoop.hbase.io.compress.Compression.Algorithm;
+ import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
+ import org.apache.hadoop.hbase.io.hfile.HFileBlockIndex.BlockIndexChunk;
+ import org.apache.hadoop.hbase.io.hfile.HFileBlockIndex.BlockIndexReader;
+@@ -503,6 +504,73 @@ public class TestHFileBlockIndex {
+   }
+ 
+   /**
++  * to check if looks good when midKey on a leaf index block boundary
++  * @throws IOException
++  */
++  @Test
++ public void testMidKeyOnLeafIndexBlockBoundary() throws IOException {
++   Path hfilePath = new Path(TEST_UTIL.getDataTestDir(),
++       "hfile_for_midkey");
++   int maxChunkSize = 512;
++   conf.setInt(HFileBlockIndex.MAX_CHUNK_SIZE_KEY, maxChunkSize);
++   // should open hfile.block.index.cacheonwrite
++   conf.setBoolean(CacheConfig.CACHE_INDEX_BLOCKS_ON_WRITE_KEY, true);
++
++   CacheConfig cacheConf = new CacheConfig(conf);
++   BlockCache blockCache = cacheConf.getBlockCache();
++   // Evict all blocks that were cached-on-write by the previous invocation.
++   blockCache.evictBlocksByHfileName(hfilePath.getName());
++   // Write the HFile
++   {
++     HFileContext meta = new HFileContextBuilder()
++                         .withBlockSize(SMALL_BLOCK_SIZE)
++                         .withCompression(Algorithm.NONE)
++                         .withDataBlockEncoding(DataBlockEncoding.NONE)
++                         .build();
++     HFile.Writer writer =
++           HFile.getWriterFactory(conf, cacheConf)
++               .withPath(fs, hfilePath)
++               .withFileContext(meta)
++               .create();
++     Random rand = new Random(19231737);
++     byte[] family = Bytes.toBytes("f");
++     byte[] qualifier = Bytes.toBytes("q");
++     int kvNumberToBeWritten = 16;
++     // the new generated hfile will contain 2 leaf-index blocks and 16 data blocks,
++     // midkey is just on the boundary of the first leaf-index block
++     for (int i = 0; i < kvNumberToBeWritten; ++i) {
++       byte[] row = TestHFileWriterV2.randomOrderedFixedLengthKey(rand, i, 30);
++
++       // Key will be interpreted by KeyValue.KEY_COMPARATOR
++       KeyValue kv =
++             new KeyValue(row, family, qualifier, EnvironmentEdgeManager.currentTime(),
++                 TestHFileWriterV2.randomFixedLengthValue(rand, SMALL_BLOCK_SIZE));
++       writer.append(kv);
++     }
++     writer.close();
++   }
++
++   // close hfile.block.index.cacheonwrite
++   conf.setBoolean(CacheConfig.CACHE_INDEX_BLOCKS_ON_WRITE_KEY, false);
++
++   // Read the HFile
++   HFile.Reader reader = HFile.createReader(fs, hfilePath, cacheConf, conf);
++
++   boolean hasArrayIndexOutOfBoundsException = false;
++   try {
++     // get the mid-key.
++     reader.midkey();
++   } catch (ArrayIndexOutOfBoundsException e) {
++     hasArrayIndexOutOfBoundsException = true;
++   } finally {
++     reader.close();
++   }
++
++   // to check if ArrayIndexOutOfBoundsException occured
++   assertFalse(hasArrayIndexOutOfBoundsException);
++ }
++
++  /**
+    * Testing block index through the HFile writer/reader APIs. Allows to test
+    * setting index block size through configuration, intermediate-level index
+    * blocks, and caching index blocks on write.
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/io/hfile/TestHFileWriterV2.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/io/hfile/TestHFileWriterV2.java
+index 02b7e67..11fd1e4 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/io/hfile/TestHFileWriterV2.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/io/hfile/TestHFileWriterV2.java
+@@ -293,6 +293,25 @@ public class TestHFileWriterV2 {
+     return keyBytes;
+   }
+ 
++  public static byte[] randomOrderedFixedLengthKey(Random rand, int i, int suffixLength) {
++    StringBuilder k = new StringBuilder();
++
++    // The fixed-length lexicographically increasing part of the key.
++    for (int bitIndex = 31; bitIndex >= 0; --bitIndex) {
++      if ((i & (1 << bitIndex)) == 0)
++        k.append("a");
++      else
++        k.append("b");
++    }
++
++    // A random suffix of the key.
++    for (int j = 0; j < suffixLength; ++j)
++      k.append(randomReadableChar(rand));
++
++    byte[] keyBytes = k.toString().getBytes();
++    return keyBytes;
++  }
++
+   public static byte[] randomValue(Random rand) {
+     StringBuilder v = new StringBuilder();
+     for (int j = 0; j < 1 + rand.nextInt(2000); ++j) {
+@@ -303,6 +322,16 @@ public class TestHFileWriterV2 {
+     return valueBytes;
+   }
+ 
++  public static byte[] randomFixedLengthValue(Random rand, int valueLength) {
++    StringBuilder v = new StringBuilder();
++    for (int j = 0; j < valueLength; ++j) {
++      v.append((char) (32 + rand.nextInt(95)));
++    }
++
++    byte[] valueBytes = v.toString().getBytes();
++    return valueBytes;
++  }
++
+   public static final char randomReadableChar(Random rand) {
+     int i = rand.nextInt(26 * 2 + 10 + 1);
+     if (i < 26)
+-- 
+1.7.9.5
+

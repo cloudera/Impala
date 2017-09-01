@@ -1,0 +1,44 @@
+From 1d2bf3c486a170e30a6691eef633d0b8260bf5a8 Mon Sep 17 00:00:00 2001
+From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
+Date: Mon, 20 Jun 2016 10:42:32 -0700
+Subject: [PATCH 174/410] HBASE-14644 Region in transition metric is broken --
+ addendum (Huaxiang Sun)
+
+Reason: Bug
+Author: Huaxiang Sun
+Ref: CDH-41444
+
+Change-Id: I5f31bef2f6fee96ef37428329570010dceb3e715
+---
+ .../org/apache/hadoop/hbase/master/HMaster.java    |    8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
+index 8c1e256..7914cbe 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
+@@ -436,10 +436,6 @@ public class HMaster extends HRegionServer implements MasterServices, Server {
+       }
+     }
+ 
+-    // Do Metrics periodically
+-    periodicDoMetricsChore = new PeriodicDoMetrics(msgInterval, this);
+-    getChoreService().scheduleChore(periodicDoMetricsChore);
+-
+     // Some unit tests don't need a cluster, so no zookeeper at all
+     if (!conf.getBoolean("hbase.testing.nocluster", false)) {
+       activeMasterManager = new ActiveMasterManager(zooKeeper, this.serverName, this);
+@@ -790,6 +786,10 @@ public class HMaster extends HRegionServer implements MasterServices, Server {
+     this.catalogJanitorChore = new CatalogJanitor(this, this);
+     getChoreService().scheduleChore(catalogJanitorChore);
+ 
++    // Do Metrics periodically
++    periodicDoMetricsChore = new PeriodicDoMetrics(msgInterval, this);
++    getChoreService().scheduleChore(periodicDoMetricsChore);
++
+     status.setStatus("Starting namespace manager");
+     initNamespace();
+ 
+-- 
+1.7.9.5
+

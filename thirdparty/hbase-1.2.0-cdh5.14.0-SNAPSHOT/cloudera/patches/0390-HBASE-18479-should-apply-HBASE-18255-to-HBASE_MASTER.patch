@@ -1,0 +1,47 @@
+From 4d584cb436d52b1164d553cd3abf279e9adb1643 Mon Sep 17 00:00:00 2001
+From: chenyechao <chenyechao@cmss.chinamobile.com>
+Date: Sun, 30 Jul 2017 14:07:38 +0800
+Subject: [PATCH 390/410] HBASE-18479 should apply HBASE-18255 to
+ HBASE_MASTER_OPTS too
+
+Signed-off-by: tedyu <yuzhihong@gmail.com>
+(cherry picked from commit 9f809748d72b39489f202a56aba107cf7386f30c)
+
+Change-Id: Id6b97f5503beed547d3c19d46638fccb450e95e1
+Reason: Perf
+Author: Yechao Chen
+Ref: CDH-57979
+---
+ conf/hbase-env.cmd |    2 +-
+ conf/hbase-env.sh  |    2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/conf/hbase-env.cmd b/conf/hbase-env.cmd
+index 2ffadbf..b10e934 100644
+--- a/conf/hbase-env.cmd
++++ b/conf/hbase-env.cmd
+@@ -43,7 +43,7 @@
+ set HBASE_OPTS="-XX:+UseConcMarkSweepGC" "-Djava.net.preferIPv4Stack=true"
+ 
+ @rem Configure PermSize. Only needed in JDK7. You can safely remove it for JDK8+
+-set HBASE_MASTER_OPTS=%HBASE_MASTER_OPTS% "-XX:PermSize=128m" "-XX:MaxPermSize=128m"
++set HBASE_MASTER_OPTS=%HBASE_MASTER_OPTS% "-XX:PermSize=128m" "-XX:MaxPermSize=128m" "-XX:ReservedCodeCacheSize=256m"
+ set HBASE_REGIONSERVER_OPTS=%HBASE_REGIONSERVER_OPTS% "-XX:PermSize=128m" "-XX:MaxPermSize=128m" "-XX:ReservedCodeCacheSize=256m"
+ 
+ @rem Uncomment below to enable java garbage collection logging for the server-side processes
+diff --git a/conf/hbase-env.sh b/conf/hbase-env.sh
+index 599a2f1..f2195da 100644
+--- a/conf/hbase-env.sh
++++ b/conf/hbase-env.sh
+@@ -43,7 +43,7 @@
+ export HBASE_OPTS="-XX:+UseConcMarkSweepGC"
+ 
+ # Configure PermSize. Only needed in JDK7. You can safely remove it for JDK8+
+-export HBASE_MASTER_OPTS="$HBASE_MASTER_OPTS -XX:PermSize=128m -XX:MaxPermSize=128m"
++export HBASE_MASTER_OPTS="$HBASE_MASTER_OPTS -XX:PermSize=128m -XX:MaxPermSize=128m -XX:ReservedCodeCacheSize=256m"
+ export HBASE_REGIONSERVER_OPTS="$HBASE_REGIONSERVER_OPTS -XX:PermSize=128m -XX:MaxPermSize=128m -XX:ReservedCodeCacheSize=256m"
+ 
+ # Uncomment one of the below three options to enable java garbage collection logging for the server-side processes.
+-- 
+1.7.9.5
+

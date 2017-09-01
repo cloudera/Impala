@@ -1,0 +1,142 @@
+From dc0f03b4acb9550dda006485ef2d95b1ea3f398f Mon Sep 17 00:00:00 2001
+From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
+Date: Tue, 8 Mar 2016 10:46:54 -0800
+Subject: [PATCH 129/410] HBASE-15113 Procedure v2 - Speedup eviction of sys
+ operation results
+
+Reason: Improvement
+Author: Matteo Bertozzi
+Ref: CDH-38138
+
+Change-Id: I8a1b59326d07d6723ccfb012bdfc1b21e490c134
+---
+ .../org/apache/hadoop/hbase/ProcedureInfo.java     |    2 +-
+ .../apache/hadoop/hbase/procedure2/Procedure.java  |   13 ++++++++++
+ .../hadoop/hbase/procedure2/ProcedureExecutor.java |   26 ++++++++++++--------
+ .../master/procedure/CreateTableProcedure.java     |    7 ++++++
+ .../master/procedure/ServerCrashProcedure.java     |    7 ++++++
+ 5 files changed, 44 insertions(+), 11 deletions(-)
+
+diff --git a/hbase-common/src/main/java/org/apache/hadoop/hbase/ProcedureInfo.java b/hbase-common/src/main/java/org/apache/hadoop/hbase/ProcedureInfo.java
+index a24db64..bcbe41f 100644
+--- a/hbase-common/src/main/java/org/apache/hadoop/hbase/ProcedureInfo.java
++++ b/hbase-common/src/main/java/org/apache/hadoop/hbase/ProcedureInfo.java
+@@ -203,7 +203,7 @@ public class ProcedureInfo implements Cloneable {
+ 
+   @InterfaceAudience.Private
+   public boolean hasClientAckTime() {
+-    return clientAckTime > 0;
++    return clientAckTime != -1;
+   }
+ 
+   @InterfaceAudience.Private
+diff --git a/hbase-procedure/src/main/java/org/apache/hadoop/hbase/procedure2/Procedure.java b/hbase-procedure/src/main/java/org/apache/hadoop/hbase/procedure2/Procedure.java
+index 64f817a..aff2b15 100644
+--- a/hbase-procedure/src/main/java/org/apache/hadoop/hbase/procedure2/Procedure.java
++++ b/hbase-procedure/src/main/java/org/apache/hadoop/hbase/procedure2/Procedure.java
+@@ -190,6 +190,19 @@ public abstract class Procedure<TEnvironment> implements Comparable<Procedure> {
+     return false;
+   }
+ 
++  /**
++   * By default, the executor will keep the procedure result around util
++   * the eviction TTL is expired. The client can cut down the waiting time
++   * by requesting that the result is removed from the executor.
++   * In case of system started procedure, we can force the executor to auto-ack.
++   * @param env the environment passed to the ProcedureExecutor
++   * @return true if the executor should wait the client ack for the result.
++   *         Defaults to return true.
++   */
++  protected boolean shouldWaitClientAck(final TEnvironment env) {
++    return true;
++  }
++
+   @Override
+   public String toString() {
+     StringBuilder sb = new StringBuilder();
+diff --git a/hbase-procedure/src/main/java/org/apache/hadoop/hbase/procedure2/ProcedureExecutor.java b/hbase-procedure/src/main/java/org/apache/hadoop/hbase/procedure2/ProcedureExecutor.java
+index f45f2f9..37bcb00 100644
+--- a/hbase-procedure/src/main/java/org/apache/hadoop/hbase/procedure2/ProcedureExecutor.java
++++ b/hbase-procedure/src/main/java/org/apache/hadoop/hbase/procedure2/ProcedureExecutor.java
+@@ -165,22 +165,23 @@ public class ProcedureExecutor<TEnvironment> {
+       final long evictTtl = conf.getInt(EVICT_TTL_CONF_KEY, DEFAULT_EVICT_TTL);
+       final long evictAckTtl = conf.getInt(EVICT_ACKED_TTL_CONF_KEY, DEFAULT_ACKED_EVICT_TTL);
+ 
+-      long now = EnvironmentEdgeManager.currentTime();
+-      Iterator<Map.Entry<Long, ProcedureInfo>> it = completed.entrySet().iterator();
++      final long now = EnvironmentEdgeManager.currentTime();
++      final Iterator<Map.Entry<Long, ProcedureInfo>> it = completed.entrySet().iterator();
++      final boolean isDebugEnabled = LOG.isDebugEnabled();
+       while (it.hasNext() && store.isRunning()) {
+-        Map.Entry<Long, ProcedureInfo> entry = it.next();
+-        ProcedureInfo result = entry.getValue();
++        final Map.Entry<Long, ProcedureInfo> entry = it.next();
++        final ProcedureInfo procInfo = entry.getValue();
+ 
+         // TODO: Select TTL based on Procedure type
+-        if ((result.hasClientAckTime() && (now - result.getClientAckTime()) >= evictAckTtl) ||
+-            (now - result.getLastUpdate()) >= evictTtl) {
+-          if (LOG.isDebugEnabled()) {
+-            LOG.debug("Evict completed procedure " + entry.getKey());
++        if ((procInfo.hasClientAckTime() && (now - procInfo.getClientAckTime()) >= evictAckTtl) ||
++            (now - procInfo.getLastUpdate()) >= evictTtl) {
++          if (isDebugEnabled) {
++            LOG.debug("Evict completed procedure: " + procInfo);
+           }
+           store.delete(entry.getKey());
+           it.remove();
+ 
+-          NonceKey nonceKey = result.getNonceKey();
++          NonceKey nonceKey = procInfo.getNonceKey();
+           if (nonceKey != null) {
+             nonceKeysToProcIdsMap.remove(nonceKey);
+           }
+@@ -1272,7 +1273,12 @@ public class ProcedureExecutor<TEnvironment> {
+     }
+ 
+     // update the executor internal state maps
+-    completed.put(proc.getProcId(), Procedure.createProcedureInfo(proc, proc.getNonceKey()));
++    ProcedureInfo procInfo = Procedure.createProcedureInfo(proc, proc.getNonceKey());
++    if (!proc.shouldWaitClientAck(getEnvironment())) {
++      procInfo.setClientAckTime(0);
++    }
++
++    completed.put(procInfo.getProcId(), procInfo);
+     rollbackStack.remove(proc.getProcId());
+     procedures.remove(proc.getProcId());
+ 
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/CreateTableProcedure.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/CreateTableProcedure.java
+index cdb5d61..6d4955c 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/CreateTableProcedure.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/CreateTableProcedure.java
+@@ -471,4 +471,11 @@ public class CreateTableProcedure
+       final TableName tableName) throws IOException {
+     env.getMasterServices().getTableDescriptors().get(tableName);
+   }
++
++  @Override
++  protected boolean shouldWaitClientAck(MasterProcedureEnv env) {
++    // system tables are created on bootstrap internally by the system
++    // the client does not know about this procedures.
++    return !getTableName().isSystemTable();
++  }
+ }
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/ServerCrashProcedure.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/ServerCrashProcedure.java
+index d402b38..0e35ddb 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/ServerCrashProcedure.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/ServerCrashProcedure.java
+@@ -804,4 +804,11 @@ implements ServerProcedureInterface {
+   protected boolean isYieldBeforeExecuteFromState(MasterProcedureEnv env, ServerCrashState state) {
+     return true;
+   }
++
++  @Override
++  protected boolean shouldWaitClientAck(MasterProcedureEnv env) {
++    // The operation is triggered internally on the server
++    // the client does not know about this procedure.
++    return false;
++  }
+ }
+-- 
+1.7.9.5
+

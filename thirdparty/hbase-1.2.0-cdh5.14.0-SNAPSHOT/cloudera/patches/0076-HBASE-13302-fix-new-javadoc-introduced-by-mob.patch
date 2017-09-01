@@ -1,0 +1,45 @@
+From bf012e1e360b50dd30cdf685808da542e0372dbb Mon Sep 17 00:00:00 2001
+From: Jonathan M Hsieh <jmhsieh@apache.org>
+Date: Wed, 8 Apr 2015 06:01:34 -0700
+Subject: [PATCH 076/410] HBASE-13302 fix new javadoc introduced by mob
+
+Reason: Bugfix
+Author: Jonathan Hsieh
+Ref: CDH-31077
+---
+ .../java/org/apache/hadoop/hbase/mob/MobUtils.java |    4 ++--
+ .../hadoop/hbase/regionserver/StoreFileInfo.java   |    2 +-
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/MobUtils.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/MobUtils.java
+index 7007416..71464b8 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/MobUtils.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/MobUtils.java
+@@ -567,9 +567,9 @@ public class MobUtils {
+ 
+   /**
+    * Commits the mob file.
+-   * @param @param conf The current configuration.
++   * @param conf The current configuration.
+    * @param fs The current file system.
+-   * @param path The path where the mob file is saved.
++   * @param sourceFile The path where the mob file is saved.
+    * @param targetPath The directory path where the source file is renamed to.
+    * @param cacheConfig The current cache config.
+    * @return The target file path the source file is renamed to.
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/StoreFileInfo.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/StoreFileInfo.java
+index 178bc01..0f7c0c2 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/StoreFileInfo.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/StoreFileInfo.java
+@@ -394,7 +394,7 @@ public class StoreFileInfo {
+   }
+ 
+   /**
+-   * @param path Path to check.
++   * @param fileName Sting version of path to validate.
+    * @return True if the file name has format of a del file.
+    */
+   public static boolean isDelFile(final String fileName) {
+-- 
+1.7.9.5
+

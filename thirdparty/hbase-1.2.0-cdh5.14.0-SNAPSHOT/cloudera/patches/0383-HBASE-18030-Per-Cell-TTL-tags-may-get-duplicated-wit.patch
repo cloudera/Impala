@@ -1,0 +1,45 @@
+From d476ab3ac418f73160c26df8d29f6a5f2547e60a Mon Sep 17 00:00:00 2001
+From: anoopsamjohn <anoopsamjohn@gmail.com>
+Date: Tue, 6 Jun 2017 12:28:17 +0530
+Subject: [PATCH 383/410] HBASE-18030 Per Cell TTL tags may get duplicated
+ with increments/Append causing tags length
+ overflow.
+
+(cherry picked from commit b9d8f3b8504b0126917b6693381762ce15800248)
+
+Change-Id: Id8dceaac56ec10522e8939d7a2319dda59ab313b
+Author: anoopsamjohn
+Reason: Bug
+Ref: CDH-57970
+---
+ .../apache/hadoop/hbase/regionserver/HRegion.java  |   14 +++++++++++++-
+ 1 file changed, 13 insertions(+), 1 deletion(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
+index 35ac53f..536856b 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
+@@ -7732,7 +7732,19 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+     // If we are making the array in here, given we are the last thing checked, we'll be only thing
+     // in the array so set its size to '1' (I saw this being done in earlier version of
+     // tag-handling).
+-    if (tags == null) tags = new ArrayList<Tag>(1);
++    if (tags == null) {
++      tags = new ArrayList<Tag>(1);
++    } else {
++      // Remove existing TTL tags if any
++      Iterator<Tag> tagsItr = tags.iterator();
++      while (tagsItr.hasNext()) {
++        Tag tag = tagsItr.next();
++        if (tag.getType() == TagType.TTL_TAG_TYPE) {
++          tagsItr.remove();
++          break;
++        }
++      }
++    }
+     tags.add(new Tag(TagType.TTL_TAG_TYPE, Bytes.toBytes(ttl)));
+     return tags;
+   }
+-- 
+1.7.9.5
+

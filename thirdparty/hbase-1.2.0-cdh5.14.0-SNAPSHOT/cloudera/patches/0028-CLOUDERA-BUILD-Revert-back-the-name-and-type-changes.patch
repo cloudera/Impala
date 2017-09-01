@@ -1,0 +1,113 @@
+From b48c65ec20299eeb72b99efe43981aad939c72cd Mon Sep 17 00:00:00 2001
+From: Srikanth Srungarapu <ssrungarapu@cloudera.com>
+Date: Tue, 14 Jul 2015 20:58:31 -0700
+Subject: [PATCH 028/410] CLOUDERA-BUILD Revert back the name and type changes
+ block cache hit percentage that broke operational
+ compatibility
+
+Change-Id: Id1b439928d736b24d5a8111f5fc33568d9ff6492
+Reason: Backward Compatibility
+Author: Srikanth Srungarapu
+Ref: CDH-29488
+---
+ .../regionserver/MetricsRegionServerSource.java    |    3 +++
+ .../regionserver/MetricsRegionServerWrapper.java   |    5 +++++
+ .../MetricsRegionServerSourceImpl.java             |    2 ++
+ .../MetricsRegionServerWrapperImpl.java            |    8 ++++++++
+ .../MetricsRegionServerWrapperStub.java            |    5 +++++
+ .../regionserver/TestMetricsRegionServer.java      |    1 +
+ 6 files changed, 24 insertions(+)
+
+diff --git a/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionServerSource.java b/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionServerSource.java
+index 7087625..61cb1e2 100644
+--- a/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionServerSource.java
++++ b/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionServerSource.java
+@@ -221,6 +221,9 @@ public interface MetricsRegionServerSource extends BaseSource {
+   String BLOCK_CACHE_PRIMARY_EVICTION_COUNT = "blockCacheEvictionCountPrimary";
+   String BLOCK_CACHE_PRIMARY_EVICTION_COUNT_DESC =
+       "Count of the number of blocks evicted from primary replica in the block cache.";
++  String BLOCK_COUNT_HIT_PERCENT = "blockCountHitPercent";
++  String BLOCK_COUNT_HIT_PERCENT_DESC =
++      "Percent of block cache requests that are hits";
+   String BLOCK_CACHE_HIT_PERCENT = "blockCacheCountHitPercent";
+   String BLOCK_CACHE_HIT_PERCENT_DESC =
+       "Percent of block cache requests that are hits";
+diff --git a/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionServerWrapper.java b/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionServerWrapper.java
+index 2505f9b..c9c5160 100644
+--- a/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionServerWrapper.java
++++ b/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionServerWrapper.java
+@@ -229,6 +229,11 @@ public interface MetricsRegionServerWrapper {
+   double getBlockCacheHitPercent();
+ 
+   /**
++   * Get the percent of all requests that hit the block cache.
++   */
++  int getBlockHitPercent();
++
++  /**
+    * Get the percent of requests with the block cache turned on that hit the block cache.
+    */
+   double getBlockCacheHitCachingPercent();
+diff --git a/hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionServerSourceImpl.java b/hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionServerSourceImpl.java
+index 202d241..c2a0533 100644
+--- a/hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionServerSourceImpl.java
++++ b/hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionServerSourceImpl.java
+@@ -249,6 +249,8 @@ public class MetricsRegionServerSourceImpl
+             BLOCK_CACHE_PRIMARY_EVICTION_COUNT_DESC), rsWrap.getBlockCachePrimaryEvictedCount())
+           .addGauge(Interns.info(BLOCK_CACHE_HIT_PERCENT, BLOCK_CACHE_HIT_PERCENT_DESC),
+               rsWrap.getBlockCacheHitPercent())
++          .addGauge(Interns.info(BLOCK_COUNT_HIT_PERCENT, BLOCK_COUNT_HIT_PERCENT_DESC),
++              rsWrap.getBlockHitPercent())
+           .addGauge(Interns.info(BLOCK_CACHE_EXPRESS_HIT_PERCENT,
+               BLOCK_CACHE_EXPRESS_HIT_PERCENT_DESC), rsWrap.getBlockCacheHitCachingPercent())
+           .addCounter(Interns.info(BLOCK_CACHE_FAILED_INSERTION_COUNT,
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionServerWrapperImpl.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionServerWrapperImpl.java
+index 5878572..cc0ccfd 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionServerWrapperImpl.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionServerWrapperImpl.java
+@@ -311,6 +311,14 @@ class MetricsRegionServerWrapperImpl
+   }
+ 
+   @Override
++  public int getBlockHitPercent() {
++    if (this.cacheStats == null) {
++      return 0;
++    }
++    return (int) (this.cacheStats.getHitRatio() * 100);
++  }
++
++  @Override
+   public double getBlockCacheHitCachingPercent() {
+     if (this.cacheStats == null) {
+       return 0;
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/MetricsRegionServerWrapperStub.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/MetricsRegionServerWrapperStub.java
+index e2728d1..ba693e1 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/MetricsRegionServerWrapperStub.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/MetricsRegionServerWrapperStub.java
+@@ -206,6 +206,11 @@ public class MetricsRegionServerWrapperStub implements MetricsRegionServerWrappe
+   }
+ 
+   @Override
++  public int getBlockHitPercent() {
++    return 98;
++  }
++
++  @Override
+   public double getBlockCacheHitCachingPercent() {
+     return 97;
+   }
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestMetricsRegionServer.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestMetricsRegionServer.java
+index 9e206e1..51642c7 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestMetricsRegionServer.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestMetricsRegionServer.java
+@@ -85,6 +85,7 @@ public class TestMetricsRegionServer {
+     HELPER.assertCounter("blockCacheMissCount", 417, serverSource);
+     HELPER.assertCounter("blockCacheEvictionCount", 418, serverSource);
+     HELPER.assertGauge("blockCacheCountHitPercent", 98, serverSource);
++    HELPER.assertGauge("blockCountHitPercent", 98, serverSource);
+     HELPER.assertGauge("blockCacheExpressHitPercent", 97, serverSource);
+     HELPER.assertCounter("blockCacheFailedInsertionCount", 36, serverSource);
+     HELPER.assertCounter("updatesBlockedTime", 419, serverSource);
+-- 
+1.7.9.5
+

@@ -1,0 +1,85 @@
+From 0dcdcc6d934b310264b225373a76bd992fa56a20 Mon Sep 17 00:00:00 2001
+From: Stephen Yuan Jiang <syuanjiangdev@gmail.com>
+Date: Mon, 7 Mar 2016 20:28:45 -0800
+Subject: [PATCH 127/410] HBASE-15413 Procedure-V2: print out ProcedureInfo
+ during trace
+
+Reason: Debuggability
+Author: Stephen Yuan Jiang
+Ref: CDH-38138
+
+Change-Id: I30fd3b87699167df7ebe7313ccb5df1824a029c5
+---
+ .../org/apache/hadoop/hbase/ProcedureInfo.java     |   40 ++++++++++++++++++++
+ 1 file changed, 40 insertions(+)
+
+diff --git a/hbase-common/src/main/java/org/apache/hadoop/hbase/ProcedureInfo.java b/hbase-common/src/main/java/org/apache/hadoop/hbase/ProcedureInfo.java
+index 8546863..a24db64 100644
+--- a/hbase-common/src/main/java/org/apache/hadoop/hbase/ProcedureInfo.java
++++ b/hbase-common/src/main/java/org/apache/hadoop/hbase/ProcedureInfo.java
+@@ -27,8 +27,10 @@ import org.apache.hadoop.hbase.protobuf.generated.ProcedureProtos;
+ import org.apache.hadoop.hbase.protobuf.generated.ProcedureProtos.ProcedureState;
+ import org.apache.hadoop.hbase.security.User;
+ import org.apache.hadoop.hbase.util.ByteStringer;
++import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
+ import org.apache.hadoop.hbase.util.ForeignExceptionUtil;
+ import org.apache.hadoop.hbase.util.NonceKey;
++import org.apache.hadoop.util.StringUtils;
+ 
+ /**
+  * Procedure information
+@@ -82,6 +84,40 @@ public class ProcedureInfo implements Cloneable {
+       exception, lastUpdate, startTime, result);
+   }
+ 
++  @Override
++  public String toString() {
++    StringBuilder sb = new StringBuilder();
++    sb.append("Procedure=");
++    sb.append(procName);
++    sb.append(" (id=");
++    sb.append(procId);
++    if (hasParentId()) {
++      sb.append(", parent=");
++      sb.append(parentId);
++    }
++    if (hasOwner()) {
++      sb.append(", owner=");
++      sb.append(procOwner);
++    }
++    sb.append(", state=");
++    sb.append(procState);
++
++    long now = EnvironmentEdgeManager.currentTime();
++    sb.append(", startTime=");
++    sb.append(StringUtils.formatTime(now - startTime));
++    sb.append(" ago, lastUpdate=");
++    sb.append(StringUtils.formatTime(now - startTime));
++    sb.append(" ago");
++
++    if (isFailed()) {
++      sb.append(", exception=\"");
++      sb.append(getExceptionMessage());
++      sb.append("\"");
++    }
++    sb.append(")");
++    return sb.toString();
++  }
++
+   public long getProcId() {
+     return procId;
+   }
+@@ -90,6 +126,10 @@ public class ProcedureInfo implements Cloneable {
+     return procName;
+   }
+ 
++  private boolean hasOwner() {
++    return procOwner != null;
++  }
++
+   public String getProcOwner() {
+     return procOwner;
+   }
+-- 
+1.7.9.5
+

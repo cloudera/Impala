@@ -1,0 +1,46 @@
+From 8d85aff8e420b5beac1015eff66826f6025dff70 Mon Sep 17 00:00:00 2001
+From: Elliott Clark <eclark@apache.org>
+Date: Thu, 23 Jun 2016 11:27:44 -0700
+Subject: [PATCH 178/410] HBASE-16093 Fix splits failed before creating
+ daughter regions leave meta inconsistent
+
+(cherry picked from commit deea804ae84f4783837bc8498990562147d72cb0)
+
+Change-Id: I61d4dc90af2381851fbe543b189ef889ebcc91bc
+Reason: Bug
+Author: Elliott Clark
+Ref: CDH-41834
+---
+ .../hadoop/hbase/master/AssignmentManager.java     |   15 +++++++++++++--
+ 1 file changed, 13 insertions(+), 2 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java
+index 9308af6..de05d96 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java
+@@ -3754,9 +3754,20 @@ public class AssignmentManager extends ZooKeeperListener {
+     if (!org.apache.commons.lang.StringUtils.isEmpty(s)) {
+       return s;
+     }
++
++    // Always bring the parent back online. Even if it's not offline
++    // There's no harm in making it online again.
+     regionOnline(p, sn);
+-    regionOffline(a);
+-    regionOffline(b);
++
++    // Only offline the region if they are known to exist.
++    RegionState regionStateA = regionStates.getRegionState(a);
++    RegionState regionStateB = regionStates.getRegionState(b);
++    if (regionStateA != null) {
++      regionOffline(a);
++    }
++    if (regionStateB != null) {
++      regionOffline(b);
++    }
+ 
+     if (getTableStateManager().isTableState(p.getTable(),
+         ZooKeeperProtos.Table.State.DISABLED, ZooKeeperProtos.Table.State.DISABLING)) {
+-- 
+1.7.9.5
+

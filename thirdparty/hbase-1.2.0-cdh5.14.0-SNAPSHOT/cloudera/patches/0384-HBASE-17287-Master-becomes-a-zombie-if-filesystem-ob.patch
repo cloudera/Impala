@@ -1,0 +1,174 @@
+From 6967f2127387db3dbd30a7b24e9ca8c2ccdeba87 Mon Sep 17 00:00:00 2001
+From: tedyu <yuzhihong@gmail.com>
+Date: Wed, 29 Mar 2017 07:21:10 -0700
+Subject: [PATCH 384/410] HBASE-17287 Master becomes a zombie if filesystem
+ object closes
+
+(cherry picked from commit 2d79b7d5a508c2175312487db3e93d838e063ec2)
+
+Change-Id: I8b0bae7d6d3273b57e9c962cb53bf2d42211bc32
+Author: tedyu
+Reason: Bug
+Ref: CDH-57967
+---
+ .../hadoop/hbase/master/MasterFileSystem.java      |    5 +
+ .../procedure/TestSafemodeBringsDownMaster.java    |  131 ++++++++++++++++++++
+ 2 files changed, 136 insertions(+)
+ create mode 100644 hbase-server/src/test/java/org/apache/hadoop/hbase/master/procedure/TestSafemodeBringsDownMaster.java
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MasterFileSystem.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MasterFileSystem.java
+index 91e0b77..9b49d18 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MasterFileSystem.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/MasterFileSystem.java
+@@ -375,6 +375,11 @@ public class MasterFileSystem {
+         }
+         logDirs.add(splitDir);
+       }
++    } catch (IOException ioe) {
++      if (!checkFileSystem()) {
++        this.services.abort("Aborting due to filesystem unavailable", ioe);
++        throw ioe;
++      }
+     } finally {
+       if (needReleaseLock) {
+         this.splitLogLock.unlock();
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/procedure/TestSafemodeBringsDownMaster.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/procedure/TestSafemodeBringsDownMaster.java
+new file mode 100644
+index 0000000..b5ee09a
+--- /dev/null
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/procedure/TestSafemodeBringsDownMaster.java
+@@ -0,0 +1,131 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.hbase.master.procedure;
++
++import java.io.IOException;
++import java.util.List;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.hbase.DoNotRetryIOException;
++import org.apache.hadoop.hbase.HBaseTestingUtility;
++import org.apache.hadoop.hbase.HConstants;
++import org.apache.hadoop.hbase.HRegionInfo;
++import org.apache.hadoop.hbase.HTableDescriptor;
++import org.apache.hadoop.hbase.ProcedureInfo;
++import org.apache.hadoop.hbase.TableExistsException;
++import org.apache.hadoop.hbase.TableName;
++import org.apache.hadoop.hbase.Waiter;
++import org.apache.hadoop.hbase.procedure2.ProcedureExecutor;
++import org.apache.hadoop.hbase.procedure2.ProcedureTestingUtility;
++import org.apache.hadoop.hbase.protobuf.generated.MasterProcedureProtos.CreateTableState;
++import org.apache.hadoop.hbase.testclassification.MediumTests;
++import org.apache.hadoop.hbase.util.Bytes;
++import org.apache.hadoop.hbase.util.JVMClusterUtil;
++import org.apache.hadoop.hbase.util.ModifyRegionUtils;
++import org.apache.hadoop.hdfs.DistributedFileSystem;
++import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.apache.hadoop.hdfs.protocol.HdfsConstants;
++import org.junit.After;
++import org.junit.AfterClass;
++import org.junit.Before;
++import org.junit.BeforeClass;
++import org.junit.Test;
++import org.junit.experimental.categories.Category;
++
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertTrue;
++
++@Category(MediumTests.class)
++public class TestSafemodeBringsDownMaster {
++  private static final Log LOG = LogFactory.getLog(TestSafemodeBringsDownMaster.class);
++
++  protected static final HBaseTestingUtility UTIL = new HBaseTestingUtility();
++
++  private static void setupConf(Configuration conf) {
++    conf.setInt(MasterProcedureConstants.MASTER_PROCEDURE_THREADS, 1);
++  }
++
++  @BeforeClass
++  public static void setupCluster() throws Exception {
++    setupConf(UTIL.getConfiguration());
++    UTIL.startMiniCluster(1);
++  }
++
++  @AfterClass
++  public static void cleanupTest() throws Exception {
++    try {
++      UTIL.shutdownMiniCluster();
++    } catch (Exception e) {
++      LOG.warn("failure shutting down cluster", e);
++    }
++  }
++
++  @Before
++  public void setup() throws Exception {
++    resetProcExecutorTestingKillFlag();
++  }
++
++  private ProcedureExecutor<MasterProcedureEnv> getMasterProcedureExecutor() {
++    return UTIL.getHBaseCluster().getMaster().getMasterProcedureExecutor();
++  }
++  private void resetProcExecutorTestingKillFlag() {
++    final ProcedureExecutor<MasterProcedureEnv> procExec = getMasterProcedureExecutor();
++    ProcedureTestingUtility.setKillAndToggleBeforeStoreUpdate(procExec, false);
++    assertTrue("expected executor to be running", procExec.isRunning());
++  }
++
++  @After
++  public void tearDown() throws Exception {
++  }
++
++  @Test(timeout=60000)
++  public void testSafemodeBringsDownMaster() throws Exception {
++    final TableName tableName = TableName.valueOf("testSafemodeBringsDownMaster");
++    final byte[][] splitKeys = new byte[][] {
++      Bytes.toBytes("a"), Bytes.toBytes("b"), Bytes.toBytes("c")
++    };
++    HRegionInfo[] regions = MasterProcedureTestingUtility.createTable(
++        getMasterProcedureExecutor(), tableName, splitKeys, "f1", "f2");
++    MiniDFSCluster dfsCluster = UTIL.getDFSCluster();
++    DistributedFileSystem dfs = (DistributedFileSystem) dfsCluster.getFileSystem();
++    dfs.setSafeMode(HdfsConstants.SafeModeAction.SAFEMODE_ENTER);
++    final long timeOut = 180000;
++    long startTime = System.currentTimeMillis();
++    int index = -1;
++    do {
++      index = UTIL.getMiniHBaseCluster().getServerWithMeta();
++    } while (index == -1 &&
++      startTime + timeOut < System.currentTimeMillis());
++
++    if (index != -1){
++      UTIL.getMiniHBaseCluster().abortRegionServer(index);
++      UTIL.getMiniHBaseCluster().waitOnRegionServer(index);
++    }
++    UTIL.waitFor(timeOut, new Waiter.Predicate<Exception>() {
++      @Override
++      public boolean evaluate() throws Exception {
++        List<JVMClusterUtil.MasterThread> threads = UTIL.getMiniHBaseCluster().getLiveMasterThreads();
++        return threads == null || threads.isEmpty();
++      }
++    });
++    dfs.setSafeMode(HdfsConstants.SafeModeAction.SAFEMODE_LEAVE);
++  }
++}
+-- 
+1.7.9.5
+

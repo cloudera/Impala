@@ -1,0 +1,120 @@
+From 3e635ad892018171b99259997e0caff320a0838f Mon Sep 17 00:00:00 2001
+From: tedyu <yuzhihong@gmail.com>
+Date: Fri, 13 May 2016 15:24:57 -0700
+Subject: [PATCH 298/410] Backport HBASE-15125 HBaseFsck's adoptHdfsOrphan
+ function creates region with wrong end key boundary
+
+(cherry picked from commit f778736b658b28b24ce7bb7428ab3b268d742765)
+
+Change-Id: Ie08d3a7875c711c469622c42adf345d4b74c8889
+Author: Balazs Meszaros
+Reason: Bug
+Ref: CDH-50432
+---
+ .../org/apache/hadoop/hbase/util/HBaseFsck.java    |    3 +-
+ .../apache/hadoop/hbase/util/TestHBaseFsck.java    |   61 +++++++++++++++++++-
+ 2 files changed, 62 insertions(+), 2 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/util/HBaseFsck.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/util/HBaseFsck.java
+index 907b6dc..b07ebe7 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/util/HBaseFsck.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/util/HBaseFsck.java
+@@ -933,7 +933,8 @@ public class HBaseFsck extends Configured implements Closeable {
+         Bytes.toString(orphanRegionRange.getSecond()) + ")");
+ 
+     // create new region on hdfs.  move data into place.
+-    HRegionInfo hri = new HRegionInfo(template.getTableName(), orphanRegionRange.getFirst(), orphanRegionRange.getSecond());
++    HRegionInfo hri = new HRegionInfo(template.getTableName(), orphanRegionRange.getFirst(), 
++      Bytes.add(orphanRegionRange.getSecond(), new byte[1]));
+     LOG.info("Creating new region : " + hri);
+     HRegion region = HBaseFsckRepair.createHDFSRegionDir(getConf(), hri, template);
+     Path target = region.getRegionFileSystem().getRegionDir();
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/util/TestHBaseFsck.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/util/TestHBaseFsck.java
+index 81867cc..205cafc 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/util/TestHBaseFsck.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/util/TestHBaseFsck.java
+@@ -480,7 +480,7 @@ public class TestHBaseFsck {
+   }
+ 
+   /**
+-   * Counts the number of row to verify data loss or non-dataloss.
++   * Counts the number of rows to verify data loss or non-dataloss.
+    */
+   int countRows() throws IOException {
+      Scan s = new Scan();
+@@ -493,6 +493,18 @@ public class TestHBaseFsck {
+   }
+ 
+   /**
++   * Counts the number of rows to verify data loss or non-dataloss.
++   */
++  int countRows(byte[] start, byte[] end) throws IOException {
++    Scan s = new Scan(start, end);
++    ResultScanner rs = tbl.getScanner(s);
++    int i = 0;
++    while (rs.next() != null) {
++      i++;
++    }
++    return i;
++  }
++  /**
+    * delete table in preparation for next test
+    *
+    * @param tablename
+@@ -1260,6 +1272,53 @@ public class TestHBaseFsck {
+   }
+ 
+   /**
++   * This creates and fixes a bad table with a missing region -- hole in meta and data present but
++   * .regioninfo missing (an orphan hdfs region)in the fs. At last we check every row was present
++   * at the correct region.
++   */
++  @Test(timeout = 180000)
++  public void testHDFSRegioninfoMissingAndCheckRegionBoundary() throws Exception {
++    TableName table = TableName.valueOf("testHDFSRegioninfoMissingAndCheckRegionBoundary");
++    try {
++      setupTable(table);
++      assertEquals(ROWKEYS.length, countRows());
++
++      // Mess it up by leaving a hole in the meta data
++      admin.disableTable(table);
++      deleteRegion(conf, tbl.getTableDescriptor(), Bytes.toBytes("B"), Bytes.toBytes("C"), true,
++        true, false, true, HRegionInfo.DEFAULT_REPLICA_ID);
++      admin.enableTable(table);
++
++      HBaseFsck hbck = doFsck(conf, false);
++      assertErrors(hbck,
++        new HBaseFsck.ErrorReporter.ERROR_CODE[] {
++            HBaseFsck.ErrorReporter.ERROR_CODE.ORPHAN_HDFS_REGION,
++            HBaseFsck.ErrorReporter.ERROR_CODE.NOT_IN_META_OR_DEPLOYED,
++            HBaseFsck.ErrorReporter.ERROR_CODE.HOLE_IN_REGION_CHAIN });
++      // holes are separate from overlap groups
++      assertEquals(0, hbck.getOverlapGroups(table).size());
++
++      // fix hole
++      doFsck(conf, true);
++
++      // check that hole fixed
++      assertNoErrors(doFsck(conf, false));
++
++      // check data belong to the correct region,every scan should get one row.
++      for (int i = 0; i < ROWKEYS.length; i++) {
++        if (i != ROWKEYS.length - 1) {
++          assertEquals(1, countRows(ROWKEYS[i], ROWKEYS[i + 1]));
++        } else {
++          assertEquals(1, countRows(ROWKEYS[i], null));
++        }
++      }
++
++    } finally {
++      cleanupTable(table);
++    }
++  }
++
++  /**
+    * This creates and fixes a bad table with a region that is missing meta and
+    * not assigned to a region server.
+    */
+-- 
+1.7.9.5
+

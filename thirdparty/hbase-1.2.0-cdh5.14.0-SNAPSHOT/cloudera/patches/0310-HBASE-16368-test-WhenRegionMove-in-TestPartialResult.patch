@@ -1,0 +1,41 @@
+From dc217ac378e1415143b974376f217f79dfe34c73 Mon Sep 17 00:00:00 2001
+From: Phil Yang <ud1937@gmail.com>
+Date: Tue, 9 Aug 2016 15:09:00 +0800
+Subject: [PATCH 310/410] HBASE-16368 test*WhenRegionMove in
+ TestPartialResultsFromClientSide is flaky
+
+Author: Phil Yang
+Reason: Bug
+Ref:    CDH-51512
+
+Change-Id: I4f080e8fd6be9b5d39666211fd8f617b4fe7508c
+Signed-off-by: zhangduo <zhangduo@apache.org>
+---
+ .../hbase/TestPartialResultsFromClientSide.java    |    4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/TestPartialResultsFromClientSide.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/TestPartialResultsFromClientSide.java
+index 5be5bb4..1aa57dc 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/TestPartialResultsFromClientSide.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/TestPartialResultsFromClientSide.java
+@@ -99,7 +99,7 @@ public class TestPartialResultsFromClientSide {
+   // getCellHeapSize().
+   private static long CELL_HEAP_SIZE = -1;
+ 
+-  private static long timeout = 2000;
++  private static long timeout = 10000;
+ 
+   @BeforeClass
+   public static void setUpBeforeClass() throws Exception {
+@@ -1051,7 +1051,7 @@ public class TestPartialResultsFromClientSide {
+     scan.setCaching(1);
+     ResultScanner scanner = table.getScanner(scan);
+     scanner.next();
+-    Thread.sleep(timeout * 3);
++    Thread.sleep(timeout * 2);
+     int count = 1;
+     while (scanner.next() != null) {
+       count++;
+-- 
+1.7.9.5
+

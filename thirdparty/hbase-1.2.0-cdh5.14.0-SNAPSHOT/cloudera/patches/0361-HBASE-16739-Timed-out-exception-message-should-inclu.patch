@@ -1,0 +1,33 @@
+From 035ea4c748043aa5444623e2f6cedca2c663c52f Mon Sep 17 00:00:00 2001
+From: tedyu <yuzhihong@gmail.com>
+Date: Mon, 3 Oct 2016 06:44:58 -0700
+Subject: [PATCH 361/410] HBASE-16739 Timed out exception message should
+ include encoded region name
+
+(cherry picked from commit 252d7fae0ac43dae04d2c9708374593a6ae87a89)
+
+Change-Id: Ifd43a6bdb6f190c422a8e13e7dff4cf45b336fd9
+Author: tedyu
+Reason: Bug
+Ref: CDH-55070
+---
+ .../apache/hadoop/hbase/regionserver/HRegion.java  |    3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
+index b847fda..eab1986 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
+@@ -5189,7 +5189,8 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+         result = null;
+         // Clean up the counts just in case this was the thing keeping the context alive.
+         rowLockContext.cleanUp();
+-        throw new IOException("Timed out waiting for lock for row: " + rowKey);
++        throw new IOException("Timed out waiting for lock for row: " + rowKey + " in region "
++            + getRegionInfo().getEncodedName());
+       }
+       return result;
+     } catch (InterruptedException ie) {
+-- 
+1.7.9.5
+

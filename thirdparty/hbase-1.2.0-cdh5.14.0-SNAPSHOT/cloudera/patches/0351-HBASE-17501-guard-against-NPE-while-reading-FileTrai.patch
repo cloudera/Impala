@@ -1,0 +1,103 @@
+From ab3c42db65725c16efd4c7bfc5ca629388d444ea Mon Sep 17 00:00:00 2001
+From: Michael Stack <stack@apache.org>
+Date: Thu, 16 Mar 2017 14:59:17 -0700
+Subject: [PATCH 351/410] HBASE-17501 guard against NPE while reading
+ FileTrailer and HFileBlock
+
+This reverts commit 31d37fb904c4fcd77e79f9df8db155c5a3d1d8ed.
+
+A revert of a revert -- i.e. a restore -- just so I can fix the commit
+message (add in the JIRA number)
+
+(cherry picked from commit 4f5f7fbd478d1898df70ac13480ecf5ba7b18ff7)
+
+Change-Id: I87cdae8a982b3b6091aaa1f835da05ffde13a472
+Author: Michael Stack
+Reason: Bug
+Ref: CDH-53419
+---
+ .../hadoop/hbase/io/hfile/FixedFileTrailer.java    |    3 +-
+ .../apache/hadoop/hbase/io/hfile/HFileBlock.java   |    2 +-
+ .../apache/hadoop/hbase/io/hfile/HFileUtil.java    |   43 ++++++++++++++++++++
+ 3 files changed, 46 insertions(+), 2 deletions(-)
+ create mode 100644 hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/HFileUtil.java
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/FixedFileTrailer.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/FixedFileTrailer.java
+index 6735036..c21e8ba 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/FixedFileTrailer.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/FixedFileTrailer.java
+@@ -385,7 +385,8 @@ public class FixedFileTrailer {
+       bufferSize = (int) fileSize;
+     }
+ 
+-    istream.seek(seekPoint);
++    HFileUtil.seekOnMultipleSources(istream, seekPoint);
++
+     ByteBuffer buf = ByteBuffer.allocate(bufferSize);
+     istream.readFully(buf.array(), buf.arrayOffset(),
+         buf.arrayOffset() + buf.limit());
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/HFileBlock.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/HFileBlock.java
+index 02c4a04..e6fadf0 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/HFileBlock.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/HFileBlock.java
+@@ -1431,7 +1431,7 @@ public class HFileBlock implements Cacheable {
+       if (!pread && streamLock.tryLock()) {
+         // Seek + read. Better for scanning.
+         try {
+-          istream.seek(fileOffset);
++          HFileUtil.seekOnMultipleSources(istream, fileOffset);
+ 
+           long realOffset = istream.getPos();
+           if (realOffset != fileOffset) {
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/HFileUtil.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/HFileUtil.java
+new file mode 100644
+index 0000000..835450c
+--- /dev/null
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/HFileUtil.java
+@@ -0,0 +1,43 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hbase.io.hfile;
++
++import java.io.IOException;
++
++import org.apache.hadoop.fs.FSDataInputStream;
++
++public class HFileUtil {
++
++  /** guards against NullPointer
++   * utility which tries to seek on the DFSIS and will try an alternative source
++   * if the FSDataInputStream throws an NPE HBASE-17501
++   * @param istream
++   * @param offset
++   * @throws IOException
++   */
++  static public void seekOnMultipleSources(FSDataInputStream istream, long offset) throws IOException {
++    try {
++      // attempt to seek inside of current blockReader
++      istream.seek(offset);
++    } catch (NullPointerException e) {
++      // retry the seek on an alternate copy of the data
++      // this can occur if the blockReader on the DFSInputStream is null
++      istream.seekToNewSource(offset);
++    }
++  }
++}
+-- 
+1.7.9.5
+

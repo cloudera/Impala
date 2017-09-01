@@ -1,0 +1,40 @@
+From 4e8d9ed66439fa58e527762c480801821a07a474 Mon Sep 17 00:00:00 2001
+From: Yi Liang <easyliangjob@gmail.com>
+Date: Tue, 14 Feb 2017 10:22:22 -0800
+Subject: [PATCH 378/410] HBASE-17648: HBase Table-level synchronization fails
+ between two secured(kerberized) cluster
+
+Signed-off-by: tedyu <yuzhihong@gmail.com>
+
+(cherry picked from commit 5839056ce10b68123d2964479927fc28946db059)
+
+Change-Id: I9b6b6df7e76175c178ac5af13e4d4325fe6c5d84
+Author: Yi Liang
+Reason: Bug
+Ref: CDH-57965
+---
+ .../apache/hadoop/hbase/mapreduce/SyncTable.java   |    8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/SyncTable.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/SyncTable.java
+index 7adf200..9fe4e30 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/SyncTable.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/SyncTable.java
+@@ -143,7 +143,13 @@ public class SyncTable extends Configured implements Tool {
+       
+       // would be nice to add an option for bulk load instead
+     }
+-    
++
++    // Obtain an authentication token, for the specified cluster, on behalf of the current user
++    if (sourceZkCluster != null) {
++      Configuration peerConf =
++          HBaseConfiguration.createClusterConf(job.getConfiguration(), sourceZkCluster);
++      TableMapReduceUtil.initCredentialsForCluster(job, peerConf);
++    }
+     return job;
+   }
+   
+-- 
+1.7.9.5
+

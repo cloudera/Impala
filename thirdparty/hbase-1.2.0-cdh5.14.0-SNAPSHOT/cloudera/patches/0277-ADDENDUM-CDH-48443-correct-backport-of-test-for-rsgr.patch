@@ -1,0 +1,76 @@
+From 8defebc2ac51c5f595db0f9ae8c25ff90d7bcb94 Mon Sep 17 00:00:00 2001
+From: Sean Busbey <busbey@cloudera.com>
+Date: Fri, 24 Feb 2017 16:15:45 -0600
+Subject: [PATCH 277/410] ADDENDUM CDH-48443 correct backport of test for
+ rsgroup admin shell commands.
+
+Change-Id: I2985edd77c4ff769d0ac6a2965515787c756f675
+Reason: Bug
+Author: Sean Busbey
+Ref: CDH-50644
+---
+ .../src/test/ruby/shell/rsgroup_shell_test.rb      |   17 +++++++++--------
+ 1 file changed, 9 insertions(+), 8 deletions(-)
+
+diff --git a/hbase-shell/src/test/ruby/shell/rsgroup_shell_test.rb b/hbase-shell/src/test/ruby/shell/rsgroup_shell_test.rb
+index b7cfb85..f696c5e 100644
+--- a/hbase-shell/src/test/ruby/shell/rsgroup_shell_test.rb
++++ b/hbase-shell/src/test/ruby/shell/rsgroup_shell_test.rb
+@@ -17,14 +17,15 @@
+ # limitations under the License.
+ #
+ 
+-require 'hbase_constants'
++require 'hbase'
+ require 'shell'
+ 
+ module Hbase
+   class RSGroupShellTest < Test::Unit::TestCase
+     def setup
+       @hbase = ::Hbase::Hbase.new($TEST_CLUSTER.getConfiguration)
+-      @shell = Shell::Shell.new(@hbase)
++      @formatter = ::Shell::Formatter::Console.new()
++      @shell = Shell::Shell.new(@hbase, @formatter)
+       connection = $TEST_CLUSTER.getConnection
+       @rsgroup_admin =
+           org.apache.hadoop.hbase.rsgroup.RSGroupAdminClient.new(connection)
+@@ -63,7 +64,7 @@ module Hbase
+       assert_equal(1, @rsgroup_admin.getRSGroupInfo(group_name).getTables.count)
+ 
+       count = 0
+-      @hbase.rsgroup_admin().get_rsgroup(group_name) do |line|
++      @hbase.rsgroup_admin(@formatter).get_rsgroup(group_name) do |line|
+         case count
+         when 1
+           assert_equal(hostPortStr, line)
+@@ -75,22 +76,22 @@ module Hbase
+       assert_equal(4, count)
+ 
+       assert_equal(2,
+-                   @hbase.rsgroup_admin().list_rs_groups.count)
++                   @hbase.rsgroup_admin(@formatter).list_rs_groups.count)
+ 
+       # just run it to verify jruby->java api binding
+-      @hbase.rsgroup_admin().balance_rs_group(group_name)
++      @hbase.rsgroup_admin(@formatter).balance_rs_group(group_name)
+     end
+ 
+     # we test exceptions that could be thrown by the ruby wrappers
+     define_test 'Test bogus arguments' do
+       assert_raise(ArgumentError) do
+-        @hbase.rsgroup_admin().get_rsgroup('foobar')
++        @hbase.rsgroup_admin(@formatter).get_rsgroup('foobar')
+       end
+       assert_raise(ArgumentError) do
+-        @hbase.rsgroup_admin().get_rsgroup_of_server('foobar:123')
++        @hbase.rsgroup_admin(@formatter).get_rsgroup_of_server('foobar:123')
+       end
+       assert_raise(ArgumentError) do
+-        @hbase.rsgroup_admin().get_rsgroup_of_table('foobar')
++        @hbase.rsgroup_admin(@formatter).get_rsgroup_of_table('foobar')
+       end
+     end
+   end
+-- 
+1.7.9.5
+

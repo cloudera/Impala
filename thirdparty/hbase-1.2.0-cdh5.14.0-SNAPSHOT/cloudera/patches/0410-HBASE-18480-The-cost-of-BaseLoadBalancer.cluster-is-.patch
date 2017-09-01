@@ -1,0 +1,101 @@
+From c537c3c9892e2f923a70b9ffe9d514fc61d693d0 Mon Sep 17 00:00:00 2001
+From: Chia-Ping Tsai <chia7712@gmail.com>
+Date: Wed, 2 Aug 2017 08:30:29 +0800
+Subject: [PATCH 410/410] HBASE-18480 The cost of BaseLoadBalancer.cluster is
+ changed even if the rollback is done
+
+(cherry picked from commit 5f6cca9967f5d77b46d1dda493b290e2935933c9)
+
+Change-Id: Ibcdbd9156184ad15f2c0a1d8eeb883422737140b
+Author: Chia-Ping Tsai
+Reason: Bug
+Ref: CDH-57982
+---
+ .../hbase/master/balancer/BaseLoadBalancer.java    |    1 +
+ .../master/balancer/StochasticLoadBalancer.java    |   11 +++++++---
+ .../balancer/TestStochasticLoadBalancer.java       |   21 ++++++++++++++++++++
+ 3 files changed, 30 insertions(+), 3 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/balancer/BaseLoadBalancer.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/balancer/BaseLoadBalancer.java
+index 48ec1ac..44f54ad 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/balancer/BaseLoadBalancer.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/balancer/BaseLoadBalancer.java
+@@ -650,6 +650,7 @@ public abstract class BaseLoadBalancer implements LoadBalancer {
+       } else if (oldServer >= 0 && (numRegionsPerServerPerTable[oldServer][tableIndex] + 1)
+           == numMaxRegionsPerTable[tableIndex]) {
+         //recompute maxRegionsPerTable since the previous value was coming from the old server
++        numMaxRegionsPerTable[tableIndex] = 0;
+         for (int serverIndex = 0 ; serverIndex < numRegionsPerServerPerTable.length; serverIndex++) {
+           if (numRegionsPerServerPerTable[serverIndex][tableIndex] > numMaxRegionsPerTable[tableIndex]) {
+             numMaxRegionsPerTable[tableIndex] = numRegionsPerServerPerTable[serverIndex][tableIndex];
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/balancer/StochasticLoadBalancer.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/balancer/StochasticLoadBalancer.java
+index 2ba3733..00c6451 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/balancer/StochasticLoadBalancer.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/balancer/StochasticLoadBalancer.java
+@@ -17,6 +17,7 @@
+  */
+ package org.apache.hadoop.hbase.master.balancer;
+ 
++import com.google.common.annotations.VisibleForTesting;
+ import java.util.ArrayDeque;
+ import java.util.Arrays;
+ import java.util.Collection;
+@@ -215,6 +216,12 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
+     return false;
+   }
+ 
++  @VisibleForTesting
++  Cluster.Action nextAction(Cluster cluster) {
++    return candidateGenerators[(RANDOM.nextInt(candidateGenerators.length))]
++            .generate(cluster);
++  }
++
+   /**
+    * Given the cluster state this will try and approach an optimal balance. This
+    * should always approach the optimal state given enough steps.
+@@ -266,9 +273,7 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
+     long step;
+ 
+     for (step = 0; step < computedMaxSteps; step++) {
+-      int generatorIdx = RANDOM.nextInt(candidateGenerators.length);
+-      CandidateGenerator p = candidateGenerators[generatorIdx];
+-      Cluster.Action action = p.generate(cluster);
++      Cluster.Action action = nextAction(cluster);
+ 
+       if (action.type == Type.NULL) {
+         continue;
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/balancer/TestStochasticLoadBalancer.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/balancer/TestStochasticLoadBalancer.java
+index 7ee9fa5..8ddb6b9 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/balancer/TestStochasticLoadBalancer.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/balancer/TestStochasticLoadBalancer.java
+@@ -149,6 +149,27 @@ public class TestStochasticLoadBalancer extends BalancerTestBase {
+   }
+ 
+   @Test
++  public void testCostAfterUndoAction() {
++    final int runs = 10;
++    loadBalancer.setConf(conf);
++    for (int[] mockCluster : clusterStateMocks) {
++      BaseLoadBalancer.Cluster cluster = mockCluster(mockCluster);
++      loadBalancer.initCosts(cluster);
++      for (int i = 0; i != runs; ++i) {
++        final double expectedCost = loadBalancer.computeCost(cluster, Double.MAX_VALUE);
++        Cluster.Action action = loadBalancer.nextAction(cluster);
++        cluster.doAction(action);
++        loadBalancer.updateCostsWithAction(cluster, action);
++        Cluster.Action undoAction = action.undoAction();
++        cluster.doAction(undoAction);
++        loadBalancer.updateCostsWithAction(cluster, undoAction);
++        final double actualCost = loadBalancer.computeCost(cluster, Double.MAX_VALUE);
++        assertEquals(expectedCost, actualCost, 0);
++      }
++    }
++  }
++
++  @Test
+   public void testTableSkewCost() {
+     Configuration conf = HBaseConfiguration.create();
+     StochasticLoadBalancer.CostFunction
+-- 
+1.7.9.5
+

@@ -1,0 +1,44 @@
+From 6ed1e7ac477d23e087fa249f1514877fc27048e3 Mon Sep 17 00:00:00 2001
+From: Balazs Meszaros <balazs.meszaros@cloudera.com>
+Date: Tue, 15 Aug 2017 12:04:58 +0200
+Subject: [PATCH 375/410] HBASE-18077 Update JUnit licensing to use EPL
+
+This commit contains some fixes for CDH.
+
+Signed-off-by: Sean Busbey <busbey@apache.org>
+
+(cherry picked from commit 6ee7a4932ab0a24956168d6482c30712a247a17a)
+
+Change-Id: Ief6e2b8073a4cca340440b7f09cd609599e90bef
+Author: Mike Drob
+Reason: Bug
+Ref: CDH-57897
+---
+ .../src/main/resources/META-INF/LICENSE.vm         |    4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/hbase-resource-bundle/src/main/resources/META-INF/LICENSE.vm b/hbase-resource-bundle/src/main/resources/META-INF/LICENSE.vm
+index 324c0f7..ec3d398 100644
+--- a/hbase-resource-bundle/src/main/resources/META-INF/LICENSE.vm
++++ b/hbase-resource-bundle/src/main/resources/META-INF/LICENSE.vm
+@@ -1565,7 +1565,7 @@ You can redistribute it and/or modify it under either the terms of the GPL
+ ## license mentions.
+ ##
+ ## See this FAQ link for justifications: https://www.apache.org/legal/resolved.html
+-#set($non_aggregate_fine = [ 'Public Domain', 'New BSD license', 'BSD license', 'Mozilla Public License Version 1.1', 'Mozilla Public License Version 2.0', 'Creative Commons Attribution License, Version 2.5' ])
++#set($non_aggregate_fine = [ 'Public Domain', 'New BSD License', 'BSD license', 'Mozilla Public License Version 1.1', 'Mozilla Public License Version 2.0', 'HSQLDB License', 'Creative Commons Attribution License, Version 2.5' ])
+ ## include LICENSE sections for anything not under ASL2.0
+ #foreach( ${dep} in ${projects} )
+ #if(${debug-print-included-work-info.equalsIgnoreCase("true")})
+@@ -1641,7 +1641,7 @@ ${dep.scm.url}
+ #if(${dep.licenses[0].name.equals("Common Public License Version 1.0")})
+ #set($aggregated = $cpl.add($dep))
+ #end
+-#if(${dep.licenses[0].name.equals("Eclipse Public License 1.0")})
++#if(${dep.licenses[0].name.equals("Eclipse Public License 1.0")} || ${dep.licenses[0].name.equals("Eclipse Public License v1.0")})
+ #set($aggregated = $epl.add($dep))
+ #end
+ #if(!${aggregated})
+-- 
+1.7.9.5
+

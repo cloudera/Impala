@@ -1,0 +1,57 @@
+From 3477902596e82719cc8d04d75ecc486b68ea7b28 Mon Sep 17 00:00:00 2001
+From: Jerry He <jerryjch@apache.org>
+Date: Mon, 8 Feb 2016 14:13:46 -0800
+Subject: [PATCH 114/410] HBASE-15201 Add hbase-spark to hbase assembly
+
+Change-Id: I01a343a20f37bed07987e3de96e96d3a2c06fcd4
+Reason: New Feature
+Author: Jerry He
+Ref: CDH-35578
+---
+ hbase-assembly/pom.xml                             |    5 +++++
+ .../src/main/assembly/hadoop-two-compat.xml        |    1 +
+ hbase-spark/pom.xml                                |    1 +
+ 3 files changed, 7 insertions(+)
+
+diff --git a/hbase-assembly/pom.xml b/hbase-assembly/pom.xml
+index 6b3f5ba..9e2eaae 100644
+--- a/hbase-assembly/pom.xml
++++ b/hbase-assembly/pom.xml
+@@ -192,5 +192,10 @@
+        <version>${project.version}</version>
+        <optional>true</optional>
+     </dependency>
++    <dependency>
++      <groupId>org.apache.hbase</groupId>
++      <artifactId>hbase-spark</artifactId>
++      <version>${project.version}</version>
++    </dependency>
+   </dependencies>
+ </project>
+diff --git a/hbase-assembly/src/main/assembly/hadoop-two-compat.xml b/hbase-assembly/src/main/assembly/hadoop-two-compat.xml
+index df6ab0e..5aed6f0 100644
+--- a/hbase-assembly/src/main/assembly/hadoop-two-compat.xml
++++ b/hbase-assembly/src/main/assembly/hadoop-two-compat.xml
+@@ -45,6 +45,7 @@
+         <include>org.apache.hbase:hbase-rest</include>
+         <include>org.apache.hbase:hbase-server</include>
+         <include>org.apache.hbase:hbase-shell</include>
++        <include>org.apache.hbase:hbase-spark</include>
+         <include>org.apache.hbase:hbase-thrift</include>
+         <include>org.apache.hbase:hbase-external-blockcache</include>
+       </includes>
+diff --git a/hbase-spark/pom.xml b/hbase-spark/pom.xml
+index 449a3f6..66424aa 100644
+--- a/hbase-spark/pom.xml
++++ b/hbase-spark/pom.xml
+@@ -88,6 +88,7 @@
+             <groupId>org.apache.spark</groupId>
+             <artifactId>spark-streaming_${scala.binary.version}</artifactId>
+             <version>${spark.version}</version>
++            <scope>provided</scope>
+         </dependency>
+         <dependency>
+             <groupId>org.apache.spark</groupId>
+-- 
+1.7.9.5
+

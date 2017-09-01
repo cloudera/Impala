@@ -1,0 +1,642 @@
+From 4b67b1e45e68903ac5cc3482cc572e0df19f27c8 Mon Sep 17 00:00:00 2001
+From: chenheng <chenheng@apache.org>
+Date: Sat, 27 Aug 2016 10:36:21 +0800
+Subject: [PATCH 199/410] HBASE016490 Fix race condition between
+ SnapshotManager and SnapshotCleaner
+
+Reason: Bug
+Author: Heng Chen
+Ref: CDH-43658
+
+Change-Id: Ie93916bf54fa987edd4dff1c08871a8d5f503dcc
+---
+ .../org/apache/hadoop/hbase/master/HMaster.java    |    5 +++-
+ .../master/cleaner/BaseFileCleanerDelegate.java    |    7 +++++
+ .../hadoop/hbase/master/cleaner/CleanerChore.java  |   29 +++++++++++++-------
+ .../hbase/master/cleaner/FileCleanerDelegate.java  |    8 ++++++
+ .../hadoop/hbase/master/cleaner/HFileCleaner.java  |   12 ++++++--
+ .../snapshot/DisabledTableSnapshotHandler.java     |    4 +--
+ .../snapshot/EnabledTableSnapshotHandler.java      |    2 +-
+ .../hbase/master/snapshot/SnapshotFileCache.java   |   28 ++++++++++++-------
+ .../master/snapshot/SnapshotHFileCleaner.java      |   15 +++++++++-
+ .../hbase/master/snapshot/SnapshotLogCleaner.java  |   13 ++++++++-
+ .../hbase/master/snapshot/SnapshotManager.java     |   22 ++++++++++++++-
+ .../hbase/master/snapshot/TakeSnapshotHandler.java |   10 +++++--
+ .../master/snapshot/TestSnapshotFileCache.java     |   11 ++++----
+ .../master/snapshot/TestSnapshotHFileCleaner.java  |   19 ++++++-------
+ 14 files changed, 139 insertions(+), 46 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
+index 75d85db..6e80e8c 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
+@@ -29,6 +29,7 @@ import java.util.ArrayList;
+ import java.util.Collection;
+ import java.util.Collections;
+ import java.util.Comparator;
++import java.util.HashMap;
+ import java.util.HashSet;
+ import java.util.Iterator;
+ import java.util.List;
+@@ -1124,8 +1125,10 @@ public class HMaster extends HRegionServer implements MasterServices, Server {
+ 
+    //start the hfile archive cleaner thread
+     Path archiveDir = HFileArchiveUtil.getArchivePath(conf);
++    Map<String, Object> params = new HashMap<String, Object>();
++    params.put(MASTER, this);
+     this.hfileCleaner = new HFileCleaner(cleanerInterval, this, conf, getMasterFileSystem()
+-        .getFileSystem(), archiveDir);
++        .getFileSystem(), archiveDir, params);
+     getChoreService().scheduleChore(hfileCleaner);
+     serviceStarted = true;
+     if (LOG.isTraceEnabled()) {
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/cleaner/BaseFileCleanerDelegate.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/cleaner/BaseFileCleanerDelegate.java
+index c6955d0..891db22 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/cleaner/BaseFileCleanerDelegate.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/cleaner/BaseFileCleanerDelegate.java
+@@ -23,6 +23,8 @@ import org.apache.hadoop.hbase.BaseConfigurable;
+ import com.google.common.base.Predicate;
+ import com.google.common.collect.Iterables;
+ 
++import java.util.Map;
++
+ /**
+  * Base class for file cleaners which allows subclasses to implement a simple
+  * isFileDeletable method (which used to be the FileCleanerDelegate contract).
+@@ -39,6 +41,11 @@ implements FileCleanerDelegate {
+       }});
+   }
+ 
++  @Override
++  public void init(Map<String, Object> params) {
++    // subclass could override it if needed.
++  }
++
+   /**
+    * Should the master delete the file or keep it?
+    * @param fStat file status of the file to check
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/cleaner/CleanerChore.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/cleaner/CleanerChore.java
+index 0efcff7..5c268bd 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/cleaner/CleanerChore.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/cleaner/CleanerChore.java
+@@ -17,10 +17,10 @@
+  */
+ package org.apache.hadoop.hbase.master.cleaner;
+ 
+-import java.io.IOException;
+-import java.util.LinkedList;
+-import java.util.List;
+-
++import com.google.common.annotations.VisibleForTesting;
++import com.google.common.collect.ImmutableSet;
++import com.google.common.collect.Iterables;
++import com.google.common.collect.Lists;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+@@ -32,10 +32,10 @@ import org.apache.hadoop.hbase.ScheduledChore;
+ import org.apache.hadoop.hbase.Stoppable;
+ import org.apache.hadoop.hbase.util.FSUtils;
+ 
+-import com.google.common.annotations.VisibleForTesting;
+-import com.google.common.collect.ImmutableSet;
+-import com.google.common.collect.Iterables;
+-import com.google.common.collect.Lists;
++import java.io.IOException;
++import java.util.LinkedList;
++import java.util.List;
++import java.util.Map;
+ 
+ /**
+  * Abstract Cleaner that uses a chain of delegates to clean a directory of files
+@@ -49,6 +49,12 @@ public abstract class CleanerChore<T extends FileCleanerDelegate> extends Schedu
+   private final Path oldFileDir;
+   private final Configuration conf;
+   protected List<T> cleanersChain;
++  protected Map<String, Object> params;
++
++  public CleanerChore(String name, final int sleepPeriod, final Stoppable s, Configuration conf,
++                      FileSystem fs, Path oldFileDir, String confKey) {
++    this(name, sleepPeriod, s, conf, fs, oldFileDir, confKey, null);
++  }
+ 
+   /**
+    * @param name name of the chore being run
+@@ -58,17 +64,19 @@ public abstract class CleanerChore<T extends FileCleanerDelegate> extends Schedu
+    * @param fs handle to the FS
+    * @param oldFileDir the path to the archived files
+    * @param confKey configuration key for the classes to instantiate
++   * @param params members could be used in cleaner
+    */
+   public CleanerChore(String name, final int sleepPeriod, final Stoppable s, Configuration conf,
+-      FileSystem fs, Path oldFileDir, String confKey) {
++      FileSystem fs, Path oldFileDir, String confKey, Map<String, Object> params) {
+     super(name, s, sleepPeriod);
+     this.fs = fs;
+     this.oldFileDir = oldFileDir;
+     this.conf = conf;
+-
++    this.params = params;
+     initCleanerChain(confKey);
+   }
+ 
++
+   /**
+    * Validate the file to see if it even belongs in the directory. If it is valid, then the file
+    * will go through the cleaner delegates, but otherwise the file is just deleted.
+@@ -109,6 +117,7 @@ public abstract class CleanerChore<T extends FileCleanerDelegate> extends Schedu
+       @SuppressWarnings("unchecked")
+       T cleaner = (T) c.newInstance();
+       cleaner.setConf(conf);
++      cleaner.init(this.params);
+       return cleaner;
+     } catch (Exception e) {
+       LOG.warn("Can NOT create CleanerDelegate: " + className, e);
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/cleaner/FileCleanerDelegate.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/cleaner/FileCleanerDelegate.java
+index b11fd80..7a15b96 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/cleaner/FileCleanerDelegate.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/cleaner/FileCleanerDelegate.java
+@@ -22,6 +22,8 @@ import org.apache.hadoop.conf.Configurable;
+ import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.hbase.Stoppable;
+ 
++import java.util.Map;
++
+ /**
+  * General interface for cleaning files from a folder (generally an archive or
+  * backup folder). These are chained via the {@link CleanerChore} to determine
+@@ -36,4 +38,10 @@ public interface FileCleanerDelegate extends Configurable, Stoppable {
+    * @return files that are ok to delete according to this cleaner
+    */
+   Iterable<FileStatus> getDeletableFiles(Iterable<FileStatus> files);
++
++
++  /**
++   * this method is used to pass some instance into subclass
++   * */
++  void init(Map<String, Object> params);
+ }
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/cleaner/HFileCleaner.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/cleaner/HFileCleaner.java
+index 2785155..89c316b 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/cleaner/HFileCleaner.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/cleaner/HFileCleaner.java
+@@ -18,6 +18,7 @@
+ package org.apache.hadoop.hbase.master.cleaner;
+ 
+ import java.util.List;
++import java.util.Map;
+ 
+ import org.apache.hadoop.hbase.classification.InterfaceAudience;
+ import org.apache.hadoop.conf.Configuration;
+@@ -35,16 +36,23 @@ public class HFileCleaner extends CleanerChore<BaseHFileCleanerDelegate> {
+ 
+   public static final String MASTER_HFILE_CLEANER_PLUGINS = "hbase.master.hfilecleaner.plugins";
+ 
++  public HFileCleaner(final int period, final Stoppable stopper, Configuration conf, FileSystem fs,
++      Path directory) {
++    this(period, stopper, conf, fs, directory, null);
++  }
++
+   /**
+    * @param period the period of time to sleep between each run
+    * @param stopper the stopper
+    * @param conf configuration to use
+    * @param fs handle to the FS
+    * @param directory directory to be cleaned
++   * @param params params could be used in subclass of BaseHFileCleanerDelegate
+    */
+   public HFileCleaner(final int period, final Stoppable stopper, Configuration conf, FileSystem fs,
+-      Path directory) {
+-    super("HFileCleaner", period, stopper, conf, fs, directory, MASTER_HFILE_CLEANER_PLUGINS);
++                      Path directory, Map<String, Object> params) {
++    super("HFileCleaner", period, stopper, conf, fs,
++      directory, MASTER_HFILE_CLEANER_PLUGINS, params);
+   }
+ 
+   @Override
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/DisabledTableSnapshotHandler.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/DisabledTableSnapshotHandler.java
+index 6b9e5e2..aae97af 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/DisabledTableSnapshotHandler.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/DisabledTableSnapshotHandler.java
+@@ -60,8 +60,8 @@ public class DisabledTableSnapshotHandler extends TakeSnapshotHandler {
+    * @param masterServices master services provider
+    */
+   public DisabledTableSnapshotHandler(SnapshotDescription snapshot,
+-      final MasterServices masterServices) {
+-    super(snapshot, masterServices);
++      final MasterServices masterServices, final SnapshotManager snapshotManager) {
++    super(snapshot, masterServices, snapshotManager);
+   }
+ 
+   @Override
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/EnabledTableSnapshotHandler.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/EnabledTableSnapshotHandler.java
+index 7e047ac..f545a82 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/EnabledTableSnapshotHandler.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/EnabledTableSnapshotHandler.java
+@@ -50,7 +50,7 @@ public class EnabledTableSnapshotHandler extends TakeSnapshotHandler {
+ 
+   public EnabledTableSnapshotHandler(SnapshotDescription snapshot, MasterServices master,
+       final SnapshotManager manager) {
+-    super(snapshot, master);
++    super(snapshot, master, manager);
+     this.coordinator = manager.getCoordinator();
+   }
+ 
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/SnapshotFileCache.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/SnapshotFileCache.java
+index 5b367c5..f80d962 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/SnapshotFileCache.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/SnapshotFileCache.java
+@@ -27,6 +27,7 @@ import java.util.Map;
+ import java.util.Set;
+ import java.util.Timer;
+ import java.util.TimerTask;
++import java.util.concurrent.locks.ReentrantLock;
+ 
+ import com.google.common.annotations.VisibleForTesting;
+ import com.google.common.collect.Lists;
+@@ -177,7 +178,8 @@ public class SnapshotFileCache implements Stoppable {
+   // XXX this is inefficient to synchronize on the method, when what we really need to guard against
+   // is an illegal access to the cache. Really we could do a mutex-guarded pointer swap on the
+   // cache, but that seems overkill at the moment and isn't necessarily a bottleneck.
+-  public synchronized Iterable<FileStatus> getUnreferencedFiles(Iterable<FileStatus> files)
++  public synchronized Iterable<FileStatus> getUnreferencedFiles(Iterable<FileStatus> files,
++      final SnapshotManager snapshotManager)
+       throws IOException {
+     List<FileStatus> unReferencedFiles = Lists.newArrayList();
+     List<String> snapshotsInProgress = null;
+@@ -192,7 +194,7 @@ public class SnapshotFileCache implements Stoppable {
+         continue;
+       }
+       if (snapshotsInProgress == null) {
+-        snapshotsInProgress = getSnapshotsInProgress();
++        snapshotsInProgress = getSnapshotsInProgress(snapshotManager);
+       }
+       if (snapshotsInProgress.contains(fileName)) {
+         continue;
+@@ -292,8 +294,9 @@ public class SnapshotFileCache implements Stoppable {
+     this.snapshots.clear();
+     this.snapshots.putAll(known);
+   }
+-  
+-  @VisibleForTesting List<String> getSnapshotsInProgress() throws IOException {
++
++  @VisibleForTesting List<String> getSnapshotsInProgress(
++    final SnapshotManager snapshotManager) throws IOException {
+     List<String> snapshotInProgress = Lists.newArrayList();
+     // only add those files to the cache, but not to the known snapshots
+     Path snapshotTmpDir = new Path(snapshotDir, SnapshotDescriptionUtils.SNAPSHOT_TMP_DIR_NAME);
+@@ -301,20 +304,25 @@ public class SnapshotFileCache implements Stoppable {
+     FileStatus[] running = FSUtils.listStatus(fs, snapshotTmpDir);
+     if (running != null) {
+       for (FileStatus run : running) {
++        ReentrantLock lock = null;
++        if (snapshotManager != null) {
++          lock = snapshotManager.getLocks().acquireLock(run.getPath().getName());
++        }
+         try {
+           snapshotInProgress.addAll(fileInspector.filesUnderSnapshot(run.getPath()));
+         } catch (CorruptedSnapshotException e) {
+           // See HBASE-16464
+           if (e.getCause() instanceof FileNotFoundException) {
+-            // If the snapshot is not in progress, we will delete it
+-            if (!fs.exists(new Path(run.getPath(),
+-              SnapshotDescriptionUtils.SNAPSHOT_IN_PROGRESS))) {
+-              fs.delete(run.getPath(), true);
+-              LOG.warn("delete the " + run.getPath() + " due to exception:", e.getCause());
+-            }
++            // If the snapshot is corrupt, we will delete it
++            fs.delete(run.getPath(), true);
++            LOG.warn("delete the " + run.getPath() + " due to exception:", e.getCause());
+           } else {
+             throw e;
+           }
++        } finally {
++          if (lock != null) {
++            lock.unlock();
++          }
+         }
+       }
+     }
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/SnapshotHFileCleaner.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/SnapshotHFileCleaner.java
+index df03d63..2fdbd55 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/SnapshotHFileCleaner.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/SnapshotHFileCleaner.java
+@@ -20,6 +20,7 @@ package org.apache.hadoop.hbase.master.snapshot;
+ import java.io.IOException;
+ import java.util.Collection;
+ import java.util.Collections;
++import java.util.Map;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+@@ -30,6 +31,8 @@ import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.hbase.HBaseInterfaceAudience;
++import org.apache.hadoop.hbase.master.HMaster;
++import org.apache.hadoop.hbase.master.MasterServices;
+ import org.apache.hadoop.hbase.master.cleaner.BaseHFileCleanerDelegate;
+ import org.apache.hadoop.hbase.snapshot.CorruptedSnapshotException;
+ import org.apache.hadoop.hbase.snapshot.SnapshotReferenceUtil;
+@@ -57,10 +60,12 @@ public class SnapshotHFileCleaner extends BaseHFileCleanerDelegate {
+   /** File cache for HFiles in the completed and currently running snapshots */
+   private SnapshotFileCache cache;
+ 
++  private MasterServices master;
++
+   @Override
+   public synchronized Iterable<FileStatus> getDeletableFiles(Iterable<FileStatus> files) {
+     try {
+-      return cache.getUnreferencedFiles(files);
++      return cache.getUnreferencedFiles(files, master.getSnapshotManager());
+     } catch (CorruptedSnapshotException cse) {
+       LOG.debug("Corrupted in-progress snapshot file exception, ignored ", cse);
+     } catch (IOException e) {
+@@ -70,6 +75,13 @@ public class SnapshotHFileCleaner extends BaseHFileCleanerDelegate {
+   }
+ 
+   @Override
++  public void init(Map<String, Object> params) {
++    if (params.containsKey(HMaster.MASTER)) {
++      this.master = (MasterServices) params.get(HMaster.MASTER);
++    }
++  }
++
++  @Override
+   protected boolean isFileDeletable(FileStatus fStat) {
+     return false;
+   }
+@@ -93,6 +105,7 @@ public class SnapshotHFileCleaner extends BaseHFileCleanerDelegate {
+     }
+   }
+ 
++
+   @Override
+   public void stop(String why) {
+     this.cache.stop(why);
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/SnapshotLogCleaner.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/SnapshotLogCleaner.java
+index 28aa800..666b180 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/SnapshotLogCleaner.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/SnapshotLogCleaner.java
+@@ -20,6 +20,7 @@ package org.apache.hadoop.hbase.master.snapshot;
+ import java.io.IOException;
+ import java.util.Collection;
+ import java.util.Collections;
++import java.util.Map;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+@@ -30,6 +31,8 @@ import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.hbase.HBaseInterfaceAudience;
++import org.apache.hadoop.hbase.master.HMaster;
++import org.apache.hadoop.hbase.master.MasterServices;
+ import org.apache.hadoop.hbase.master.cleaner.BaseLogCleanerDelegate;
+ import org.apache.hadoop.hbase.snapshot.SnapshotReferenceUtil;
+ import org.apache.hadoop.hbase.util.FSUtils;
+@@ -54,17 +57,25 @@ public class SnapshotLogCleaner extends BaseLogCleanerDelegate {
+   private static final long DEFAULT_WAL_CACHE_REFRESH_PERIOD = 300000;
+ 
+   private SnapshotFileCache cache;
++  private MasterServices master;
+ 
+   @Override
+   public synchronized Iterable<FileStatus> getDeletableFiles(Iterable<FileStatus> files) {
+     try {
+-      return cache.getUnreferencedFiles(files);
++      return cache.getUnreferencedFiles(files, master.getSnapshotManager());
+     } catch (IOException e) {
+       LOG.error("Exception while checking if files were valid, keeping them just in case.", e);
+       return Collections.emptyList();
+     }
+   }
+ 
++  @Override
++  public void init(Map<String, Object> params) {
++    if (params.containsKey(HMaster.MASTER)) {
++      this.master = (MasterServices) params.get(HMaster.MASTER);
++    }
++  }
++
+   /**
+    * This method should only be called <b>once</b>, as it starts a thread to keep the cache
+    * up-to-date.
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/SnapshotManager.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/SnapshotManager.java
+index 04ba3ff..bda666c 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/SnapshotManager.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/SnapshotManager.java
+@@ -27,7 +27,10 @@ import java.util.Iterator;
+ import java.util.List;
+ import java.util.Map;
+ import java.util.Set;
++import java.util.concurrent.ConcurrentHashMap;
++import java.util.concurrent.ConcurrentMap;
+ import java.util.concurrent.ThreadPoolExecutor;
++import java.util.concurrent.locks.ReentrantReadWriteLock;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+@@ -80,6 +83,8 @@ import org.apache.hadoop.hbase.snapshot.TablePartiallyOpenException;
+ import org.apache.hadoop.hbase.snapshot.UnknownSnapshotException;
+ import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
+ import org.apache.hadoop.hbase.util.FSUtils;
++import org.apache.hadoop.hbase.util.KeyLocker;
++import org.apache.hadoop.hbase.wal.WAL;
+ import org.apache.zookeeper.KeeperException;
+ 
+ /**
+@@ -154,6 +159,16 @@ public class SnapshotManager extends MasterProcedureManager implements Stoppable
+   private Path rootDir;
+   private ExecutorService executorService;
+ 
++  /**
++   *  Locks for snapshot operations
++   *  key is snapshot's filename in progress, value is the related lock
++   *    - create snapshot
++   *    - SnapshotCleaner
++   * */
++  private KeyLocker<String> locks = new KeyLocker<String>();
++
++
++
+   public SnapshotManager() {}
+ 
+   /**
+@@ -465,7 +480,7 @@ public class SnapshotManager extends MasterProcedureManager implements Stoppable
+ 
+     // Take the snapshot of the disabled table
+     DisabledTableSnapshotHandler handler =
+-        new DisabledTableSnapshotHandler(snapshot, master);
++        new DisabledTableSnapshotHandler(snapshot, master, this);
+     snapshotTable(snapshot, handler);
+   }
+ 
+@@ -1124,4 +1139,9 @@ public class SnapshotManager extends MasterProcedureManager implements Stoppable
+     builder.setType(SnapshotDescription.Type.FLUSH);
+     return builder.build();
+   }
++
++  public KeyLocker<String> getLocks() {
++    return locks;
++  }
++
+ }
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/TakeSnapshotHandler.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/TakeSnapshotHandler.java
+index 39387cb..08b16f1 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/TakeSnapshotHandler.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/TakeSnapshotHandler.java
+@@ -23,6 +23,7 @@ import java.util.HashSet;
+ import java.util.List;
+ import java.util.Set;
+ import java.util.concurrent.CancellationException;
++import java.util.concurrent.locks.ReentrantLock;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+@@ -87,6 +88,7 @@ public abstract class TakeSnapshotHandler extends EventHandler implements Snapsh
+   protected final MonitoredTask status;
+   protected final TableName snapshotTable;
+   protected final SnapshotManifest snapshotManifest;
++  protected final SnapshotManager snapshotManager;
+ 
+   protected HTableDescriptor htd;
+ 
+@@ -94,13 +96,15 @@ public abstract class TakeSnapshotHandler extends EventHandler implements Snapsh
+    * @param snapshot descriptor of the snapshot to take
+    * @param masterServices master services provider
+    */
+-  public TakeSnapshotHandler(SnapshotDescription snapshot, final MasterServices masterServices) {
++  public TakeSnapshotHandler(SnapshotDescription snapshot, final MasterServices masterServices,
++                             final SnapshotManager snapshotManager) {
+     super(masterServices, EventType.C_M_SNAPSHOT_TABLE);
+     assert snapshot != null : "SnapshotDescription must not be nul1";
+     assert masterServices != null : "MasterServices must not be nul1";
+ 
+     this.master = masterServices;
+     this.snapshot = snapshot;
++    this.snapshotManager = snapshotManager;
+     this.snapshotTable = TableName.valueOf(snapshot.getTable());
+     this.conf = this.master.getConfiguration();
+     this.fs = this.master.getMasterFileSystem().getFileSystem();
+@@ -160,11 +164,12 @@ public abstract class TakeSnapshotHandler extends EventHandler implements Snapsh
+     String msg = "Running " + snapshot.getType() + " table snapshot " + snapshot.getName() + " "
+         + eventType + " on table " + snapshotTable;
+     LOG.info(msg);
++    ReentrantLock lock = snapshotManager.getLocks().acquireLock(snapshot.getName());
+     status.setStatus(msg);
+     try {
+       // If regions move after this meta scan, the region specific snapshot should fail, triggering
+       // an external exception that gets captured here.
+-      SnapshotDescriptionUtils.createInProgressTag(workingDir, fs);
++
+       // write down the snapshot info in the working directory
+       SnapshotDescriptionUtils.writeSnapshotInfo(snapshot, workingDir, fs);
+       snapshotManifest.addTableDescriptor(this.htd);
+@@ -228,6 +233,7 @@ public abstract class TakeSnapshotHandler extends EventHandler implements Snapsh
+       } catch (IOException e) {
+         LOG.error("Couldn't delete snapshot working directory:" + workingDir);
+       }
++      lock.unlock();
+       releaseTableLock();
+     }
+   }
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/snapshot/TestSnapshotFileCache.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/snapshot/TestSnapshotFileCache.java
+index 989efe4..a45ff22 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/snapshot/TestSnapshotFileCache.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/snapshot/TestSnapshotFileCache.java
+@@ -172,8 +172,9 @@ public class TestSnapshotFileCache {
+     SnapshotFileCache cache = new SnapshotFileCache(fs, rootDir, period, 10000000,
+         "test-snapshot-file-cache-refresh", new SnapshotFiles()) {
+       @Override
+-      List<String> getSnapshotsInProgress() throws IOException {
+-        List<String> result = super.getSnapshotsInProgress();
++      List<String> getSnapshotsInProgress(final SnapshotManager snapshotManager)
++              throws IOException {
++        List<String> result = super.getSnapshotsInProgress(snapshotManager);
+         count.incrementAndGet();
+         return result;
+       }
+@@ -194,7 +195,7 @@ public class TestSnapshotFileCache {
+     FSUtils.logFileSystemState(fs, rootDir, LOG);
+ 
+     List<FileStatus> allStoreFiles = getStoreFilesForSnapshot(complete);
+-    Iterable<FileStatus> deletableFiles = cache.getUnreferencedFiles(allStoreFiles);
++    Iterable<FileStatus> deletableFiles = cache.getUnreferencedFiles(allStoreFiles, null);
+     assertTrue(Iterables.isEmpty(deletableFiles));
+     // no need for tmp dir check as all files are accounted for.
+     assertEquals(0, count.get() - countBeforeCheck);
+@@ -203,7 +204,7 @@ public class TestSnapshotFileCache {
+     // add a random file to make sure we refresh
+     FileStatus randomFile = mockStoreFile(UUID.randomUUID().toString());
+     allStoreFiles.add(randomFile);
+-    deletableFiles = cache.getUnreferencedFiles(allStoreFiles);
++    deletableFiles = cache.getUnreferencedFiles(allStoreFiles, null);
+     assertEquals(randomFile, Iterables.getOnlyElement(deletableFiles));
+     assertEquals(1, count.get() - countBeforeCheck); // we check the tmp directory
+   }
+@@ -315,7 +316,7 @@ public class TestSnapshotFileCache {
+   private Iterable<FileStatus> getNonSnapshotFiles(SnapshotFileCache cache, Path storeFile)
+       throws IOException {
+     return cache.getUnreferencedFiles(
+-        Arrays.asList(FSUtils.listStatus(fs, storeFile.getParent()))
++        Arrays.asList(FSUtils.listStatus(fs, storeFile.getParent())), null
+     );
+   }
+ }
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/snapshot/TestSnapshotHFileCleaner.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/snapshot/TestSnapshotHFileCleaner.java
+index 78be717..0bdd176 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/snapshot/TestSnapshotHFileCleaner.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/snapshot/TestSnapshotHFileCleaner.java
+@@ -132,7 +132,7 @@ public class TestSnapshotHFileCleaner {
+     SnapshotFileCache cache = new SnapshotFileCache(fs, rootDir, period, 10000000,
+         "test-snapshot-file-cache-refresh", new SnapshotFiles());
+     try {
+-      cache.getSnapshotsInProgress();
++      cache.getSnapshotsInProgress(null);
+     } catch (CorruptedSnapshotException cse) {
+       LOG.info("Expected exception " + cse);
+     } finally {
+@@ -159,7 +159,7 @@ public class TestSnapshotHFileCleaner {
+     SnapshotFileCache cache = new SnapshotFileCache(fs, rootDir, period, 10000000,
+         "test-snapshot-file-cache-refresh", new SnapshotFiles());
+     try {
+-      cache.getSnapshotsInProgress();
++      cache.getSnapshotsInProgress(null);
+     } catch (CorruptedSnapshotException cse) {
+       LOG.info("Expected exception " + cse);
+     } finally {
+@@ -167,23 +167,22 @@ public class TestSnapshotHFileCleaner {
+     }
+   }
+ 
+-
+   /**
+-   * HBASE-16464
+-   */
++  * HBASE-16464
++  */
+   @Test
+   public void testMissedTmpSnapshot() throws IOException {
+     SnapshotTestingUtils.SnapshotMock
+-      snapshotMock = new SnapshotTestingUtils.SnapshotMock(TEST_UTIL.getConfiguration(), fs, rootDir);
++        snapshotMock = new SnapshotTestingUtils.SnapshotMock(TEST_UTIL.getConfiguration(), fs, rootDir);
+     SnapshotTestingUtils.SnapshotMock.SnapshotBuilder builder = snapshotMock.createSnapshotV2(
+-      SNAPSHOT_NAME_STR, TABLE_NAME_STR);
++        SNAPSHOT_NAME_STR, TABLE_NAME_STR);
+     builder.addRegionV2();
+     builder.missOneRegionSnapshotFile();
+ 
+-    long period = Long.MAX_VALUE;
++      long period = Long.MAX_VALUE;
+     SnapshotFileCache cache = new SnapshotFileCache(fs, rootDir, period, 10000000,
+-      "test-snapshot-file-cache-refresh", new SnapshotFiles());
+-    cache.getSnapshotsInProgress();
++        "test-snapshot-file-cache-refresh", new SnapshotFiles());
++    cache.getSnapshotsInProgress(null);
+     assertFalse(fs.exists(builder.getSnapshotsDir()));
+   }
+ }
+-- 
+1.7.9.5
+

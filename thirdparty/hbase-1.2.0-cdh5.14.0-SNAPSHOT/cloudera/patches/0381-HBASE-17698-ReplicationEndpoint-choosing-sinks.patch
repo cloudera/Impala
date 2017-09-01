@@ -1,0 +1,35 @@
+From 10448018fbc5c949db8fc69f25f23b9d3e2d19cc Mon Sep 17 00:00:00 2001
+From: Karan Mehta <k.mehta@kmehta-ltm1.internal.salesforce.com>
+Date: Mon, 6 Mar 2017 15:56:24 -0800
+Subject: [PATCH 381/410] HBASE-17698 ReplicationEndpoint choosing sinks
+
+Signed-off-by: Andrew Purtell <apurtell@apache.org>
+
+(cherry picked from commit cd583383bcdae7e658ca2ca308d96a3be48956aa)
+
+Change-Id: I5d72a4296e8cfc975e12bca4f26f1f0dbbdb9601
+Author: Karan Mehta
+Reason: Bug
+Ref: CDH-57969
+---
+ .../HBaseInterClusterReplicationEndpoint.java      |    4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/HBaseInterClusterReplicationEndpoint.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/HBaseInterClusterReplicationEndpoint.java
+index 8176384..fa8723c 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/HBaseInterClusterReplicationEndpoint.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/HBaseInterClusterReplicationEndpoint.java
+@@ -264,8 +264,8 @@ public class HBaseInterClusterReplicationEndpoint extends HBaseReplicationEndpoi
+                 + "Replication cannot proceed without losing data.", sleepMultiplier)) {
+               sleepMultiplier++;
+             }
+-          } else if (ioe instanceof SaslException) {
+-            LOG.warn("Peer encountered SaslException, rechecking all sinks: ", ioe);
++          } else {
++            LOG.warn("Peer encountered RemoteException, rechecking all sinks: ", ioe);
+             replicationSinkMgr.chooseSinks();
+           }
+         } else {
+-- 
+1.7.9.5
+

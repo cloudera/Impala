@@ -1,0 +1,43 @@
+From fe5e77d6568427697dcc70bd9f8af36284ca5934 Mon Sep 17 00:00:00 2001
+From: Huaxiang Sun <hsun@cloudera.com>
+Date: Fri, 8 Jan 2016 17:36:34 -0800
+Subject: [PATCH 085/410] HBASE-13109 Make better SEEK vs SKIP decisions
+ during scanning. (addendum)
+
+Reason: Product Requirement (Compatibility)
+Author: Lars Hofhansl
+Ref: CDH-35507
+
+Change-Id: I332ab9ee85122b28b6a7b1bf9814025b7cec94be
+---
+ .../hadoop/hbase/mob/DefaultMobStoreFlusher.java   |    6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/DefaultMobStoreFlusher.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/DefaultMobStoreFlusher.java
+index 00b3421..73b2cf4 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/DefaultMobStoreFlusher.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/DefaultMobStoreFlusher.java
+@@ -39,6 +39,7 @@ import org.apache.hadoop.hbase.regionserver.DefaultStoreFlusher;
+ import org.apache.hadoop.hbase.regionserver.HMobStore;
+ import org.apache.hadoop.hbase.regionserver.InternalScanner;
+ import org.apache.hadoop.hbase.regionserver.MemStoreSnapshot;
++import org.apache.hadoop.hbase.regionserver.ScannerContext;
+ import org.apache.hadoop.hbase.regionserver.Store;
+ import org.apache.hadoop.hbase.regionserver.StoreFile;
+ import org.apache.hadoop.hbase.util.Bytes;
+@@ -168,8 +169,11 @@ public class DefaultMobStoreFlusher extends DefaultStoreFlusher {
+           .getName());
+       List<Cell> cells = new ArrayList<Cell>();
+       boolean hasMore;
++      ScannerContext scannerContext =
++              ScannerContext.newBuilder().setBatchLimit(compactionKVMax).build();
++      
+       do {
+-        hasMore = scanner.next(cells, compactionKVMax);
++        hasMore = scanner.next(cells, scannerContext);
+         if (!cells.isEmpty()) {
+           for (Cell c : cells) {
+             // If we know that this KV is going to be included always, then let us
+-- 
+1.7.9.5
+

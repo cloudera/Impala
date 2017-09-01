@@ -1,0 +1,115 @@
+From 9e9b7bc60ed79343f787e17e612535f6bead0c18 Mon Sep 17 00:00:00 2001
+From: chenheng <chenheng@apache.org>
+Date: Thu, 28 Apr 2016 11:40:29 +0800
+Subject: [PATCH 368/410] HBASE-15720 Print row locks at the debug dump page
+
+(cherry picked from commit 92eec5382995e2254ff9db556d0e784559c08b2e)
+(cherry picked from commit bf13941592ab0c947ce76cf4c353696414fc1067)
+
+Change-Id: Icb19acb1baed69020961099b1cd72920d116b515
+Author: chenheng
+Reason: Improvement
+Ref: CDH-56908
+---
+ .../apache/hadoop/hbase/regionserver/HRegion.java  |   11 ++++++++++
+ .../hadoop/hbase/regionserver/RSDumpServlet.java   |   21 +++++++++++++++++++-
+ 2 files changed, 31 insertions(+), 1 deletion(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
+index eab1986..117024a 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
+@@ -5192,6 +5192,7 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+         throw new IOException("Timed out waiting for lock for row: " + rowKey + " in region "
+             + getRegionInfo().getEncodedName());
+       }
++      rowLockContext.setThreadName(Thread.currentThread().getName());
+       return result;
+     } catch (InterruptedException ie) {
+       LOG.warn("Thread interrupted waiting for lock on row: " + rowKey);
+@@ -5219,6 +5220,10 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+     }
+   }
+ 
++  public ConcurrentHashMap<HashedBytes, RowLockContext> getLockedRows() {
++    return lockedRows;
++  }
++
+   @VisibleForTesting
+   class RowLockContext {
+     private final HashedBytes row;
+@@ -5226,6 +5231,7 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+     final AtomicBoolean usable = new AtomicBoolean(true);
+     final AtomicInteger count = new AtomicInteger(0);
+     final Object lock = new Object();
++    private String threadName;
+ 
+     RowLockContext(HashedBytes row) {
+       this.row = row;
+@@ -5264,12 +5270,17 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+       }
+     }
+ 
++    public void setThreadName(String threadName) {
++      this.threadName = threadName;
++    }
++
+     @Override
+     public String toString() {
+       return "RowLockContext{" +
+           "row=" + row +
+           ", readWriteLock=" + readWriteLock +
+           ", count=" + count +
++          ", threadName=" + threadName +
+           '}';
+     }
+   }
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/RSDumpServlet.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/RSDumpServlet.java
+index 77b68ec..56d0417 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/RSDumpServlet.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/RSDumpServlet.java
+@@ -23,7 +23,6 @@ import java.io.OutputStream;
+ import java.io.PrintStream;
+ import java.io.PrintWriter;
+ import java.util.Date;
+-
+ import javax.servlet.http.HttpServletRequest;
+ import javax.servlet.http.HttpServletResponse;
+ 
+@@ -69,6 +68,10 @@ public class RSDumpServlet extends StateDumpServlet {
+     out.println(LINE);
+     TaskMonitor.get().dumpAsText(out);
+ 
++    out.println("\n\nRowLocks:");
++    out.println(LINE);
++    dumpRowLock(hrs, out);
++
+     out.println("\n\nExecutors:");
+     out.println(LINE);
+     dumpExecutors(hrs.getExecutorService(), out);
+@@ -100,6 +103,22 @@ public class RSDumpServlet extends StateDumpServlet {
+     out.flush();
+   }
+ 
++  public static void dumpRowLock(HRegionServer hrs, PrintWriter out) {
++    StringBuilder sb = new StringBuilder();
++    for (Region region : hrs.getOnlineRegionsLocalContext()) {
++      HRegion hRegion = (HRegion)region;
++      if (hRegion.getLockedRows().size() > 0) {
++        for (HRegion.RowLockContext rowLockContext : hRegion.getLockedRows().values()) {
++          sb.setLength(0);
++          sb.append(hRegion.getTableDesc().getTableName()).append(",")
++            .append(hRegion.getRegionInfo().getEncodedName()).append(",");
++          sb.append(rowLockContext.toString());
++          out.println(sb.toString());
++        }
++      }
++    }
++  }
++
+   public static void dumpQueue(HRegionServer hrs, PrintWriter out)
+       throws IOException {
+     if (hrs.compactSplitThread != null) {
+-- 
+1.7.9.5
+

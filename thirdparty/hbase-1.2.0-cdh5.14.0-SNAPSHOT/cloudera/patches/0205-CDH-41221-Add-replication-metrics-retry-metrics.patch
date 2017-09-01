@@ -1,0 +1,428 @@
+From ec5105edc688cc87316523dbd0aecef9c2478346 Mon Sep 17 00:00:00 2001
+From: Sean Busbey <busbey@apache.org>
+Date: Tue, 7 Jun 2016 16:00:46 -0500
+Subject: [PATCH 205/410] CDH-41221 Add replication metrics retry metrics
+
+Adds some additional log detail at the TRACE
+level about file offsets seen while handling recoverable errors. It also
+add metrics that measure the use of this recovery mechanism.
+
+Change-Id: Iacc62aa16b703a1f879843d6fa4036d7746c4dc4
+Reason: Supportability
+Author: Sean Busbey
+Ref: CDH-39853
+---
+ .../MetricsReplicationSourceSource.java            |   17 +++++
+ .../MetricsReplicationGlobalSourceSource.java      |   43 +++++++++++
+ .../MetricsReplicationSourceSourceImpl.java        |   80 ++++++++++++++++++++
+ .../hbase/regionserver/wal/ProtobufLogReader.java  |   20 +++--
+ .../replication/regionserver/MetricsSource.java    |   35 +++++++++
+ .../regionserver/ReplicationSource.java            |   12 ++-
+ src/main/asciidoc/_chapters/ops_mgt.adoc           |   24 +++++-
+ 7 files changed, 223 insertions(+), 8 deletions(-)
+
+diff --git a/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/replication/regionserver/MetricsReplicationSourceSource.java b/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/replication/regionserver/MetricsReplicationSourceSource.java
+index fecf191..22b90dd 100644
+--- a/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/replication/regionserver/MetricsReplicationSourceSource.java
++++ b/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/replication/regionserver/MetricsReplicationSourceSource.java
+@@ -32,6 +32,16 @@ public interface MetricsReplicationSourceSource {
+ 
+   public static final String SOURCE_LOG_EDITS_FILTERED = "source.logEditsFiltered";
+ 
++  public static final String SOURCE_CLOSED_LOGS_WITH_UNKNOWN_LENGTH =
++      "source.closedLogsWithUnknownFileLength";
++  public static final String SOURCE_UNCLEANLY_CLOSED_LOGS = "source.uncleanlyClosedLogs";
++  public static final String SOURCE_UNCLEANLY_CLOSED_IGNORED_IN_BYTES =
++      "source.ignoredUncleanlyClosedLogContentsInBytes";
++  public static final String SOURCE_RESTARTED_LOG_READING = "source.restartedLogReading";
++  public static final String SOURCE_REPEATED_LOG_FILE_BYTES = "source.repeatedLogFileBytes";
++  public static final String SOURCE_COMPLETED_LOGS = "source.completedLogs";
++  public static final String SOURCE_COMPLETED_RECOVERY_QUEUES = "source.completedRecoverQueues";
++
+   void setLastShippedAge(long age);
+   void setSizeOfLogQueue(int size);
+   void incrSizeOfLogQueue(int size);
+@@ -44,4 +54,11 @@ public interface MetricsReplicationSourceSource {
+   void incrLogReadInEdits(long size);
+   void clear();
+   long getLastShippedAge();
++  void incrUnknownFileLengthForClosedWAL();
++  void incrUncleanlyClosedWALs();
++  void incrBytesSkippedInUncleanlyClosedWALs(final long bytes);
++  void incrRestartedWALReading();
++  void incrRepeatedFileBytes(final long bytes);
++  void incrCompletedWAL();
++  void incrCompletedRecoveryQueue();
+ }
+diff --git a/hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/replication/regionserver/MetricsReplicationGlobalSourceSource.java b/hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/replication/regionserver/MetricsReplicationGlobalSourceSource.java
+index 3e4f1a4..023bac3 100644
+--- a/hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/replication/regionserver/MetricsReplicationGlobalSourceSource.java
++++ b/hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/replication/regionserver/MetricsReplicationGlobalSourceSource.java
+@@ -32,6 +32,13 @@ public class MetricsReplicationGlobalSourceSource implements MetricsReplicationS
+   private final MutableFastCounter shippedOpsCounter;
+   private final MutableFastCounter shippedKBsCounter;
+   private final MutableFastCounter logReadInBytesCounter;
++  private final MutableFastCounter unknownFileLengthForClosedWAL;
++  private final MutableFastCounter uncleanlyClosedWAL;
++  private final MutableFastCounter uncleanlyClosedSkippedBytes;
++  private final MutableFastCounter restartWALReading;
++  private final MutableFastCounter repeatedFileBytes;
++  private final MutableFastCounter completedWAL;
++  private final MutableFastCounter completedRecoveryQueue;
+ 
+   public MetricsReplicationGlobalSourceSource(MetricsReplicationSourceImpl rms) {
+     this.rms = rms;
+@@ -52,6 +59,13 @@ public class MetricsReplicationGlobalSourceSource implements MetricsReplicationS
+ 
+     logEditsFilteredCounter = rms.getMetricsRegistry().getCounter(SOURCE_LOG_EDITS_FILTERED, 0L);
+ 
++    unknownFileLengthForClosedWAL = rms.getMetricsRegistry().getCounter(SOURCE_CLOSED_LOGS_WITH_UNKNOWN_LENGTH, 0L);
++    uncleanlyClosedWAL = rms.getMetricsRegistry().getCounter(SOURCE_UNCLEANLY_CLOSED_LOGS, 0L);
++    uncleanlyClosedSkippedBytes = rms.getMetricsRegistry().getCounter(SOURCE_UNCLEANLY_CLOSED_IGNORED_IN_BYTES, 0L);
++    restartWALReading = rms.getMetricsRegistry().getCounter(SOURCE_RESTARTED_LOG_READING, 0L);
++    repeatedFileBytes = rms.getMetricsRegistry().getCounter(SOURCE_REPEATED_LOG_FILE_BYTES, 0L);
++    completedWAL = rms.getMetricsRegistry().getCounter(SOURCE_COMPLETED_LOGS, 0L);
++    completedRecoveryQueue = rms.getMetricsRegistry().getCounter(SOURCE_COMPLETED_RECOVERY_QUEUES, 0L);
+   }
+ 
+   @Override public void setLastShippedAge(long age) {
+@@ -101,4 +115,33 @@ public class MetricsReplicationGlobalSourceSource implements MetricsReplicationS
+   public long getLastShippedAge() {
+     return ageOfLastShippedOpGauge.value();
+   }
++
++  @Override
++  public void incrUnknownFileLengthForClosedWAL() {
++    unknownFileLengthForClosedWAL.incr(1L);
++  }
++  @Override
++  public void incrUncleanlyClosedWALs() {
++    uncleanlyClosedWAL.incr(1L);
++  }
++  @Override
++  public void incrBytesSkippedInUncleanlyClosedWALs(final long bytes) {
++    uncleanlyClosedSkippedBytes.incr(bytes);
++  }
++  @Override
++  public void incrRestartedWALReading() {
++    restartWALReading.incr(1L);
++  }
++  @Override
++  public void incrRepeatedFileBytes(final long bytes) {
++    repeatedFileBytes.incr(bytes);
++  }
++  @Override
++  public void incrCompletedWAL() {
++    completedWAL.incr(1L);
++  }
++  @Override
++  public void incrCompletedRecoveryQueue() {
++    completedRecoveryQueue.incr(1L);
++  }
+ }
+diff --git a/hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/replication/regionserver/MetricsReplicationSourceSourceImpl.java b/hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/replication/regionserver/MetricsReplicationSourceSourceImpl.java
+index 16992a6..a91ef93 100644
+--- a/hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/replication/regionserver/MetricsReplicationSourceSourceImpl.java
++++ b/hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/replication/regionserver/MetricsReplicationSourceSourceImpl.java
+@@ -31,6 +31,7 @@ public class MetricsReplicationSourceSourceImpl implements MetricsReplicationSou
+   private final String shippedBatchesKey;
+   private final String shippedOpsKey;
+   private final String shippedKBsKey;
++  private String keyPrefix;
+   private final String logReadInBytesKey;
+ 
+   private final MutableGaugeLong ageOfLastShippedOpGauge;
+@@ -42,9 +43,25 @@ public class MetricsReplicationSourceSourceImpl implements MetricsReplicationSou
+   private final MutableFastCounter shippedKBsCounter;
+   private final MutableFastCounter logReadInBytesCounter;
+ 
++  private final String unknownFileLengthKey;
++  private final String uncleanlyClosedKey;
++  private final String uncleanlySkippedBytesKey;
++  private final String restartedKey;
++  private final String repeatedBytesKey;
++  private final String completedLogsKey;
++  private final String completedRecoveryKey;
++  private final MutableFastCounter unknownFileLengthForClosedWAL;
++  private final MutableFastCounter uncleanlyClosedWAL;
++  private final MutableFastCounter uncleanlyClosedSkippedBytes;
++  private final MutableFastCounter restartWALReading;
++  private final MutableFastCounter repeatedFileBytes;
++  private final MutableFastCounter completedWAL;
++  private final MutableFastCounter completedRecoveryQueue;
++
+   public MetricsReplicationSourceSourceImpl(MetricsReplicationSourceImpl rms, String id) {
+     this.rms = rms;
+     this.id = id;
++    this.keyPrefix = "source." + this.id + ".";
+ 
+     ageOfLastShippedOpKey = "source." + id + ".ageOfLastShippedOp";
+     ageOfLastShippedOpGauge = rms.getMetricsRegistry().getGauge(ageOfLastShippedOpKey, 0L);
+@@ -70,6 +87,26 @@ public class MetricsReplicationSourceSourceImpl implements MetricsReplicationSou
+     logEditsFilteredKey = "source." + id + ".logEditsFiltered";
+     logEditsFilteredCounter = rms.getMetricsRegistry().getCounter(logEditsFilteredKey, 0L);
+ 
++    unknownFileLengthKey = this.keyPrefix + "closedLogsWithUnknownFileLength";
++    unknownFileLengthForClosedWAL = rms.getMetricsRegistry().getCounter(unknownFileLengthKey, 0L);
++
++    uncleanlyClosedKey = this.keyPrefix + "uncleanlyClosedLogs";
++    uncleanlyClosedWAL = rms.getMetricsRegistry().getCounter(uncleanlyClosedKey, 0L);
++
++    uncleanlySkippedBytesKey = this.keyPrefix + "ignoredUncleanlyClosedLogContentsInBytes";
++    uncleanlyClosedSkippedBytes = rms.getMetricsRegistry().getCounter(uncleanlySkippedBytesKey, 0L);
++
++    restartedKey = this.keyPrefix + "restartedLogReading";
++    restartWALReading = rms.getMetricsRegistry().getCounter(restartedKey, 0L);
++
++    repeatedBytesKey = this.keyPrefix + "repeatedLogFileBytes";
++    repeatedFileBytes = rms.getMetricsRegistry().getCounter(repeatedBytesKey, 0L);
++
++    completedLogsKey = this.keyPrefix + "completedLogs";
++    completedWAL = rms.getMetricsRegistry().getCounter(completedLogsKey, 0L);
++
++    completedRecoveryKey = this.keyPrefix + "completedRecoverQueues";
++    completedRecoveryQueue = rms.getMetricsRegistry().getCounter(completedRecoveryKey, 0L);
+   }
+ 
+   @Override public void setLastShippedAge(long age) {
+@@ -125,10 +162,53 @@ public class MetricsReplicationSourceSourceImpl implements MetricsReplicationSou
+     rms.removeMetric(logReadInEditsKey);
+ 
+     rms.removeMetric(logEditsFilteredKey);
++
++    rms.removeMetric(unknownFileLengthKey);
++    rms.removeMetric(uncleanlyClosedKey);
++    rms.removeMetric(uncleanlySkippedBytesKey);
++    rms.removeMetric(restartedKey);
++    rms.removeMetric(repeatedBytesKey);
++    rms.removeMetric(completedLogsKey);
++    rms.removeMetric(completedRecoveryKey);
+   }
+ 
+   @Override
+   public long getLastShippedAge() {
+     return ageOfLastShippedOpGauge.value();
+   }
++
++  @Override
++  public void incrUnknownFileLengthForClosedWAL() {
++    unknownFileLengthForClosedWAL.incr(1L);
++  }
++
++  @Override
++  public void incrUncleanlyClosedWALs() {
++    uncleanlyClosedWAL.incr(1L);
++  }
++
++  @Override
++  public void incrBytesSkippedInUncleanlyClosedWALs(final long bytes) {
++    uncleanlyClosedSkippedBytes.incr(bytes);
++  }
++
++  @Override
++  public void incrRestartedWALReading() {
++    restartWALReading.incr(1L);
++  }
++
++  @Override
++  public void incrRepeatedFileBytes(final long bytes) {
++    repeatedFileBytes.incr(bytes);
++  }
++
++  @Override
++  public void incrCompletedWAL() {
++    completedWAL.incr(1L);
++  }
++
++  @Override
++  public void incrCompletedRecoveryQueue() {
++    completedRecoveryQueue.incr(1L);
++  }
+ }
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/wal/ProtobufLogReader.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/wal/ProtobufLogReader.java
+index d26c587..9fd171f 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/wal/ProtobufLogReader.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/wal/ProtobufLogReader.java
+@@ -327,7 +327,9 @@ public class ProtobufLogReader extends ReaderBase {
+       // OriginalPosition might be < 0 on local fs; if so, it is useless to us.
+       long originalPosition = this.inputStream.getPos();
+       if (trailerPresent && originalPosition > 0 && originalPosition == this.walEditsStopOffset) {
+-        LOG.trace("Reached end of expected edits area at offset " + originalPosition);
++        if (LOG.isTraceEnabled()) {
++          LOG.trace("Reached end of expected edits area at offset " + originalPosition);
++        }
+         return false;
+       }
+       WALKey.Builder builder = WALKey.newBuilder();
+@@ -363,7 +365,9 @@ public class ProtobufLogReader extends ReaderBase {
+         WALKey walKey = builder.build();
+         entry.getKey().readFieldsFromPb(walKey, this.byteStringUncompressor);
+         if (!walKey.hasFollowingKvCount() || 0 == walKey.getFollowingKvCount()) {
+-          LOG.trace("WALKey has no KVs that follow it; trying the next one. current offset=" + this.inputStream.getPos());
++          if (LOG.isTraceEnabled()) {
++            LOG.trace("WALKey has no KVs that follow it; trying the next one. current offset=" + this.inputStream.getPos());
++          }
+           continue;
+         }
+         int expectedCells = walKey.getFollowingKvCount();
+@@ -378,7 +382,9 @@ public class ProtobufLogReader extends ReaderBase {
+           try {
+             posAfterStr = this.inputStream.getPos() + "";
+           } catch (Throwable t) {
+-            LOG.trace("Error getting pos for error message - ignoring", t);
++            if (LOG.isTraceEnabled()) {
++              LOG.trace("Error getting pos for error message - ignoring", t);
++            }
+           }
+           String message = " while reading " + expectedCells + " WAL KVs; started reading at "
+               + posBefore + " and read up to " + posAfterStr;
+@@ -395,12 +401,16 @@ public class ProtobufLogReader extends ReaderBase {
+       } catch (EOFException eof) {
+         // If originalPosition is < 0, it is rubbish and we cannot use it (probably local fs)
+         if (originalPosition < 0) {
+-          LOG.trace("Encountered a malformed edit, but can't seek back to last good position because originalPosition is negative. last offset=" + this.inputStream.getPos(), eof);
++          if (LOG.isTraceEnabled()) {
++            LOG.trace("Encountered a malformed edit, but can't seek back to last good position because originalPosition is negative. last offset=" + this.inputStream.getPos(), eof);
++          }
+           throw eof;
+         }
+         // Else restore our position to original location in hope that next time through we will
+         // read successfully.
+-        LOG.trace("Encountered a malformed edit, seeking back to last good position in file, from "+ inputStream.getPos()+" to " + originalPosition, eof);
++        if (LOG.isTraceEnabled()) {
++          LOG.trace("Encountered a malformed edit, seeking back to last good position in file, from "+ inputStream.getPos()+" to " + originalPosition, eof);
++        }
+         seekOnFs(originalPosition);
+         return false;
+       }
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/MetricsSource.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/MetricsSource.java
+index f9f7001..be94c1e 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/MetricsSource.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/MetricsSource.java
+@@ -194,4 +194,39 @@ public class MetricsSource {
+   public String getPeerID() {
+     return id;
+   }
++
++  public void incrUnknownFileLengthForClosedWAL() {
++    singleSourceSource.incrUnknownFileLengthForClosedWAL();
++    globalSourceSource.incrUnknownFileLengthForClosedWAL();
++  }
++
++  public void incrUncleanlyClosedWALs() {
++    singleSourceSource.incrUncleanlyClosedWALs();
++    globalSourceSource.incrUncleanlyClosedWALs();
++  }
++
++  public void incrBytesSkippedInUncleanlyClosedWALs(final long bytes) {
++    singleSourceSource.incrBytesSkippedInUncleanlyClosedWALs(bytes);
++    globalSourceSource.incrBytesSkippedInUncleanlyClosedWALs(bytes);
++  }
++
++  public void incrRestartedWALReading() {
++    singleSourceSource.incrRestartedWALReading();
++    globalSourceSource.incrRestartedWALReading();
++  }
++
++  public void incrRepeatedFileBytes(final long bytes) {
++    singleSourceSource.incrRepeatedFileBytes(bytes);
++    globalSourceSource.incrRepeatedFileBytes(bytes);
++  }
++
++  public void incrCompletedWAL() {
++    singleSourceSource.incrCompletedWAL();
++    globalSourceSource.incrCompletedWAL();
++  }
++
++  public void incrCompletedRecoveryQueue() {
++    singleSourceSource.incrCompletedRecoveryQueue();
++    globalSourceSource.incrCompletedRecoveryQueue();
++  }
+ }
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/ReplicationSource.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/ReplicationSource.java
+index 83515cb..be16d01 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/ReplicationSource.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/ReplicationSource.java
+@@ -987,16 +987,22 @@ public class ReplicationSource extends Thread
+         } catch (IOException exception) {
+           LOG.warn("Couldn't get file length information about log " + this.currentPath + ", it " + (trailerSize < 0 ? "was not" : "was") + " closed cleanly"
+               + ", stats: " + getStats());
++          metrics.incrUnknownFileLengthForClosedWAL();
+         }
+         if (stat != null) {
+           if (trailerSize < 0) {
+             if (currentPosition < stat.getLen()) {
+-              LOG.info("Reached the end of WAL file '" + currentPath + "'. It was not closed cleanly, so we did not parse " + (stat.getLen() - currentPosition) + " bytes of data.");
++              final long skippedBytes = stat.getLen() - currentPosition;
++              LOG.info("Reached the end of WAL file '" + currentPath + "'. It was not closed cleanly, so we did not parse " + skippedBytes + " bytes of data.");
++              metrics.incrUncleanlyClosedWALs();
++              metrics.incrBytesSkippedInUncleanlyClosedWALs(skippedBytes);
+             }
+           } else if (currentPosition + trailerSize < stat.getLen()){
+             LOG.warn("Processing end of WAL file '" + currentPath + "'. At position " + currentPosition + ", which is too far away from reported file length " + stat.getLen() +
+-                ". Restarting WAL reading (see CDH-38113 / case #87596 for details). stats: " + getStats());
++                ". Restarting WAL reading (see HBASE-15983 for details). stats: " + getStats());
+             repLogReader.setPosition(0);
++            metrics.incrRestartedWALReading();
++            metrics.incrRepeatedFileBytes(currentPosition);
+             return false;
+           }
+         }
+@@ -1007,10 +1013,12 @@ public class ReplicationSource extends Thread
+         this.currentPath = null;
+         this.repLogReader.finishCurrentFile();
+         this.reader = null;
++        metrics.incrCompletedWAL();
+         return true;
+       } else if (this.replicationQueueInfo.isQueueRecovered()) {
+         LOG.debug("Finished recovering queue for group " + walGroupId + " of peer "
+             + peerClusterZnode);
++        metrics.incrCompletedRecoveryQueue();
+         workerRunning = false;
+         return true;
+       }
+diff --git a/src/main/asciidoc/_chapters/ops_mgt.adoc b/src/main/asciidoc/_chapters/ops_mgt.adoc
+index e3a8cc0..63bd48b 100644
+--- a/src/main/asciidoc/_chapters/ops_mgt.adoc
++++ b/src/main/asciidoc/_chapters/ops_mgt.adoc
+@@ -1571,7 +1571,7 @@ The new layout will be:
+ 
+ === Replication Metrics
+ 
+-The following metrics are exposed at the global region server level and (since HBase 0.95) at the peer level:
++The following metrics are exposed at the global region server level and at the peer level:
+ 
+ `source.sizeOfLogQueue`::
+   number of WALs to process (excludes the one which is being processed) at the Replication source
+@@ -1585,6 +1585,28 @@ The following metrics are exposed at the global region server level and (since H
+ `source.ageOfLastShippedOp`::
+   age of last batch that was shipped by the replication source
+ 
++`source.completedLogs`::
++  The number of write-ahead-log files that have completed their acknowledged sending to the peer associated with this source. Increments to this metric are a part of normal operation of HBase replication.
++
++`source.completedRecoverQueues`::
++  The number of recovery queues this source has completed sending to the associated peer. Increments to this metric are a part of normal recovery of HBase replication in the face of failed Region Servers.
++
++`source.uncleanlyClosedLogs`::
++  The number of write-ahead-log files the replication system considered completed after reaching the end of readable entries in the face of an uncleanly closed file.
++
++`source.ignoredUncleanlyClosedLogContentsInBytes`::
++  When a write-ahead-log file is not closed cleanly, there will likely be some entry that has been partially serialized. This metric contains the number of bytes of such entries the HBase replication system believes were remaining at the end of files skipped in the face of an uncleanly closed file. Those bytes should either be in different file or represent a client write that was not acknowledged.
++
++`source.restartedLogReading`::
++  The number of times the HBase replication system detected that it failed to correctly parse a cleanly closed write-ahead-log file. In this circumstance, the system replays the entire log from the beginning, ensuring that no edits fail to be acknowledged by the associated peer. Increments to this metric indicate that the HBase replication system is having difficulty correctly handling failures in the underlying distributed storage system. No dataloss should occur, but you should check Region Server log files for details of the failures.
++
++`source.repeatedLogFileBytes`::
++  When the HBase replication system determines that it needs to replay a given write-ahead-log file, this metric is incremented by the number of bytes the replication system believes had already been acknowledged by the associated peer prior to starting over.
++
++`source.closedLogsWithUnknownFileLength`::
++  Incremented when the HBase replication system believes it is at the end of a write-ahead-log file but it can not determine the length of that file in the underlying distributed storage system. Could indicate dataloss since the replication system is unable to determine if the end of readable entries lines up with the expected end of the file. You should check Region Server log files for details of the failures.
++
++
+ === Replication Configuration Options
+ 
+ [cols="1,1,1", options="header"]
+-- 
+1.7.9.5
+

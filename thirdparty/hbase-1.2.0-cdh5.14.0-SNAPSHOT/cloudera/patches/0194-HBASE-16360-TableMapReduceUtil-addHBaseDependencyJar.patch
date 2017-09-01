@@ -1,0 +1,31 @@
+From 39abf4677250d789be7a8db3fcbd2b3f75be1107 Mon Sep 17 00:00:00 2001
+From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
+Date: Tue, 23 Aug 2016 14:22:20 -0700
+Subject: [PATCH 194/410] HBASE-16360 TableMapReduceUtil
+ addHBaseDependencyJars has the wrong class name for
+ PrefixTreeCodec (Jing Pu Chen)
+
+Change-Id: Ie34335bb3164cdc3ce47ff2ad6ac771b4fd44614
+Reason: Bug
+Author: Jing Pu Chen
+Ref: CDH-43454
+---
+ .../hadoop/hbase/mapreduce/TableMapReduceUtil.java |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/TableMapReduceUtil.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/TableMapReduceUtil.java
+index 8cad7ab..bbcf99f 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/TableMapReduceUtil.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/TableMapReduceUtil.java
+@@ -771,7 +771,7 @@ public class TableMapReduceUtil {
+     Class prefixTreeCodecClass = null;
+     try {
+       prefixTreeCodecClass =
+-          Class.forName("org.apache.hadoop.hbase.code.prefixtree.PrefixTreeCodec");
++          Class.forName("org.apache.hadoop.hbase.codec.prefixtree.PrefixTreeCodec");
+     } catch (ClassNotFoundException e) {
+       // this will show up in unit tests but should not show in real deployments
+       LOG.warn("The hbase-prefix-tree module jar containing PrefixTreeCodec is not present." +
+-- 
+1.7.9.5
+

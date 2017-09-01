@@ -1,0 +1,39 @@
+From 81d6b02b1e8b3c133b31d56b54cabf1049e274ae Mon Sep 17 00:00:00 2001
+From: Sean Busbey <busbey@cloudera.com>
+Date: Fri, 12 May 2017 11:05:51 -0500
+Subject: [PATCH 347/410] CDH-53788 update precommit hook to archive logs.
+
+Change-Id: I564e97939df01afa4c8c648e42e78e03636a7ac6
+---
+ cloudera/pre_commit_hook.sh |   11 ++++++++---
+ 1 file changed, 8 insertions(+), 3 deletions(-)
+
+diff --git a/cloudera/pre_commit_hook.sh b/cloudera/pre_commit_hook.sh
+index 2fdb321..c1db44a 100644
+--- a/cloudera/pre_commit_hook.sh
++++ b/cloudera/pre_commit_hook.sh
+@@ -112,8 +112,8 @@ cd "${COMPONENT}"
+ "${GIT}" branch --set-upstream-to="origin/${GERRIT_BRANCH}" "${GERRIT_BRANCH}"
+ cd "${WORKSPACE}"
+ 
+-# Finally invoke test-patch and send results to a known HTML file.
+-/bin/bash "${TESTPATCHBIN}" \
++# invoke test-patch and send results to a known HTML file.
++if ! /bin/bash "${TESTPATCHBIN}" \
+         "${YETUS_ARGS[@]}" \
+         --patch-dir="${PATCHPROCESS}" \
+         --basedir="${COMPONENT}" \
+@@ -121,4 +121,9 @@ cd "${WORKSPACE}"
+         --git-cmd="${GIT}" \
+         --branch="${GERRIT_BRANCH}" \
+         --html-report-file="${PATCHPROCESS}/report_output.html" \
+-        "${PATCHFILE}"
++        "${PATCHFILE}" ; then
++  echo "[ERROR] test patch failed, grabbing test logs into artifact 'test_logs.zip'"
++  echo "[DEBUG] If we failed but didn't run any junit tests, zip will fail. We can safely ignore that."
++  find "${COMPONENT}" -path '*/target/surefire-reports/*' | zip "${PATCHPROCESS}/test_logs.zip" -@ || true
++  exit 1
++fi
+-- 
+1.7.9.5
+

@@ -1,0 +1,679 @@
+From 18913bf962c7e03da534aafa1f04c900d94ebea8 Mon Sep 17 00:00:00 2001
+From: Guanghao Zhang <zghaobac@gmail.com>
+Date: Fri, 25 Nov 2016 14:13:21 +0800
+Subject: [PATCH 320/410] HBASE-16561 Add metrics about read/write/scan queue
+ length and active read/write/scan handler count
+
+Signed-off-by: zhangduo <zhangduo@apache.org>
+
+(cherry picked from commit cc03f7ad5320d9b91cd65e0630501d08d341ad74)
+
+Change-Id: I42dab02ed05e737d3503332af28fd4d29b416da1
+Author: Guanghao Zhang
+Reason: Improvement
+Ref: CDH-51766
+---
+ .../hadoop/hbase/ipc/MetricsHBaseServerSource.java |   15 +++++
+ .../hbase/ipc/MetricsHBaseServerWrapper.java       |   17 ++++++
+ .../hbase/ipc/MetricsHBaseServerSourceImpl.java    |   14 ++++-
+ .../apache/hadoop/hbase/ipc/FifoRpcScheduler.java  |   30 ++++++++++
+ .../FifoWithFastPathBalancedQueueRpcExecutor.java  |    9 ++-
+ .../hbase/ipc/MetricsHBaseServerWrapperImpl.java   |   48 +++++++++++++++
+ .../hadoop/hbase/ipc/RWQueueRpcExecutor.java       |   63 ++++++++++++++++++--
+ .../org/apache/hadoop/hbase/ipc/RpcExecutor.java   |   59 +++++++++++++-----
+ .../org/apache/hadoop/hbase/ipc/RpcScheduler.java  |   18 ++++++
+ .../hadoop/hbase/ipc/SimpleRpcScheduler.java       |   47 ++++++++++++---
+ .../hadoop/hbase/ipc/DelegatingRpcScheduler.java   |   30 ++++++++++
+ .../hbase/ipc/MetricsHBaseServerWrapperStub.java   |   30 ++++++++++
+ .../apache/hadoop/hbase/ipc/TestRpcMetrics.java    |    7 ++-
+ 13 files changed, 354 insertions(+), 33 deletions(-)
+
+diff --git a/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/ipc/MetricsHBaseServerSource.java b/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/ipc/MetricsHBaseServerSource.java
+index a3ffcb2..f4833cc 100644
+--- a/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/ipc/MetricsHBaseServerSource.java
++++ b/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/ipc/MetricsHBaseServerSource.java
+@@ -60,10 +60,25 @@ public interface MetricsHBaseServerSource extends BaseSource {
+   String REPLICATION_QUEUE_DESC =
+       "Number of calls in the replication call queue.";
+   String PRIORITY_QUEUE_DESC = "Number of calls in the priority call queue.";
++  String WRITE_QUEUE_NAME = "numCallsInWriteQueue";
++  String WRITE_QUEUE_DESC = "Number of calls in the write call queue; " +
++    "parsed requests waiting in scheduler to be executed";
++  String READ_QUEUE_NAME = "numCallsInReadQueue";
++  String READ_QUEUE_DESC = "Number of calls in the read call queue; " +
++    "parsed requests waiting in scheduler to be executed";
++  String SCAN_QUEUE_NAME = "numCallsInScanQueue";
++  String SCAN_QUEUE_DESC = "Number of calls in the scan call queue; " +
++    "parsed requests waiting in scheduler to be executed";
+   String NUM_OPEN_CONNECTIONS_NAME = "numOpenConnections";
+   String NUM_OPEN_CONNECTIONS_DESC = "Number of open connections.";
+   String NUM_ACTIVE_HANDLER_NAME = "numActiveHandler";
+   String NUM_ACTIVE_HANDLER_DESC = "Number of active rpc handlers.";
++  String NUM_ACTIVE_WRITE_HANDLER_NAME = "numActiveWriteHandler";
++  String NUM_ACTIVE_WRITE_HANDLER_DESC = "Number of active write rpc handlers.";
++  String NUM_ACTIVE_READ_HANDLER_NAME = "numActiveReadHandler";
++  String NUM_ACTIVE_READ_HANDLER_DESC = "Number of active read rpc handlers.";
++  String NUM_ACTIVE_SCAN_HANDLER_NAME = "numActiveScanHandler";
++  String NUM_ACTIVE_SCAN_HANDLER_DESC = "Number of active scan rpc handlers.";
+ 
+   String EXCEPTIONS_NAME="exceptions";
+   String EXCEPTIONS_DESC="Exceptions caused by requests";
+diff --git a/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/ipc/MetricsHBaseServerWrapper.java b/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/ipc/MetricsHBaseServerWrapper.java
+index 1885264..8b4550d 100644
+--- a/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/ipc/MetricsHBaseServerWrapper.java
++++ b/hbase-hadoop-compat/src/main/java/org/apache/hadoop/hbase/ipc/MetricsHBaseServerWrapper.java
+@@ -21,9 +21,26 @@ package org.apache.hadoop.hbase.ipc;
+ 
+ public interface MetricsHBaseServerWrapper {
+   long getTotalQueueSize();
++
+   int getGeneralQueueLength();
++
+   int getReplicationQueueLength();
++
+   int getPriorityQueueLength();
++
+   int getNumOpenConnections();
++
+   int getActiveRpcHandlerCount();
++
++  int getWriteQueueLength();
++
++  int getReadQueueLength();
++
++  int getScanQueueLength();
++
++  int getActiveWriteRpcHandlerCount();
++
++  int getActiveReadRpcHandlerCount();
++
++  int getActiveScanRpcHandlerCount();
+ }
+diff --git a/hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/ipc/MetricsHBaseServerSourceImpl.java b/hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/ipc/MetricsHBaseServerSourceImpl.java
+index 857ffbe..436e175 100644
+--- a/hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/ipc/MetricsHBaseServerSourceImpl.java
++++ b/hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/ipc/MetricsHBaseServerSourceImpl.java
+@@ -235,7 +235,19 @@ public class MetricsHBaseServerSourceImpl extends BaseSourceImpl
+           .addGauge(Interns.info(NUM_OPEN_CONNECTIONS_NAME,
+               NUM_OPEN_CONNECTIONS_DESC), wrapper.getNumOpenConnections())
+           .addGauge(Interns.info(NUM_ACTIVE_HANDLER_NAME,
+-              NUM_ACTIVE_HANDLER_DESC), wrapper.getActiveRpcHandlerCount());
++              NUM_ACTIVE_HANDLER_DESC), wrapper.getActiveRpcHandlerCount())
++          .addGauge(Interns.info(WRITE_QUEUE_NAME, WRITE_QUEUE_DESC),
++              wrapper.getWriteQueueLength())
++          .addGauge(Interns.info(READ_QUEUE_NAME, READ_QUEUE_DESC),
++              wrapper.getReadQueueLength())
++          .addGauge(Interns.info(SCAN_QUEUE_NAME, SCAN_QUEUE_DESC),
++              wrapper.getScanQueueLength())
++          .addGauge(Interns.info(NUM_ACTIVE_WRITE_HANDLER_NAME, NUM_ACTIVE_WRITE_HANDLER_DESC),
++              wrapper.getActiveWriteRpcHandlerCount())
++          .addGauge(Interns.info(NUM_ACTIVE_READ_HANDLER_NAME, NUM_ACTIVE_READ_HANDLER_DESC),
++              wrapper.getActiveReadRpcHandlerCount())
++          .addGauge(Interns.info(NUM_ACTIVE_SCAN_HANDLER_NAME, NUM_ACTIVE_SCAN_HANDLER_DESC),
++              wrapper.getActiveScanRpcHandlerCount());
+     }
+ 
+     metricsRegistry.snapshot(mrb, all);
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/FifoRpcScheduler.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/FifoRpcScheduler.java
+index 5e104eb..226fce4 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/FifoRpcScheduler.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/FifoRpcScheduler.java
+@@ -104,4 +104,34 @@ public class FifoRpcScheduler extends RpcScheduler {
+   public int getActiveRpcHandlerCount() {
+     return executor.getActiveCount();
+   }
++
++  @Override
++  public int getWriteQueueLength() {
++    return 0;
++  }
++
++  @Override
++  public int getReadQueueLength() {
++    return 0;
++  }
++
++  @Override
++  public int getScanQueueLength() {
++    return 0;
++  }
++
++  @Override
++  public int getActiveWriteRpcHandlerCount() {
++    return 0;
++  }
++
++  @Override
++  public int getActiveReadRpcHandlerCount() {
++    return 0;
++  }
++
++  @Override
++  public int getActiveScanRpcHandlerCount() {
++    return 0;
++  }
+ }
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/FifoWithFastPathBalancedQueueRpcExecutor.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/FifoWithFastPathBalancedQueueRpcExecutor.java
+index 1951dd0..96e2d9d 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/FifoWithFastPathBalancedQueueRpcExecutor.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/FifoWithFastPathBalancedQueueRpcExecutor.java
+@@ -22,6 +22,7 @@ import java.util.concurrent.BlockingQueue;
+ import java.util.concurrent.ConcurrentLinkedDeque;
+ import java.util.concurrent.LinkedBlockingQueue;
+ import java.util.concurrent.Semaphore;
++import java.util.concurrent.atomic.AtomicInteger;
+ 
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hbase.Abortable;
+@@ -52,8 +53,9 @@ public class FifoWithFastPathBalancedQueueRpcExecutor extends BalancedQueueRpcEx
+ 
+   @Override
+   protected Handler getHandler(String name, double handlerFailureThreshhold,
+-      BlockingQueue<CallRunner> q) {
+-    return new FastPathHandler(name, handlerFailureThreshhold, q, fastPathHandlerStack);
++      BlockingQueue<CallRunner> q, AtomicInteger activeHandlerCount) {
++    return new FastPathHandler(name, handlerFailureThreshhold, q, activeHandlerCount,
++        fastPathHandlerStack);
+   }
+ 
+   @Override
+@@ -79,8 +81,9 @@ public class FifoWithFastPathBalancedQueueRpcExecutor extends BalancedQueueRpcEx
+     private CallRunner loadedCallRunner;
+ 
+     FastPathHandler(String name, double handlerFailureThreshhold, BlockingQueue<CallRunner> q,
++        final AtomicInteger activeHandlerCount,
+         final Deque<FastPathHandler> fastPathHandlerStack) {
+-      super(name, handlerFailureThreshhold, q);
++      super(name, handlerFailureThreshhold, q, activeHandlerCount);
+       this.fastPathHandlerStack = fastPathHandlerStack;
+       this.semaphore.drainPermits();
+     }
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/MetricsHBaseServerWrapperImpl.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/MetricsHBaseServerWrapperImpl.java
+index 63c4b32..e65eeb1 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/MetricsHBaseServerWrapperImpl.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/MetricsHBaseServerWrapperImpl.java
+@@ -78,4 +78,52 @@ public class MetricsHBaseServerWrapperImpl implements MetricsHBaseServerWrapper
+     }
+     return server.getScheduler().getActiveRpcHandlerCount();
+   }
++
++  @Override
++  public int getWriteQueueLength() {
++    if (!isServerStarted() || this.server.getScheduler() == null) {
++      return 0;
++    }
++    return server.getScheduler().getWriteQueueLength();
++  }
++
++  @Override
++  public int getReadQueueLength() {
++    if (!isServerStarted() || this.server.getScheduler() == null) {
++      return 0;
++    }
++    return server.getScheduler().getReadQueueLength();
++  }
++
++  @Override
++  public int getScanQueueLength() {
++    if (!isServerStarted() || this.server.getScheduler() == null) {
++      return 0;
++    }
++    return server.getScheduler().getScanQueueLength();
++  }
++
++  @Override
++  public int getActiveWriteRpcHandlerCount() {
++    if (!isServerStarted() || this.server.getScheduler() == null) {
++      return 0;
++    }
++    return server.getScheduler().getActiveWriteRpcHandlerCount();
++  }
++
++  @Override
++  public int getActiveReadRpcHandlerCount() {
++    if (!isServerStarted() || this.server.getScheduler() == null) {
++      return 0;
++    }
++    return server.getScheduler().getActiveReadRpcHandlerCount();
++  }
++
++  @Override
++  public int getActiveScanRpcHandlerCount() {
++    if (!isServerStarted() || this.server.getScheduler() == null) {
++      return 0;
++    }
++    return server.getScheduler().getActiveScanRpcHandlerCount();
++  }
+ }
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/RWQueueRpcExecutor.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/RWQueueRpcExecutor.java
+index de4b4de..0d98ea9 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/RWQueueRpcExecutor.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/RWQueueRpcExecutor.java
+@@ -22,6 +22,7 @@ import java.util.ArrayList;
+ import java.util.List;
+ import java.util.concurrent.BlockingQueue;
+ import java.util.concurrent.LinkedBlockingQueue;
++import java.util.concurrent.atomic.AtomicInteger;
+ 
+ import org.apache.commons.lang.ArrayUtils;
+ import org.apache.commons.logging.Log;
+@@ -34,10 +35,10 @@ import org.apache.hadoop.hbase.classification.InterfaceStability;
+ import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.Action;
+ import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MultiRequest;
+ import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutateRequest;
+-import org.apache.hadoop.hbase.protobuf.generated.RegionServerStatusProtos;
+ import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.RegionAction;
+ import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.ScanRequest;
+ import org.apache.hadoop.hbase.protobuf.generated.RPCProtos.RequestHeader;
++import org.apache.hadoop.hbase.protobuf.generated.RegionServerStatusProtos;
+ import org.apache.hadoop.hbase.util.ReflectionUtils;
+ 
+ import com.google.protobuf.Message;
+@@ -63,6 +64,10 @@ public class RWQueueRpcExecutor extends RpcExecutor {
+   private final int numReadQueues;
+   private final int numScanQueues;
+ 
++  private final AtomicInteger activeWriteHandlerCount = new AtomicInteger(0);
++  private final AtomicInteger activeReadHandlerCount = new AtomicInteger(0);
++  private final AtomicInteger activeScanHandlerCount = new AtomicInteger(0);
++
+   public RWQueueRpcExecutor(final String name, final int handlerCount, final int numQueues,
+       final float readShare, final int maxQueueLength,
+       final Configuration conf, final Abortable abortable) {
+@@ -153,10 +158,13 @@ public class RWQueueRpcExecutor extends RpcExecutor {
+ 
+   @Override
+   protected void startHandlers(final int port) {
+-    startHandlers(".write", writeHandlersCount, queues, 0, numWriteQueues, port);
+-    startHandlers(".read", readHandlersCount, queues, numWriteQueues, numReadQueues, port);
++    startHandlers(".write", writeHandlersCount, queues, 0, numWriteQueues, port,
++      activeWriteHandlerCount);
++    startHandlers(".read", readHandlersCount, queues, numWriteQueues, numReadQueues, port,
++      activeReadHandlerCount);
+     startHandlers(".scan", scanHandlersCount, queues,
+-                  numWriteQueues + numReadQueues, numScanQueues, port);
++                  numWriteQueues + numReadQueues, numScanQueues, port,
++                  activeScanHandlerCount);
+   }
+ 
+   @Override
+@@ -225,6 +233,53 @@ public class RWQueueRpcExecutor extends RpcExecutor {
+   }
+ 
+   @Override
++  public int getWriteQueueLength() {
++    int length = 0;
++    for (int i = 0; i < numWriteQueues; i++) {
++      length += queues.get(i).size();
++    }
++    return length;
++  }
++
++  @Override
++  public int getReadQueueLength() {
++    int length = 0;
++    for (int i = numWriteQueues; i < (numWriteQueues + numReadQueues); i++) {
++      length += queues.get(i).size();
++    }
++    return length;
++  }
++
++  @Override
++  public int getScanQueueLength() {
++    int length = 0;
++    for (int i = numWriteQueues + numReadQueues; i < (numWriteQueues + numReadQueues + numScanQueues); i++) {
++      length += queues.get(i).size();
++    }
++    return length;
++  }
++
++  @Override
++  public int getActiveHandlerCount() {
++    return activeWriteHandlerCount.get() + activeReadHandlerCount.get() + activeScanHandlerCount.get();
++  }
++
++  @Override
++  public int getActiveWriteHandlerCount() {
++    return activeWriteHandlerCount.get();
++  }
++
++  @Override
++  public int getActiveReadHandlerCount() {
++    return activeReadHandlerCount.get();
++  }
++
++  @Override
++  public int getActiveScanHandlerCount() {
++    return activeScanHandlerCount.get();
++  }
++
++  @Override
+   protected List<BlockingQueue<CallRunner>> getQueues() {
+     return queues;
+   }
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/RpcExecutor.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/RpcExecutor.java
+index 6525796..3251946 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/RpcExecutor.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/RpcExecutor.java
+@@ -82,13 +82,6 @@ public abstract class RpcExecutor {
+     }
+   }
+ 
+-  public int getActiveHandlerCount() {
+-    return activeHandlerCount.get();
+-  }
+-
+-  /** Returns the length of the pending queue */
+-  public abstract int getQueueLength();
+-
+   /** Add the request to the executor queue */
+   public abstract boolean dispatch(final CallRunner callTask) throws InterruptedException;
+ 
+@@ -97,15 +90,15 @@ public abstract class RpcExecutor {
+ 
+   protected void startHandlers(final int port) {
+     List<BlockingQueue<CallRunner>> callQueues = getQueues();
+-    startHandlers(null, handlerCount, callQueues, 0, callQueues.size(), port);
++    startHandlers(null, handlerCount, callQueues, 0, callQueues.size(), port, activeHandlerCount);
+   }
+ 
+   /**
+    * Override if providing alternate Handler implementation.
+    */
+   protected Handler getHandler(final String name, final double handlerFailureThreshhold,
+-      final BlockingQueue<CallRunner> q) {
+-    return new Handler(name, handlerFailureThreshhold, q);
++      final BlockingQueue<CallRunner> q, final AtomicInteger activeHandlerCount) {
++    return new Handler(name, handlerFailureThreshhold, q, activeHandlerCount);
+   }
+ 
+   /**
+@@ -113,7 +106,8 @@ public abstract class RpcExecutor {
+    */
+   protected void startHandlers(final String nameSuffix, final int numHandlers,
+       final List<BlockingQueue<CallRunner>> callQueues,
+-      final int qindex, final int qsize, final int port) {
++      final int qindex, final int qsize, final int port,
++      final AtomicInteger activeHandlerCount) {
+     final String threadPrefix = name + Strings.nullToEmpty(nameSuffix);
+     double handlerFailureThreshhold =
+         conf == null ? 1.0 : conf.getDouble(HConstants.REGION_SERVER_HANDLER_ABORT_ON_ERROR_PERCENT,
+@@ -122,7 +116,8 @@ public abstract class RpcExecutor {
+       final int index = qindex + (i % qsize);
+       String name = "RpcServer." + threadPrefix + ".handler=" + handlers.size() + ",queue=" +
+           index + ",port=" + port;
+-      Handler handler = getHandler(name, handlerFailureThreshhold, callQueues.get(index));
++      Handler handler = getHandler(name, handlerFailureThreshhold, callQueues.get(index),
++        activeHandlerCount);
+       handler.start();
+       LOG.debug("Started " + name);
+       handlers.add(handler);
+@@ -140,12 +135,15 @@ public abstract class RpcExecutor {
+ 
+     final double handlerFailureThreshhold;
+ 
++    final AtomicInteger activeHandlerCount;
++
+     Handler(final String name, final double handlerFailureThreshhold,
+-        final BlockingQueue<CallRunner> q) {
++        final BlockingQueue<CallRunner> q, final AtomicInteger activeHandlerCount) {
+       super(name);
+       setDaemon(true);
+       this.q = q;
+       this.handlerFailureThreshhold = handlerFailureThreshhold;
++      this.activeHandlerCount = activeHandlerCount;
+     }
+ 
+     /**
+@@ -181,7 +179,7 @@ public abstract class RpcExecutor {
+       MonitoredRPCHandler status = RpcServer.getStatus();
+       cr.setStatus(status);
+       try {
+-        activeHandlerCount.incrementAndGet();
++        this.activeHandlerCount.incrementAndGet();
+         cr.run();
+       } catch (Throwable e) {
+         if (e instanceof Error) {
+@@ -204,7 +202,7 @@ public abstract class RpcExecutor {
+           LOG.warn("Handler  exception " + StringUtils.stringifyException(e));
+         }
+       } finally {
+-        activeHandlerCount.decrementAndGet();
++        this.activeHandlerCount.decrementAndGet();
+       }
+     }
+   }
+@@ -249,4 +247,35 @@ public abstract class RpcExecutor {
+       return ThreadLocalRandom.current().nextInt(queueSize);
+     }
+   }
++
++  public int getActiveHandlerCount() {
++    return activeHandlerCount.get();
++  }
++
++  public int getActiveWriteHandlerCount() {
++    return 0;
++  }
++
++  public int getActiveReadHandlerCount() {
++    return 0;
++  }
++
++  public int getActiveScanHandlerCount() {
++    return 0;
++  }
++
++  /** Returns the length of the pending queue */
++  public abstract int getQueueLength();
++
++  public int getReadQueueLength() {
++    return 0;
++  }
++
++  public int getScanQueueLength() {
++    return 0;
++  }
++
++  public int getWriteQueueLength() {
++    return 0;
++  }
+ }
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/RpcScheduler.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/RpcScheduler.java
+index 90bcb47..25126ed 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/RpcScheduler.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/RpcScheduler.java
+@@ -71,4 +71,22 @@ public abstract class RpcScheduler {
+ 
+   /** Retrieves the number of active handler. */
+   public abstract int getActiveRpcHandlerCount();
++
++  /** Retrieves length of the write queue for metrics when use RWQueueRpcExecutor. */
++  public abstract int getWriteQueueLength();
++
++  /** Retrieves length of the read queue for metrics when use RWQueueRpcExecutor. */
++  public abstract int getReadQueueLength();
++
++  /** Retrieves length of the scan queue for metrics when use RWQueueRpcExecutor. */
++  public abstract int getScanQueueLength();
++
++  /** Retrieves the number of active write rpc handler when use RWQueueRpcExecutor. */
++  public abstract int getActiveWriteRpcHandlerCount();
++
++  /** Retrieves the number of active write rpc handler when use RWQueueRpcExecutor. */
++  public abstract int getActiveReadRpcHandlerCount();
++
++  /** Retrieves the number of active write rpc handler when use RWQueueRpcExecutor. */
++  public abstract int getActiveScanRpcHandlerCount();
+ }
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/SimpleRpcScheduler.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/SimpleRpcScheduler.java
+index 7d72516..dc2fe22 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/SimpleRpcScheduler.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/SimpleRpcScheduler.java
+@@ -167,14 +167,14 @@ public class SimpleRpcScheduler extends RpcScheduler {
+   }
+ 
+   public SimpleRpcScheduler(
+-	      Configuration conf,
+-	      int handlerCount,
+-	      int priorityHandlerCount,
+-	      int replicationHandlerCount,
+-	      PriorityFunction priority,
+-	      int highPriorityLevel) {
+-	  this(conf, handlerCount, priorityHandlerCount, replicationHandlerCount, priority,
+-	    null, highPriorityLevel);
++        Configuration conf,
++        int handlerCount,
++        int priorityHandlerCount,
++        int replicationHandlerCount,
++        PriorityFunction priority,
++        int highPriorityLevel) {
++    this(conf, handlerCount, priorityHandlerCount, replicationHandlerCount, priority,
++      null, highPriorityLevel);
+   }
+ 
+   @Override
+@@ -230,5 +230,34 @@ public class SimpleRpcScheduler extends RpcScheduler {
+            (priorityExecutor == null ? 0 : priorityExecutor.getActiveHandlerCount()) +
+            (replicationExecutor == null ? 0 : replicationExecutor.getActiveHandlerCount());
+   }
+-}
+ 
++  @Override
++  public int getWriteQueueLength() {
++    return callExecutor.getWriteQueueLength();
++  }
++
++  @Override
++  public int getReadQueueLength() {
++    return callExecutor.getReadQueueLength();
++  }
++
++  @Override
++  public int getScanQueueLength() {
++    return callExecutor.getScanQueueLength();
++  }
++
++  @Override
++  public int getActiveWriteRpcHandlerCount() {
++    return callExecutor.getActiveWriteHandlerCount();
++  }
++
++  @Override
++  public int getActiveReadRpcHandlerCount() {
++    return callExecutor.getActiveReadHandlerCount();
++  }
++
++  @Override
++  public int getActiveScanRpcHandlerCount() {
++    return callExecutor.getActiveScanHandlerCount();
++  }
++}
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/ipc/DelegatingRpcScheduler.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/ipc/DelegatingRpcScheduler.java
+index 7c6fa26..c8222c5 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/ipc/DelegatingRpcScheduler.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/ipc/DelegatingRpcScheduler.java
+@@ -60,6 +60,36 @@ public class DelegatingRpcScheduler extends RpcScheduler {
+   }
+ 
+   @Override
++  public int getWriteQueueLength() {
++    return 0;
++  }
++
++  @Override
++  public int getReadQueueLength() {
++    return 0;
++  }
++
++  @Override
++  public int getScanQueueLength() {
++    return 0;
++  }
++
++  @Override
++  public int getActiveWriteRpcHandlerCount() {
++    return 0;
++  }
++
++  @Override
++  public int getActiveReadRpcHandlerCount() {
++    return 0;
++  }
++
++  @Override
++  public int getActiveScanRpcHandlerCount() {
++    return 0;
++  }
++
++  @Override
+   public boolean dispatch(CallRunner task) throws IOException, InterruptedException {
+     return delegate.dispatch(task);
+   }
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/ipc/MetricsHBaseServerWrapperStub.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/ipc/MetricsHBaseServerWrapperStub.java
+index 6241f8e..a215d79 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/ipc/MetricsHBaseServerWrapperStub.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/ipc/MetricsHBaseServerWrapperStub.java
+@@ -48,4 +48,34 @@ public class MetricsHBaseServerWrapperStub implements MetricsHBaseServerWrapper{
+   public int getActiveRpcHandlerCount() {
+     return 106;
+   }
++
++  @Override
++  public int getWriteQueueLength() {
++    return 50;
++  }
++
++  @Override
++  public int getReadQueueLength() {
++    return 50;
++  }
++
++  @Override
++  public int getScanQueueLength() {
++    return 2;
++  }
++
++  @Override
++  public int getActiveWriteRpcHandlerCount() {
++    return 50;
++  }
++
++  @Override
++  public int getActiveReadRpcHandlerCount() {
++    return 50;
++  }
++
++  @Override
++  public int getActiveScanRpcHandlerCount() {
++    return 6;
++  }
+ }
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/ipc/TestRpcMetrics.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/ipc/TestRpcMetrics.java
+index 52518f8..3814de2 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/ipc/TestRpcMetrics.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/ipc/TestRpcMetrics.java
+@@ -45,7 +45,6 @@ public class TestRpcMetrics {
+     MetricsHBaseServer rsMetrics = new MetricsHBaseServer("HRegionServer", new MetricsHBaseServerWrapperStub());
+     MetricsHBaseServerSource rsSource = rsMetrics.getMetricsSource();
+ 
+-
+     assertEquals("master", masterSource.getMetricsContext());
+     assertEquals("regionserver", rsSource.getMetricsContext());
+ 
+@@ -70,6 +69,12 @@ public class TestRpcMetrics {
+     HELPER.assertGauge("numCallsInPriorityQueue", 104, serverSource);
+     HELPER.assertGauge("numOpenConnections", 105, serverSource);
+     HELPER.assertGauge("numActiveHandler", 106, serverSource);
++    HELPER.assertGauge("numActiveWriteHandler", 50, serverSource);
++    HELPER.assertGauge("numActiveReadHandler", 50, serverSource);
++    HELPER.assertGauge("numActiveScanHandler", 6, serverSource);
++    HELPER.assertGauge("numCallsInWriteQueue", 50, serverSource);
++    HELPER.assertGauge("numCallsInReadQueue", 50, serverSource);
++    HELPER.assertGauge("numCallsInScanQueue", 2, serverSource);
+   }
+ 
+   /**
+-- 
+1.7.9.5
+

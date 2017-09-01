@@ -1,0 +1,64 @@
+From 7c8465bfc88033cf89ffb9101a1d19aa3b79fd3e Mon Sep 17 00:00:00 2001
+From: Stephen Yuan Jiang <syuanjiangdev@gmail.com>
+Date: Wed, 21 Jun 2017 15:23:59 -0700
+Subject: [PATCH 380/410] HBASE-15691 ConcurrentModificationException in
+ BucketAllocator
+
+(cherry picked from commit 1b15b7825bb390a59dd57527efd4d013c753de5a)
+
+Change-Id: Idf34e82c1295c69497edd18decc5678ea76b8084
+Author: Stephen Yuan Jiang
+Reason: Bug
+Ref: CDH-57966
+---
+ .../hbase/io/hfile/bucket/BucketAllocator.java     |    6 +++---
+ .../hadoop/hbase/io/hfile/bucket/BucketCache.java  |    2 ++
+ 2 files changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/bucket/BucketAllocator.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/bucket/BucketAllocator.java
+index 646e822..92ce51e 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/bucket/BucketAllocator.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/bucket/BucketAllocator.java
+@@ -188,7 +188,7 @@ public final class BucketAllocator {
+       this.sizeIndex = sizeIndex;
+     }
+ 
+-    public void instantiateBucket(Bucket b) {
++    public synchronized void instantiateBucket(Bucket b) {
+       assert b.isUninstantiated() || b.isCompletelyFree();
+       b.reconfigure(sizeIndex, bucketSizes, bucketCapacity);
+       bucketList.put(b, b);
+@@ -240,7 +240,7 @@ public final class BucketAllocator {
+       return b;
+     }
+ 
+-    private void removeBucket(Bucket b) {
++    private synchronized void removeBucket(Bucket b) {
+       assert b.isCompletelyFree();
+       bucketList.remove(b);
+       freeBuckets.remove(b);
+@@ -256,7 +256,7 @@ public final class BucketAllocator {
+       if (b.isCompletelyFree()) completelyFreeBuckets.put(b, b);
+     }
+ 
+-    public IndexStatistics statistics() {
++    public synchronized IndexStatistics statistics() {
+       long free = 0, used = 0;
+       for (Object obj : bucketList.keySet()) {
+         Bucket b = (Bucket) obj;
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/bucket/BucketCache.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/bucket/BucketCache.java
+index c9b7322..f174709 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/bucket/BucketCache.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/bucket/BucketCache.java
+@@ -738,6 +738,8 @@ public class BucketCache implements BlockCache, HeapSize {
+         }
+       }
+ 
++    } catch (Throwable t) {
++      LOG.warn("Failed freeing space", t);
+     } finally {
+       cacheStats.evict();
+       freeInProgress = false;
+-- 
+1.7.9.5
+

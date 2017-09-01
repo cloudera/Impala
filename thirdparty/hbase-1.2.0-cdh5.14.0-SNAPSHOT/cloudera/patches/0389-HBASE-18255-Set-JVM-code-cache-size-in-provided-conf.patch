@@ -1,0 +1,48 @@
+From e6655385f20eb2620b0a71dce1805029d68aed2f Mon Sep 17 00:00:00 2001
+From: Josh Elser <elserj@apache.org>
+Date: Wed, 5 Jul 2017 16:53:00 -0400
+Subject: [PATCH 389/410] HBASE-18255 Set JVM code cache size in provided
+ configuration (Vladimir Rodionov)
+
+Java7 defaults to 50MB (which is likely too small) and 256MB in Java8/9.
+
+(cherry picked from commit 8a996e3413e93ff7b421a9a5c611ad122439d681)
+
+Change-Id: I4a9d48f3e72cda39456a7087c671ce44be29f2e9
+Reason: Perf
+Author: Vladimir Rodionov
+Ref: CDH-57979
+---
+ conf/hbase-env.cmd |    2 +-
+ conf/hbase-env.sh  |    2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/conf/hbase-env.cmd b/conf/hbase-env.cmd
+index 9fb87d7..2ffadbf 100644
+--- a/conf/hbase-env.cmd
++++ b/conf/hbase-env.cmd
+@@ -44,7 +44,7 @@ set HBASE_OPTS="-XX:+UseConcMarkSweepGC" "-Djava.net.preferIPv4Stack=true"
+ 
+ @rem Configure PermSize. Only needed in JDK7. You can safely remove it for JDK8+
+ set HBASE_MASTER_OPTS=%HBASE_MASTER_OPTS% "-XX:PermSize=128m" "-XX:MaxPermSize=128m"
+-set HBASE_REGIONSERVER_OPTS=%HBASE_REGIONSERVER_OPTS% "-XX:PermSize=128m" "-XX:MaxPermSize=128m"
++set HBASE_REGIONSERVER_OPTS=%HBASE_REGIONSERVER_OPTS% "-XX:PermSize=128m" "-XX:MaxPermSize=128m" "-XX:ReservedCodeCacheSize=256m"
+ 
+ @rem Uncomment below to enable java garbage collection logging for the server-side processes
+ @rem this enables basic gc logging for the server processes to the .out file
+diff --git a/conf/hbase-env.sh b/conf/hbase-env.sh
+index b7d00d1..599a2f1 100644
+--- a/conf/hbase-env.sh
++++ b/conf/hbase-env.sh
+@@ -44,7 +44,7 @@ export HBASE_OPTS="-XX:+UseConcMarkSweepGC"
+ 
+ # Configure PermSize. Only needed in JDK7. You can safely remove it for JDK8+
+ export HBASE_MASTER_OPTS="$HBASE_MASTER_OPTS -XX:PermSize=128m -XX:MaxPermSize=128m"
+-export HBASE_REGIONSERVER_OPTS="$HBASE_REGIONSERVER_OPTS -XX:PermSize=128m -XX:MaxPermSize=128m"
++export HBASE_REGIONSERVER_OPTS="$HBASE_REGIONSERVER_OPTS -XX:PermSize=128m -XX:MaxPermSize=128m -XX:ReservedCodeCacheSize=256m"
+ 
+ # Uncomment one of the below three options to enable java garbage collection logging for the server-side processes.
+ 
+-- 
+1.7.9.5
+

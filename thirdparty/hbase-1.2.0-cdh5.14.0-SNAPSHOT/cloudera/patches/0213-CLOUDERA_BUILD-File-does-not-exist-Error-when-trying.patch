@@ -1,0 +1,251 @@
+From cb118bae72b41ad352ee989eb58cf9468eeb3df7 Mon Sep 17 00:00:00 2001
+From: Huaxiang Sun <hsun@cloudera.com>
+Date: Tue, 13 Sep 2016 12:26:16 -0700
+Subject: [PATCH 213/410] CLOUDERA_BUILD File does not exist Error when trying
+ to retrieve MOB Data
+
+Add an unittest only.
+
+Reason: Improvement
+Author: Huaxiang Sun
+Ref: CDH-44285
+
+Change-Id: I83532339a7e895b3e5b56a490513c25fb398853d
+---
+ .../apache/hadoop/hbase/mob/TestMobCompaction.java |  223 ++++++++++++++++++++
+ 1 file changed, 223 insertions(+)
+ create mode 100644 hbase-server/src/test/java/org/apache/hadoop/hbase/mob/TestMobCompaction.java
+
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/mob/TestMobCompaction.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/mob/TestMobCompaction.java
+new file mode 100644
+index 0000000..71541db
+--- /dev/null
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/mob/TestMobCompaction.java
+@@ -0,0 +1,223 @@
++/**
++ *
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++
++package org.apache.hadoop.hbase.mob;
++
++import java.lang.Thread;
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.hbase.HBaseTestingUtility;
++import org.apache.hadoop.hbase.HColumnDescriptor;
++import org.apache.hadoop.hbase.HTableDescriptor;
++import org.apache.hadoop.hbase.client.Get;
++import org.apache.hadoop.hbase.client.Put;
++import org.apache.hadoop.hbase.client.Result;
++import org.apache.hadoop.hbase.client.Table;
++
++import org.apache.hadoop.fs.FileStatus;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++
++import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
++import org.apache.hadoop.hbase.coprocessor.ObserverContext;
++import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
++import org.apache.hadoop.hbase.master.cleaner.TimeToLiveHFileCleaner;
++import org.apache.hadoop.hbase.regionserver.HRegion;
++import org.apache.hadoop.hbase.regionserver.Store;
++import org.apache.hadoop.hbase.regionserver.StoreFile;
++import org.apache.hadoop.hbase.regionserver.compactions.CompactionRequest;
++import org.apache.hadoop.hbase.testclassification.MediumTests;
++import org.apache.hadoop.hbase.util.Bytes;
++import org.junit.AfterClass;
++import static org.junit.Assert.assertTrue;
++import org.junit.BeforeClass;
++import org.junit.Test;
++import org.junit.experimental.categories.Category;
++
++import java.io.IOException;
++import java.util.Arrays;
++import java.util.List;
++
++@Category(MediumTests.class)
++public class TestMobCompaction {
++  private static final Log LOG = LogFactory.getLog(TestMobCompaction.class);
++
++  private static final HBaseTestingUtility HTU = new HBaseTestingUtility();
++
++  private final static String famStr = "f1";
++  private final byte[] fam = Bytes.toBytes(famStr);
++  private final byte[] qualifier = Bytes.toBytes("q1");
++  private final long mobLen = 10;
++  private byte[] nonMobVal = Bytes.toBytes("01234");
++  private byte[] mobVal = Bytes.toBytes("01234567890");
++
++  /**
++   * This copro overwrites the default compaction policy. It always chooses two latest
++   * hfiles and compacts them into a new one.
++   */
++  public static class CompactTwoLatestHfilesCopro extends BaseRegionObserver {
++
++    public CompactTwoLatestHfilesCopro() {
++    }
++
++    @Override
++    public void preCompactSelection(final ObserverContext<RegionCoprocessorEnvironment> c,
++        final Store store, final List<StoreFile> candidates, final CompactionRequest request)
++        throws IOException {
++
++      LOG.info("We always choose 2 latest files to compact");
++      int count = candidates.size();
++      if (count < 2) {
++        LOG.info("Not enough files to compact");
++      } else {
++        for (int i = 0; i < count -2; i ++) {
++          candidates.remove(0);
++        }
++
++        LOG.info("Force compact " + candidates.get(0).toString() + " and " +
++            candidates.get(1).toString());
++        c.bypass();
++      }
++    }
++  }
++
++
++  @BeforeClass
++  public static void beforeClass() throws Exception {
++    HTU.getConfiguration().setInt("hfile.format.version", 3);
++    HTU.getConfiguration().setLong(TimeToLiveHFileCleaner.TTL_CONF_KEY, 0);
++    HTU.getConfiguration().setInt("hbase.client.retries.number", 1);
++    HTU.startMiniCluster();
++  }
++
++  @AfterClass
++  public static void afterClass() throws Exception {
++    HTU.shutdownMiniCluster();
++  }
++
++  private void waitUntilFilesShowup(final FileSystem fs, final Path path, final int num)
++      throws InterruptedException, IOException  {
++
++    FileStatus[] fileList = fs.listStatus(path);
++
++    while (fileList.length != num) {
++      Thread.sleep(50);
++      fileList = fs.listStatus(path);
++    }
++  }
++
++  /**
++   * This test case tries to test the following mob compaction and normal compaction scenario:
++   *   After mob compaction, the mob reference in new bulkloaded hfile will win even after it
++   *   is compacted with some other normal hfiles. This is to make sure that mvcc is included
++   *   after compaction for mob enabled store files.
++   */
++  @Test
++  public void testMobCompaction() throws InterruptedException, IOException {
++    // Create table then get the single region for our new table.
++    HTableDescriptor hdt = HTU.createTableDescriptor("testMobCompactTable");
++    hdt.addCoprocessor(CompactTwoLatestHfilesCopro.class.getName());
++    HColumnDescriptor hcd= new HColumnDescriptor(fam);
++
++    hcd.setMobEnabled(true);
++    hcd.setMobThreshold(mobLen);
++    hcd.setMaxVersions(1);
++    hdt.addFamily(hcd);
++
++    try {
++      Table table = HTU.createTable(hdt, null);
++
++      HRegion r = HTU.getMiniHBaseCluster().getRegions(hdt.getTableName()).get(0);
++
++      Put p = new Put(Bytes.toBytes("r1"));
++      p.addColumn(fam, qualifier, mobVal);
++      table.put(p);
++
++      // Create mob file mob1 and reference file ref1
++      HTU.flush(table.getName());
++
++      // Make sure that it is flushed.
++      FileSystem fs = r.getRegionFileSystem().getFileSystem();
++      Path path = r.getRegionFileSystem().getStoreDir(famStr);
++
++      waitUntilFilesShowup(fs, path, 1);
++
++      p = new Put(Bytes.toBytes("r2"));
++      p.addColumn(fam, qualifier, mobVal);
++      table.put(p);
++
++      // Create mob file mob2 and reference file ref2
++      HTU.flush(table.getName());
++
++      waitUntilFilesShowup(fs, path, 2);
++
++      // Do mob compaction to create mob3 and ref3
++      HTU.getHBaseAdmin().compactMob(hdt.getTableName(), fam);
++
++      waitUntilFilesShowup(fs, path, 3);
++
++      // Compact ref3 and ref2 into ref4
++      HTU.getHBaseAdmin().compact(hdt.getTableName(), fam);
++
++      waitUntilFilesShowup(fs, path, 2);
++
++      p = new Put(Bytes.toBytes("r3"));
++      p.addColumn(fam, qualifier, nonMobVal);
++      table.put(p);
++
++      // Create hfile1
++      HTU.flush(table.getName());
++
++      // At this moment, there should be ref1, ref4, hfile1
++      waitUntilFilesShowup(fs, path, 3);
++
++      // Compact hfile1 and ref4 into hfile2
++      HTU.getHBaseAdmin().compact(hdt.getTableName(), fam);
++
++      waitUntilFilesShowup(fs, path, 2);
++
++      // compact ref1 and hfile2 into hfile3, after this compaction, there should be only hfile3
++      HTU.getHBaseAdmin().compact(hdt.getTableName(), fam);
++
++      waitUntilFilesShowup(fs, path, 1);
++
++      // Sleep for some time, since TimeToLiveHFileCleaner is 0, the next run of
++      // clean chore is guaranteed to clean up files in archive
++      Thread.sleep(100);
++
++      // Run cleaner to make sure that files in archive directory are cleaned up
++      HTU.getMiniHBaseCluster().getMaster().getHFileCleaner().choreForTesting();
++
++      // Get "r1"
++      Get get = new Get(Bytes.toBytes("r1"));
++
++      try {
++        Result result = table.get(get);
++        assertTrue(Arrays.equals(result.getValue(fam, qualifier), mobVal));
++      } catch (IOException e) {
++        assertTrue("This should not happen", false);
++      }
++    } finally {
++
++      HTU.getHBaseAdmin().disableTable(hdt.getTableName());
++      HTU.deleteTable(hdt.getTableName());
++    }
++  }
++}
+\ No newline at end of file
+-- 
+1.7.9.5
+

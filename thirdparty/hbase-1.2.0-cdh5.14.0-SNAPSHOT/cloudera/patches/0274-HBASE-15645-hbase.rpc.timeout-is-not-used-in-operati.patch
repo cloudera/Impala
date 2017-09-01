@@ -1,0 +1,584 @@
+From 9ad0e26344ff6cdcf040979d3abe9bd299b9e93e Mon Sep 17 00:00:00 2001
+From: Umesh Agashe <uagashe@cloudera.com>
+Date: Thu, 23 Feb 2017 11:38:52 -0800
+Subject: [PATCH 274/410] HBASE-15645 hbase.rpc.timeout is not used in
+ operations of HTable
+
+  (from commits 15ee4040aa3f2b7a65209eae3b47e2d6c82891e8 and 03167638b3446750f49aed8600bccc4412eb16d9)
+
+  Author: Phil Yang <ud1937@gmail.com>
+  Date:   Tue Apr 26 17:13:35 2016 +0800
+  Reason: Bug
+  Ref:    CDH-50407
+
+Change-Id: I69a29cef04ee117df6184b161c91a428201797c2
+---
+ .../org/apache/hadoop/hbase/client/HBaseAdmin.java |   16 ++++---
+ .../org/apache/hadoop/hbase/client/HTable.java     |   46 ++++++++++++++------
+ .../org/apache/hadoop/hbase/client/HTablePool.java |   16 +++++++
+ .../hadoop/hbase/client/RpcRetryingCaller.java     |   16 +++++--
+ .../hbase/client/RpcRetryingCallerFactory.java     |   25 ++++++++++-
+ .../client/StatsTrackingRpcRetryingCaller.java     |    2 +-
+ .../java/org/apache/hadoop/hbase/client/Table.java |   35 +++++++++++++++
+ .../java/org/apache/hadoop/hbase/HConstants.java   |    4 +-
+ hbase-common/src/main/resources/hbase-default.xml  |   11 ++++-
+ .../hadoop/hbase/rest/client/RemoteHTable.java     |   16 +++++++
+ .../apache/hadoop/hbase/client/HTableWrapper.java  |   16 +++++++
+ .../org/apache/hadoop/hbase/client/TestHCM.java    |   26 ++++++++++-
+ 12 files changed, 201 insertions(+), 28 deletions(-)
+
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/HBaseAdmin.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/HBaseAdmin.java
+index 08d4e1d..eed9319 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/HBaseAdmin.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/HBaseAdmin.java
+@@ -213,6 +213,7 @@ public class HBaseAdmin implements Admin {
+   private boolean cleanupConnectionOnClose = false; // close the connection in close()
+   private boolean closed = false;
+   private int operationTimeout;
++  private int rpcTimeout;
+ 
+   private RpcRetryingCallerFactory rpcCallerFactory;
+   private RpcControllerFactory rpcControllerFactory;
+@@ -287,6 +288,8 @@ public class HBaseAdmin implements Admin {
+         "hbase.client.retries.longer.multiplier", 10);
+     this.operationTimeout = this.conf.getInt(HConstants.HBASE_CLIENT_OPERATION_TIMEOUT,
+         HConstants.DEFAULT_HBASE_CLIENT_OPERATION_TIMEOUT);
++    this.rpcTimeout = this.conf.getInt(HConstants.HBASE_RPC_TIMEOUT_KEY,
++        HConstants.DEFAULT_HBASE_RPC_TIMEOUT);
+     this.syncWaitTimeout = this.conf.getInt(
+       "hbase.client.sync.wait.timeout.msec", 10 * 60000); // 10min
+ 
+@@ -557,12 +560,12 @@ public class HBaseAdmin implements Admin {
+   public HTableDescriptor getTableDescriptor(final TableName tableName)
+   throws TableNotFoundException, IOException {
+      return getTableDescriptor(tableName, getConnection(), rpcCallerFactory, rpcControllerFactory,
+-       operationTimeout);
++       operationTimeout, rpcTimeout);
+   }
+ 
+   static HTableDescriptor getTableDescriptor(final TableName tableName, HConnection connection,
+       RpcRetryingCallerFactory rpcCallerFactory, final RpcControllerFactory rpcControllerFactory,
+-         int operationTimeout) throws TableNotFoundException, IOException {
++         int operationTimeout, int rpcTimeout) throws TableNotFoundException, IOException {
+ 
+       if (tableName == null) return null;
+       HTableDescriptor htd = executeCallable(new MasterCallable<HTableDescriptor>(connection) {
+@@ -580,7 +583,7 @@ public class HBaseAdmin implements Admin {
+           }
+           return null;
+         }
+-      }, rpcCallerFactory, operationTimeout);
++      }, rpcCallerFactory, operationTimeout, rpcTimeout);
+       if (htd != null) {
+         return htd;
+       }
+@@ -4299,12 +4302,13 @@ public class HBaseAdmin implements Admin {
+   }
+ 
+   private <V> V executeCallable(MasterCallable<V> callable) throws IOException {
+-    return executeCallable(callable, rpcCallerFactory, operationTimeout);
++    return executeCallable(callable, rpcCallerFactory, operationTimeout, rpcTimeout);
+   }
+ 
+   private static <V> V executeCallable(MasterCallable<V> callable,
+-             RpcRetryingCallerFactory rpcCallerFactory, int operationTimeout) throws IOException {
+-    RpcRetryingCaller<V> caller = rpcCallerFactory.newCaller();
++             RpcRetryingCallerFactory rpcCallerFactory, int operationTimeout, int rpcTimeout)
++      throws IOException {
++    RpcRetryingCaller<V> caller = rpcCallerFactory.newCaller(rpcTimeout);
+     try {
+       return caller.callWithRetries(callable, operationTimeout);
+     } finally {
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/HTable.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/HTable.java
+index fa76887..5a56e11 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/HTable.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/HTable.java
+@@ -125,7 +125,8 @@ public class HTable implements HTableInterface, RegionLocator {
+   protected int scannerCaching;
+   protected long scannerMaxResultSize;
+   private ExecutorService pool;  // For Multi & Scan
+-  private int operationTimeout;
++  private int operationTimeout; // global timeout for each blocking method with retrying rpc
++  private int rpcTimeout; // timeout for each rpc request
+   private final boolean cleanupPoolOnClose; // shutdown the pool in close()
+   private final boolean cleanupConnectionOnClose; // close the connection in close()
+   private Consistency defaultConsistency = Consistency.STRONG;
+@@ -419,9 +420,10 @@ public class HTable implements HTableInterface, RegionLocator {
+     if (connConfiguration == null) {
+       connConfiguration = new ConnectionConfiguration(configuration);
+     }
+-
+     this.operationTimeout = tableName.isSystemTable() ?
+         connConfiguration.getMetaOperationTimeout() : connConfiguration.getOperationTimeout();
++    this.rpcTimeout = configuration.getInt(HConstants.HBASE_RPC_TIMEOUT_KEY,
++        HConstants.DEFAULT_HBASE_RPC_TIMEOUT);
+     this.scannerCaching = connConfiguration.getScannerCaching();
+     this.scannerMaxResultSize = connConfiguration.getScannerMaxResultSize();
+     if (this.rpcCallerFactory == null) {
+@@ -637,7 +639,7 @@ public class HTable implements HTableInterface, RegionLocator {
+   @Override
+   public HTableDescriptor getTableDescriptor() throws IOException {
+     HTableDescriptor htd = HBaseAdmin.getTableDescriptor(tableName, connection, rpcCallerFactory,
+-      rpcControllerFactory, operationTimeout);
++      rpcControllerFactory, operationTimeout, rpcTimeout);
+     if (htd != null) {
+       return new UnmodifyableHTableDescriptor(htd);
+     }
+@@ -819,7 +821,8 @@ public class HTable implements HTableInterface, RegionLocator {
+          }
+        }
+      };
+-     return rpcCallerFactory.<Result>newCaller().callWithRetries(callable, this.operationTimeout);
++     return rpcCallerFactory.<Result>newCaller(rpcTimeout).callWithRetries(callable,
++         this.operationTimeout);
+    }
+ 
+   /**
+@@ -924,7 +927,8 @@ public class HTable implements HTableInterface, RegionLocator {
+           }
+         }
+       };
+-      return rpcCallerFactory.<Result>newCaller().callWithRetries(callable, this.operationTimeout);
++      return rpcCallerFactory.<Result>newCaller(rpcTimeout).callWithRetries(callable,
++          this.operationTimeout);
+     }
+ 
+     // Call that takes into account the replica
+@@ -1039,7 +1043,8 @@ public class HTable implements HTableInterface, RegionLocator {
+         }
+       }
+     };
+-    rpcCallerFactory.<Boolean> newCaller().callWithRetries(callable, this.operationTimeout);
++    rpcCallerFactory.<Boolean> newCaller(rpcTimeout).callWithRetries(callable,
++        this.operationTimeout);
+   }
+ 
+   /**
+@@ -1156,7 +1161,8 @@ public class HTable implements HTableInterface, RegionLocator {
+           }
+         }
+       };
+-    return rpcCallerFactory.<Result> newCaller().callWithRetries(callable, this.operationTimeout);
++    return rpcCallerFactory.<Result> newCaller(rpcTimeout).callWithRetries(callable,
++        this.operationTimeout);
+   }
+ 
+   /**
+@@ -1187,7 +1193,8 @@ public class HTable implements HTableInterface, RegionLocator {
+         }
+       }
+     };
+-    return rpcCallerFactory.<Result> newCaller().callWithRetries(callable, this.operationTimeout);
++    return rpcCallerFactory.<Result> newCaller(rpcTimeout).callWithRetries(callable,
++        this.operationTimeout);
+   }
+ 
+   /**
+@@ -1257,7 +1264,8 @@ public class HTable implements HTableInterface, RegionLocator {
+           }
+         }
+       };
+-    return rpcCallerFactory.<Long> newCaller().callWithRetries(callable, this.operationTimeout);
++    return rpcCallerFactory.<Long> newCaller(rpcTimeout).callWithRetries(callable,
++        this.operationTimeout);
+   }
+ 
+   /**
+@@ -1286,7 +1294,8 @@ public class HTable implements HTableInterface, RegionLocator {
+           }
+         }
+       };
+-    return rpcCallerFactory.<Boolean> newCaller().callWithRetries(callable, this.operationTimeout);
++    return rpcCallerFactory.<Boolean> newCaller(rpcTimeout).callWithRetries(callable,
++        this.operationTimeout);
+   }
+ 
+   /**
+@@ -1316,7 +1325,8 @@ public class HTable implements HTableInterface, RegionLocator {
+           }
+         }
+       };
+-    return rpcCallerFactory.<Boolean> newCaller().callWithRetries(callable, this.operationTimeout);
++    return rpcCallerFactory.<Boolean> newCaller(rpcTimeout).callWithRetries(callable,
++        this.operationTimeout);
+   }
+ 
+   /**
+@@ -1345,7 +1355,8 @@ public class HTable implements HTableInterface, RegionLocator {
+           }
+         }
+       };
+-    return rpcCallerFactory.<Boolean> newCaller().callWithRetries(callable, this.operationTimeout);
++    return rpcCallerFactory.<Boolean> newCaller(rpcTimeout).callWithRetries(callable,
++        this.operationTimeout);
+   }
+ 
+   /**
+@@ -1375,7 +1386,8 @@ public class HTable implements HTableInterface, RegionLocator {
+           }
+         }
+       };
+-    return rpcCallerFactory.<Boolean> newCaller().callWithRetries(callable, this.operationTimeout);
++    return rpcCallerFactory.<Boolean> newCaller(rpcTimeout).callWithRetries(callable,
++        this.operationTimeout);
+   }
+ 
+   /**
+@@ -1829,6 +1841,14 @@ public class HTable implements HTableInterface, RegionLocator {
+     return operationTimeout;
+   }
+ 
++  @Override public void setRpcTimeout(int rpcTimeout) {
++    this.rpcTimeout = rpcTimeout;
++  }
++
++  @Override public int getRpcTimeout() {
++    return rpcTimeout;
++  }
++
+   @Override
+   public String toString() {
+     return tableName + ";" + connection;
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/HTablePool.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/HTablePool.java
+index ff13c8c..2d18367 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/HTablePool.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/HTablePool.java
+@@ -669,5 +669,21 @@ public class HTablePool implements Closeable {
+       checkState();
+       return table.checkAndMutate(row, family, qualifier, compareOp, value, mutation);
+     }
++
++    @Override public void setOperationTimeout(int operationTimeout) {
++      table.setOperationTimeout(operationTimeout);
++    }
++
++    @Override public int getOperationTimeout() {
++      return table.getOperationTimeout();
++    }
++
++    @Override public void setRpcTimeout(int rpcTimeout) {
++      table.setRpcTimeout(rpcTimeout);
++    }
++
++    @Override public int getRpcTimeout() {
++      return table.getRpcTimeout();
++    }
+   }
+ }
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/RpcRetryingCaller.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/RpcRetryingCaller.java
+index bb19d5f..bfa21da 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/RpcRetryingCaller.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/RpcRetryingCaller.java
+@@ -63,21 +63,23 @@ public class RpcRetryingCaller<T> {
+ 
+   private final long pause;
+   private final int retries;
++  private final int rpcTimeout;// timeout for each rpc request
+   private final AtomicBoolean cancelled = new AtomicBoolean(false);
+   private final RetryingCallerInterceptor interceptor;
+   private final RetryingCallerInterceptorContext context;
+ 
+   public RpcRetryingCaller(long pause, int retries, int startLogErrorsCnt) {
+-    this(pause, retries, RetryingCallerInterceptorFactory.NO_OP_INTERCEPTOR, startLogErrorsCnt);
++    this(pause, retries, RetryingCallerInterceptorFactory.NO_OP_INTERCEPTOR, startLogErrorsCnt, 0);
+   }
+ 
+   public RpcRetryingCaller(long pause, int retries,
+-      RetryingCallerInterceptor interceptor, int startLogErrorsCnt) {
++      RetryingCallerInterceptor interceptor, int startLogErrorsCnt, int rpcTimeout) {
+     this.pause = pause;
+     this.retries = retries;
+     this.interceptor = interceptor;
+     context = interceptor.createEmptyContext();
+     this.startLogErrorsCnt = startLogErrorsCnt;
++    this.rpcTimeout = rpcTimeout;
+   }
+ 
+   private int getRemainingTime(int callTimeout) {
+@@ -97,6 +99,14 @@ public class RpcRetryingCaller<T> {
+     }
+   }
+ 
++  private int getTimeout(int callTimeout){
++    int timeout = getRemainingTime(callTimeout);
++    if (timeout <= 0 || rpcTimeout > 0 && rpcTimeout < timeout){
++      timeout = rpcTimeout;
++    }
++    return timeout;
++  }
++
+   public void cancel(){
+     synchronized (cancelled){
+       cancelled.set(true);
+@@ -123,7 +133,7 @@ public class RpcRetryingCaller<T> {
+       try {
+         callable.prepare(tries != 0); // if called with false, check table status on ZK
+         interceptor.intercept(context.prepare(callable, tries));
+-        return callable.call(getRemainingTime(callTimeout));
++        return callable.call(getTimeout(callTimeout));
+       } catch (PreemptiveFastFailException e) {
+         throw e;
+       } catch (Throwable t) {
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/RpcRetryingCallerFactory.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/RpcRetryingCallerFactory.java
+index 1bf7bb0..09b70b8 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/RpcRetryingCallerFactory.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/RpcRetryingCallerFactory.java
+@@ -33,6 +33,7 @@ public class RpcRetryingCallerFactory {
+   protected final Configuration conf;
+   private final long pause;
+   private final int retries;
++  private final int rpcTimeout;
+   private final RetryingCallerInterceptor interceptor;
+   private final int startLogErrorsCnt;
+   private final boolean enableBackPressure;
+@@ -53,6 +54,7 @@ public class RpcRetryingCallerFactory {
+     this.interceptor = interceptor;
+     enableBackPressure = conf.getBoolean(HConstants.ENABLE_CLIENT_BACKPRESSURE,
+         HConstants.DEFAULT_ENABLE_CLIENT_BACKPRESSURE);
++    rpcTimeout = conf.getInt(HConstants.HBASE_RPC_TIMEOUT_KEY,HConstants.DEFAULT_HBASE_RPC_TIMEOUT);
+   }
+ 
+   /**
+@@ -62,11 +64,32 @@ public class RpcRetryingCallerFactory {
+     this.stats = statisticTracker;
+   }
+ 
++  /**
++   * Create a new RetryingCaller with specific rpc timeout.
++   */
++  public <T> RpcRetryingCaller<T> newCaller(int rpcTimeout) {
++    // We store the values in the factory instance. This way, constructing new objects
++    //  is cheap as it does not require parsing a complex structure.
++    RpcRetryingCaller<T> caller = new RpcRetryingCaller<T>(pause, retries, interceptor,
++        startLogErrorsCnt, rpcTimeout);
++
++    // wrap it with stats, if we are tracking them
++    if (enableBackPressure && this.stats != null) {
++      caller = new StatsTrackingRpcRetryingCaller<T>(pause, retries, interceptor,
++          startLogErrorsCnt, stats);
++    }
++
++    return caller;
++  }
++
++  /**
++   * Create a new RetryingCaller with configured rpc timeout.
++   */
+   public <T> RpcRetryingCaller<T> newCaller() {
+     // We store the values in the factory instance. This way, constructing new objects
+     //  is cheap as it does not require parsing a complex structure.
+     RpcRetryingCaller<T> caller = new RpcRetryingCaller<T>(pause, retries, interceptor,
+-        startLogErrorsCnt);
++        startLogErrorsCnt, rpcTimeout);
+ 
+     // wrap it with stats, if we are tracking them
+     if (enableBackPressure && this.stats != null) {
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/StatsTrackingRpcRetryingCaller.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/StatsTrackingRpcRetryingCaller.java
+index fc175bb..cbd625d 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/StatsTrackingRpcRetryingCaller.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/StatsTrackingRpcRetryingCaller.java
+@@ -39,7 +39,7 @@ public class StatsTrackingRpcRetryingCaller<T> extends RpcRetryingCaller<T> {
+   public StatsTrackingRpcRetryingCaller(long pause, int retries,
+       RetryingCallerInterceptor interceptor, int startLogErrorsCnt,
+       ServerStatisticTracker stats) {
+-    super(pause, retries, interceptor, startLogErrorsCnt);
++    super(pause, retries, interceptor, startLogErrorsCnt, 0);
+     this.stats = stats;
+   }
+ 
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/Table.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/Table.java
+index 9a6744b..ee742b2 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/Table.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/Table.java
+@@ -595,4 +595,39 @@ public interface Table extends Closeable {
+    */
+   boolean checkAndMutate(byte[] row, byte[] family, byte[] qualifier,
+       CompareFilter.CompareOp compareOp, byte[] value, RowMutations mutation) throws IOException;
++
++  /**
++   * Set timeout (millisecond) of each operation in this Table instance, will override the value
++   * of hbase.client.operation.timeout in configuration.
++   * Operation timeout is a top-level restriction that makes sure a blocking method will not be
++   * blocked more than this. In each operation, if rpc request fails because of timeout or
++   * other reason, it will retry until success or throw a RetriesExhaustedException. But if the
++   * total time being blocking reach the operation timeout before retries exhausted, it will break
++   * early and throw SocketTimeoutException.
++   * @param operationTimeout the total timeout of each operation in millisecond.
++   */
++  @InterfaceAudience.Private
++  public void setOperationTimeout(int operationTimeout);
++
++  /**
++   * Get timeout (millisecond) of each operation for in Table instance.
++   */
++  @InterfaceAudience.Private
++  public int getOperationTimeout();
++
++  /**
++   * Set timeout (millisecond) of each rpc request in operations of this Table instance, will
++   * override the value of hbase.rpc.timeout in configuration.
++   * If a rpc request waiting too long, it will stop waiting and send a new request to retry until
++   * retries exhausted or operation timeout reached.
++   * @param rpcTimeout the timeout of each rpc request in millisecond.
++   */
++  @InterfaceAudience.Private
++  public void setRpcTimeout(int rpcTimeout);
++
++  /**
++   * Get timeout (millisecond) of each rpc request in this Table instance.
++   */
++  @InterfaceAudience.Private
++  public int getRpcTimeout();
+ }
+diff --git a/hbase-common/src/main/java/org/apache/hadoop/hbase/HConstants.java b/hbase-common/src/main/java/org/apache/hadoop/hbase/HConstants.java
+index b97d9f1..6e6343a 100644
+--- a/hbase-common/src/main/java/org/apache/hadoop/hbase/HConstants.java
++++ b/hbase-common/src/main/java/org/apache/hadoop/hbase/HConstants.java
+@@ -275,10 +275,10 @@ public final class HConstants {
+   /** Parameter name for HBase client IPC pool size */
+   public static final String HBASE_CLIENT_IPC_POOL_SIZE = "hbase.client.ipc.pool.size";
+ 
+-  /** Parameter name for HBase client operation timeout, which overrides RPC timeout */
++  /** Parameter name for HBase client operation timeout. */
+   public static final String HBASE_CLIENT_OPERATION_TIMEOUT = "hbase.client.operation.timeout";
+ 
+-  /** Parameter name for HBase client operation timeout, which overrides RPC timeout */
++  /** Parameter name for HBase client operation timeout. */
+   public static final String HBASE_CLIENT_META_OPERATION_TIMEOUT =
+     "hbase.client.meta.operation.timeout";
+ 
+diff --git a/hbase-common/src/main/resources/hbase-default.xml b/hbase-common/src/main/resources/hbase-default.xml
+index 442399e..66bd4b6 100644
+--- a/hbase-common/src/main/resources/hbase-default.xml
++++ b/hbase-common/src/main/resources/hbase-default.xml
+@@ -810,11 +810,20 @@ possible configurations would overwhelm and obscure the important.
+   <property>
+     <name>hbase.rpc.timeout</name>
+     <value>60000</value>
+-    <description>This is for the RPC layer to define how long HBase client applications
++    <description>This is for the RPC layer to define how long (millisecond) HBase client applications
+         take for a remote call to time out. It uses pings to check connections
+         but will eventually throw a TimeoutException.</description>
+   </property>
+   <property>
++    <name>hbase.client.operation.timeout</name>
++    <value>1200000</value>
++    <description>Operation timeout is a top-level restriction (millisecond) that makes sure a
++        blocking operation in Table will not be blocked more than this. In each operation, if rpc
++        request fails because of timeout or other reason, it will retry until success or throw
++        RetriesExhaustedException. But if the total time being blocking reach the operation timeout
++        before retries exhausted, it will break early and throw SocketTimeoutException.</description>
++  </property>
++  <property>
+     <name>hbase.cells.scanned.per.heartbeat.check</name>
+     <value>10000</value>
+     <description>The number of cells scanned in between heartbeat checks. Heartbeat
+diff --git a/hbase-rest/src/main/java/org/apache/hadoop/hbase/rest/client/RemoteHTable.java b/hbase-rest/src/main/java/org/apache/hadoop/hbase/rest/client/RemoteHTable.java
+index 0300ea2..8429e12 100644
+--- a/hbase-rest/src/main/java/org/apache/hadoop/hbase/rest/client/RemoteHTable.java
++++ b/hbase-rest/src/main/java/org/apache/hadoop/hbase/rest/client/RemoteHTable.java
+@@ -856,4 +856,20 @@ public class RemoteHTable implements Table {
+       CompareOp compareOp, byte[] value, RowMutations rm) throws IOException {
+     throw new UnsupportedOperationException("checkAndMutate not implemented");
+   }
++
++  @Override public void setOperationTimeout(int operationTimeout) {
++    throw new UnsupportedOperationException();
++  }
++
++  @Override public int getOperationTimeout() {
++    throw new UnsupportedOperationException();
++  }
++
++  @Override public void setRpcTimeout(int rpcTimeout) {
++    throw new UnsupportedOperationException();
++  }
++
++  @Override public int getRpcTimeout() {
++    throw new UnsupportedOperationException();
++  }
+ }
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/client/HTableWrapper.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/client/HTableWrapper.java
+index 1f84bb4..2d25f63 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/client/HTableWrapper.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/client/HTableWrapper.java
+@@ -365,4 +365,20 @@ public class HTableWrapper implements HTableInterface {
+       CompareOp compareOp, byte[] value, RowMutations rm) throws IOException {
+     return table.checkAndMutate(row, family, qualifier, compareOp, value, rm);
+   }
++
++  @Override public void setOperationTimeout(int operationTimeout) {
++    table.setOperationTimeout(operationTimeout);
++  }
++
++  @Override public int getOperationTimeout() {
++    return table.getOperationTimeout();
++  }
++
++  @Override public void setRpcTimeout(int rpcTimeout) {
++    table.setRpcTimeout(rpcTimeout);
++  }
++
++  @Override public int getRpcTimeout() {
++    return table.getRpcTimeout();
++  }
+ }
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestHCM.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestHCM.java
+index 1669fc4..a8c7113 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestHCM.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestHCM.java
+@@ -134,11 +134,21 @@ public class TestHCM {
+     }
+   }
+ 
++  public static class SleepCoprocessor extends BaseRegionObserver {
++    public static final int SLEEP_TIME = 5000;
++    @Override
++    public void preGetOp(final ObserverContext<RegionCoprocessorEnvironment> e,
++        final Get get, final List<Cell> results) throws IOException {
++      Threads.sleep(SLEEP_TIME);
++    }
++  }
++
+   @BeforeClass
+   public static void setUpBeforeClass() throws Exception {
+     TEST_UTIL.getConfiguration().setBoolean(HConstants.STATUS_PUBLISHED, true);
+     // Up the handlers; this test needs more than usual.
+     TEST_UTIL.getConfiguration().setInt(HConstants.REGION_SERVER_HIGH_PRIORITY_HANDLER_COUNT, 10);
++    TEST_UTIL.getConfiguration().setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER, 5);
+     TEST_UTIL.startMiniCluster(2);
+   }
+ 
+@@ -309,7 +319,7 @@ public class TestHCM {
+     HTableDescriptor hdt = TEST_UTIL.createTableDescriptor("HCM-testOperationTimeout");
+     hdt.addCoprocessor(SleepAndFailFirstTime.class.getName());
+     HTable table = TEST_UTIL.createTable(hdt, new byte[][]{FAM_NAM}, TEST_UTIL.getConfiguration());
+-
++    table.setRpcTimeout(Integer.MAX_VALUE);
+     // Check that it works if the timeout is big enough
+     table.setOperationTimeout(120 * 1000);
+     table.get(new Get(FAM_NAM));
+@@ -332,6 +342,20 @@ public class TestHCM {
+     }
+   }
+ 
++  @Test(expected = RetriesExhaustedException.class)
++  public void testRpcTimeout() throws Exception {
++    HTableDescriptor hdt = TEST_UTIL.createTableDescriptor("HCM-testRpcTimeout");
++    hdt.addCoprocessor(SleepCoprocessor.class.getName());
++    Configuration c = new Configuration(TEST_UTIL.getConfiguration());
++
++    try (Table t = TEST_UTIL.createTable(hdt, new byte[][] { FAM_NAM }, c)) {
++      assert t instanceof HTable;
++      HTable table = (HTable) t;
++      table.setRpcTimeout(SleepCoprocessor.SLEEP_TIME / 2);
++      table.setOperationTimeout(SleepCoprocessor.SLEEP_TIME * 100);
++      table.get(new Get(FAM_NAM));
++    }
++  }
+ 
+   private void testConnectionClose(boolean allowsInterrupt) throws Exception {
+     TableName tableName = TableName.valueOf("HCM-testConnectionClose" + allowsInterrupt);
+-- 
+1.7.9.5
+

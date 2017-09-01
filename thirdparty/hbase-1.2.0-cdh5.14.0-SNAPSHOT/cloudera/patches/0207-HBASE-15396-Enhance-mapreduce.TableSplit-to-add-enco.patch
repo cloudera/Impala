@@ -1,0 +1,282 @@
+From 60070c308b9cbb7e709e02f86642e4e7c45d2152 Mon Sep 17 00:00:00 2001
+From: Harsh J <harsh@cloudera.com>
+Date: Fri, 1 Apr 2016 15:20:47 +0530
+Subject: [PATCH 207/410] HBASE-15396 Enhance mapreduce.TableSplit to add
+ encoded region name
+
+(cherry picked from commit 7d3a89ce8e07d9fd1c31b4bd2324b71dd10ecef5)
+
+Signed-off-by: Sean Busbey <busbey@apache.org>
+
+Change-Id: Id22c6bf2724deecb06e1787ad32ed7862de1332c
+Reason: Improvement
+Author: Harsh J
+Ref: CDH-38072
+---
+ .../hbase/mapreduce/MultiTableInputFormatBase.java |    4 +-
+ .../hbase/mapreduce/TableInputFormatBase.java      |   19 ++++---
+ .../apache/hadoop/hbase/mapreduce/TableSplit.java  |   59 ++++++++++++++++----
+ .../hadoop/hbase/mapreduce/TestTableSplit.java     |   22 +++++++-
+ 4 files changed, 82 insertions(+), 22 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/MultiTableInputFormatBase.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/MultiTableInputFormatBase.java
+index 6f0075a..4931c3f 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/MultiTableInputFormatBase.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/MultiTableInputFormatBase.java
+@@ -223,11 +223,13 @@ public abstract class MultiTableInputFormatBase extends
+                       keys.getFirst()[i], false);
+               String regionHostname = hregionLocation.getHostname();
+               HRegionInfo regionInfo = hregionLocation.getRegionInfo();
++              String encodedRegionName = regionInfo.getEncodedName();
+               long regionSize = sizeCalculator.getRegionSize(
+                       regionInfo.getRegionName());
+ 
+               TableSplit split = new TableSplit(table.getName(),
+-                      scan, splitStart, splitStop, regionHostname, regionSize);
++                      scan, splitStart, splitStop, regionHostname,
++                      encodedRegionName, regionSize);
+ 
+               splits.add(split);
+ 
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/TableInputFormatBase.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/TableInputFormatBase.java
+index 82378d1..aa56dae 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/TableInputFormatBase.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/TableInputFormatBase.java
+@@ -306,9 +306,11 @@ extends InputFormat<ImmutableBytesWritable, Result> {
+             keys.getSecond()[i] : stopRow;
+ 
+         byte[] regionName = location.getRegionInfo().getRegionName();
++        String encodedRegionName = location.getRegionInfo().getEncodedName();
+         long regionSize = sizeCalculator.getRegionSize(regionName);
+-        TableSplit split = new TableSplit(table.getName(),
+-          splitStart, splitStop, regionLocation, regionSize);
++
++        TableSplit split = new TableSplit(table.getName(), scan,
++          splitStart, splitStop, regionLocation, encodedRegionName, regionSize);
+         splits.add(split);
+         if (LOG.isDebugEnabled()) {
+           LOG.debug("getSplits: split -> " + i + " -> " + split);
+@@ -391,6 +393,7 @@ extends InputFormat<ImmutableBytesWritable, Result> {
+     while (count < list.size()) {
+       TableSplit ts = (TableSplit)list.get(count);
+       String regionLocation = ts.getRegionLocation();
++      String encodedRegionName = ts.getEncodedRegionName();
+       long regionSize = ts.getLength();
+       if (regionSize >= dataSkewThreshold) {
+         // if the current region size is large than the data skew threshold,
+@@ -398,10 +401,10 @@ extends InputFormat<ImmutableBytesWritable, Result> {
+         byte[] splitKey = getSplitKey(ts.getStartRow(), ts.getEndRow(), isTextKey);
+          //Set the size of child TableSplit as 1/2 of the region size. The exact size of the
+          // MapReduce input splits is not far off.
+-        TableSplit t1 = new TableSplit(table.getName(), ts.getStartRow(), splitKey, regionLocation,
+-                regionSize / 2);
+-        TableSplit t2 = new TableSplit(table.getName(), splitKey, ts.getEndRow(), regionLocation,
+-                regionSize - regionSize / 2);
++        TableSplit t1 = new TableSplit(table.getName(), scan, ts.getStartRow(), splitKey,
++                regionLocation, encodedRegionName, regionSize / 2);
++        TableSplit t2 = new TableSplit(table.getName(), scan, splitKey, ts.getEndRow(),
++                regionLocation, encodedRegionName, regionSize - regionSize / 2);
+         resultList.add(t1);
+         resultList.add(t2);
+         count++;
+@@ -427,8 +430,8 @@ extends InputFormat<ImmutableBytesWritable, Result> {
+             break;
+           }
+         }
+-        TableSplit t = new TableSplit(table.getName(), splitStartKey, splitEndKey,
+-                regionLocation, totalSize);
++        TableSplit t = new TableSplit(table.getName(), scan, splitStartKey, splitEndKey,
++                regionLocation, encodedRegionName, totalSize);
+         resultList.add(t);
+       }
+     }
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/TableSplit.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/TableSplit.java
+index 7111668..4d8a2b5 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/TableSplit.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/TableSplit.java
+@@ -52,7 +52,9 @@ implements Writable, Comparable<TableSplit> {
+   enum Version {
+     UNVERSIONED(0),
+     // Initial number we put on TableSplit when we introduced versioning.
+-    INITIAL(-1);
++    INITIAL(-1),
++    // Added an encoded region name field for easier identification of split -> region
++    WITH_ENCODED_REGION_NAME(-2);
+ 
+     final int code;
+     static final Version[] byCode;
+@@ -78,11 +80,12 @@ implements Writable, Comparable<TableSplit> {
+     }
+   }
+   
+-  private static final Version VERSION = Version.INITIAL;
++  private static final Version VERSION = Version.WITH_ENCODED_REGION_NAME;
+   private TableName tableName;
+   private byte [] startRow;
+   private byte [] endRow;
+   private String regionLocation;
++  private String encodedRegionName = "";
+   private String scan = ""; // stores the serialized form of the Scan
+   private long length; // Contains estimation of region size in bytes
+ 
+@@ -107,6 +110,7 @@ implements Writable, Comparable<TableSplit> {
+   /**
+    * Creates a new instance while assigning all variables.
+    * Length of region is set to 0
++   * Encoded name of the region is set to blank
+    *
+    * @param tableName  The name of the current table.
+    * @param scan The scan associated with this split.
+@@ -121,6 +125,7 @@ implements Writable, Comparable<TableSplit> {
+ 
+   /**
+    * Creates a new instance while assigning all variables.
++   * Encoded name of region is set to blank
+    *
+    * @param tableName  The name of the current table.
+    * @param scan The scan associated with this split.
+@@ -130,6 +135,21 @@ implements Writable, Comparable<TableSplit> {
+    */
+   public TableSplit(TableName tableName, Scan scan, byte [] startRow, byte [] endRow,
+       final String location, long length) {
++    this(tableName, scan, startRow, endRow, location, "", length);
++  }
++
++  /**
++   * Creates a new instance while assigning all variables.
++   *
++   * @param tableName  The name of the current table.
++   * @param scan The scan associated with this split.
++   * @param startRow  The start row of the split.
++   * @param endRow  The end row of the split.
++   * @param encodedRegionName The region ID.
++   * @param location  The location of the region.
++   */
++  public TableSplit(TableName tableName, Scan scan, byte [] startRow, byte [] endRow,
++      final String location, final String encodedRegionName, long length) {
+     this.tableName = tableName;
+     try {
+       this.scan =
+@@ -140,6 +160,7 @@ implements Writable, Comparable<TableSplit> {
+     this.startRow = startRow;
+     this.endRow = endRow;
+     this.regionLocation = location;
++    this.encodedRegionName = encodedRegionName;
+     this.length = length;
+   }
+ 
+@@ -157,6 +178,7 @@ implements Writable, Comparable<TableSplit> {
+ 
+   /**
+    * Creates a new instance without a scanner.
++   * Length of region is set to 0
+    *
+    * @param tableName The name of the current table.
+    * @param startRow The start row of the split.
+@@ -252,6 +274,15 @@ implements Writable, Comparable<TableSplit> {
+   }
+ 
+   /**
++   * Returns the region's encoded name.
++   *
++   * @return The region's encoded name.
++   */
++  public String getEncodedRegionName() {
++    return encodedRegionName;
++  }
++
++  /**
+    * Returns the length of the split.
+    *
+    * @return The length of the split.
+@@ -295,6 +326,9 @@ implements Writable, Comparable<TableSplit> {
+       scan = Bytes.toString(Bytes.readByteArray(in));
+     }
+     length = WritableUtils.readVLong(in);
++    if (version.atLeast(Version.WITH_ENCODED_REGION_NAME)) {
++      encodedRegionName = Bytes.toString(Bytes.readByteArray(in));
++    }
+   }
+ 
+   /**
+@@ -312,6 +346,7 @@ implements Writable, Comparable<TableSplit> {
+     Bytes.writeByteArray(out, Bytes.toBytes(regionLocation));
+     Bytes.writeByteArray(out, Bytes.toBytes(scan));
+     WritableUtils.writeVLong(out, length);
++    Bytes.writeByteArray(out, Bytes.toBytes(encodedRegionName));
+   }
+ 
+   /**
+@@ -329,6 +364,7 @@ implements Writable, Comparable<TableSplit> {
+     sb.append(", start row: ").append(Bytes.toStringBinary(startRow));
+     sb.append(", end row: ").append(Bytes.toStringBinary(endRow));
+     sb.append(", region location: ").append(regionLocation);
++    sb.append(", encoded region name: ").append(encodedRegionName);
+     sb.append(")");
+     return sb.toString();
+   }
+@@ -361,13 +397,14 @@ implements Writable, Comparable<TableSplit> {
+       regionLocation.equals(((TableSplit)o).regionLocation);
+   }
+ 
+-    @Override
+-    public int hashCode() {
+-        int result = tableName != null ? tableName.hashCode() : 0;
+-        result = 31 * result + (scan != null ? scan.hashCode() : 0);
+-        result = 31 * result + (startRow != null ? Arrays.hashCode(startRow) : 0);
+-        result = 31 * result + (endRow != null ? Arrays.hashCode(endRow) : 0);
+-        result = 31 * result + (regionLocation != null ? regionLocation.hashCode() : 0);
+-        return result;
+-    }
++  @Override
++  public int hashCode() {
++    int result = tableName != null ? tableName.hashCode() : 0;
++    result = 31 * result + (scan != null ? scan.hashCode() : 0);
++    result = 31 * result + (startRow != null ? Arrays.hashCode(startRow) : 0);
++    result = 31 * result + (endRow != null ? Arrays.hashCode(endRow) : 0);
++    result = 31 * result + (regionLocation != null ? regionLocation.hashCode() : 0);
++    result = 31 * result + (encodedRegionName != null ? encodedRegionName.hashCode() : 0);
++    return result;
++  }
+ }
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/mapreduce/TestTableSplit.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/mapreduce/TestTableSplit.java
+index 2de2ac3..3845908 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/mapreduce/TestTableSplit.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/mapreduce/TestTableSplit.java
+@@ -92,13 +92,31 @@ public class TestTableSplit {
+             "location");
+     String str =
+         "HBase table split(table name: table, scan: , start row: row-start, "
+-            + "end row: row-end, region location: location)";
++            + "end row: row-end, region location: location, "
++            + "encoded region name: )";
++    Assert.assertEquals(str, split.toString());
++
++    split =
++        new TableSplit(TableName.valueOf("table"), null, "row-start".getBytes(),
++            "row-end".getBytes(), "location", "encoded-region-name", 1000L);
++    str =
++        "HBase table split(table name: table, scan: , start row: row-start, "
++            + "end row: row-end, region location: location, "
++            + "encoded region name: encoded-region-name)";
+     Assert.assertEquals(str, split.toString());
+ 
+     split = new TableSplit((TableName) null, null, null, null);
+     str =
+         "HBase table split(table name: null, scan: , start row: null, "
+-            + "end row: null, region location: null)";
++            + "end row: null, region location: null, "
++            + "encoded region name: )";
++    Assert.assertEquals(str, split.toString());
++
++    split = new TableSplit((TableName) null, null, null, null, null, null, 1000L);
++    str =
++        "HBase table split(table name: null, scan: , start row: null, "
++            + "end row: null, region location: null, "
++            + "encoded region name: null)";
+     Assert.assertEquals(str, split.toString());
+   }
+ }
+-- 
+1.7.9.5
+

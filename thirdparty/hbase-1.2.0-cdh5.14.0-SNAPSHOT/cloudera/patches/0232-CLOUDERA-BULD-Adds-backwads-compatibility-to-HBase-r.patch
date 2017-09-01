@@ -1,0 +1,199 @@
+From 8c3afcfb3cfdf841280e6fda6402e7e7ebb23dd0 Mon Sep 17 00:00:00 2001
+From: Esteban Gutierrez <esteban@cloudera.com>
+Date: Tue, 25 Oct 2016 17:11:50 -0700
+Subject: [PATCH 232/410] CLOUDERA-BULD Adds backwads compatibility to HBase
+ replication previous to namespace support.
+
+Change-Id: I20f8dbdfb4779cf81ff306998712440df7469dca
+Author: Esteban Gutierrez
+Reason: Backward Compatibility
+Ref: CDH-45543
+---
+ .../hbase/replication/ReplicationSerDeHelper.java  |    5 ++++-
+ .../org/apache/hadoop/hbase/master/HMaster.java    |   10 ++++++----
+ .../replication/master/TestTableCFsUpdater.java    |   18 +++++++++++++-----
+ .../src/main/ruby/hbase/replication_admin.rb       |   13 +++++++++++--
+ .../src/main/ruby/shell/commands/add_peer.rb       |    7 +++++--
+ .../src/test/ruby/hbase/replication_admin_test.rb  |    3 ---
+ 6 files changed, 39 insertions(+), 17 deletions(-)
+
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/replication/ReplicationSerDeHelper.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/replication/ReplicationSerDeHelper.java
+index cdb95f7f..a72f92d 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/replication/ReplicationSerDeHelper.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/replication/ReplicationSerDeHelper.java
+@@ -99,7 +99,10 @@ public final class ReplicationSerDeHelper {
+       String[] pair = tab.split(":");
+       String tabName = pair[0].trim();
+       if (pair.length > 2 || tabName.length() == 0) {
+-        LOG.info("incorrect format:" + tableCFsConfig);
++        LOG.warn("incorrect format:" + tableCFsConfig + (pair.length == 3 ? " found a namespace in the "
++          + "peer configuration, please set "
++          + "ReplicationMigrationConvertingToPB to true in the HBase master in order to use namespaces for replication."
++          : ""));
+         continue;
+       }
+ 
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
+index 298732f..bfba001 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMaster.java
+@@ -690,10 +690,12 @@ public class HMaster extends HRegionServer implements MasterServices, Server {
+ 
+     // This is for backwards compatibility
+     // See HBASE-11393
+-    status.setStatus("Update TableCFs node in ZNode");
+-    TableCFsUpdater tableCFsUpdater = new TableCFsUpdater(zooKeeper,
+-            conf, this.clusterConnection);
+-    tableCFsUpdater.update();
++    if (this.conf.getBoolean("hbase.ReplicationMigrationConvertingToPB", true)) {
++      status.setStatus("Update TableCFs node in ZNode");
++      TableCFsUpdater tableCFsUpdater = new TableCFsUpdater(zooKeeper,
++        conf, this.clusterConnection);
++      tableCFsUpdater.update();
++    }
+ 
+     // initialize master side coprocessors before we start handling requests
+     status.setStatus("Initializing master coprocessors");
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/replication/master/TestTableCFsUpdater.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/replication/master/TestTableCFsUpdater.java
+index f53aef3..c2f67d9 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/replication/master/TestTableCFsUpdater.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/replication/master/TestTableCFsUpdater.java
+@@ -62,6 +62,7 @@ public class TestTableCFsUpdater extends TableCFsUpdater {
+ 
+   @BeforeClass
+   public static void setUpBeforeClass() throws Exception {
++    TEST_UTIL.getConfiguration().setBoolean("hbase.ReplicationMigrationConvertingToPB", true);
+     TEST_UTIL.startMiniZKCluster();
+     Configuration conf = TEST_UTIL.getConfiguration();
+     abortable = new Abortable() {
+@@ -90,13 +91,14 @@ public class TestTableCFsUpdater extends TableCFsUpdater {
+     TableName tab1 = TableName.valueOf("table1");
+     TableName tab2 = TableName.valueOf("table2");
+     TableName tab3 = TableName.valueOf("table3");
++    TableName tab4 = TableName.valueOf("table4");
+ 
+     ReplicationPeerConfig rpc = new ReplicationPeerConfig();
+     rpc.setClusterKey(zkw.getQuorum());
+     String peerNode = getPeerNode(peerId);
+     ZKUtil.createWithParents(zkw, peerNode, ReplicationSerDeHelper.toByteArray(rpc));
+ 
+-    String tableCFs = "table1:cf1,cf2;table2:cf3;table3";
++    String tableCFs = "table1:cf1,cf2;table2:cf3;table3;table4:cf.4";
+     String tableCFsNode = getTableCFsNode(peerId);
+     LOG.info("create tableCFs :" + tableCFsNode + " for peerId=" + peerId);
+     ZKUtil.createWithParents(zkw, tableCFsNode , Bytes.toBytes(tableCFs));
+@@ -114,7 +116,7 @@ public class TestTableCFsUpdater extends TableCFsUpdater {
+     peerNode = getPeerNode(peerId);
+     ZKUtil.createWithParents(zkw, peerNode, ReplicationSerDeHelper.toByteArray(rpc));
+ 
+-    tableCFs = "table1:cf1,cf3;table2:cf2";
++    tableCFs = "table1:cf1,cf3;table2:cf2;table4:cf.4";
+     tableCFsNode = getTableCFsNode(peerId);
+     LOG.info("create tableCFs :" + tableCFsNode + " for peerId=" + peerId);
+     ZKUtil.createWithParents(zkw, tableCFsNode , Bytes.toBytes(tableCFs));
+@@ -134,15 +136,20 @@ public class TestTableCFsUpdater extends TableCFsUpdater {
+     actualRpc = ReplicationSerDeHelper.parsePeerFrom(ZKUtil.getData(zkw, peerNode));
+     assertEquals(rpc.getClusterKey(), actualRpc.getClusterKey());
+     Map<TableName, List<String>> tableNameListMap = actualRpc.getTableCFsMap();
+-    assertEquals(3, tableNameListMap.size());
++    assertEquals(4, tableNameListMap.size());
+     assertTrue(tableNameListMap.containsKey(tab1));
+     assertTrue(tableNameListMap.containsKey(tab2));
+     assertTrue(tableNameListMap.containsKey(tab3));
++    assertTrue(tableNameListMap.containsKey(tab4));
++
+     assertEquals(2, tableNameListMap.get(tab1).size());
+     assertEquals("cf1", tableNameListMap.get(tab1).get(0));
+     assertEquals("cf2", tableNameListMap.get(tab1).get(1));
+     assertEquals(1, tableNameListMap.get(tab2).size());
+     assertEquals("cf3", tableNameListMap.get(tab2).get(0));
++    assertEquals(1, tableNameListMap.get(tab4).size());
++    assertEquals("cf.4", tableNameListMap .get(tab4).get(0));
++
+     assertNull(tableNameListMap.get(tab3));
+ 
+ 
+@@ -151,7 +158,7 @@ public class TestTableCFsUpdater extends TableCFsUpdater {
+     actualRpc = ReplicationSerDeHelper.parsePeerFrom(ZKUtil.getData(zkw, peerNode));
+     assertEquals(rpc.getClusterKey(), actualRpc.getClusterKey());
+     tableNameListMap = actualRpc.getTableCFsMap();
+-    assertEquals(2, tableNameListMap.size());
++    assertEquals(3, tableNameListMap.size());
+     assertTrue(tableNameListMap.containsKey(tab1));
+     assertTrue(tableNameListMap.containsKey(tab2));
+     assertEquals(2, tableNameListMap.get(tab1).size());
+@@ -159,6 +166,7 @@ public class TestTableCFsUpdater extends TableCFsUpdater {
+     assertEquals("cf3", tableNameListMap.get(tab1).get(1));
+     assertEquals(1, tableNameListMap.get(tab2).size());
+     assertEquals("cf2", tableNameListMap.get(tab2).get(0));
++    assertEquals(1, tableNameListMap.get(tab4).size());
++    assertEquals("cf.4", tableNameListMap.get(tab4).get(0));
+   }
+-
+ }
+diff --git a/hbase-shell/src/main/ruby/hbase/replication_admin.rb b/hbase-shell/src/main/ruby/hbase/replication_admin.rb
+index ae25915..ba7e7b6 100644
+--- a/hbase-shell/src/main/ruby/hbase/replication_admin.rb
++++ b/hbase-shell/src/main/ruby/hbase/replication_admin.rb
+@@ -40,7 +40,16 @@ module Hbase
+     #----------------------------------------------------------------------------------------------
+     # Add a new peer cluster to replicate to
+     def add_peer(id, args = {}, peer_tableCFs = nil)
+-      if args.is_a?(Hash)
++      if args.is_a?(String)
++            cluster_key = args
++            if !peer_tableCFs.nil?
++              # if more than colon is present. Fail and warn to use new syntax
++              if peer_tableCFs.scan(/:[0-9a-z\.]+:/).size > 0
++                raise(ArgumentError, "peer_tableCFs contains a namespace and CF, see help for alternate syntax.")
++              end
++            end
++            @replication_admin.addPeer(id, cluster_key, peer_tableCFs)
++      elsif args.is_a?(Hash)
+         unless peer_tableCFs.nil?
+           raise(ArgumentError, "peer_tableCFs should be specified as TABLE_CFS in args")
+         end
+@@ -97,7 +106,7 @@ module Hbase
+ 
+         @replication_admin.add_peer(id, replication_peer_config)
+       else
+-        raise(ArgumentError, "args must be a Hash")
++        raise(ArgumentError, "args must be a String or Hash")
+       end
+     end
+ 
+diff --git a/hbase-shell/src/main/ruby/shell/commands/add_peer.rb b/hbase-shell/src/main/ruby/shell/commands/add_peer.rb
+index 7ebfbf6..73a5774 100644
+--- a/hbase-shell/src/main/ruby/shell/commands/add_peer.rb
++++ b/hbase-shell/src/main/ruby/shell/commands/add_peer.rb
+@@ -31,8 +31,11 @@ This gives a full path for HBase to connect to another HBase cluster. An optiona
+ table column families identifies which column families will be replicated to the peer cluster.
+ Examples:
+ 
+-  hbase> add_peer '1', CLUSTER_KEY => "server1.cie.com:2181:/hbase"
+-  hbase> add_peer '2', CLUSTER_KEY => "zk1,zk2,zk3:2182:/hbase-prod",
++  hbase> add_peer '1', "server1.cie.com:2181:/hbase"
++  hbase> add_peer '2', "zk1,zk2,zk3:2182:/hbase-prod"
++  hbase> add_peer '3', "zk4,zk5,zk6:11000:/hbase-test", "table1; table2:cf1; table3:cf1,cf2"
++  hbase> add_peer '4', CLUSTER_KEY => "server1.cie.com:2181:/hbase"
++  hbase> add_peer '5', CLUSTER_KEY => "zk1,zk2,zk3:2182:/hbase-prod",
+     TABLE_CFS => { "table1" => [], "ns2:table2" => ["cf1"], "ns3:table3" => ["cf1", "cf2"] }
+ 
+ For a custom replication endpoint, the ENDPOINT_CLASSNAME can be provided. Two optional arguments
+diff --git a/hbase-shell/src/test/ruby/hbase/replication_admin_test.rb b/hbase-shell/src/test/ruby/hbase/replication_admin_test.rb
+index 6d14fee..3abff71 100644
+--- a/hbase-shell/src/test/ruby/hbase/replication_admin_test.rb
++++ b/hbase-shell/src/test/ruby/hbase/replication_admin_test.rb
+@@ -71,9 +71,6 @@ module Hbase
+       assert_raise(ArgumentError) do
+         replication_admin.add_peer(@peer_id, ['test'])
+       end
+-      assert_raise(ArgumentError) do
+-        replication_admin.add_peer(@peer_id, 'test')
+-      end
+     end
+ 
+     define_test "add_peer: single zk cluster key - peer config" do
+-- 
+1.7.9.5
+

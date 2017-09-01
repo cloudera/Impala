@@ -1,0 +1,128 @@
+From 47a2b579cc07908a2585b8d9564307ae5715c493 Mon Sep 17 00:00:00 2001
+From: tedyu <yuzhihong@gmail.com>
+Date: Wed, 21 Dec 2016 08:27:45 -0800
+Subject: [PATCH 402/410] HBASE-17341 Add a timeout during replication
+ endpoint termination (Vincent Poon)
+
+Change-Id: I8ec966a5c71d46e6201a17e6f2a120eb9f4dfc82
+Author: Vincent Poon
+Reason: Improvement
+Ref: CDH-50420
+---
+ .../regionserver/ReplicationSource.java            |    6 ++-
+ .../hbase/replication/TestReplicationSource.java   |   54 ++++++++++++++++++++
+ 2 files changed, 58 insertions(+), 2 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/ReplicationSource.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/ReplicationSource.java
+index 341899b..59af134 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/ReplicationSource.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/ReplicationSource.java
+@@ -382,9 +382,11 @@ public class ReplicationSource extends Thread
+       }
+       if (future != null) {
+         try {
+-          future.get();
++          future.get(sleepForRetries * maxRetriesMultiplier, TimeUnit.MILLISECONDS);
+         } catch (Exception e) {
+-          LOG.warn("Got exception:" + e);
++          LOG.warn("Got exception while waiting for endpoint to shutdown for replication source :"
++              + this.peerClusterZnode,
++            e);
+         }
+       }
+     }
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/replication/TestReplicationSource.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/replication/TestReplicationSource.java
+index 5a83a2f..66f9b0d 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/replication/TestReplicationSource.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/replication/TestReplicationSource.java
+@@ -23,6 +23,10 @@ import static org.junit.Assert.assertNotNull;
+ import static org.junit.Assert.assertNull;
+ 
+ import java.io.IOException;
++import java.util.concurrent.ExecutorService;
++import java.util.concurrent.Executors;
++import java.util.concurrent.Future;
++
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+@@ -32,6 +36,8 @@ import org.apache.hadoop.hbase.CoordinatedStateManager;
+ import org.apache.hadoop.hbase.MiniHBaseCluster;
+ import org.apache.hadoop.hbase.TableName;
+ import org.apache.hadoop.hbase.Waiter;
++
++import org.apache.hadoop.hbase.Waiter.Predicate;
+ import org.apache.hadoop.hbase.HBaseConfiguration;
+ import org.apache.hadoop.hbase.HBaseTestingUtility;
+ import org.apache.hadoop.hbase.HConstants;
+@@ -46,6 +52,8 @@ import org.apache.hadoop.hbase.wal.WALProvider;
+ import org.apache.hadoop.hbase.wal.WALFactory;
+ import org.apache.hadoop.hbase.wal.WALKey;
+ import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
++import org.apache.hadoop.hbase.replication.regionserver.HBaseInterClusterReplicationEndpoint;
++import org.apache.hadoop.hbase.replication.regionserver.ReplicationSource;
+ import org.apache.hadoop.hbase.util.Bytes;
+ 
+ import org.junit.AfterClass;
+@@ -53,6 +61,8 @@ import org.junit.BeforeClass;
+ import org.junit.Test;
+ import org.junit.experimental.categories.Category;
+ 
++import static org.mockito.Mockito.mock;
++
+ @Category(MediumTests.class)
+ public class TestReplicationSource {
+ 
+@@ -236,5 +246,49 @@ public class TestReplicationSource {
+       super.stopServiceThreads();
+     }
+   }
++
++  /**
++   * Tests that {@link ReplicationSource#terminate(String)} will timeout properly
++   */
++  @Test
++  public void testTerminateTimeout() throws Exception {
++    final ReplicationSource source = new ReplicationSource();
++    ReplicationEndpoint replicationEndpoint = new HBaseInterClusterReplicationEndpoint() {
++      @Override
++      protected void doStart() {
++        notifyStarted();
++      }
++
++      @Override
++      protected void doStop() {
++        // not calling notifyStopped() here causes the caller of stop() to get a Future that never
++        // completes
++      }
++    };
++    replicationEndpoint.start();
++    ReplicationPeers mockPeers = mock(ReplicationPeers.class);
++    Configuration testConf = HBaseConfiguration.create();
++    testConf.setInt("replication.source.maxretriesmultiplier", 1);
++    source.init(testConf, null, null, null, mockPeers, null, "testPeer", null, replicationEndpoint,
++      null);
++    ExecutorService executor = Executors.newSingleThreadExecutor();
++    final Future<?> future = executor.submit(new Runnable() {
++
++      @Override
++      public void run() {
++        source.terminate("testing source termination");
++      }
++    });
++    long sleepForRetries = testConf.getLong("replication.source.sleepforretries", 1000);
++    Waiter.waitFor(testConf, sleepForRetries * 2, new Predicate<Exception>() {
++
++      @Override
++      public boolean evaluate() throws Exception {
++        return future.isDone();
++      }
++
++    });
++
++  }
+ }
+ 
+-- 
+1.7.9.5
+

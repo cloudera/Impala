@@ -1,0 +1,35 @@
+From b03254a5ab93af721baf1b72c31d28d1bd5cf2f0 Mon Sep 17 00:00:00 2001
+From: Michael Stack <stack@apache.org>
+Date: Thu, 11 May 2017 17:23:43 -0700
+Subject: [PATCH 396/410] HBASE-18021 Add more info in timed out
+ RetriesExhaustedException for read replica client
+ get processing (Huaxiang Sun)
+
+(cherry picked from commit 51cb53776de413c3f2b4b481a0798f428680ac6b)
+
+Change-Id: Iaa59b6f2312fee230c247a01a133cce789710fa0
+Author: Michael Stack
+Reason: Improvement
+Ref: CDH-57891
+---
+ .../client/RpcRetryingCallerWithReadReplicas.java  |    4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/RpcRetryingCallerWithReadReplicas.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/RpcRetryingCallerWithReadReplicas.java
+index a441ab8..e80fd20 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/RpcRetryingCallerWithReadReplicas.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/RpcRetryingCallerWithReadReplicas.java
+@@ -268,7 +268,9 @@ public class RpcRetryingCallerWithReadReplicas {
+       Future<Result> f = cs.pollForFirstSuccessfullyCompletedTask(operationTimeout,
+           TimeUnit.MILLISECONDS, startIndex, endIndex);
+       if (f == null) {
+-        throw new RetriesExhaustedException("timed out after " + operationTimeout + " ms");
++        throw new RetriesExhaustedException("Timed out after " + operationTimeout +
++            "ms. Get is sent to replicas with startIndex: " + startIndex +
++            ", endIndex: " + endIndex + ", Locations: " + rl);
+       }
+       return f.get();
+     } catch (ExecutionException e) {
+-- 
+1.7.9.5
+

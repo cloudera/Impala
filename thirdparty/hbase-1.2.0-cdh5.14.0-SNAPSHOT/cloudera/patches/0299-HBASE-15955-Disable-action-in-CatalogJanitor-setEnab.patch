@@ -1,0 +1,51 @@
+From 1b6e332fbb929b6d56a2682ab4352f9fa255afd7 Mon Sep 17 00:00:00 2001
+From: Stephen Yuan Jiang <syuanjiangdev@gmail.com>
+Date: Fri, 3 Jun 2016 15:48:48 -0700
+Subject: [PATCH 299/410] HBASE-15955 Disable action in
+ CatalogJanitor#setEnabled should wait for active
+ cleanup scan to finish (Stephen Yuan Jiang)
+
+(cherry picked from commit edbf2754a410d3a4496ba1c2c8f96c7919da50a8)
+
+Change-Id: Ib391d49d955753d90b269bcb6e65f18b85abdc76
+Author: Balazs Meszaros
+Reason: Bug
+Ref: CDH-50430
+---
+ .../apache/hadoop/hbase/master/CatalogJanitor.java |   13 ++++++++++++-
+ 1 file changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/CatalogJanitor.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/CatalogJanitor.java
+index 5b78556..48105c8 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/CatalogJanitor.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/CatalogJanitor.java
+@@ -50,6 +50,7 @@ import org.apache.hadoop.hbase.util.Bytes;
+ import org.apache.hadoop.hbase.util.FSUtils;
+ import org.apache.hadoop.hbase.util.Pair;
+ import org.apache.hadoop.hbase.util.PairOfSameType;
++import org.apache.hadoop.hbase.util.Threads;
+ import org.apache.hadoop.hbase.util.Triple;
+ 
+ /**
+@@ -88,7 +89,17 @@ public class CatalogJanitor extends ScheduledChore {
+    * @param enabled
+    */
+   public boolean setEnabled(final boolean enabled) {
+-    return this.enabled.getAndSet(enabled);
++    boolean alreadyEnabled = this.enabled.getAndSet(enabled);
++    // If disabling is requested on an already enabled chore, we could have an active
++    // scan still going on, callers might not be aware of that and do further action thinkng
++    // that no action would be from this chore.  In this case, the right action is to wait for
++    // the active scan to complete before exiting this function.
++    if (!enabled && alreadyEnabled) {
++      while (alreadyRunning.get()) {
++        Threads.sleepWithoutInterrupt(100);
++      }
++    }
++    return alreadyEnabled;
+   }
+ 
+   boolean getEnabled() {
+-- 
+1.7.9.5
+

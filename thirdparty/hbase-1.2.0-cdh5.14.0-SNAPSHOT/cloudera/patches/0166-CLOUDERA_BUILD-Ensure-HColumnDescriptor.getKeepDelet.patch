@@ -1,0 +1,34 @@
+From 19ead4201c1c1401ab348535a6c23ec2bee23878 Mon Sep 17 00:00:00 2001
+From: Sean Busbey <busbey@cloudera.com>
+Date: Thu, 16 Jun 2016 11:24:59 -0500
+Subject: [PATCH 166/410] CLOUDERA_BUILD Ensure
+ HColumnDescriptor.getKeepDeletedCells is consistent
+ with enum version.
+
+Change-Id: I48cc7e836eee48fd8824e6e1f798fd9cef7aa454
+Reason: compatibility
+Author: Sean Busbey
+Ref: CDH-41409
+---
+ .../org/apache/hadoop/hbase/HColumnDescriptor.java |    5 ++---
+ 1 file changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/HColumnDescriptor.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/HColumnDescriptor.java
+index 0cb152e..2908a69 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/HColumnDescriptor.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/HColumnDescriptor.java
+@@ -916,9 +916,8 @@ public class HColumnDescriptor implements WritableComparable<HColumnDescriptor>
+    */
+   @Deprecated
+   public boolean getKeepDeletedCells() {
+-    String value = getValue(KEEP_DELETED_CELLS);
+-    if (value != null) {
+-      KeepDeletedCells kdc = KeepDeletedCells.valueOf(value);
++    final KeepDeletedCells kdc = getKeepDeletedCellsAsEnum();
++    if (kdc != null) {
+       switch (kdc) {
+         case TRUE:
+         case TTL:
+-- 
+1.7.9.5
+

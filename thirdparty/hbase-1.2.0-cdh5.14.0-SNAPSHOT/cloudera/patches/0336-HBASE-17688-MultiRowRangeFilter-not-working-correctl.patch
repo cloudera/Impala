@@ -1,0 +1,141 @@
+From 350ea781935d8605bae1963e375619071352f1b6 Mon Sep 17 00:00:00 2001
+From: Jingcheng Du <jingchengdu@apache.org>
+Date: Tue, 28 Feb 2017 12:40:20 +0800
+Subject: [PATCH 336/410] HBASE-17688 MultiRowRangeFilter not working
+ correctly if given same start and stop RowKey
+
+(cherry picked from commit 56dea8f87437c88dcf5ddade46a63c80a73822c0)
+
+Change-Id: I7bda9ea158900760fdfb5048cb44787d82310c75
+Author: Jingcheng Du
+Reason: Bug
+Ref: CDH-53421
+---
+ .../hadoop/hbase/filter/MultiRowRangeFilter.java   |   15 +++++-----
+ .../hbase/filter/TestMultiRowRangeFilter.java      |   31 ++++++++++++++++++++
+ 2 files changed, 38 insertions(+), 8 deletions(-)
+
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/filter/MultiRowRangeFilter.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/filter/MultiRowRangeFilter.java
+index 9df5249..7e9503c 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/filter/MultiRowRangeFilter.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/filter/MultiRowRangeFilter.java
+@@ -117,7 +117,9 @@ public class MultiRowRangeFilter extends FilterBase {
+       } else {
+         if (range.contains(buffer, offset, length)) {
+           currentReturnCode = ReturnCode.INCLUDE;
+-        } else currentReturnCode = ReturnCode.SEEK_NEXT_USING_HINT;
++        } else {
++          currentReturnCode = ReturnCode.SEEK_NEXT_USING_HINT;
++        }
+       }
+     } else {
+       currentReturnCode = ReturnCode.INCLUDE;
+@@ -151,7 +153,6 @@ public class MultiRowRangeFilter extends FilterBase {
+         if (range.stopRow != null)
+           rangebuilder.setStopRow(ByteStringer.wrap(range.stopRow));
+         rangebuilder.setStopRowInclusive(range.stopRowInclusive);
+-        range.isScan = Bytes.equals(range.startRow, range.stopRow) ? 1 : 0;
+         builder.addRowRangeList(rangebuilder.build());
+       }
+     }
+@@ -422,7 +423,6 @@ public class MultiRowRangeFilter extends FilterBase {
+     private boolean startRowInclusive = true;
+     private byte[] stopRow;
+     private boolean stopRowInclusive = false;
+-    private int isScan = 0;
+ 
+     public RowRange() {
+     }
+@@ -445,7 +445,6 @@ public class MultiRowRangeFilter extends FilterBase {
+       this.startRowInclusive = startRowInclusive;
+       this.stopRow = (stopRow == null) ? HConstants.EMPTY_BYTE_ARRAY :stopRow;
+       this.stopRowInclusive = stopRowInclusive;
+-      isScan = Bytes.equals(startRow, stopRow) ? 1 : 0;
+     }
+ 
+     public byte[] getStartRow() {
+@@ -479,21 +478,21 @@ public class MultiRowRangeFilter extends FilterBase {
+         if(stopRowInclusive) {
+           return Bytes.compareTo(buffer, offset, length, startRow, 0, startRow.length) >= 0
+               && (Bytes.equals(stopRow, HConstants.EMPTY_BYTE_ARRAY) ||
+-                  Bytes.compareTo(buffer, offset, length, stopRow, 0, stopRow.length) <= isScan);
++                  Bytes.compareTo(buffer, offset, length, stopRow, 0, stopRow.length) <= 0);
+         } else {
+           return Bytes.compareTo(buffer, offset, length, startRow, 0, startRow.length) >= 0
+               && (Bytes.equals(stopRow, HConstants.EMPTY_BYTE_ARRAY) ||
+-                  Bytes.compareTo(buffer, offset, length, stopRow, 0, stopRow.length) < isScan);
++                  Bytes.compareTo(buffer, offset, length, stopRow, 0, stopRow.length) < 0);
+         }
+       } else {
+         if(stopRowInclusive) {
+           return Bytes.compareTo(buffer, offset, length, startRow, 0, startRow.length) > 0
+               && (Bytes.equals(stopRow, HConstants.EMPTY_BYTE_ARRAY) ||
+-                  Bytes.compareTo(buffer, offset, length, stopRow, 0, stopRow.length) <= isScan);
++                  Bytes.compareTo(buffer, offset, length, stopRow, 0, stopRow.length) <= 0);
+         } else {
+           return Bytes.compareTo(buffer, offset, length, startRow, 0, startRow.length) > 0
+               && (Bytes.equals(stopRow, HConstants.EMPTY_BYTE_ARRAY) ||
+-                  Bytes.compareTo(buffer, offset, length, stopRow, 0, stopRow.length) < isScan);
++                  Bytes.compareTo(buffer, offset, length, stopRow, 0, stopRow.length) < 0);
+         }
+       }
+     }
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/filter/TestMultiRowRangeFilter.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/filter/TestMultiRowRangeFilter.java
+index dfa8bfa..9ba5ec3 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/filter/TestMultiRowRangeFilter.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/filter/TestMultiRowRangeFilter.java
+@@ -457,6 +457,35 @@ public class TestMultiRowRangeFilter {
+     ht.close();
+   }
+ 
++  @Test
++  public void testOneRowRange() throws IOException {
++    tableName = Bytes.toBytes("testOneRowRange");
++    HTable ht = TEST_UTIL.createTable(tableName, family, Integer.MAX_VALUE);
++    generateRows(numRows, ht, family, qf, value);
++    ArrayList<MultiRowRangeFilter.RowRange> rowRangesList = new ArrayList<>();
++    rowRangesList
++        .add(new MultiRowRangeFilter.RowRange(Bytes.toBytes(50), true, Bytes.toBytes(50), true));
++    Scan scan = new Scan();
++    scan.setFilter(new MultiRowRangeFilter(rowRangesList));
++    int resultsSize = getResultsSize(ht, scan);
++    assertEquals(1, resultsSize);
++    rowRangesList.clear();
++    rowRangesList
++        .add(new MultiRowRangeFilter.RowRange(Bytes.toBytes(50), true, Bytes.toBytes(51), false));
++    scan = new Scan();
++    scan.setFilter(new MultiRowRangeFilter(rowRangesList));
++    resultsSize = getResultsSize(ht, scan);
++    assertEquals(1, resultsSize);
++    rowRangesList.clear();
++    rowRangesList
++        .add(new MultiRowRangeFilter.RowRange(Bytes.toBytes(50), true, Bytes.toBytes(51), true));
++    scan = new Scan();
++    scan.setFilter(new MultiRowRangeFilter(rowRangesList));
++    resultsSize = getResultsSize(ht, scan);
++    assertEquals(2, resultsSize);
++    ht.close();
++  }
++
+   private void generateRows(int numberOfRows, HTable ht, byte[] family, byte[] qf, byte[] value)
+       throws IOException {
+     for (int i = 0; i < numberOfRows; i++) {
+@@ -485,6 +514,7 @@ public class TestMultiRowRangeFilter {
+         kvList.add(kv);
+       }
+     }
++    scanner.close();
+     return kvList;
+   }
+ 
+@@ -497,6 +527,7 @@ public class TestMultiRowRangeFilter {
+         results.add(kv);
+       }
+     }
++    scanner.close();
+     return results.size();
+   }
+ }
+-- 
+1.7.9.5
+

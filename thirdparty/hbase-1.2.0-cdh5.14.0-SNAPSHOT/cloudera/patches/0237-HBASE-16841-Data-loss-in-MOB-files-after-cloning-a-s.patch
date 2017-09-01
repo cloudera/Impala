@@ -1,0 +1,491 @@
+From d67832ae83710bb898c339f3b198cb788c77959e Mon Sep 17 00:00:00 2001
+From: Huaxiang Sun <hsun@cloudera.com>
+Date: Tue, 6 Dec 2016 17:52:49 -0800
+Subject: [PATCH 237/410] HBASE-16841 Data loss in MOB files after cloning a
+ snapshot and deleting that snapshot
+
+Change-Id: Ibddddf5018eeffbfaa0cc9b4240cd01a7010fb3f
+Author: Jingcheng Du
+Reason: Bug
+Ref: CDH-45881
+---
+ .../apache/hadoop/hbase/backup/HFileArchiver.java  |   18 +++-
+ .../snapshot/DisabledTableSnapshotHandler.java     |   14 +--
+ .../snapshot/EnabledTableSnapshotHandler.java      |   20 +++++
+ .../java/org/apache/hadoop/hbase/mob/MobUtils.java |   20 ++++-
+ .../apache/hadoop/hbase/regionserver/HRegion.java  |   19 ----
+ .../hbase/snapshot/RestoreSnapshotHelper.java      |    2 +-
+ .../hadoop/hbase/snapshot/SnapshotManifest.java    |   30 ++-----
+ .../apache/hadoop/hbase/util/HFileArchiveUtil.java |   13 +++
+ .../client/TestMobCloneSnapshotFromClient.java     |   91 ++++++++++++++++++--
+ 9 files changed, 167 insertions(+), 60 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/backup/HFileArchiver.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/backup/HFileArchiver.java
+index d682ccc..2d20232 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/backup/HFileArchiver.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/backup/HFileArchiver.java
+@@ -162,6 +162,22 @@ public class HFileArchiver {
+   public static void archiveFamily(FileSystem fs, Configuration conf,
+       HRegionInfo parent, Path tableDir, byte[] family) throws IOException {
+     Path familyDir = new Path(tableDir, new Path(parent.getEncodedName(), Bytes.toString(family)));
++    archiveFamilyByFamilyDir(fs, conf, parent, familyDir, family);
++  }
++
++  /**
++   * Removes from the specified region the store files of the specified column family,
++   * either by archiving them or outright deletion
++   * @param fs the filesystem where the store files live
++   * @param conf {@link Configuration} to examine to determine the archive directory
++   * @param parent Parent region hosting the store files
++   * @param familyDir {@link Path} to where the family is being stored
++   * @param family the family hosting the store files
++   * @throws IOException if the files could not be correctly disposed.
++   */
++   public static void archiveFamilyByFamilyDir(FileSystem fs, Configuration conf,
++    HRegionInfo parent, Path familyDir, byte[] family) throws IOException {
++
+     FileStatus[] storeFiles = FSUtils.listStatus(fs, familyDir);
+     if (storeFiles == null) {
+       LOG.debug("No store files to dispose for region=" + parent.getRegionNameAsString() +
+@@ -171,7 +187,7 @@ public class HFileArchiver {
+ 
+     FileStatusConverter getAsFile = new FileStatusConverter(fs);
+     Collection<File> toArchive = Lists.transform(Arrays.asList(storeFiles), getAsFile);
+-    Path storeArchiveDir = HFileArchiveUtil.getStoreArchivePath(conf, parent, tableDir, family);
++    Path storeArchiveDir = HFileArchiveUtil.getStoreArchivePath(conf, parent, family);
+ 
+     // do the actual archive
+     if (!resolveAndArchive(fs, storeArchiveDir, toArchive)) {
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/DisabledTableSnapshotHandler.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/DisabledTableSnapshotHandler.java
+index aae97af..dd916cd 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/DisabledTableSnapshotHandler.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/DisabledTableSnapshotHandler.java
+@@ -29,7 +29,6 @@ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hbase.HConstants;
+ import org.apache.hadoop.hbase.classification.InterfaceAudience;
+ import org.apache.hadoop.hbase.classification.InterfaceStability;
+-import org.apache.hadoop.hbase.HConstants;
+ import org.apache.hadoop.hbase.HRegionInfo;
+ import org.apache.hadoop.hbase.ServerName;
+ import org.apache.hadoop.hbase.client.RegionReplicaUtil;
+@@ -39,7 +38,6 @@ import org.apache.hadoop.hbase.mob.MobUtils;
+ import org.apache.hadoop.hbase.protobuf.generated.HBaseProtos.SnapshotDescription;
+ import org.apache.hadoop.hbase.snapshot.ClientSnapshotDescriptionUtils;
+ import org.apache.hadoop.hbase.snapshot.SnapshotManifest;
+-import org.apache.hadoop.hbase.util.Bytes;
+ import org.apache.hadoop.hbase.util.FSUtils;
+ import org.apache.hadoop.hbase.util.ModifyRegionUtils;
+ import org.apache.hadoop.hbase.util.Pair;
+@@ -85,11 +83,13 @@ public class DisabledTableSnapshotHandler extends TakeSnapshotHandler {
+         if (RegionReplicaUtil.isDefaultReplica(hri)) {
+           regions.add(hri);
+         }
+-        // if it's the first region, add the mob region
+-        if (Bytes.equals(hri.getStartKey(), HConstants.EMPTY_START_ROW)) {
+-          HRegionInfo mobRegion = MobUtils.getMobRegionInfo(hri.getTable());
+-          regions.add(mobRegion);
+-        }
++      }
++      // handle the mob files if any.
++      boolean mobEnabled = MobUtils.hasMobColumns(htd);
++      if (mobEnabled) {
++        // snapshot the mob files as a offline region.
++        HRegionInfo mobRegionInfo = MobUtils.getMobRegionInfo(htd.getTableName());
++        regions.add(mobRegionInfo);
+       }
+ 
+       // 2. for each region, write all the info to disk
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/EnabledTableSnapshotHandler.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/EnabledTableSnapshotHandler.java
+index f545a82..900e13c 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/EnabledTableSnapshotHandler.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/EnabledTableSnapshotHandler.java
+@@ -29,6 +29,7 @@ import org.apache.hadoop.hbase.HRegionInfo;
+ import org.apache.hadoop.hbase.ServerName;
+ import org.apache.hadoop.hbase.errorhandling.ForeignException;
+ import org.apache.hadoop.hbase.master.MasterServices;
++import org.apache.hadoop.hbase.mob.MobUtils;
+ import org.apache.hadoop.hbase.procedure.Procedure;
+ import org.apache.hadoop.hbase.procedure.ProcedureCoordinator;
+ import org.apache.hadoop.hbase.protobuf.generated.HBaseProtos.SnapshotDescription;
+@@ -103,6 +104,15 @@ public class EnabledTableSnapshotHandler extends TakeSnapshotHandler {
+           snapshotDisabledRegion(regionInfo);
+         }
+       }
++
++      // handle the mob files if any.
++      boolean mobEnabled = MobUtils.hasMobColumns(htd);
++      if (mobEnabled) {
++        LOG.info("Taking snapshot for mob files in table " + htd.getTableName());
++        // snapshot the mob files as a offline region.
++        HRegionInfo mobRegionInfo = MobUtils.getMobRegionInfo(htd.getTableName());
++        snapshotMobRegion(mobRegionInfo);
++      }
+     } catch (InterruptedException e) {
+       ForeignException ee =
+           new ForeignException("Interrupted while waiting for snapshot to finish", e);
+@@ -112,4 +122,14 @@ public class EnabledTableSnapshotHandler extends TakeSnapshotHandler {
+       monitor.receive(e);
+     }
+   }
++
++  /**
++   * Takes a snapshot of the mob region
++   */
++  private void snapshotMobRegion(final HRegionInfo regionInfo)
++      throws IOException {
++    snapshotManifest.addMobRegion(regionInfo);
++    monitor.rethrowException();
++    status.setStatus("Completed referencing HFiles for the mob region of table: " + snapshotTable);
++  }
+ }
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/MobUtils.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/MobUtils.java
+index 388b7c7..ed852ec 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/MobUtils.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/mob/MobUtils.java
+@@ -46,6 +46,7 @@ import org.apache.hadoop.hbase.HBaseConfiguration;
+ import org.apache.hadoop.hbase.HColumnDescriptor;
+ import org.apache.hadoop.hbase.HConstants;
+ import org.apache.hadoop.hbase.HRegionInfo;
++import org.apache.hadoop.hbase.HTableDescriptor;
+ import org.apache.hadoop.hbase.KeyValue;
+ import org.apache.hadoop.hbase.TableName;
+ import org.apache.hadoop.hbase.Tag;
+@@ -504,8 +505,8 @@ public class MobUtils {
+       HColumnDescriptor family, String date, Path basePath, long maxKeyCount,
+       Compression.Algorithm compression, byte[] startKey, CacheConfig cacheConfig)
+       throws IOException {
+-    MobFileName mobFileName = MobFileName.create(startKey, date, UUID.randomUUID().toString()
+-        .replaceAll("-", ""));
++    MobFileName mobFileName = MobFileName.create(startKey, date,
++        UUID.randomUUID().toString().replaceAll("-", ""));
+     return createWriter(conf, fs, family, mobFileName, basePath, maxKeyCount, compression,
+       cacheConfig);
+   }
+@@ -757,6 +758,21 @@ public class MobUtils {
+   }
+ 
+   /**
++   * Checks whether this table has mob-enabled columns.
++   * @param htd The current table descriptor.
++   * @return Whether this table has mob-enabled columns.
++   */
++  public static boolean hasMobColumns(HTableDescriptor htd) {
++    HColumnDescriptor[] hcds = htd.getColumnFamilies();
++    for (HColumnDescriptor hcd : hcds) {
++      if (hcd.isMobEnabled()) {
++        return true;
++      }
++    }
++    return false;
++  }
++
++  /**
+    * Indicates whether return null value when the mob file is missing or corrupt.
+    * The information is set in the attribute "empty.value.on.mobcell.miss" of scan.
+    * @param scan The current scan.
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
+index 9f45680..693214b 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
+@@ -126,7 +126,6 @@ import org.apache.hadoop.hbase.io.hfile.HFile;
+ import org.apache.hadoop.hbase.ipc.CallerDisconnectedException;
+ import org.apache.hadoop.hbase.ipc.RpcCallContext;
+ import org.apache.hadoop.hbase.ipc.RpcServer;
+-import org.apache.hadoop.hbase.mob.MobUtils;
+ import org.apache.hadoop.hbase.monitoring.MonitoredTask;
+ import org.apache.hadoop.hbase.monitoring.TaskMonitor;
+ import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
+@@ -3575,24 +3574,6 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+     SnapshotManifest manifest = SnapshotManifest.create(conf, getFilesystem(),
+             snapshotDir, desc, exnSnare);
+     manifest.addRegion(this);
+-
+-    // The regionserver holding the first region of the table is responsible for taking the
+-    // manifest of the mob dir.
+-    if (!Bytes.equals(getRegionInfo().getStartKey(), HConstants.EMPTY_START_ROW))
+-      return;
+-
+-    // if any cf's have is mob enabled, add the "mob region" to the manifest.
+-    List<Store> stores = getStores();
+-    for (Store store : stores) {
+-      boolean hasMobStore = store.getFamily().isMobEnabled();
+-      if (hasMobStore) {
+-        // use the .mob as the start key and 0 as the regionid
+-        HRegionInfo mobRegionInfo = MobUtils.getMobRegionInfo(this.getTableDesc().getTableName());
+-        mobRegionInfo.setOffline(true);
+-        manifest.addMobRegion(mobRegionInfo, this.getTableDesc().getColumnFamilies());
+-        return;
+-      }
+-    }
+   }
+ 
+   @Override
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/RestoreSnapshotHelper.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/RestoreSnapshotHelper.java
+index 2ad222f..6ec4669 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/RestoreSnapshotHelper.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/RestoreSnapshotHelper.java
+@@ -509,7 +509,7 @@ public class RestoreSnapshotHelper {
+         // Family doesn't exists in the snapshot
+         LOG.trace("Removing family=" + Bytes.toString(family) +
+           " from region=" + regionInfo.getEncodedName() + " table=" + tableName);
+-        HFileArchiver.archiveFamily(fs, conf, regionInfo, tableDir, family);
++        HFileArchiver.archiveFamilyByFamilyDir(fs, conf, regionInfo, familyDir, family);
+         fs.delete(familyDir, true);
+       }
+     }
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/SnapshotManifest.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/SnapshotManifest.java
+index 4049ac2..eebe7da 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/SnapshotManifest.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/snapshot/SnapshotManifest.java
+@@ -161,7 +161,7 @@ public class SnapshotManifest {
+     }
+   }
+ 
+-  public void addMobRegion(HRegionInfo regionInfo, HColumnDescriptor[] hcds) throws IOException {
++  public void addMobRegion(HRegionInfo regionInfo) throws IOException {
+     // 0. Get the ManifestBuilder/RegionVisitor
+     RegionVisitor visitor = createRegionVisitor(desc);
+ 
+@@ -174,7 +174,7 @@ public class SnapshotManifest {
+     LOG.debug("Creating references for hfiles");
+ 
+     Path mobRegionPath = MobUtils.getMobRegionPath(conf, regionInfo.getTable());
+-    for (HColumnDescriptor hcd : hcds) {
++    for (HColumnDescriptor hcd : htd.getColumnFamilies()) {
+       // 2.1. build the snapshot reference for the store if it's a mob store
+       if (!hcd.isMobEnabled()) {
+         continue;
+@@ -265,9 +265,14 @@ public class SnapshotManifest {
+ 
+     boolean isMobRegion = MobUtils.isMobRegionInfo(regionInfo);
+     try {
++      Path baseDir = tableDir;
+       // Open the RegionFS
++      if (isMobRegion) {
++        baseDir = FSUtils.getTableDir(MobUtils.getMobHome(conf), regionInfo.getTable());
++      }
++
+       HRegionFileSystem regionFs = HRegionFileSystem.openRegionFromFileSystem(conf, fs,
+-            tableDir, regionInfo, true);
++            baseDir, regionInfo, true);
+       monitor.rethrowException();
+ 
+       // 1. dump region meta info into the snapshot directory
+@@ -289,24 +294,7 @@ public class SnapshotManifest {
+           Object familyData = visitor.familyOpen(regionData, Bytes.toBytes(familyName));
+           monitor.rethrowException();
+ 
+-          Collection<StoreFileInfo> storeFiles = null;
+-          if (isMobRegion) {
+-            Path regionPath = MobUtils.getMobRegionPath(conf, regionInfo.getTable());
+-            Path storePath = MobUtils.getMobFamilyPath(regionPath, familyName);
+-            if (!fs.exists(storePath)) {
+-              continue;
+-            }
+-            FileStatus[] stats = fs.listStatus(storePath);
+-            if (stats == null) {
+-              continue;
+-            }
+-            storeFiles = new ArrayList<StoreFileInfo>();
+-            for (FileStatus stat : stats) {
+-              storeFiles.add(new StoreFileInfo(conf, fs, stat));
+-            }
+-          } else {
+-            storeFiles = regionFs.getStoreFiles(familyName);
+-          }
++          Collection<StoreFileInfo> storeFiles = regionFs.getStoreFiles(familyName);
+           if (storeFiles == null) {
+             if (LOG.isDebugEnabled()) {
+               LOG.debug("No files under family: " + familyName);
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/util/HFileArchiveUtil.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/util/HFileArchiveUtil.java
+index a235696..bdd94a8 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/util/HFileArchiveUtil.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/util/HFileArchiveUtil.java
+@@ -64,6 +64,19 @@ public class HFileArchiveUtil {
+                                          HRegionInfo region,
+                                          Path tabledir,
+       byte[] family) throws IOException {
++    return getStoreArchivePath(conf, region, family);
++  }
++
++  /**
++   * Gets the directory to archive a store directory.
++   * @param conf {@link Configuration} to read for the archive directory name.
++   * @param region parent region information under which the store currently lives
++   * @param family name of the family in the store
++   * @return {@link Path} to the directory to archive the given store or <tt>null</tt> if it should
++   *         not be archived
++   */
++   public static Path getStoreArchivePath(Configuration conf, HRegionInfo region,
++       byte[] family) throws IOException {
+     Path rootDir = FSUtils.getRootDir(conf);
+     Path tableArchiveDir = getTableArchivePath(rootDir, region.getTable());
+     return HStore.getStoreHomedir(tableArchiveDir, region, family);
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestMobCloneSnapshotFromClient.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestMobCloneSnapshotFromClient.java
+index 1804881..eaab300 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestMobCloneSnapshotFromClient.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestMobCloneSnapshotFromClient.java
+@@ -17,15 +17,22 @@
+  */
+ package org.apache.hadoop.hbase.client;
+ 
++import static org.junit.Assert.assertEquals;
++
+ import java.io.IOException;
++import java.io.InterruptedIOException;
+ 
+-import org.apache.commons.logging.Log;
+-import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.hbase.HBaseTestingUtility;
++import org.apache.hadoop.hbase.HColumnDescriptor;
+ import org.apache.hadoop.hbase.HConstants;
++import org.apache.hadoop.hbase.HTableDescriptor;
+ import org.apache.hadoop.hbase.NamespaceDescriptor;
+ import org.apache.hadoop.hbase.NamespaceNotFoundException;
+ import org.apache.hadoop.hbase.TableName;
++import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
++import org.apache.hadoop.hbase.coprocessor.ObserverContext;
++import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
++import org.apache.hadoop.hbase.master.cleaner.TimeToLiveHFileCleaner;
+ import org.apache.hadoop.hbase.master.snapshot.SnapshotManager;
+ import org.apache.hadoop.hbase.mob.MobConstants;
+ import org.apache.hadoop.hbase.snapshot.MobSnapshotTestingUtils;
+@@ -45,8 +52,8 @@ import org.junit.experimental.categories.Category;
+  */
+ @Category(LargeTests.class)
+ public class TestMobCloneSnapshotFromClient {
+-  final Log LOG = LogFactory.getLog(getClass());
+ 
++  private static boolean delayFlush = false;
+   private final static HBaseTestingUtility TEST_UTIL = new HBaseTestingUtility();
+ 
+   private final byte[] FAMILY = Bytes.toBytes("cf");
+@@ -70,6 +77,7 @@ public class TestMobCloneSnapshotFromClient {
+     TEST_UTIL.getConfiguration().setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER, 6);
+     TEST_UTIL.getConfiguration().setBoolean(
+         "hbase.master.enabletable.roundrobin", true);
++    TEST_UTIL.getConfiguration().setLong(TimeToLiveHFileCleaner.TTL_CONF_KEY, 0);
+     TEST_UTIL.getConfiguration().setInt(MobConstants.MOB_FILE_CACHE_SIZE_KEY, 0);
+     TEST_UTIL.getConfiguration().setInt("hfile.format.version", 3);
+     TEST_UTIL.startMiniCluster(3);
+@@ -97,7 +105,10 @@ public class TestMobCloneSnapshotFromClient {
+     snapshotName2 = Bytes.toBytes("snaptb2-" + tid);
+ 
+     // create Table and disable it
+-    MobSnapshotTestingUtils.createMobTable(TEST_UTIL, tableName, getNumReplicas(), FAMILY);
++    createMobTable(TEST_UTIL, tableName, SnapshotTestingUtils.getSplitKeys(), getNumReplicas(),
++      FAMILY);
++    delayFlush = false;
++
+     admin.disableTable(tableName);
+ 
+     // take an empty snapshot
+@@ -107,7 +118,7 @@ public class TestMobCloneSnapshotFromClient {
+     try {
+       // enable table and insert data
+       admin.enableTable(tableName);
+-      SnapshotTestingUtils.loadData(TEST_UTIL, tableName, 500, FAMILY);
++      SnapshotTestingUtils.loadData(TEST_UTIL, tableName, 20, FAMILY);
+       snapshot0Rows = MobSnapshotTestingUtils.countMobRows(table);
+       admin.disableTable(tableName);
+ 
+@@ -116,7 +127,7 @@ public class TestMobCloneSnapshotFromClient {
+ 
+       // enable table and insert more data
+       admin.enableTable(tableName);
+-      SnapshotTestingUtils.loadData(TEST_UTIL, tableName, 500, FAMILY);
++      SnapshotTestingUtils.loadData(TEST_UTIL, tableName, 20, FAMILY);
+       snapshot1Rows = MobSnapshotTestingUtils.countMobRows(table);
+       admin.disableTable(tableName);
+ 
+@@ -194,6 +205,23 @@ public class TestMobCloneSnapshotFromClient {
+    */
+   @Test
+   public void testCloneLinksAfterDelete() throws IOException, InterruptedException {
++
++    // delay the flush to make sure
++    delayFlush = true;
++    SnapshotTestingUtils.loadData(TEST_UTIL, tableName, 20, FAMILY);
++    long tid = System.currentTimeMillis();
++    byte[] snapshotName3 = Bytes.toBytes("snaptb3-" + tid);
++    TableName clonedTableName3 = TableName.valueOf("clonedtb3-" + System.currentTimeMillis());
++    admin.snapshot(snapshotName3, tableName);
++    delayFlush = false;
++    int snapshot3Rows = -1;
++    try (Table table = TEST_UTIL.getConnection().getTable(tableName)) {
++      snapshot3Rows = TEST_UTIL.countRows(table);
++    }
++    admin.cloneSnapshot(snapshotName3, clonedTableName3);
++    admin.deleteSnapshot(snapshotName3);
++
++
+     // Clone a table from the first snapshot
+     TableName clonedTableName = TableName.valueOf("clonedtb1-" + System.currentTimeMillis());
+     admin.cloneSnapshot(snapshotName0, clonedTableName);
+@@ -231,10 +259,11 @@ public class TestMobCloneSnapshotFromClient {
+     MobSnapshotTestingUtils.verifyMobRowCount(TEST_UTIL, clonedTableName2, snapshot0Rows);
+ 
+     // Clone a new table from cloned
+-    TableName clonedTableName3 = TableName.valueOf("clonedtb3-" + System.currentTimeMillis());
+-    admin.cloneSnapshot(snapshotName2, clonedTableName3);
+-    MobSnapshotTestingUtils.verifyMobRowCount(TEST_UTIL, clonedTableName3, snapshot0Rows);
++    TableName clonedTableName4 = TableName.valueOf("clonedtb4-" + System.currentTimeMillis());
++    admin.cloneSnapshot(snapshotName2, clonedTableName4);
++    MobSnapshotTestingUtils.verifyMobRowCount(TEST_UTIL, clonedTableName4, snapshot0Rows);
+ 
++    verifyRowCount(TEST_UTIL, clonedTableName3, snapshot3Rows);
+     // Delete the cloned tables
+     TEST_UTIL.deleteTable(clonedTableName2);
+     TEST_UTIL.deleteTable(clonedTableName3);
+@@ -248,4 +277,48 @@ public class TestMobCloneSnapshotFromClient {
+   private void waitCleanerRun() throws InterruptedException {
+     TEST_UTIL.getMiniHBaseCluster().getMaster().getHFileCleaner().choreForTesting();
+   }
++
++
++  private void verifyRowCount(final HBaseTestingUtility util, final TableName tableName,
++    long expectedRows) throws IOException {
++    MobSnapshotTestingUtils.verifyMobRowCount(util, tableName, expectedRows);
++  }
++  /**
++   * This coprocessor is used to delay the flush.
++   */
++  public static class DelayFlushCoprocessor extends BaseRegionObserver {
++    @Override
++    public void preFlush(ObserverContext<RegionCoprocessorEnvironment> e) throws IOException {
++      if (delayFlush) {
++        try {
++          if (Bytes.compareTo(e.getEnvironment().getRegionInfo().getStartKey(),
++              HConstants.EMPTY_START_ROW) != 0) {
++            Thread.sleep(100);
++          }
++        } catch (InterruptedException e1) {
++          throw new InterruptedIOException(e1.getMessage());
++        }
++      }
++      super.preFlush(e);
++    }
++  }
++
++  private void createMobTable(final HBaseTestingUtility util, final TableName tableName,
++      final byte[][] splitKeys, int regionReplication, final byte[]... families) throws IOException,
++      InterruptedException {
++    HTableDescriptor htd = new HTableDescriptor(tableName);
++    htd.setRegionReplication(regionReplication);
++    htd.addCoprocessor(DelayFlushCoprocessor.class.getName());
++    for (byte[] family : families) {
++      HColumnDescriptor hcd = new HColumnDescriptor(family);
++      hcd.setMobEnabled(true);
++      hcd.setMobThreshold(0L);
++      htd.addFamily(hcd);
++    }
++    util.getHBaseAdmin().createTable(htd, splitKeys);
++    SnapshotTestingUtils.waitForTableToBeOnline(util, tableName);
++    assertEquals((splitKeys.length + 1) * regionReplication,
++        util.getHBaseAdmin().getTableRegions(tableName).size());
++  }
++
+ }
+-- 
+1.7.9.5
+

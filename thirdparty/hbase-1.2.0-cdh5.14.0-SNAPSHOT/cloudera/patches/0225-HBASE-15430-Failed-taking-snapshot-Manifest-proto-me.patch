@@ -1,0 +1,36 @@
+From 678bc9b7b8871e179bdba28cb539a92959ded464 Mon Sep 17 00:00:00 2001
+From: Esteban Gutierrez <esteban@cloudera.com>
+Date: Tue, 15 Nov 2016 11:47:41 -0800
+Subject: [PATCH 225/410] HBASE-15430 Failed taking snapshot - Manifest
+ proto-message too large (JunHo Cho) - ADDENDUM
+
+Change-Id: I6389eaacb88b3fde488e62bbaf2e911b485f933b
+Author: JunHo Cho
+Reason: Bug
+Ref: CDH-46590
+---
+ .../hbase/snapshot/TestSnapshotManifest.java       |    4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/snapshot/TestSnapshotManifest.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/snapshot/TestSnapshotManifest.java
+index 870bfd9..dfe26b2 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/snapshot/TestSnapshotManifest.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/snapshot/TestSnapshotManifest.java
+@@ -120,12 +120,12 @@ public class TestSnapshotManifest {
+     try {
+       SnapshotManifest.open(conf, fs, snapshotDir, snapshotDesc);
+       fail("fail to test snapshot manifest because message size is too small.");
+-    } catch (InvalidProtocolBufferException ipbe) {
++    } catch (CorruptedSnapshotException ipbe) {
+       try {
+         conf.setInt(SnapshotManifest.SNAPSHOT_MANIFEST_SIZE_LIMIT_CONF_KEY, 128 * 1024 * 1024);
+         SnapshotManifest.open(conf, fs, snapshotDir, snapshotDesc);
+         LOG.info("open snapshot manifest succeed.");
+-      } catch (InvalidProtocolBufferException ipbe2) {
++      } catch (CorruptedSnapshotException ipbe2) {
+         fail("fail to take snapshot because Manifest proto-message too large.");
+       }
+     }
+-- 
+1.7.9.5
+

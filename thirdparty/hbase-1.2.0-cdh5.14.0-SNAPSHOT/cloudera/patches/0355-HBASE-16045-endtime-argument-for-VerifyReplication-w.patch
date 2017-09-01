@@ -1,0 +1,57 @@
+From d916cb769de046fca501c9c7826479acf1782bea Mon Sep 17 00:00:00 2001
+From: tedyu <yuzhihong@gmail.com>
+Date: Thu, 16 Jun 2016 15:52:16 -0700
+Subject: [PATCH 355/410] HBASE-16045 endtime argument for VerifyReplication
+ was incorrectly specified in usage
+
+(cherry picked from commit 4c1db3cb03)
+
+Change-Id: Ia880597002c3d46432af9ae2477fb38283db3b46
+Reason:    Documentation
+Author:    tedyu <yuzhihong@gmail.com>
+Ref:       CDH-54704
+---
+ .../mapreduce/replication/VerifyReplication.java   |    6 +++++-
+ src/main/asciidoc/_chapters/ops_mgt.adoc           |    2 +-
+ 2 files changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/replication/VerifyReplication.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/replication/VerifyReplication.java
+index f6207ab..d8cc6c5 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/replication/VerifyReplication.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/replication/VerifyReplication.java
+@@ -337,6 +337,10 @@ public class VerifyReplication extends Configured implements Tool {
+           continue;
+         }
+ 
++        if (cmd.startsWith("--")) {
++          printUsage("Invalid argument '" + cmd + "'");
++        }
++
+         if (i == args.length-2) {
+           peerId = cmd;
+         }
+@@ -361,7 +365,7 @@ public class VerifyReplication extends Configured implements Tool {
+       System.err.println("ERROR: " + errorMsg);
+     }
+     System.err.println("Usage: verifyrep [--starttime=X]" +
+-        " [--stoptime=Y] [--families=A] <peerid> <tablename>");
++        " [--endtime=Y] [--families=A] <peerid> <tablename>");
+     System.err.println();
+     System.err.println("Options:");
+     System.err.println(" starttime    beginning of the time range");
+diff --git a/src/main/asciidoc/_chapters/ops_mgt.adoc b/src/main/asciidoc/_chapters/ops_mgt.adoc
+index 63bd48b..9e4614d 100644
+--- a/src/main/asciidoc/_chapters/ops_mgt.adoc
++++ b/src/main/asciidoc/_chapters/ops_mgt.adoc
+@@ -1352,7 +1352,7 @@ The `VerifyReplication` MapReduce job, which is included in HBase, performs a sy
+ +
+ [source,bash]
+ ----
+-$ HADOOP_CLASSPATH=`${HBASE_HOME}/bin/hbase classpath` "${HADOOP_HOME}/bin/hadoop" jar "${HBASE_HOME}/hbase-server-VERSION.jar" verifyrep --starttime=<timestamp> --stoptime=<timestamp> --families=<myFam> <ID> <tableName>
++$ HADOOP_CLASSPATH=`${HBASE_HOME}/bin/hbase classpath` "${HADOOP_HOME}/bin/hadoop" jar "${HBASE_HOME}/hbase-server-VERSION.jar" verifyrep --starttime=<timestamp> --endtime=<timestamp> --families=<myFam> <ID> <tableName>
+ ----
+ +
+ The `VerifyReplication` command prints out `GOODROWS` and `BADROWS` counters to indicate rows that did and did not replicate correctly.
+-- 
+1.7.9.5
+

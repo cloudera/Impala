@@ -1,0 +1,266 @@
+From d002b3b704ec642d61c7026db6d8191a189e46e9 Mon Sep 17 00:00:00 2001
+From: huzheng <openinx@gmail.com>
+Date: Wed, 24 May 2017 16:46:06 +0800
+Subject: [PATCH 388/410] HBASE-18066: Get with closest_row_before on
+ hbase:meta can return empty Cell during region
+ merge/split
+
+Signed-off-by: Andrew Purtell <apurtell@apache.org>
+
+(cherry picked from commit 04bbdc835c6a875576290eca1a5a1ad1d6f7577c)
+
+Change-Id: Ib4ec3c2e27b0a7ae5eee6159a667a962904a717e
+Author: huzheng
+Reason: Bug
+Ref: CDH-57972
+---
+ .../apache/hadoop/hbase/regionserver/HRegion.java  |   37 +++--
+ .../TestFromClientGetWithClosestRowBefore.java     |  165 ++++++++++++++++++++
+ 2 files changed, 193 insertions(+), 9 deletions(-)
+ create mode 100644 hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestFromClientGetWithClosestRowBefore.java
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
+index 536856b..bbc7635 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
+@@ -118,6 +118,7 @@ import org.apache.hadoop.hbase.filter.ByteArrayComparable;
+ import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+ import org.apache.hadoop.hbase.filter.FilterWrapper;
+ import org.apache.hadoop.hbase.filter.IncompatibleFilterException;
++import org.apache.hadoop.hbase.filter.PrefixFilter;
+ import org.apache.hadoop.hbase.io.HeapSize;
+ import org.apache.hadoop.hbase.io.TimeRange;
+ import org.apache.hadoop.hbase.io.hfile.BlockCache;
+@@ -2545,15 +2546,13 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+     startRegionOperation(Operation.GET);
+     this.readRequestsCount.increment();
+     try {
+-      Store store = getStore(family);
+-      // get the closest key. (HStore.getRowKeyAtOrBefore can return null)
+-      Cell key = store.getRowKeyAtOrBefore(row);
+       Result result = null;
+-      if (key != null) {
+-        Get get = new Get(CellUtil.cloneRow(key));
+-        get.addFamily(family);
+-        result = get(get);
+-      }
++      Get get = new Get(row);
++      get.addFamily(family);
++      get.setClosestRowBefore(true);
++      result = get(get);
++      // for compatibility
++      result = result.isEmpty() ? null : result;
+       if (coprocessorHost != null) {
+         coprocessorHost.postGetClosestRowBefore(row, family, result);
+       }
+@@ -6824,6 +6823,20 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+     return Result.create(results, get.isCheckExistenceOnly() ? !results.isEmpty() : null, stale);
+   }
+ 
++  private Scan buildScanForGetWithClosestRowBefore(Get get) throws IOException {
++    Scan scan = new Scan().setStartRow(get.getRow())
++        .addFamily(get.getFamilyMap().keySet().iterator().next()).setReversed(true)
++        .setStopRow(HConstants.EMPTY_END_ROW);
++    if (this.getRegionInfo().isMetaRegion()) {
++      int delimiterIdx =
++          KeyValue.getDelimiter(get.getRow(), 0, get.getRow().length, HConstants.DELIMITER);
++      if (delimiterIdx >= 0) {
++        scan.setFilter(new PrefixFilter(Bytes.copy(get.getRow(), 0, delimiterIdx + 1)));
++      }
++    }
++    return scan;
++  }
++
+   @Override
+   public List<Cell> get(Get get, boolean withCoprocessor) throws IOException {
+ 
+@@ -6835,8 +6848,14 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+          return results;
+        }
+     }
++
+     long before =  EnvironmentEdgeManager.currentTime();
+-    Scan scan = new Scan(get);
++    Scan scan;
++    if (get.isClosestRowBefore()) {
++      scan = buildScanForGetWithClosestRowBefore(get);
++    } else {
++      scan = new Scan(get);
++    }
+ 
+     RegionScanner scanner = null;
+     try {
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestFromClientGetWithClosestRowBefore.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestFromClientGetWithClosestRowBefore.java
+new file mode 100644
+index 0000000..6af6fc6
+--- /dev/null
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestFromClientGetWithClosestRowBefore.java
+@@ -0,0 +1,165 @@
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.hbase.client;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.hbase.HBaseTestingUtility;
++import org.apache.hadoop.hbase.HColumnDescriptor;
++import org.apache.hadoop.hbase.HTableDescriptor;
++import org.apache.hadoop.hbase.TableName;
++import org.apache.hadoop.hbase.testclassification.MediumTests;
++import org.apache.hadoop.hbase.util.Bytes;
++import org.apache.log4j.Logger;
++import org.junit.After;
++import org.junit.AfterClass;
++import org.junit.Assert;
++import org.junit.Before;
++import org.junit.BeforeClass;
++import org.junit.Test;
++import org.junit.experimental.categories.Category;
++
++import java.io.IOException;
++import java.util.Random;
++
++@Category({ MediumTests.class })
++public class TestFromClientGetWithClosestRowBefore {
++
++  private static final Logger LOG = Logger.getLogger(TestFromClientGetWithClosestRowBefore.class);
++  private static final HBaseTestingUtility UTIL = new HBaseTestingUtility();
++  private static Configuration CONF;
++  private static final TableName TEST_TABLE = TableName.valueOf("test_table");
++  private static final byte[] COLUMN_FAMILY = Bytes.toBytes("f1");
++  private static final Random RANDOM = new Random();
++
++  @BeforeClass
++  public static void setup() throws Exception {
++    CONF = UTIL.getConfiguration();
++    UTIL.startMiniCluster();
++  }
++
++  @AfterClass
++  public static void teardown() throws Exception {
++    UTIL.shutdownMiniCluster();
++  }
++
++  @Before
++  public void setUp() throws Exception {
++    HTableDescriptor htd = new HTableDescriptor(TEST_TABLE);
++    HColumnDescriptor hcd = new HColumnDescriptor(COLUMN_FAMILY);
++    htd.addFamily(hcd);
++
++    UTIL.getHBaseAdmin().createTable(htd);
++  }
++
++  @After
++  public void tearDown() throws Exception {
++    for (HTableDescriptor htd : UTIL.getHBaseAdmin().listTables()) {
++      UTIL.deleteTable(htd.getTableName());
++    }
++  }
++
++  @Test
++  public void testGetWithClosestRowBeforeWhenSplitRegion() throws Exception {
++    Thread t = new Thread() {
++      public void run() {
++        try {
++          Thread.sleep(100);
++          UTIL.getHBaseAdmin().split(TEST_TABLE);
++        } catch (Exception e) {
++          LOG.error("split region failed: ", e);
++        }
++      }
++    };
++
++    try (Connection conn = ConnectionFactory.createConnection(CONF)) {
++      try (Table table = conn.getTable(TEST_TABLE)) {
++        for (int i = 0; i < 1000; i++) {
++          byte[] data = Bytes.toBytes(String.format("%026d", i));
++          Put put = new Put(data).addColumn(COLUMN_FAMILY, null, data);
++          table.put(put);
++        }
++      }
++      try (Table table = conn.getTable(TableName.META_TABLE_NAME)) {
++        t.start();
++        for (int i = 0; i < 10000; i++) {
++          Get get = new Get(Bytes.toBytes(TEST_TABLE + ",,:")).addFamily(Bytes.toBytes("info"));
++          get.setClosestRowBefore(true);
++          Result result = table.get(get);
++          if (Result.getTotalSizeOfCells(result) == 0) {
++            Assert.fail("Get with closestRowBefore return NONE result.");
++          }
++        }
++      }
++    }
++  }
++
++  @Test
++  public void testClosestRowIsLatestPutRow() throws IOException {
++    final int[] initialRowkeys = new int[] { 1, 1000 };
++
++    Thread t = new Thread() {
++      public void run() {
++        try {
++          // a huge value to slow down transaction committing.
++          byte[] value = new byte[512 * 1024];
++          for (int i = 0; i < value.length; i++) {
++            value[i] = (byte) RANDOM.nextInt(256);
++          }
++
++          // Put rowKey= 2,3,4,...,(initialRowkeys[1]-1) into table, let the rowkey returned by a
++          // Get with closestRowBefore to be exactly the latest put rowkey.
++          try (Connection conn = ConnectionFactory.createConnection(CONF)) {
++            try (Table table = conn.getTable(TEST_TABLE)) {
++              for (int i = initialRowkeys[0] + 1; i < initialRowkeys[1]; i++) {
++                byte[] data = Bytes.toBytes(String.format("%026d", i));
++                Put put = new Put(data).addColumn(COLUMN_FAMILY, null, value);
++                table.put(put);
++              }
++            }
++          }
++        } catch (Exception e) {
++          LOG.error("Put huge value into table failed: ", e);
++        }
++      }
++    };
++
++    try (Connection conn = ConnectionFactory.createConnection(CONF)) {
++      try (Table table = conn.getTable(TEST_TABLE)) {
++
++        // Put the boundary into table firstly.
++        for (int i = 0; i < initialRowkeys.length; i++) {
++          byte[] rowKey = Bytes.toBytes(String.format("%026d", initialRowkeys[i]));
++          Put put = new Put(rowKey).addColumn(COLUMN_FAMILY, null, rowKey);
++          table.put(put);
++        }
++
++        t.start();
++        byte[] rowKey = Bytes.toBytes(String.format("%026d", initialRowkeys[1] - 1));
++        for (int i = 0; i < 1000; i++) {
++          Get get = new Get(rowKey).addFamily(COLUMN_FAMILY);
++          get.setClosestRowBefore(true);
++          Result result = table.get(get);
++          if (Result.getTotalSizeOfCells(result) == 0) {
++            Assert.fail("Get with closestRowBefore return NONE result.");
++          }
++        }
++      }
++    }
++  }
++}
+-- 
+1.7.9.5
+

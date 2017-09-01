@@ -1,0 +1,44 @@
+From c73b5aa8631338dc3b168ee2be6c9503591ea59f Mon Sep 17 00:00:00 2001
+From: Alex Leblang <alex.leblang@cloudera.com>
+Date: Thu, 15 Jun 2017 13:51:12 -0700
+Subject: [PATCH 364/410] CDH-55428 Fix Unicode Error in JACC
+
+This script has a bug in some versions of python where the json
+dictionary is read in as unicode, which causes the string valye key
+in the resulting dictionary to never be found. This patch removes
+unicode from the imported json dictionary
+
+Change-Id: I3966258e6180ca905143f3cc4695e6a5f1dff71f
+---
+ dev-support/checkcompatibility.py |    8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/dev-support/checkcompatibility.py b/dev-support/checkcompatibility.py
+index 799a024..c55b1f8 100755
+--- a/dev-support/checkcompatibility.py
++++ b/dev-support/checkcompatibility.py
+@@ -192,6 +192,12 @@ def write_xml_file(path, version, jars):
+             f.write(j + "\n")
+         f.write("</archives>")
+ 
++def ascii_encode_dict(data):
++    """Iterate through a dictionary of data and convert all unicode to ascii.
++    This method was taken from
++    stackoverflow.com/questions/9590382/forcing-python-json-module-to-work-with-ascii"""
++    ascii_encode = lambda x: x.encode('ascii') if isinstance(x, unicode) else x
++    return dict(map(ascii_encode, pair) for pair in data.items())
+ 
+ def process_json(path):
+     """Process the known problems json file. The program exits if it can't find
+@@ -202,7 +208,7 @@ def process_json(path):
+         sys.exit(1)
+     try:
+         with open(path) as f:
+-            return json.load(f)
++            return json.load(f, object_hook=ascii_encode_dict)
+     except ValueError as e:
+         logging.error("File: " + str(path) + "\nInvalid JSON:\n" + str(e))
+         sys.exit(1)
+-- 
+1.7.9.5
+

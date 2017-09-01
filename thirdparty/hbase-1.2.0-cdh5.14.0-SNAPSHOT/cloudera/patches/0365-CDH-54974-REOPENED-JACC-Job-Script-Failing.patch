@@ -1,0 +1,29 @@
+From 6d611adc12ff6e24c6349142f35bc7a5fd427e5d Mon Sep 17 00:00:00 2001
+From: Alex Leblang <alex.leblang@cloudera.com>
+Date: Fri, 16 Jun 2017 14:02:33 -0700
+Subject: [PATCH 365/410] CDH-54974 (REOPENED) JACC Job Script Failing
+
+The previous fix for this error had a typo where an assignment
+was not being properly set. This patch resolves that issue.
+
+Change-Id: Iabc5e0e75008d78cbf0534f5fd2a0cee82b0964b
+---
+ dev-support/checkcompatibility.py |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/dev-support/checkcompatibility.py b/dev-support/checkcompatibility.py
+index c55b1f8..f43d5bb 100755
+--- a/dev-support/checkcompatibility.py
++++ b/dev-support/checkcompatibility.py
+@@ -337,7 +337,7 @@ def get_known_problems_dict(json_path, src_rev, dst_rev):
+     if src_rev[:7] == "origin/":
+       src_rev = src_rev[7:]
+     if dst_rev[:7] == "origin/":
+-      dst_rev[:7] == dst_rev[:7]
++      dst_rev = dst_rev[7:]
+     if json_path is not None:
+         known_problems_dict = process_json(json_path)
+         try:
+-- 
+1.7.9.5
+

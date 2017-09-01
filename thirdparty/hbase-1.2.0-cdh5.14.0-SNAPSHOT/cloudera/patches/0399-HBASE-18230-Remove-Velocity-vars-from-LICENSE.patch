@@ -1,0 +1,78 @@
+From b9da4cd2c4edc2d817b9a563bce0d53d106f9e0b Mon Sep 17 00:00:00 2001
+From: Mike Drob <mdrob@apache.org>
+Date: Fri, 16 Jun 2017 20:31:32 -0500
+Subject: [PATCH 399/410] HBASE-18230 Remove Velocity vars from LICENSE
+
+Change-Id: Ic3949a3277a67f74a0180471c3e615c809684da4
+Reason: Build
+Author: Mike Drob <mdrob@apache.org>
+Ref:    CDH-57978
+
+(cherry picked from commit 6f7b4f5c2cd08debefe85f5bb19f77a3f0448076)
+(cherry picked from commit a88310e9ae68e4146847c39087fbfeda19cbd8ea)
+---
+ .../src/main/resources/META-INF/LICENSE.vm         |   12 +++++++-----
+ 1 file changed, 7 insertions(+), 5 deletions(-)
+
+diff --git a/hbase-resource-bundle/src/main/resources/META-INF/LICENSE.vm b/hbase-resource-bundle/src/main/resources/META-INF/LICENSE.vm
+index 9276262..1af97f2 100644
+--- a/hbase-resource-bundle/src/main/resources/META-INF/LICENSE.vm
++++ b/hbase-resource-bundle/src/main/resources/META-INF/LICENSE.vm
+@@ -1668,7 +1668,9 @@ ${dep.scm.url}
+ --
+ This product includes ${dep.name} licensed under the ${dep.licenses[0].name}.
+ 
++#if( $dep.licenses[0].comments && !$dep.licenses[0].comments.empty )
+ ${dep.licenses[0].comments}
++#end
+ #if(!(${non_aggregate_fine.contains($dep.licenses[0].name)}))
+ ERROR: Please check ^^^^^^^^^^^^ this License for acceptability here:
+ 
+@@ -1708,7 +1710,7 @@ ${dep.scm.url}
+ This product includes the following works licensed under the MIT license:
+ 
+ #foreach($dep in $mit)
+-#if( !(${dep.licenses[0].comments.isEmpty()}) )
++#if( $dep.licenses[0].comments && !$dep.licenses[0].comments.empty )
+   * ${dep.name}, ${dep.licenses[0].comments}
+ #else
+   * ${dep.name}
+@@ -1743,7 +1745,7 @@ THE SOFTWARE.
+ This product includes the following works licensed under the BSD 3-Clause license:
+ 
+ #foreach($dep in $bsd3)
+-#if( !(${dep.licenses[0].comments.isEmpty()}) )
++#if( $dep.licenses[0].comments && !$dep.licenses[0].comments.empty )
+   * ${dep.name}, ${dep.licenses[0].comments}
+ #else
+   * ${dep.name}
+@@ -1784,7 +1786,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ This product includes the following works licensed under the CDDL 1.0 license:
+ 
+ #foreach($dep in $cddl_1_0)
+-#if( !(${dep.licenses[0].comments.isEmpty()}) )
++#if( $dep.licenses[0].comments && !$dep.licenses[0].comments.empty )
+   * ${dep.name}, ${dep.licenses[0].comments}
+ #else
+   * ${dep.name}
+@@ -2041,7 +2043,7 @@ the State of California, with venue lying in Santa Clara County, California.
+ This product includes the following works licensed under the CDDL 1.1 license:
+ 
+ #foreach($dep in $cddl_1_1)
+-#if( !(${dep.licenses[0].comments.isEmpty()}) )
++#if( $dep.licenses[0].comments && !$dep.licenses[0].comments.empty )
+   * ${dep.name}, ${dep.licenses[0].comments}
+ #else
+   * ${dep.name}
+@@ -2339,7 +2341,7 @@ the State of California, with venue lying in Santa Clara County, California.
+ This product includes the following works licensed under the Common Public License Version 1.0:
+ 
+ #foreach($dep in $cpl)
+-#if( !(${dep.licenses[0].comments.isEmpty()}) )
++#if( $dep.licenses[0].comments && !$dep.licenses[0].comments.empty )
+   * ${dep.name}, ${dep.licenses[0].comments}
+ #else
+   * ${dep.name}
+-- 
+1.7.9.5
+

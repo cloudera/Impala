@@ -1,0 +1,101 @@
+From 82417c4927f917497eb2c2b6e1b01eb60934be9c Mon Sep 17 00:00:00 2001
+From: Phil Yang <yangzhe1991@apache.org>
+Date: Wed, 19 Jul 2017 11:34:57 +0800
+Subject: [PATCH 400/410] HBASE-18390 Sleep too long when finding region
+ location failed
+
+(cherry picked from commit 0e4ceccc82878a7fd4f729ee153cdc0d80f78c74)
+
+Change-Id: Iba24b5f66138f0dca78a0ee2bc42bbad2cdd87f3
+Author: Phil Yang
+Reason: Bug
+Ref: CDH-58213
+---
+ .../hadoop/hbase/client/ConnectionUtils.java       |   14 --------------
+ .../hbase/client/RegionAdminServiceCallable.java   |    9 +--------
+ .../hadoop/hbase/client/RegionServerCallable.java  |   10 +---------
+ 3 files changed, 2 insertions(+), 31 deletions(-)
+
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ConnectionUtils.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ConnectionUtils.java
+index 647295e..63c6883 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ConnectionUtils.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ConnectionUtils.java
+@@ -61,20 +61,6 @@ public class ConnectionUtils {
+ 
+ 
+   /**
+-   * Adds / subs a 10% jitter to a pause time. Minimum is 1.
+-   * @param pause the expected pause.
+-   * @param jitter the jitter ratio, between 0 and 1, exclusive.
+-   */
+-  public static long addJitter(final long pause, final float jitter) {
+-    float lag = pause * (RANDOM.nextFloat() - 0.5f) * jitter;
+-    long newPause = pause + (long) lag;
+-    if (newPause <= 0) {
+-      return 1;
+-    }
+-    return newPause;
+-  }
+-
+-  /**
+    * @param conn The connection for which to replace the generator.
+    * @param cnm Replaces the nonce generator used, for testing.
+    * @return old nonce generator.
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/RegionAdminServiceCallable.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/RegionAdminServiceCallable.java
+index d314777..f07ab7c 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/RegionAdminServiceCallable.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/RegionAdminServiceCallable.java
+@@ -54,8 +54,6 @@ public abstract class RegionAdminServiceCallable<T> implements RetryingCallable<
+   protected final byte[] row;
+   protected final int replicaId;
+ 
+-  protected final static int MIN_WAIT_DEAD_SERVER = 10000;
+-
+   public RegionAdminServiceCallable(ClusterConnection connection,
+       RpcControllerFactory rpcControllerFactory, TableName tableName, byte[] row) {
+     this(connection, rpcControllerFactory, null, tableName, row);
+@@ -153,12 +151,7 @@ public abstract class RegionAdminServiceCallable<T> implements RetryingCallable<
+ 
+   @Override
+   public long sleep(long pause, int tries) {
+-    long sleep = ConnectionUtils.getPauseTime(pause, tries + 1);
+-    if (sleep < MIN_WAIT_DEAD_SERVER
+-        && (location == null || connection.isDeadServer(location.getServerName()))) {
+-      sleep = ConnectionUtils.addJitter(MIN_WAIT_DEAD_SERVER, 0.10f);
+-    }
+-    return sleep;
++    return ConnectionUtils.getPauseTime(pause, tries);
+   }
+ 
+   public static RegionLocations getRegionLocations(
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/RegionServerCallable.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/RegionServerCallable.java
+index ede951c..841dd43 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/RegionServerCallable.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/RegionServerCallable.java
+@@ -54,8 +54,6 @@ public abstract class RegionServerCallable<T> implements RetryingCallable<T> {
+   protected HRegionLocation location;
+   private ClientService.BlockingInterface stub;
+ 
+-  protected final static int MIN_WAIT_DEAD_SERVER = 10000;
+-
+   /**
+    * @param connection Connection to use.
+    * @param tableName Table name to which <code>row</code> belongs.
+@@ -142,13 +140,7 @@ public abstract class RegionServerCallable<T> implements RetryingCallable<T> {
+ 
+   @Override
+   public long sleep(long pause, int tries) {
+-    // Tries hasn't been bumped up yet so we use "tries + 1" to get right pause time
+-    long sleep = ConnectionUtils.getPauseTime(pause, tries + 1);
+-    if (sleep < MIN_WAIT_DEAD_SERVER
+-        && (location == null || getConnection().isDeadServer(location.getServerName()))) {
+-      sleep = ConnectionUtils.addJitter(MIN_WAIT_DEAD_SERVER, 0.10f);
+-    }
+-    return sleep;
++    return ConnectionUtils.getPauseTime(pause, tries);
+   }
+ 
+   /**
+-- 
+1.7.9.5
+

@@ -1,0 +1,31 @@
+From 478a4e43300a8aebcb7cb8d80b7273b33b2c6c29 Mon Sep 17 00:00:00 2001
+From: Enis Soztutar <enis@apache.org>
+Date: Wed, 4 May 2016 11:37:03 -0700
+Subject: [PATCH 281/410] HBASE-15613 TestNamespaceCommand times out
+
+(cherry picked from commit 6df94a81ca24797f4761e8284a55c75fbc6287b5)
+
+Change-Id: I0dc2a9c47856d4f8ac67d45a9abe5909c210b8ca
+Author: Balazs Meszaros
+Reason: Bug
+Ref: CDH-50486
+---
+ hbase-server/src/test/resources/hbase-site.xml |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/hbase-server/src/test/resources/hbase-site.xml b/hbase-server/src/test/resources/hbase-site.xml
+index 1ae5435..f005f05 100644
+--- a/hbase-server/src/test/resources/hbase-site.xml
++++ b/hbase-server/src/test/resources/hbase-site.xml
+@@ -52,7 +52,7 @@
+   </property>
+   <property>
+     <name>hbase.regionserver.metahandler.count</name>
+-    <value>5</value>
++    <value>6</value>
+   </property>
+   <property>
+       <name>hbase.ipc.server.read.threadpool.size</name>
+-- 
+1.7.9.5
+

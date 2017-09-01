@@ -1,0 +1,93 @@
+From e8315ff0a1002fb2ccb30356ed4fb3e48d9c1118 Mon Sep 17 00:00:00 2001
+From: Stephen Yuan Jiang <syuanjiangdev@gmail.com>
+Date: Tue, 20 Jun 2017 12:34:23 -0700
+Subject: [PATCH 382/410] HBASE-18036 Data locality is not maintained after
+ cluster restart or SSH (Stephen Yuan Jiang)
+
+(cherry picked from commit 3f9ba2f247ef0fb7cebf35a4501bd7cfa36197bc)
+
+Change-Id: I40541ab54ed241642a74bb4b004d20232af78f1b
+Author: Stephen Yuan Jiang
+Reason: Bug
+Ref: CDH-57971
+---
+ .../apache/hadoop/hbase/master/ServerManager.java  |    8 ++++++
+ .../master/procedure/ServerCrashProcedure.java     |   30 +++++++++++++++++---
+ 2 files changed, 34 insertions(+), 4 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/ServerManager.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/ServerManager.java
+index 61494ec..ada2fbc 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/ServerManager.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/ServerManager.java
+@@ -1112,6 +1112,14 @@ public class ServerManager {
+   }
+ 
+   /**
++   * Check whether a server is online based on hostname and port
++   * @return true if finding a server with matching hostname and port.
++   */
++  public boolean isServerWithSameHostnamePortOnline(final ServerName serverName) {
++    return findServerWithSameHostnamePortWithLock(serverName) != null;
++  }
++
++  /**
+    * Check if a server is known to be dead.  A server can be online,
+    * or known to be dead, or unknown to this manager (i.e, not online,
+    * not known to be dead either. it is simply not tracked by the
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/ServerCrashProcedure.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/ServerCrashProcedure.java
+index 90addb2..d73519e 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/ServerCrashProcedure.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/ServerCrashProcedure.java
+@@ -23,8 +23,10 @@ import java.io.InterruptedIOException;
+ import java.io.OutputStream;
+ import java.util.ArrayList;
+ import java.util.Collection;
++import java.util.HashMap;
+ import java.util.HashSet;
+ import java.util.List;
++import java.util.Map;
+ import java.util.Set;
+ import java.util.concurrent.locks.Lock;
+ 
+@@ -543,14 +545,34 @@ implements ServerProcedureInterface {
+ 
+   private boolean assign(final MasterProcedureEnv env, final List<HRegionInfo> hris)
+   throws InterruptedIOException {
+-    AssignmentManager am = env.getMasterServices().getAssignmentManager();
++    MasterServices masterServices = env.getMasterServices();
++    AssignmentManager am = masterServices.getAssignmentManager();
++    // Determine what type of assignment to do if the dead server already restarted.
++    boolean retainAssignment =
++      (masterServices.getConfiguration().getBoolean("hbase.master.retain.assignment", true) &&
++       masterServices.getServerManager().isServerWithSameHostnamePortOnline(serverName)) ?
++           true : false;
+     try {
+-      am.assign(hris);
++      if (retainAssignment) {
++        Map<HRegionInfo, ServerName> hriServerMap =
++            new HashMap<HRegionInfo, ServerName>(hris.size());
++        for (HRegionInfo hri: hris) {
++          hriServerMap.put(hri, serverName);
++        }
++        LOG.info("Best effort in SSH to retain assignment of " + hris.size()
++          + " regions from the dead server " + serverName);
++        am.assign(hriServerMap);
++      } else {
++        LOG.info("Using round robin in SSH to assign " + hris.size()
++          + " regions from the dead server " + serverName);
++        am.assign(hris);
++      }
+     } catch (InterruptedException ie) {
+-      LOG.error("Caught " + ie + " during round-robin assignment");
++      LOG.error("Caught " + ie + " during " + (retainAssignment ? "retaining" : "round-robin")
++        + " assignment");
+       throw (InterruptedIOException)new InterruptedIOException().initCause(ie);
+     } catch (IOException ioe) {
+-      LOG.info("Caught " + ioe + " during region assignment, will retry");
++      LOG.warn("Caught " + ioe + " during region assignment, will retry");
+       return false;
+     }
+     return true;
+-- 
+1.7.9.5
+

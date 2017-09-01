@@ -1,0 +1,124 @@
+From 8f86658ddc2bbec171c3cac4cfb6753eb88f78b3 Mon Sep 17 00:00:00 2001
+From: Jerry He <jerryjch@apache.org>
+Date: Sat, 21 May 2016 20:32:20 -0700
+Subject: [PATCH 180/410] HBASE-14818 user_permission does not list namespace
+ permissions (li xiang)
+
+Reason: Bug
+Author: li xiang
+Ref: CDH-40552
+
+Change-Id: I3248a4ef252bdfe22d9024bb40e125dafcba7fde
+---
+ .../hbase/security/access/AccessControlClient.java |   13 ++++++---
+ .../security/access/TestAccessController.java      |   30 +++++++++++++++++---
+ hbase-shell/src/main/ruby/hbase/security.rb        |    4 +--
+ .../main/ruby/shell/commands/user_permission.rb    |    2 ++
+ 4 files changed, 39 insertions(+), 10 deletions(-)
+
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/security/access/AccessControlClient.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/security/access/AccessControlClient.java
+index 45c11d9..cecff7b 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/security/access/AccessControlClient.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/security/access/AccessControlClient.java
+@@ -210,10 +210,15 @@ public class AccessControlClient {
+         HTableDescriptor[] htds = null;
+         if (tableRegex == null || tableRegex.isEmpty()) {
+           permList = ProtobufUtil.getUserPermissions(protocol);
+-        } else if (tableRegex.charAt(0) == '@') {
+-          String namespace = tableRegex.substring(1);
+-          permList = ProtobufUtil.getUserPermissions(protocol, Bytes.toBytes(namespace));
+-        } else {
++        } else if (tableRegex.charAt(0) == '@') {  // Namespaces
++          String namespaceRegex = tableRegex.substring(1);
++          for (NamespaceDescriptor nsds : admin.listNamespaceDescriptors()) {  // Read out all namespaces
++            String namespace = nsds.getName();
++            if (namespace.matches(namespaceRegex)) {  // Match the given namespace regex?
++              permList.addAll(ProtobufUtil.getUserPermissions(protocol, Bytes.toBytes(namespace)));
++            }
++          }
++        } else {  // Tables
+           htds = admin.listTables(Pattern.compile(tableRegex), true);
+           for (HTableDescriptor hd : htds) {
+             permList.addAll(ProtobufUtil.getUserPermissions(protocol, hd.getTableName()));
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/security/access/TestAccessController.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/security/access/TestAccessController.java
+index 8e3261c..157e41b 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/security/access/TestAccessController.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/security/access/TestAccessController.java
+@@ -2564,19 +2564,41 @@ public class TestAccessController extends SecureTestUtil {
+     NamespaceDescriptor desc = NamespaceDescriptor.create(namespace).build();
+     createNamespace(TEST_UTIL, desc);
+     grantOnNamespace(TEST_UTIL, USER_NONE.getShortName(), namespace, Permission.Action.READ);
++
++    // Test 1: A specific namespace
++    getNamespacePermissionsAndVerify(namespace, 1, namespace);
++
++    // Test 2: '@.*'
++    getNamespacePermissionsAndVerify(".*", 1, namespace);
++
++    // Test 3: A more complex regex
++    getNamespacePermissionsAndVerify("^test[a-zA-Z]*", 1, namespace);
++
++    deleteNamespace(TEST_UTIL, namespace);
++  }
++
++  /**
++   * List all user permissions match the given regular expression for namespace
++   * and verify each of them.
++   * @param namespaceRegexWithoutPrefix the regualar expression for namespace, without NAMESPACE_PREFIX
++   * @param expectedAmount the expected amount of user permissions returned
++   * @param expectedNamespace the expected namespace of each user permission returned
++   * @throws HBaseException in the case of any HBase exception when accessing hbase:acl table
++   */
++  private void getNamespacePermissionsAndVerify(String namespaceRegexWithoutPrefix,
++      int expectedAmount, String expectedNamespace) throws HBaseException {
+     try {
+       List<UserPermission> namespacePermissions = AccessControlClient.getUserPermissions(
+-          systemUserConnection, AccessControlLists.toNamespaceEntry(namespace));
++        systemUserConnection, AccessControlLists.toNamespaceEntry(namespaceRegexWithoutPrefix));
+       assertTrue(namespacePermissions != null);
+-      assertTrue(namespacePermissions.size() == 1);
++      assertEquals(expectedAmount, namespacePermissions.size());
+       for (UserPermission namespacePermission : namespacePermissions) {
+         assertFalse(namespacePermission.isGlobal());  // Verify it is not a global user permission
+-        assertEquals(namespace, namespacePermission.getNamespace());  // Verify namespace is set
++        assertEquals(expectedNamespace, namespacePermission.getNamespace());  // Verify namespace is set
+       }
+     } catch (Throwable thw) {
+       throw new HBaseException(thw);
+     }
+-    deleteNamespace(TEST_UTIL, namespace);
+   }
+ 
+   @Test (timeout=180000)
+diff --git a/hbase-shell/src/main/ruby/hbase/security.rb b/hbase-shell/src/main/ruby/hbase/security.rb
+index c7b94e8..f061e8c 100644
+--- a/hbase-shell/src/main/ruby/hbase/security.rb
++++ b/hbase-shell/src/main/ruby/hbase/security.rb
+@@ -137,9 +137,9 @@ module Hbase
+       all_perms.each do |value|
+           user_name = String.from_java_bytes(value.getUser)
+           if (table_regex != nil && isNamespace?(table_regex))
+-            namespace = table_regex[1...table_regex.length]
++            namespace = value.getNamespace()
+           else
+-            namespace = (value.getTableName != nil) ? value.getTableName.getNamespaceAsString() : ''
++            namespace = (value.getTableName != nil) ? value.getTableName.getNamespaceAsString() : value.getNamespace()
+           end
+           table = (value.getTableName != nil) ? value.getTableName.getNameAsString() : ''
+           family = (value.getFamily != nil) ?
+diff --git a/hbase-shell/src/main/ruby/shell/commands/user_permission.rb b/hbase-shell/src/main/ruby/shell/commands/user_permission.rb
+index e4673fc..71b98f3 100644
+--- a/hbase-shell/src/main/ruby/shell/commands/user_permission.rb
++++ b/hbase-shell/src/main/ruby/shell/commands/user_permission.rb
+@@ -30,6 +30,8 @@ For example:
+ 
+     hbase> user_permission
+     hbase> user_permission '@ns1'
++    hbase> user_permission '@.*'
++    hbase> user_permission '@^[a-c].*'
+     hbase> user_permission 'table1'
+     hbase> user_permission 'namespace1:table1'
+     hbase> user_permission '.*'
+-- 
+1.7.9.5
+

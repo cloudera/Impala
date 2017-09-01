@@ -1,0 +1,199 @@
+From 0f1dc9240542b5c6dbc2b04c4e920fc06bd3bd90 Mon Sep 17 00:00:00 2001
+From: Abhishek Singh Chouhan <abhishekchouhan121@gmail.com>
+Date: Thu, 16 Feb 2017 00:20:08 +0530
+Subject: [PATCH 289/410] HBASE-17069 RegionServer writes invalid META entries
+ for split daughters in some circumstances
+
+Signed-off-by: zhangduo <zhangduo@apache.org>
+(cherry picked from commit 3f9cb1ae2c8b316354d2ded7c41275cb27499ce0)
+
+Amend HBASE-17069 RegionServer writes invalid META entries in some circumstances
+
+Fix Hregioninfo being null during merge
+
+Signed-off-by: Andrew Purtell <apurtell@apache.org>
+(cherry picked from commit fe00b59a3f11a0fffad271934d56ad8f733ca86b)
+
+Change-Id: Ib849be69f9b35127549b12b4931a60f99262e7df
+Reason: Bug
+Author: Abhishek Singh Chouhan
+Ref: CDH-50425
+---
+ .../org/apache/hadoop/hbase/MetaTableAccessor.java |    1 +
+ .../apache/hadoop/hbase/regionserver/HRegion.java  |    2 +-
+ .../hbase/regionserver/TestMutateRowsRecovery.java |  138 ++++++++++++++++++++
+ 3 files changed, 140 insertions(+), 1 deletion(-)
+ create mode 100644 hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestMutateRowsRecovery.java
+
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/MetaTableAccessor.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/MetaTableAccessor.java
+index 2bd369b..d3e3157 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/MetaTableAccessor.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/MetaTableAccessor.java
+@@ -1415,6 +1415,7 @@ public class MetaTableAccessor {
+ 
+     // region replicas are kept in the primary region's row
+     Put put = new Put(getMetaKeyForRegion(regionInfo), time);
++    addRegionInfo(put, regionInfo);
+     addLocation(put, sn, openSeqNum, time, regionInfo.getReplicaId());
+     putToMetaTable(connection, put);
+     LOG.info("Updated row " + regionInfo.getRegionNameAsString() +
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
+index 562f9b6..6f2faba 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
+@@ -6962,7 +6962,7 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+               this.htableDescriptor.getTableName(), WALKey.NO_SEQUENCE_ID, now,
+               processor.getClusterIds(), nonceGroup, nonce, mvcc);
+             txid = this.wal.append(this.htableDescriptor, this.getRegionInfo(),
+-                walKey, walEdit, false);
++                walKey, walEdit, true);
+           }
+           if(walKey == null){
+             // since we use wal sequence Id as mvcc, for SKIP_WAL changes we need a "faked" WALEdit
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestMutateRowsRecovery.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestMutateRowsRecovery.java
+new file mode 100644
+index 0000000..db0d200
+--- /dev/null
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestMutateRowsRecovery.java
+@@ -0,0 +1,138 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hbase.regionserver;
++
++import static org.apache.hadoop.hbase.HBaseTestingUtility.fam1;
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertTrue;
++
++import java.io.IOException;
++
++import org.apache.hadoop.hbase.HBaseTestingUtility;
++import org.apache.hadoop.hbase.HColumnDescriptor;
++import org.apache.hadoop.hbase.HTableDescriptor;
++import org.apache.hadoop.hbase.MiniHBaseCluster;
++import org.apache.hadoop.hbase.TableName;
++import org.apache.hadoop.hbase.client.Admin;
++import org.apache.hadoop.hbase.client.Connection;
++import org.apache.hadoop.hbase.client.ConnectionFactory;
++import org.apache.hadoop.hbase.client.Durability;
++import org.apache.hadoop.hbase.client.Get;
++import org.apache.hadoop.hbase.client.Put;
++import org.apache.hadoop.hbase.client.Result;
++import org.apache.hadoop.hbase.client.RowMutations;
++import org.apache.hadoop.hbase.client.Table;
++import org.apache.hadoop.hbase.testclassification.MediumTests;
++import org.apache.hadoop.hbase.util.Bytes;
++import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
++import org.junit.After;
++import org.junit.AfterClass;
++import org.junit.Before;
++import org.junit.BeforeClass;
++import org.junit.Test;
++import org.junit.experimental.categories.Category;
++
++@Category(MediumTests.class)
++public class TestMutateRowsRecovery {
++  private MiniHBaseCluster cluster = null;
++  private Connection connection = null;
++  private static final int NB_SERVERS = 3;
++
++  static final byte[] qual1 = Bytes.toBytes("qual1");
++  static final byte[] qual2 = Bytes.toBytes("qual2");
++  static final byte[] value1 = Bytes.toBytes("value1");
++  static final byte[] value2 = Bytes.toBytes("value2");
++  static final byte[] row1 = Bytes.toBytes("rowA");
++  static final byte[] row2 = Bytes.toBytes("rowB");
++
++  static final HBaseTestingUtility TESTING_UTIL = new HBaseTestingUtility();
++
++  @BeforeClass
++  public static void before() throws Exception {
++    TESTING_UTIL.startMiniCluster(NB_SERVERS);
++  }
++
++  @AfterClass
++  public static void after() throws Exception {
++    TESTING_UTIL.shutdownMiniCluster();
++  }
++
++  @Before
++  public void setup() throws IOException {
++    TESTING_UTIL.ensureSomeNonStoppedRegionServersAvailable(NB_SERVERS);
++    this.connection = ConnectionFactory.createConnection(TESTING_UTIL.getConfiguration());
++    this.cluster = TESTING_UTIL.getMiniHBaseCluster();
++  }
++
++  @After
++  public void tearDown() throws IOException {
++    if (this.connection != null) {
++      this.connection.close();
++    }
++  }
++
++  @Test
++  public void MutateRowsAndCheckPostKill() throws IOException, InterruptedException {
++    final TableName tableName = TableName.valueOf("test");
++    Admin admin = null;
++    Table hTable = null;
++    try {
++      admin = connection.getAdmin();
++      hTable = connection.getTable(tableName);
++      HTableDescriptor desc = new HTableDescriptor(tableName);
++      desc.addFamily(new HColumnDescriptor(fam1));
++      admin.createTable(desc);
++
++      // Add a multi
++      RowMutations rm = new RowMutations(row1);
++      Put p1 = new Put(row1);
++      p1.addColumn(fam1, qual1, value1);
++      p1.setDurability(Durability.SYNC_WAL);
++      rm.add(p1);
++      hTable.mutateRow(rm);
++
++      // Add a put
++      Put p2 = new Put(row1);
++      p2.addColumn(fam1, qual2, value2);
++      p2.setDurability(Durability.SYNC_WAL);
++      hTable.put(p2);
++
++      HRegionServer rs1 = TESTING_UTIL.getRSForFirstRegionInTable(tableName);
++      long now = EnvironmentEdgeManager.currentTime();
++      // Send the RS Load to ensure correct lastflushedseqid for stores
++      rs1.tryRegionServerReport(now - 30000, now);
++      // Kill the RS to trigger wal replay
++      cluster.killRegionServer(rs1.serverName);
++
++      // Ensure correct data exists
++      Get g1 = new Get(row1);
++      Result result = hTable.get(g1);
++      assertTrue(result.getValue(fam1, qual1) != null);
++      assertEquals(0, Bytes.compareTo(result.getValue(fam1, qual1), value1));
++      assertTrue(result.getValue(fam1, qual2) != null);
++      assertEquals(0, Bytes.compareTo(result.getValue(fam1, qual2), value2));
++    } finally {
++      if (admin != null) {
++        admin.close();
++      }
++      if (hTable != null) {
++        hTable.close();
++      }
++    }
++  }
++}
+-- 
+1.7.9.5
+

@@ -1,0 +1,337 @@
+From f6b0f8648f2dd3386fd16b9516a47088e501eb13 Mon Sep 17 00:00:00 2001
+From: tedyu <yuzhihong@gmail.com>
+Date: Fri, 9 Jun 2017 20:03:20 -0700
+Subject: [PATCH 385/410] HBASE-18192: Replication drops recovered queues on
+ region server shutdown (Ashu Pachauri)
+
+(cherry picked from commit 96e48c3df597fc1450546818e2bd34cfc1fd5c10)
+
+Change-Id: Ibfd709d5f413a5c6752f8a898c21483d8bbbcede
+Author: tedyu
+Reason: Bug
+Ref: CDH-57977
+---
+ .../hadoop/hbase/regionserver/HRegionServer.java   |    3 +-
+ .../regionserver/ReplicationSource.java            |   42 +++++--
+ .../hbase/replication/TestReplicationSource.java   |  129 +++++++++++++++++++-
+ 3 files changed, 162 insertions(+), 12 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
+index d64fca5..d1498d6 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
+@@ -2192,7 +2192,8 @@ public class HRegionServer extends HasThread implements
+    * @return Return the object that implements the replication
+    * source service.
+    */
+-  ReplicationSourceService getReplicationSourceService() {
++  @VisibleForTesting
++  public ReplicationSourceService getReplicationSourceService() {
+     return replicationSourceHandler;
+   }
+ 
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/ReplicationSource.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/ReplicationSource.java
+index 62a7911..c4ad35d 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/ReplicationSource.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/replication/regionserver/ReplicationSource.java
+@@ -138,6 +138,12 @@ public class ReplicationSource extends Thread
+   private AtomicInteger logQueueSize = new AtomicInteger(0);
+   private ConcurrentHashMap<String, ReplicationSourceWorkerThread> workerThreads =
+       new ConcurrentHashMap<String, ReplicationSourceWorkerThread>();
++  // Hold the state of a replication worker thread
++  public enum WorkerState {
++    RUNNING,
++    STOPPED,
++    FINISHED  // The worker is done processing a recovered queue
++  }
+ 
+   /**
+    * Instantiation method used by region servers
+@@ -362,7 +368,7 @@ public class ReplicationSource extends Thread
+     this.sourceRunning = false;
+     Collection<ReplicationSourceWorkerThread> workers = workerThreads.values();
+     for (ReplicationSourceWorkerThread worker : workers) {
+-      worker.setWorkerRunning(false);
++      worker.setWorkerState(WorkerState.STOPPED);
+       worker.interrupt();
+     }
+     ListenableFuture<Service.State> future = null;
+@@ -475,8 +481,8 @@ public class ReplicationSource extends Thread
+     private int currentNbOperations = 0;
+     // Current size of data we need to replicate
+     private int currentSize = 0;
+-    // Indicates whether this particular worker is running
+-    private boolean workerRunning = true;
++    // Current state of the worker thread
++    private WorkerState state;
+ 
+     public ReplicationSourceWorkerThread(String walGroupId, PriorityBlockingQueue<Path> queue,
+         ReplicationQueueInfo replicationQueueInfo, ReplicationSource source) {
+@@ -489,6 +495,7 @@ public class ReplicationSource extends Thread
+ 
+     @Override
+     public void run() {
++      setWorkerState(WorkerState.RUNNING);
+       // If this is recovered, the queue is already full and the first log
+       // normally has a position (unless the RS failed between 2 logs)
+       if (this.replicationQueueInfo.isQueueRecovered()) {
+@@ -621,13 +628,13 @@ public class ReplicationSource extends Thread
+         sleepMultiplier = 1;
+         shipEdits(currentWALisBeingWrittenTo, entries);
+       }
+-      if (replicationQueueInfo.isQueueRecovered()) {
++      if (replicationQueueInfo.isQueueRecovered() && getWorkerState() == WorkerState.FINISHED) {
+         // use synchronize to make sure one last thread will clean the queue
+         synchronized (workerThreads) {
+           Threads.sleep(100);// wait a short while for other worker thread to fully exit
+           boolean allOtherTaskDone = true;
+           for (ReplicationSourceWorkerThread worker : workerThreads.values()) {
+-            if (!worker.equals(this) && worker.isAlive()) {
++            if (!worker.equals(this) && worker.getWorkerState() != WorkerState.FINISHED) {
+               allOtherTaskDone = false;
+               break;
+             }
+@@ -639,6 +646,10 @@ public class ReplicationSource extends Thread
+           }
+         }
+       }
++      // If the worker exits run loop without finishing it's task, mark it as stopped.
++      if (state != WorkerState.FINISHED) {
++        setWorkerState(WorkerState.STOPPED);
++      }
+     }
+ 
+     /**
+@@ -1021,7 +1032,7 @@ public class ReplicationSource extends Thread
+         LOG.debug("Finished recovering queue for group " + walGroupId + " of peer "
+             + peerClusterZnode);
+         metrics.incrCompletedRecoveryQueue();
+-        workerRunning = false;
++        setWorkerState(WorkerState.FINISHED);
+         return true;
+       }
+       return false;
+@@ -1052,7 +1063,7 @@ public class ReplicationSource extends Thread
+     }
+ 
+     private boolean isWorkerActive() {
+-      return !stopper.isStopped() && workerRunning && !isInterrupted();
++      return !stopper.isStopped() && state == WorkerState.RUNNING && !isInterrupted();
+     }
+ 
+     private void terminate(String reason, Exception cause) {
+@@ -1063,13 +1074,26 @@ public class ReplicationSource extends Thread
+         LOG.error("Closing worker for wal group " + this.walGroupId
+             + " because an error occurred: " + reason, cause);
+       }
++      setWorkerState(WorkerState.STOPPED);
+       this.interrupt();
+       Threads.shutdown(this, sleepForRetries);
+       LOG.info("ReplicationSourceWorker " + this.getName() + " terminated");
+     }
+ 
+-    public void setWorkerRunning(boolean workerRunning) {
+-      this.workerRunning = workerRunning;
++    /**
++     * Set the worker state
++     * @param state
++     */
++    public void setWorkerState(WorkerState state) {
++      this.state = state;
++    }
++
++    /**
++     * Get the current state of this worker.
++     * @return WorkerState
++     */
++    public WorkerState getWorkerState() {
++      return state;
+     }
+   }
+ }
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/replication/TestReplicationSource.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/replication/TestReplicationSource.java
+index 458819d..5a83a2f 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/replication/TestReplicationSource.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/replication/TestReplicationSource.java
+@@ -18,19 +18,28 @@
+  */
+ package org.apache.hadoop.hbase.replication;
+ 
++import static org.junit.Assert.assertEquals;
+ import static org.junit.Assert.assertNotNull;
+ import static org.junit.Assert.assertNull;
+ 
++import java.io.IOException;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.hbase.CoordinatedStateManager;
++import org.apache.hadoop.hbase.MiniHBaseCluster;
+ import org.apache.hadoop.hbase.TableName;
++import org.apache.hadoop.hbase.Waiter;
+ import org.apache.hadoop.hbase.HBaseConfiguration;
+ import org.apache.hadoop.hbase.HBaseTestingUtility;
+ import org.apache.hadoop.hbase.HConstants;
+ import org.apache.hadoop.hbase.KeyValue;
++import org.apache.hadoop.hbase.client.replication.ReplicationAdmin;
++import org.apache.hadoop.hbase.regionserver.HRegionServer;
++import org.apache.hadoop.hbase.replication.regionserver.Replication;
++import org.apache.hadoop.hbase.replication.regionserver.ReplicationSourceManager;
+ import org.apache.hadoop.hbase.testclassification.MediumTests;
+ import org.apache.hadoop.hbase.wal.WAL;
+ import org.apache.hadoop.hbase.wal.WALProvider;
+@@ -38,7 +47,8 @@ import org.apache.hadoop.hbase.wal.WALFactory;
+ import org.apache.hadoop.hbase.wal.WALKey;
+ import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
+ import org.apache.hadoop.hbase.util.Bytes;
+-import org.apache.hadoop.hbase.util.FSUtils;
++
++import org.junit.AfterClass;
+ import org.junit.BeforeClass;
+ import org.junit.Test;
+ import org.junit.experimental.categories.Category;
+@@ -50,10 +60,12 @@ public class TestReplicationSource {
+       LogFactory.getLog(TestReplicationSource.class);
+   private final static HBaseTestingUtility TEST_UTIL =
+       new HBaseTestingUtility();
++  private final static HBaseTestingUtility TEST_UTIL_PEER =
++      new HBaseTestingUtility();
+   private static FileSystem FS;
+   private static Path oldLogDir;
+   private static Path logDir;
+-  private static Configuration conf = HBaseConfiguration.create();
++  private static Configuration conf = TEST_UTIL.getConfiguration();
+ 
+   /**
+    * @throws java.lang.Exception
+@@ -69,6 +81,13 @@ public class TestReplicationSource {
+     if (FS.exists(logDir)) FS.delete(logDir, true);
+   }
+ 
++  @AfterClass
++  public static void tearDownAfterClass() throws Exception {
++    TEST_UTIL_PEER.shutdownMiniHBaseCluster();
++    TEST_UTIL.shutdownMiniHBaseCluster();
++    TEST_UTIL.shutdownMiniDFSCluster();
++  }
++
+   /**
+    * Sanity check that we can move logs around while we are reading
+    * from them. Should this test fail, ReplicationSource would have a hard
+@@ -111,5 +130,111 @@ public class TestReplicationSource {
+     reader.close();
+   }
+ 
++  /**
++   * Tests that recovered queues are preserved on a regionserver shutdown.
++   * See HBASE-18192
++   * @throws Exception
++   */
++  @Test
++  public void testServerShutdownRecoveredQueue() throws Exception {
++    try {
++      // Ensure single-threaded WAL
++      conf.set("hbase.wal.provider", "defaultProvider");
++      conf.setInt("replication.sleep.before.failover", 2000);
++      // Introduces a delay in regionserver shutdown to give the race condition a chance to kick in.
++      conf.set(HConstants.REGION_SERVER_IMPL, ShutdownDelayRegionServer.class.getName());
++      MiniHBaseCluster cluster = TEST_UTIL.startMiniCluster(2);
++      TEST_UTIL_PEER.startMiniCluster(1);
++
++      HRegionServer serverA = cluster.getRegionServer(0);
++      final ReplicationSourceManager managerA =
++          ((Replication) serverA.getReplicationSourceService()).getReplicationManager();
++      HRegionServer serverB = cluster.getRegionServer(1);
++      final ReplicationSourceManager managerB =
++          ((Replication) serverB.getReplicationSourceService()).getReplicationManager();
++      final ReplicationAdmin replicationAdmin = new ReplicationAdmin(TEST_UTIL.getConfiguration());
++
++      final String peerId = "TestPeer";
++      replicationAdmin.addPeer(peerId,
++          new ReplicationPeerConfig().setClusterKey(TEST_UTIL_PEER.getClusterKey()), null);
++      // Wait for replication sources to come up
++      Waiter.waitFor(conf, 20000, new Waiter.Predicate<Exception>() {
++        @Override public boolean evaluate() throws Exception {
++          return !(managerA.getSources().isEmpty() || managerB.getSources().isEmpty());
++        }
++      });
++      // Disabling peer makes sure there is at least one log to claim when the server dies
++      // The recovered queue will also stay there until the peer is disabled even if the
++      // WALs it contains have no data.
++      replicationAdmin.disablePeer(peerId);
++
++      // Stopping serverA
++      // It's queues should be claimed by the only other alive server i.e. serverB
++      cluster.stopRegionServer(serverA.getServerName());
++      Waiter.waitFor(conf, 20000, new Waiter.Predicate<Exception>() {
++        @Override public boolean evaluate() throws Exception {
++          return managerB.getOldSources().size() == 1;
++        }
++      });
++
++      final HRegionServer serverC = cluster.startRegionServer().getRegionServer();
++      serverC.waitForServerOnline();
++      Waiter.waitFor(conf, 20000, new Waiter.Predicate<Exception>() {
++        @Override public boolean evaluate() throws Exception {
++          return serverC.getReplicationSourceService() != null;
++        }
++      });
++      final ReplicationSourceManager managerC =
++          ((Replication) serverC.getReplicationSourceService()).getReplicationManager();
++      // Sanity check
++      assertEquals(0, managerC.getOldSources().size());
++
++      // Stopping serverB
++      // Now serverC should have two recovered queues:
++      // 1. The serverB's normal queue
++      // 2. serverA's recovered queue on serverB
++      cluster.stopRegionServer(serverB.getServerName());
++      Waiter.waitFor(conf, 20000, new Waiter.Predicate<Exception>() {
++        @Override public boolean evaluate() throws Exception {
++          return managerC.getOldSources().size() == 2;
++        }
++      });
++      replicationAdmin.enablePeer(peerId);
++      Waiter.waitFor(conf, 20000, new Waiter.Predicate<Exception>() {
++        @Override public boolean evaluate() throws Exception {
++          return managerC.getOldSources().size() == 0;
++        }
++      });
++    } finally {
++      conf.set(HConstants.REGION_SERVER_IMPL, HRegionServer.class.getName());
++    }
++  }
++
++  /**
++   * Regionserver implementation that adds a delay on the graceful shutdown.
++   */
++  public static class ShutdownDelayRegionServer extends HRegionServer {
++    public ShutdownDelayRegionServer(Configuration conf) throws IOException, InterruptedException {
++      super(conf);
++    }
++
++    public ShutdownDelayRegionServer(Configuration conf, CoordinatedStateManager csm)
++        throws IOException, InterruptedException {
++      super(conf, csm);
++    }
++
++    @Override
++    protected void stopServiceThreads() {
++      // Add a delay before service threads are shutdown.
++      // This will keep the zookeeper connection alive for the duration of the delay.
++      LOG.info("Adding a delay to the regionserver shutdown");
++      try {
++        Thread.sleep(2000);
++      } catch (InterruptedException ex) {
++        LOG.error("Interrupted while sleeping");
++      }
++      super.stopServiceThreads();
++    }
++  }
+ }
+ 
+-- 
+1.7.9.5
+

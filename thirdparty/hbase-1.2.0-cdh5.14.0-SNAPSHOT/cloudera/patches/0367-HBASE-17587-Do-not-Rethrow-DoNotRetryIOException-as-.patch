@@ -1,0 +1,51 @@
+From 3d910c1b269e94c8a3f98dd9a60c93bbe289b59a Mon Sep 17 00:00:00 2001
+From: Zach York <zyork@amazon.com>
+Date: Thu, 2 Feb 2017 02:44:58 -0800
+Subject: [PATCH 367/410] HBASE-17587 Do not Rethrow DoNotRetryIOException as
+ UnknownScannerException
+
+Signed-off-by: Andrew Purtell <apurtell@apache.org>
+
+(cherry picked from commit a07b9687d21ebbd963a7aea28edd7850daf79411)
+
+Change-Id: I71449d7c10f67d66c54e571315ed87a59ec4e4d3
+Author: Zach York
+Reason: Bug
+Ref: CDH-56773
+---
+ .../hadoop/hbase/regionserver/RSRpcServices.java   |   12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/RSRpcServices.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/RSRpcServices.java
+index c3e2e94..56e9421 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/RSRpcServices.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/RSRpcServices.java
+@@ -18,6 +18,7 @@
+  */
+ package org.apache.hadoop.hbase.regionserver;
+ 
++import java.io.FileNotFoundException;
+ import java.io.IOException;
+ import java.io.InterruptedIOException;
+ import java.net.BindException;
+@@ -2630,6 +2631,17 @@ public class RSRpcServices implements HBaseRPCErrorHandler,
+           // row that the client has last seen.
+           closeScanner(region, scanner, scannerName);
+ 
++          // rethrow DoNotRetryIOException. This can avoid the retry in ClientScanner.
++          if (e instanceof DoNotRetryIOException) {
++            throw e;
++          }
++
++          // If it is a FileNotFoundException, wrap as a
++          // DoNotRetryIOException. This can avoid the retry in ClientScanner.
++          if (e instanceof FileNotFoundException) {
++            throw new DoNotRetryIOException(e);
++          }
++
+           // We closed the scanner already. Instead of throwing the IOException, and client
+           // retrying with the same scannerId only to get USE on the next RPC, we directly throw
+           // a special exception to save an RPC.
+-- 
+1.7.9.5
+

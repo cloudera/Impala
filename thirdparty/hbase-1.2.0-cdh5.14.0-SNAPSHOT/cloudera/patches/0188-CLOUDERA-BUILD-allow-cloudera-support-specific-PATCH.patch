@@ -1,0 +1,26 @@
+From 004cbebfacf2c178007fc239ba7f7e4b231a713f Mon Sep 17 00:00:00 2001
+From: Sean Busbey <busbey@cloudera.com>
+Date: Fri, 5 Aug 2016 16:19:20 -0500
+Subject: [PATCH 188/410] CLOUDERA-BUILD allow cloudera support specific PATCH
+ files past the rat plugin.
+
+Change-Id: I9f6084aa8659fe4376ff8cdc8bedf0141da11678
+---
+ pom.xml |    1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/pom.xml b/pom.xml
+index bc047f6..d74f9e3 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -801,6 +801,7 @@
+               <exclude>**/ESAPI.properties</exclude>
+               <exclude>**/cloudera/**</exclude>
+               <exclude>**/debian/**</exclude>
++              <exclude>PATCH.txt</exclude>
+             </excludes>
+           </configuration>
+         </plugin>
+-- 
+1.7.9.5
+

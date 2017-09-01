@@ -1,0 +1,341 @@
+From 90874d7039a2023abe583e7085b4e15a9049386d Mon Sep 17 00:00:00 2001
+From: Umesh Agashe <uagashe@cloudera.com>
+Date: Wed, 22 Feb 2017 14:16:33 -0800
+Subject: [PATCH 269/410] HBASE-15322 Operations using Unsafe path broken for
+ platforms not having sun.misc.Unsafe.
+
+  (from commits 149dc79d855e520a23f554ed177163eaaa113e44 & 193b77202fa85fad8be04b21c9c1f2769b7372d8)
+
+  Author: anoopsjohn <anoopsamjohn@gmail.com>
+  Reason: Bug
+  Ref: CDH-50404
+
+  Change-Id: Ia54e46090f9ce4dc8d0c14e0f0c23b9f0ea32ba2
+
+Change-Id: Ib8c10beaba8df121018958b5ab983d3eecc104b4
+---
+ .../apache/hadoop/hbase/filter/FuzzyRowFilter.java |    8 +-
+ .../java/org/apache/hadoop/hbase/util/Bytes.java   |   30 ++-----
+ .../org/apache/hadoop/hbase/util/UnsafeAccess.java |   23 ------
+ .../hadoop/hbase/util/UnsafeAvailChecker.java      |   86 ++++++++++++++++++++
+ 4 files changed, 100 insertions(+), 47 deletions(-)
+ create mode 100644 hbase-common/src/main/java/org/apache/hadoop/hbase/util/UnsafeAvailChecker.java
+
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/filter/FuzzyRowFilter.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/filter/FuzzyRowFilter.java
+index 8669b18..c3290f6 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/filter/FuzzyRowFilter.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/filter/FuzzyRowFilter.java
+@@ -34,6 +34,7 @@ import org.apache.hadoop.hbase.util.ByteStringer;
+ import org.apache.hadoop.hbase.util.Bytes;
+ import org.apache.hadoop.hbase.util.Pair;
+ import org.apache.hadoop.hbase.util.UnsafeAccess;
++import org.apache.hadoop.hbase.util.UnsafeAvailChecker;
+ 
+ import com.google.common.annotations.VisibleForTesting;
+ import com.google.protobuf.InvalidProtocolBufferException;
+@@ -59,6 +60,7 @@ import com.google.protobuf.InvalidProtocolBufferException;
+ @InterfaceAudience.Public
+ @InterfaceStability.Evolving
+ public class FuzzyRowFilter extends FilterBase {
++  private static final boolean UNSAFE_UNALIGNED = UnsafeAvailChecker.unaligned();
+   private List<Pair<byte[], byte[]>> fuzzyKeysData;
+   private boolean done = false;
+ 
+@@ -93,7 +95,7 @@ public class FuzzyRowFilter extends FilterBase {
+   }
+ 
+   private void preprocessSearchKey(Pair<byte[], byte[]> p) {
+-    if (UnsafeAccess.unaligned() == false) {
++    if (!UNSAFE_UNALIGNED) {
+       return;
+     }
+     byte[] key = p.getFirst();
+@@ -111,7 +113,7 @@ public class FuzzyRowFilter extends FilterBase {
+    * @return mask array
+    */
+   private byte[] preprocessMask(byte[] mask) {
+-    if (UnsafeAccess.unaligned() == false) {
++    if (!UNSAFE_UNALIGNED) {
+       return mask;
+     }
+     if (isPreprocessedMask(mask)) return mask;
+@@ -316,7 +318,7 @@ public class FuzzyRowFilter extends FilterBase {
+   static SatisfiesCode satisfies(boolean reverse, byte[] row, int offset, int length,
+       byte[] fuzzyKeyBytes, byte[] fuzzyKeyMeta) {
+ 
+-    if (UnsafeAccess.unaligned() == false) {
++    if (!UNSAFE_UNALIGNED) {
+       return satisfiesNoUnsafe(reverse, row, offset, length, fuzzyKeyBytes, fuzzyKeyMeta);
+     }
+ 
+diff --git a/hbase-common/src/main/java/org/apache/hadoop/hbase/util/Bytes.java b/hbase-common/src/main/java/org/apache/hadoop/hbase/util/Bytes.java
+index 3d709a5..52150c0 100644
+--- a/hbase-common/src/main/java/org/apache/hadoop/hbase/util/Bytes.java
++++ b/hbase-common/src/main/java/org/apache/hadoop/hbase/util/Bytes.java
+@@ -24,14 +24,11 @@ import static com.google.common.base.Preconditions.checkPositionIndex;
+ import java.io.DataInput;
+ import java.io.DataOutput;
+ import java.io.IOException;
+-import java.lang.reflect.Field;
+ import java.math.BigDecimal;
+ import java.math.BigInteger;
+ import java.nio.ByteBuffer;
+ import java.nio.ByteOrder;
+ import java.nio.charset.Charset;
+-import java.security.AccessController;
+-import java.security.PrivilegedAction;
+ import java.security.SecureRandom;
+ import java.util.Arrays;
+ import java.util.Collection;
+@@ -132,7 +129,8 @@ public class Bytes {
+   // SizeOf which uses java.lang.instrument says 24 bytes. (3 longs?)
+   public static final int ESTIMATED_HEAP_TAX = 16;
+ 
+-  
++  private static final boolean UNSAFE_UNALIGNED = UnsafeAvailChecker.unaligned();
++
+   /**
+    * Returns length of the byte array, returning 0 if the array is null.
+    * Useful for calculating sizes.
+@@ -604,7 +602,7 @@ public class Bytes {
+     if (length != SIZEOF_LONG || offset + length > bytes.length) {
+       throw explainWrongLengthOrOffset(bytes, offset, length, SIZEOF_LONG);
+     }
+-    if (UnsafeComparer.unaligned()) {
++    if (UNSAFE_UNALIGNED) {
+       return toLongUnsafe(bytes, offset);
+     } else {
+       long l = 0;
+@@ -645,7 +643,7 @@ public class Bytes {
+       throw new IllegalArgumentException("Not enough room to put a long at"
+           + " offset " + offset + " in a " + bytes.length + " byte array");
+     }
+-    if (UnsafeComparer.unaligned()) {
++    if (UNSAFE_UNALIGNED) {
+       return putLongUnsafe(bytes, offset, val);
+     } else {
+       for(int i = offset + 7; i > offset; i--) {
+@@ -800,7 +798,7 @@ public class Bytes {
+     if (length != SIZEOF_INT || offset + length > bytes.length) {
+       throw explainWrongLengthOrOffset(bytes, offset, length, SIZEOF_INT);
+     }
+-    if (UnsafeComparer.unaligned()) {
++    if (UNSAFE_UNALIGNED) {
+       return toIntUnsafe(bytes, offset);
+     } else {
+       int n = 0;
+@@ -896,7 +894,7 @@ public class Bytes {
+       throw new IllegalArgumentException("Not enough room to put an int at"
+           + " offset " + offset + " in a " + bytes.length + " byte array");
+     }
+-    if (UnsafeComparer.unaligned()) {
++    if (UNSAFE_UNALIGNED) {
+       return putIntUnsafe(bytes, offset, val);
+     } else {
+       for(int i= offset + 3; i > offset; i--) {
+@@ -970,7 +968,7 @@ public class Bytes {
+     if (length != SIZEOF_SHORT || offset + length > bytes.length) {
+       throw explainWrongLengthOrOffset(bytes, offset, length, SIZEOF_SHORT);
+     }
+-    if (UnsafeComparer.unaligned()) {
++    if (UNSAFE_UNALIGNED) {
+       return toShortUnsafe(bytes, offset);
+     } else {
+       short n = 0;
+@@ -1008,7 +1006,7 @@ public class Bytes {
+       throw new IllegalArgumentException("Not enough room to put a short at"
+           + " offset " + offset + " in a " + bytes.length + " byte array");
+     }
+-    if (UnsafeComparer.unaligned()) {
++    if (UNSAFE_UNALIGNED) {
+       return putShortUnsafe(bytes, offset, val);
+     } else {
+       bytes[offset+1] = (byte) val;
+@@ -1315,13 +1313,12 @@ public class Bytes {
+       INSTANCE;
+ 
+       static final Unsafe theUnsafe;
+-      private static boolean unaligned = false;
+ 
+       /** The offset to the first element in a byte array. */
+       static final int BYTE_ARRAY_BASE_OFFSET;
+ 
+       static {
+-        if (UnsafeAccess.unaligned()) {
++        if (UNSAFE_UNALIGNED) {
+           theUnsafe = UnsafeAccess.theUnsafe;
+         } else {
+           // It doesn't matter what we throw;
+@@ -1335,7 +1332,6 @@ public class Bytes {
+         if (theUnsafe.arrayIndexScale(byte[].class) != 1) {
+           throw new AssertionError();
+         }
+-        unaligned = UnsafeAccess.unaligned();
+       }
+ 
+       static final boolean littleEndian =
+@@ -1396,14 +1392,6 @@ public class Bytes {
+       }
+ 
+       /**
+-       * @return true when running JVM is having sun's Unsafe package available in it and underlying
+-       *         system having unaligned-access capability.
+-       */
+-      public static boolean unaligned() {
+-        return unaligned;
+-      }
+-
+-      /**
+        * Lexicographically compare two arrays.
+        *
+        * @param buffer1 left operand
+diff --git a/hbase-common/src/main/java/org/apache/hadoop/hbase/util/UnsafeAccess.java b/hbase-common/src/main/java/org/apache/hadoop/hbase/util/UnsafeAccess.java
+index 1a0b0e9..f0abd50 100644
+--- a/hbase-common/src/main/java/org/apache/hadoop/hbase/util/UnsafeAccess.java
++++ b/hbase-common/src/main/java/org/apache/hadoop/hbase/util/UnsafeAccess.java
+@@ -18,7 +18,6 @@
+ package org.apache.hadoop.hbase.util;
+ 
+ import java.lang.reflect.Field;
+-import java.lang.reflect.Method;
+ import java.nio.ByteOrder;
+ import java.security.AccessController;
+ import java.security.PrivilegedAction;
+@@ -42,7 +41,6 @@ public final class UnsafeAccess {
+ 
+   /** The offset to the first element in a byte array. */
+   public static final int BYTE_ARRAY_BASE_OFFSET;
+-  private static boolean unaligned = false;
+ 
+   static {
+     theUnsafe = (Unsafe) AccessController.doPrivileged(new PrivilegedAction<Object>() {
+@@ -61,33 +59,12 @@ public final class UnsafeAccess {
+ 
+     if(theUnsafe != null){
+       BYTE_ARRAY_BASE_OFFSET = theUnsafe.arrayBaseOffset(byte[].class);
+-      try {
+-        // Using java.nio.Bits#unaligned() to check for unaligned-access capability
+-        Class<?> clazz = Class.forName("java.nio.Bits");
+-        Method m = clazz.getDeclaredMethod("unaligned");
+-        m.setAccessible(true);
+-        unaligned = (boolean) m.invoke(null);
+-      } catch (Exception e) {
+-        unaligned = false; // FindBugs: Causes REC_CATCH_EXCEPTION. Suppressed.
+-      }
+     } else{
+       BYTE_ARRAY_BASE_OFFSET = -1;
+     }
+   }
+ 
+   private UnsafeAccess(){}
+-  
+-  public static boolean isAvailable() {
+-    return theUnsafe != null;
+-  }
+-
+-  /**
+-   * @return true when running JVM is having sun's Unsafe package available in it and underlying
+-   *         system having unaligned-access capability.
+-   */
+-  public static boolean unaligned() {
+-    return unaligned;
+-  }
+ 
+   public static final boolean littleEndian = ByteOrder.nativeOrder()
+       .equals(ByteOrder.LITTLE_ENDIAN);
+diff --git a/hbase-common/src/main/java/org/apache/hadoop/hbase/util/UnsafeAvailChecker.java b/hbase-common/src/main/java/org/apache/hadoop/hbase/util/UnsafeAvailChecker.java
+new file mode 100644
+index 0000000..90e6ec8
+--- /dev/null
++++ b/hbase-common/src/main/java/org/apache/hadoop/hbase/util/UnsafeAvailChecker.java
+@@ -0,0 +1,86 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hbase.util;
++
++import java.lang.reflect.Field;
++import java.lang.reflect.Method;
++import java.security.AccessController;
++import java.security.PrivilegedAction;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.hbase.classification.InterfaceAudience;
++
++@InterfaceAudience.Private
++public class UnsafeAvailChecker {
++
++  private static final String CLASS_NAME = "sun.misc.Unsafe";
++  private static final Log LOG = LogFactory.getLog(UnsafeAvailChecker.class);
++  private static boolean avail = false;
++  private static boolean unaligned = false;
++
++  static {
++    avail = AccessController.doPrivileged(new PrivilegedAction<Boolean>() {
++      @Override
++      public Boolean run() {
++        try {
++          Class<?> clazz = Class.forName(CLASS_NAME);
++          Field f = clazz.getDeclaredField("theUnsafe");
++          f.setAccessible(true);
++          return f.get(null) != null;
++        } catch (Throwable e) {
++          LOG.warn("sun.misc.Unsafe is not available/accessible", e);
++        }
++        return false;
++      }
++    });
++    // When Unsafe itself is not available/accessible consider unaligned as false.
++    if (avail) {
++      try {
++        // Using java.nio.Bits#unaligned() to check for unaligned-access capability
++        Class<?> clazz = Class.forName("java.nio.Bits");
++        Method m = clazz.getDeclaredMethod("unaligned");
++        m.setAccessible(true);
++        unaligned = (Boolean) m.invoke(null);
++      } catch (Exception e) {
++        LOG.warn("java.nio.Bits#unaligned() check failed."
++            + "Unsafe based read/write of primitive types won't be used", e);
++      }
++    }
++  }
++
++  /**
++   * @return true when running JVM is having sun's Unsafe package available in it and it is
++   *         accessible.
++   */
++  public static boolean isAvailable() {
++    return avail;
++  }
++
++  /**
++   * @return true when running JVM is having sun's Unsafe package available in it and underlying
++   *         system having unaligned-access capability.
++   */
++  public static boolean unaligned() {
++    return unaligned;
++  }
++
++  private UnsafeAvailChecker() {
++    // private constructor to avoid instantiation
++  }
++}
+\ No newline at end of file
+-- 
+1.7.9.5
+

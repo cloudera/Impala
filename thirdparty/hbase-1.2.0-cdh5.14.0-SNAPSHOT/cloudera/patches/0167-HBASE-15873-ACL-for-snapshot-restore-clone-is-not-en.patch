@@ -1,0 +1,55 @@
+From 923f6d7bd3c2a7146db09774fb3d715434c03904 Mon Sep 17 00:00:00 2001
+From: tedyu <yuzhihong@gmail.com>
+Date: Sun, 22 May 2016 19:19:05 -0700
+Subject: [PATCH 167/410] HBASE-15873 ACL for snapshot restore / clone is not
+ enforced
+
+Reason: Bug
+Author: Ted Yu
+Ref: CDH-41395
+
+Change-Id: I9bed0914114645742be05ee4e3bc3278f131322f
+---
+ .../hbase/master/snapshot/SnapshotManager.java     |    8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/SnapshotManager.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/SnapshotManager.java
+index 7e071c2..04ba3ff 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/SnapshotManager.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/snapshot/SnapshotManager.java
+@@ -722,7 +722,7 @@ public class SnapshotManager extends MasterProcedureManager implements Stoppable
+ 
+       // call coproc pre hook
+       if (cpHost != null) {
+-        cpHost.preRestoreSnapshot(reqSnapshot, snapshotTableDesc);
++        cpHost.preRestoreSnapshot(snapshot, snapshotTableDesc);
+       }
+       try {
+         // Table already exist. Check and update the region quota for this table namespace
+@@ -737,12 +737,12 @@ public class SnapshotManager extends MasterProcedureManager implements Stoppable
+       LOG.info("Restore snapshot=" + snapshot.getName() + " as table=" + tableName);
+ 
+       if (cpHost != null) {
+-        cpHost.postRestoreSnapshot(reqSnapshot, snapshotTableDesc);
++        cpHost.postRestoreSnapshot(snapshot, snapshotTableDesc);
+       }
+     } else {
+       HTableDescriptor htd = new HTableDescriptor(tableName, snapshotTableDesc);
+       if (cpHost != null) {
+-        cpHost.preCloneSnapshot(reqSnapshot, htd);
++        cpHost.preCloneSnapshot(snapshot, htd);
+       }
+       try {
+         checkAndUpdateNamespaceQuota(manifest, tableName);
+@@ -756,7 +756,7 @@ public class SnapshotManager extends MasterProcedureManager implements Stoppable
+       LOG.info("Clone snapshot=" + snapshot.getName() + " as table=" + tableName);
+ 
+       if (cpHost != null) {
+-        cpHost.postCloneSnapshot(reqSnapshot, htd);
++        cpHost.postCloneSnapshot(snapshot, htd);
+       }
+     }
+   }
+-- 
+1.7.9.5
+

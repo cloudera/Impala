@@ -1,0 +1,46 @@
+From f2a441c5a817285ca710e9c6524e830dccc3b154 Mon Sep 17 00:00:00 2001
+From: Enis Soztutar <enis@apache.org>
+Date: Tue, 5 Apr 2016 18:13:40 -0700
+Subject: [PATCH 282/410] HBASE-15587 FSTableDescriptors.getDescriptor() logs
+ stack trace erronously
+
+(cherry picked from commit fcfda192f7a9ab4a7950b2dc21cd861abedf49df)
+
+Change-Id: Ie59054996769306956b0cef984b2b680024802e4
+Author: Balazs Meszaros
+Reason: Bug
+Ref: CDH-50427
+---
+ .../hadoop/hbase/util/FSTableDescriptors.java      |    4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/util/FSTableDescriptors.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/util/FSTableDescriptors.java
+index 7cd2673..06eb9ea 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/util/FSTableDescriptors.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/util/FSTableDescriptors.java
+@@ -124,11 +124,13 @@ public class FSTableDescriptors implements TableDescriptors {
+     this.metaTableDescriptor = HTableDescriptor.metaTableDescriptor(conf);
+   }
+ 
++  @Override
+   public void setCacheOn() throws IOException {
+     this.cache.clear();
+     this.usecache = true;
+   }
+ 
++  @Override
+   public void setCacheOff() throws IOException {
+     this.usecache = false;
+     this.cache.clear();
+@@ -173,6 +175,8 @@ public class FSTableDescriptors implements TableDescriptors {
+     } catch (NullPointerException e) {
+       LOG.debug("Exception during readTableDecriptor. Current table name = "
+           + tablename, e);
++    } catch (TableInfoMissingException e) {
++      // ignore. This is regular operation
+     } catch (IOException ioe) {
+       LOG.debug("Exception during readTableDecriptor. Current table name = "
+           + tablename, ioe);
+-- 
+1.7.9.5
+

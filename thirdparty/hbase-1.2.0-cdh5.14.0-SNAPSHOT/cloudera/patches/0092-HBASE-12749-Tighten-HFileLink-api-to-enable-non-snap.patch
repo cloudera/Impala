@@ -1,0 +1,29 @@
+From 883ea4f91c19e1b699236a2f02d3c6ddc27b4236 Mon Sep 17 00:00:00 2001
+From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
+Date: Fri, 27 Mar 2015 16:40:44 +0100
+Subject: [PATCH 092/410] HBASE-12749 Tighten HFileLink api to enable
+ non-snapshot uses (addendum)
+
+Reason: Bug
+Author: Jonathan Hsieh
+Ref: CDH-26305
+---
+ .../java/org/apache/hadoop/hbase/io/HFileLink.java |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/io/HFileLink.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/io/HFileLink.java
+index 6c66e39..56e65e0 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/io/HFileLink.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/io/HFileLink.java
+@@ -104,7 +104,7 @@ public class HFileLink extends FileLink {
+     this.originPath = originPath;
+     this.mobPath = mobPath;
+     this.archivePath = archivePath;
+-    setLocations(originPath, tempPath, archivePath);
++    setLocations(originPath, tempPath, mobPath, archivePath);
+   }
+ 
+   /**
+-- 
+1.7.9.5
+

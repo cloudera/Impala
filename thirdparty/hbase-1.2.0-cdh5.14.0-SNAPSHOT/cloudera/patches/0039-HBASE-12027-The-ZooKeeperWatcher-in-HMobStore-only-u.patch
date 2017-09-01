@@ -1,0 +1,29 @@
+From b1e48b9956d2baad3583d1af6c9db518da376262 Mon Sep 17 00:00:00 2001
+From: Jonathan M Hsieh <jmhsieh@apache.org>
+Date: Fri, 19 Sep 2014 11:13:06 -0700
+Subject: [PATCH 039/410] HBASE-12027 The ZooKeeperWatcher in HMobStore only
+ uses the default conf (Jingcheng Du)
+
+Reason: MOB Feature
+Author: Jingcheng Du
+Ref: CDH-19420
+---
+ .../hadoop/hbase/regionserver/HMobStore.java       |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HMobStore.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HMobStore.java
+index 071b5fe..2cef3df 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HMobStore.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HMobStore.java
+@@ -340,7 +340,7 @@ public class HMobStore extends HStore {
+       String compactionName = UUID.randomUUID().toString().replaceAll("-", "");
+       MobZookeeper zk = null;
+       try {
+-        zk = MobZookeeper.newInstance(this.conf, compactionName);
++        zk = MobZookeeper.newInstance(region.getBaseConf(), compactionName);
+       } catch (KeeperException e) {
+         LOG.error("Cannot connect to the zookeeper, ready to perform the minor compaction instead",
+             e);
+-- 
+1.7.9.5
+

@@ -1,0 +1,61 @@
+From 1573b8a862a7216ddef557274e5557dbf439d55d Mon Sep 17 00:00:00 2001
+From: Philip Zeyliger <philip@cloudera.com>
+Date: Fri, 20 Nov 2015 23:59:30 +0000
+Subject: [PATCH 031/410] CLOUDERA-BUILD Specify assembly artifact naming.
+
+Reason: New Feature
+Author: Philip Zeyliger
+Ref: CDH-34616
+
+When using SNAPSHOT artifacts, there are two names
+for an hbase jar.  For example,
+  hbase-server-1.0.0-cdh5.7.6-20151201.205646-1.jar (stored in
+  org/apache/hbase/hbase-server/1.0.0-cdh5.7.6-SNAPSHOT in a maven repo)
+or
+  hbase-server-1.0.0-cdh5.7.6-SNAPSHOT.jar
+
+Depending on whether you're using the local ~/.m2/repository
+or a "remote" file:// repository, the assembly gets
+different names.  Our world expects the -SNAPSHOT name, and
+fails subtly if it doesn't happen.
+
+The suble error you'd see would be something like this from
+the RPM build:
+
+  + echo Linktype:internal:LinkName:hbase-annotations.jar:LinkSource:hbase-annotations-1.0.0-cdh5.7.6-20151120.231720-1.jar
+  ... many lines making it hard to reason about ...
+  + ln -s hbase-annotations-1.0.0-cdh5.7.6-SNAPSHOT.jar hbase-annotations.jar
+  ln: creating symbolic link base-annotations.jar': File exists
+
+This very small XML change makes that error go away.
+
+Other people have experienced this at https://issues.apache.org/jira/browse/MASSEMBLY-67.
+
+Change-Id: I80412b8e022207a94967c792a2b95ff9e7114d47
+---
+ .../src/main/assembly/hadoop-two-compat.xml        |    2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/hbase-assembly/src/main/assembly/hadoop-two-compat.xml b/hbase-assembly/src/main/assembly/hadoop-two-compat.xml
+index c60af25..df6ab0e 100644
+--- a/hbase-assembly/src/main/assembly/hadoop-two-compat.xml
++++ b/hbase-assembly/src/main/assembly/hadoop-two-compat.xml
+@@ -51,6 +51,7 @@
+       <!-- Binaries for the dependencies also go in the hbase-jars directory -->
+       <binaries>
+         <outputDirectory>lib</outputDirectory>
++        <outputFileNameMapping>${artifact.artifactId}-${artifact.baseVersion}${dashClassifier?}.${artifact.extension}</outputFileNameMapping>
+         <unpack>false</unpack>
+         <dependencySets>
+           <dependencySet>
+@@ -62,6 +63,7 @@
+             <excludes>
+               <exclude>org.apache.hadoop:hadoop-core</exclude>
+             </excludes>
++            <outputFileNameMapping>${artifact.artifactId}-${artifact.baseVersion}${dashClassifier?}.${artifact.extension}</outputFileNameMapping>
+           </dependencySet>
+         </dependencySets>
+       </binaries>
+-- 
+1.7.9.5
+

@@ -1,0 +1,34 @@
+From 333c5a5a48b5b6cd36258079bc171176ef6b6ad0 Mon Sep 17 00:00:00 2001
+From: Ashu Pachauri <ashu210890@gmail.com>
+Date: Thu, 9 Mar 2017 12:28:32 -0800
+Subject: [PATCH 339/410] HBASE-16977 VerifyReplication should log a printable
+ representation of the row keys
+
+Signed-off-by: Gary Helmling <garyh@apache.org>
+
+(cherry picked from commit 729239c8d13bcf15b8f87030a6f23b723d6f7227)
+
+Change-Id: I790e46114d7c333b36cf1a6bc896e28817f1ac11
+Author: Ashu Pachauri
+Reason: Improvement
+Ref: CDH-53587
+---
+ .../mapreduce/replication/VerifyReplication.java   |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/replication/VerifyReplication.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/replication/VerifyReplication.java
+index 75dfe9e..f6207ab 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/replication/VerifyReplication.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/replication/VerifyReplication.java
+@@ -173,7 +173,7 @@ public class VerifyReplication extends Configured implements Tool {
+     private void logFailRowAndIncreaseCounter(Context context, Counters counter, Result row) {
+       context.getCounter(counter).increment(1);
+       context.getCounter(Counters.BADROWS).increment(1);
+-      LOG.error(counter.toString() + ", rowkey=" + Bytes.toString(row.getRow()));
++      LOG.error(counter.toString() + ", rowkey=" + Bytes.toStringBinary(row.getRow()));
+     }
+ 
+     @Override
+-- 
+1.7.9.5
+

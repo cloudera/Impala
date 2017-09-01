@@ -1,0 +1,178 @@
+From 58775e1acc32d6f5fbecd1055d6b7ec590337364 Mon Sep 17 00:00:00 2001
+From: Umesh Agashe <uagashe@cloudera.com>
+Date: Wed, 8 Mar 2017 13:25:28 -0800
+Subject: [PATCH 309/410] HBASE-17761: Test
+ TestRemoveRegionMetrics.testMoveRegion fails
+ intermittently because of race condition
+
+Signed-off-by: Esteban Gutierrez <esteban@apache.org>
+(cherry picked from commit 3d9520b1403346cbe7a6322cf6c2632197d79f7a)
+
+Conflicts:
+ hbase-server/src/test/java/org/apache/hadoop/hbase/HBaseTestingUtility.java
+
+ Author: Umesh Agashe
+ Date:      Wed Mar 8 13:25:28 2017 -0800
+ Reason: Bug
+ Ref:    CDH-51341
+
+Change-Id: Ic8728b5cb4e796b6856c2a445bdfcb1905a951e1
+---
+ .../apache/hadoop/hbase/HBaseTestingUtility.java   |   24 ++++++++++++++++++++
+ .../org/apache/hadoop/hbase/client/TestAdmin1.java |   21 +----------------
+ .../regionserver/TestRemoveRegionMetrics.java      |    5 +---
+ .../hbase/regionserver/wal/TestWALReplay.java      |   23 ++-----------------
+ 4 files changed, 28 insertions(+), 45 deletions(-)
+
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/HBaseTestingUtility.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/HBaseTestingUtility.java
+index 11ce0cc..e46fa37 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/HBaseTestingUtility.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/HBaseTestingUtility.java
+@@ -3420,6 +3420,30 @@ public class HBaseTestingUtility extends HBaseCommonTestingUtility {
+   }
+ 
+   /**
++   * Move region to destination server and wait till region is completely moved and online
++   *
++   * @param destRegion region to move
++   * @param destServer destination server of the region
++   * @throws InterruptedException
++   * @throws IOException
++   */
++  public void moveRegionAndWait(HRegionInfo destRegion, ServerName destServer)
++      throws InterruptedException, IOException {
++    HMaster master = getMiniHBaseCluster().getMaster();
++    getHBaseAdmin().move(destRegion.getEncodedNameAsBytes(),
++        Bytes.toBytes(destServer.getServerName()));
++    while (true) {
++      ServerName serverName = master.getAssignmentManager().getRegionStates()
++          .getRegionServerOfRegion(destRegion);
++      if (serverName != null && serverName.equals(destServer)) {
++        assertRegionOnServer(destRegion, serverName, 200);
++        break;
++      }
++      Thread.sleep(10);
++    }
++  }
++
++  /**
+    * Wait until all regions for a table in hbase:meta have a non-empty
+    * info:server, up to 60 seconds. This means all regions have been deployed,
+    * master has been informed and updated hbase:meta with the regions deployed
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestAdmin1.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestAdmin1.java
+index 2695ec4..9de7835 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestAdmin1.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestAdmin1.java
+@@ -1251,7 +1251,7 @@ public class TestAdmin1 {
+     // Try going to the regionservers directly
+     // first move the region to the same regionserver
+     if (!regions.get(2).getSecond().equals(regions.get(1).getSecond())) {
+-      moveRegionAndWait(regions.get(2).getFirst(), regions.get(1).getSecond());
++      TEST_UTIL.moveRegionAndWait(regions.get(2).getFirst(), regions.get(1).getSecond());
+     }
+     try {
+       AdminService.BlockingInterface admin = TEST_UTIL.getHBaseAdmin().getConnection()
+@@ -1263,25 +1263,6 @@ public class TestAdmin1 {
+     assertTrue(gotException);
+   }
+ 
+-  private void moveRegionAndWait(HRegionInfo destRegion, ServerName destServer)
+-      throws InterruptedException, MasterNotRunningException,
+-      ZooKeeperConnectionException, IOException {
+-    HMaster master = TEST_UTIL.getMiniHBaseCluster().getMaster();
+-    TEST_UTIL.getHBaseAdmin().move(
+-        destRegion.getEncodedNameAsBytes(),
+-        Bytes.toBytes(destServer.getServerName()));
+-    while (true) {
+-      ServerName serverName = master.getAssignmentManager()
+-          .getRegionStates().getRegionServerOfRegion(destRegion);
+-      if (serverName != null && serverName.equals(destServer)) {
+-        TEST_UTIL.assertRegionOnServer(
+-            destRegion, serverName, 200);
+-        break;
+-      }
+-      Thread.sleep(10);
+-    }
+-  }
+-
+   /**
+    * HADOOP-2156
+    * @throws IOException
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestRemoveRegionMetrics.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestRemoveRegionMetrics.java
+index 1694b64..81b79d1 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestRemoveRegionMetrics.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestRemoveRegionMetrics.java
+@@ -90,7 +90,6 @@ public class TestRemoveRegionMetrics {
+       int destServerIdx = (currentServerIdx +1)% cluster.getLiveRegionServerThreads().size();
+       HRegionServer currentServer = cluster.getRegionServer(currentServerIdx);
+       HRegionServer destServer = cluster.getRegionServer(destServerIdx);
+-      byte[] destServerName = Bytes.toBytes(destServer.getServerName().getServerName());
+ 
+ 
+       // Do a put. The counters should be non-zero now
+@@ -113,13 +112,11 @@ public class TestRemoveRegionMetrics {
+ 
+ 
+       try {
+-        admin.move(regionInfo.getEncodedNameAsBytes(), destServerName);
++        TEST_UTIL.moveRegionAndWait(regionInfo, destServer.getServerName());
+         moved = true;
+-        Thread.sleep(5000);
+       } catch (IOException ioe) {
+         moved = false;
+       }
+-      TEST_UTIL.waitUntilAllRegionsAssigned(t.getName());
+ 
+       if (moved) {
+         MetricsRegionAggregateSource destAgg = destServer.getRegion(regionInfo.getRegionName())
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/wal/TestWALReplay.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/wal/TestWALReplay.java
+index 7924973..efa86bb 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/wal/TestWALReplay.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/wal/TestWALReplay.java
+@@ -225,7 +225,7 @@ public class TestWALReplay {
+     HRegionServer originServer = hbaseCluster.getRegionServer(originServerNum);
+     HRegionServer destServer = hbaseCluster.getRegionServer(destServerNum);
+     // move region to destination regionserver
+-    moveRegionAndWait(destRegion, destServer);
++    TEST_UTIL.moveRegionAndWait(destRegion.getRegionInfo(), destServer.getServerName());
+ 
+     // delete the row
+     Delete del = new Delete(Bytes.toBytes("r1"));
+@@ -248,7 +248,7 @@ public class TestWALReplay {
+     region.compact(true);
+ 
+     // move region to origin regionserver
+-    moveRegionAndWait(destRegion, originServer);
++    TEST_UTIL.moveRegionAndWait(destRegion.getRegionInfo(), originServer.getServerName());
+     // abort the origin regionserver
+     originServer.abort("testing");
+ 
+@@ -261,25 +261,6 @@ public class TestWALReplay {
+     resultScanner.close();
+   }
+ 
+-  private void moveRegionAndWait(Region destRegion, HRegionServer destServer)
+-      throws InterruptedException, MasterNotRunningException,
+-      ZooKeeperConnectionException, IOException {
+-    HMaster master = TEST_UTIL.getMiniHBaseCluster().getMaster();
+-    TEST_UTIL.getHBaseAdmin().move(
+-        destRegion.getRegionInfo().getEncodedNameAsBytes(),
+-        Bytes.toBytes(destServer.getServerName().getServerName()));
+-    while (true) {
+-      ServerName serverName = master.getAssignmentManager()
+-        .getRegionStates().getRegionServerOfRegion(destRegion.getRegionInfo());
+-      if (serverName != null && serverName.equals(destServer.getServerName())) {
+-        TEST_UTIL.assertRegionOnServer(
+-          destRegion.getRegionInfo(), serverName, 200);
+-        break;
+-      }
+-      Thread.sleep(10);
+-    }
+-  }
+-
+   /**
+    * Tests for hbase-2727.
+    * @throws Exception
+-- 
+1.7.9.5
+
