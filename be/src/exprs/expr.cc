@@ -417,9 +417,10 @@ Status Expr::CloneIfNotExists(const vector<ExprContext*>& ctxs, RuntimeState* st
     for (int i = 0; i < new_ctxs->size(); ++i) DCHECK((*new_ctxs)[i]->is_clone_);
     return Status::OK();
   }
-  new_ctxs->resize(ctxs.size());
   for (int i = 0; i < ctxs.size(); ++i) {
-    RETURN_IF_ERROR(ctxs[i]->Clone(state, &(*new_ctxs)[i]));
+    ExprContext* new_ctx = nullptr;
+    RETURN_IF_ERROR(ctxs[i]->Clone(state, &new_ctx));
+    new_ctxs->push_back(new_ctx);
   }
   return Status::OK();
 }
