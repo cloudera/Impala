@@ -1,3 +1,32 @@
+commit f15b3ee5ba65305f393661d78a7f603416fc3368
+Author: Ashish Singhi <ashishsinghi@apache.org>
+Date:   Fri Jun 16 10:43:56 2017 +0530
+
+    HBASE-18212 reduce log level for unbuffer warning.
+    
+    In Standalone mode with local filesystem HBase logs Warning message:Failed to invoke 'unbuffer' method in class org.apache.hadoop.fs.FSDataInputStream
+    
+    Signed-off-by: Umesh Agashe <uagashe@cloudera.com>
+    Signed-off-by: Sean Busbey <busbey@apache.org>
+    
+    Change-Id: I22d5889fc9f169a8a5f9e9f7dc3d91b115f9d9a4
+    Author: Ashish Singhi
+    Reason: Improvement
+    Ref: CDH-59007
+    (cherry picked from commit ca56ca9175e48b313a59f40caca07847f1547c87)
+
+commit 3b4f87df52b9f8cad87769152c37ef9675591b41
+Author: Peter Somogyi <psomogyi@cloudera.com>
+Date:   Wed Sep 6 19:21:55 2017 +0200
+
+    JENKINS-1063 Increase resources for HBase unit tests
+    
+    The tests occasionally timed out or failed do to overloading.
+    Reducing surefire secondPartForkCount to 1.
+    
+    Change-Id: Ibb394e37264aaecb1d9ef50fceff050d78c785b9
+    (cherry picked from commit 6098360851a40bc64ca3e71e3bef65029528a961)
+
 commit 4317f9b89b3a31795f09373ec9fe5e9340dd0b62
 Author: Jenkins <dev-kitchen@cloudera.com>
 Date:   Thu Aug 24 08:22:56 2017 -0700
