@@ -29,13 +29,19 @@ import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.ClusterStatus;
 import org.apache.hadoop.hbase.HRegionInfo;
+import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Get;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.util.PairOfSameType;
 import org.apache.hadoop.hbase.util.Threads;
 import org.slf4j.Logger;
@@ -46,7 +52,7 @@ import com.google.common.collect.Maps;
 
 /**
  * Splits HBase tables into regions and deterministically assigns regions to region
- * servers. 
+ * servers.
  */
 class HBaseTestDataRegionAssigment {
   public class TableNotFoundException extends Exception {
@@ -57,8 +63,10 @@ class HBaseTestDataRegionAssigment {
 
   private final static Logger LOG = LoggerFactory.getLogger(
       HBaseTestDataRegionAssigment.class);
+  private ClusterStatus clusterStatus = null;
   private final Configuration conf;
-  private final HBaseAdmin hbaseAdmin;
+  private Connection connection = null;
+  private final Admin admin;
   private final List<ServerName> sortedRS; // sorted list of region server name
   private final String[] splitPoints = { "1", "3", "5", "7", "9"};
 
@@ -70,15 +78,16 @@ class HBaseTestDataRegionAssigment {
 
   public HBaseTestDataRegionAssigment() throws IOException {
     conf = new Configuration();
-    hbaseAdmin = new HBaseAdmin(conf);
-    ClusterStatus clusterStatus = hbaseAdmin.getClusterStatus();
+    connection = ConnectionFactory.createConnection(conf);
+    admin = connection.getAdmin();
+    ClusterStatus clusterStatus = admin.getClusterStatus();
     Collection<ServerName> regionServerNames = clusterStatus.getServers();
     sortedRS = new ArrayList<ServerName>(regionServerNames);
     Collections.sort(sortedRS);
   }
 
   public void close() throws IOException {
-    hbaseAdmin.close();
+    admin.close();
   }
 
   /**
@@ -87,50 +96,49 @@ class HBaseTestDataRegionAssigment {
    * will be on the same server.
    * The table must have data loaded and only a single region.
    */
-  public void performAssigment(String tableName) throws IOException, 
+  public void performAssigment(String tableName) throws IOException,
     InterruptedException, TableNotFoundException {
-    HTableDescriptor[] desc = hbaseAdmin.listTables(tableName);
+    HTableDescriptor[] desc = admin.listTables(tableName);
     if (desc == null || desc.length == 0) {
       throw new TableNotFoundException("Table " + tableName + " not found.");
     }
-
-    if (hbaseAdmin.getTableRegions(tableName.getBytes()).size() == 1) {
+    TableName table = TableName.valueOf(tableName);
+    if (admin.getTableRegions(table).size() == 1) {
       // Split into regions
       // The table has one region only to begin with. The logic of
-      // blockUntilRegionSplit requires that the input regionName has performed a split. 
+      // blockUntilRegionSplit requires that the input regionName has performed a split.
       // If the table has already been split (i.e. regions count > 1), the same split
       // call will be a no-op and this will cause blockUntilRegionSplit to break.
       for (int i = 0; i < splitPoints.length; ++i) {
-        hbaseAdmin.majorCompact(tableName);
-        List<HRegionInfo> regions = hbaseAdmin.getTableRegions(tableName.getBytes());
+        admin.majorCompact(table);
+        List<HRegionInfo> regions = admin.getTableRegions(table);
         HRegionInfo splitRegion = regions.get(regions.size() - 1);
-        int attempt = 1;
         boolean done = false;
-        while (!done && attempt < MAX_SPLIT_ATTEMPTS) {
+        int attempt = 0;
+        for (; !done && attempt < MAX_SPLIT_ATTEMPTS; ++attempt) {
           // HBase seems to not always properly receive/process this split RPC,
           // so we need to retry the split/block several times.
-          hbaseAdmin.split(splitRegion.getRegionNameAsString(), splitPoints[i]);
+          admin.split(splitRegion.getTable(), Bytes.toBytes(splitPoints[i]));
           done = blockUntilRegionSplit(conf, WAIT_FOR_SPLIT_TIMEOUT,
               splitRegion.getRegionName(), true);
-          Thread.sleep(100);
-          ++attempt;
         }
         if (!done) {
           throw new IllegalStateException(
-              String.format("Failed to split region '%s' after %s attempts.",
-                  splitRegion.getRegionNameAsString(), WAIT_FOR_SPLIT_TIMEOUT));
+              String.format("Failed to split region '%s' after %s attempts (%d ms).",
+                  splitRegion.getRegionNameAsString(), MAX_SPLIT_ATTEMPTS,
+                  MAX_SPLIT_ATTEMPTS * WAIT_FOR_SPLIT_TIMEOUT));
         }
         LOG.info(String.format("Split region '%s' after %s attempts.",
             splitRegion.getRegionNameAsString(), attempt));
       }
     }
-    
+
     // Sort the region by start key
-    List<HRegionInfo> regions = hbaseAdmin.getTableRegions(tableName.getBytes());
+    List<HRegionInfo> regions = admin.getTableRegions(table);
     Preconditions.checkArgument(regions.size() == splitPoints.length + 1);
     Collections.sort(regions);
-    
-    // Pair up two adjacent regions to the same region server. That is, 
+
+    // Pair up two adjacent regions to the same region server. That is,
     // region server 1 <- regions (unbound:1), (1:3)
     // region server 2 <- regions (3:5), (5:7)
     // region server 3 <- regions (7:9), (9:unbound)
@@ -139,38 +147,46 @@ class HBaseTestDataRegionAssigment {
       HRegionInfo regionInfo = regions.get(i);
       int rsIdx = (i / 2) % sortedRS.size();
       ServerName regionServerName = sortedRS.get(rsIdx);
-      hbaseAdmin.move(regionInfo.getEncodedNameAsBytes(),
+      admin.move(regionInfo.getEncodedNameAsBytes(),
           regionServerName.getServerName().getBytes());
       expectedLocs.put(regionInfo, regionServerName);
     }
-    
-    // hbaseAdmin.move() is an asynchronous operation. HBase tests use sleep to wait for
-    // the move to complete. It should be done in 10sec.
+
+    // admin.move() is an asynchronous operation. Wait for the move to complete.
+    // It should be done in 10sec.
     int sleepCnt = 0;
-    HTable hbaseTable = new HTable(conf, tableName);
-    try {
-      while(!expectedLocs.equals(hbaseTable.getRegionLocations()) &&
-          sleepCnt < 100) {
+    while (true) {
+      int matched = 0;
+      List<Pair<HRegionInfo, ServerName>> pairs =
+          MetaTableAccessor.getTableRegionsAndLocations(connection, table);
+      Preconditions.checkState(pairs.size() == regions.size());
+      for (Pair<HRegionInfo, ServerName> pair: pairs) {
+        HRegionInfo regionInfo = pair.getFirst();
+        ServerName serverName = pair.getSecond();
+        Preconditions.checkNotNull(expectedLocs.get(regionInfo));
+        LOG.error(printKey(regionInfo.getStartKey()) + " -> " +
+            serverName.getHostAndPort() + ", expecting " +
+            expectedLocs.get(regionInfo).getHostAndPort());
+        if (expectedLocs.get(regionInfo).equals(serverName)) {
+           ++matched;
+           continue;
+        }
+      }
+      if (matched == regions.size()) break;
+      if (sleepCnt < 300) {
         Thread.sleep(100);
         ++sleepCnt;
+        continue;
       }
-      NavigableMap<HRegionInfo, ServerName> actualLocs = hbaseTable.getRegionLocations();
-      Preconditions.checkArgument(expectedLocs.equals(actualLocs));
-
-      // Log the actual region location map
-      for (Map.Entry<HRegionInfo, ServerName> entry: actualLocs.entrySet()) {
-        LOG.info(printKey(entry.getKey().getStartKey()) + " -> " +
-            entry.getValue().getHostAndPort());
-      }
-
-      // Force a major compaction such that the HBase table is backed by deterministic
-      // physical artifacts (files, WAL, etc.). Our #rows estimate relies on the sizes of
-      // these physical artifacts.
-      LOG.info("Major compacting HBase table: " + tableName);
-      hbaseAdmin.majorCompact(tableName);
-    } finally {
-      IOUtils.closeQuietly(hbaseTable);
+      throw new IllegalStateException(
+          String.format("Failed to assign regions to servers after 30 seconds."));
     }
+
+    // Force a major compaction such that the HBase table is backed by deterministic
+    // physical artifacts (files, WAL, etc.). Our #rows estimate relies on the sizes of
+    // these physical artifacts.
+    LOG.info("Major compacting HBase table: " + tableName);
+    admin.majorCompact(table);
   }
 
   /**
@@ -188,16 +204,16 @@ class HBaseTestDataRegionAssigment {
     }
     return result.toString();
   }
-  
-  /** 
-   * The following static methods blockUntilRegionSplit, getRegionRow,
-   * blockUntilRegionIsOpened and blockUntilRegionIsInMeta are copied from 
+
+  /**
+   * The following static methods blockUntilRegionSplit, blockUntilRegionIsOpened
+   * and blockUntilRegionIsInMeta are copied from
    * org.apache.hadoop.hbase.regionserver.TestEndToEndSplitTransaction
    * to help block until a region split is completed.
-   * 
+   *
    * The original code was modified to return a true/false in case of success/failure.
    *
-   * Blocks until the region split is complete in META and region server opens the 
+   * Blocks until the region split is complete in META and region server opens the
    * daughters
    */
   private static boolean blockUntilRegionSplit(Configuration conf, long timeout,
@@ -205,18 +221,18 @@ class HBaseTestDataRegionAssigment {
       throws IOException, InterruptedException {
     long start = System.currentTimeMillis();
     HRegionInfo daughterA = null, daughterB = null;
-    HTable metaTable = new HTable(conf, TableName.META_TABLE_NAME);
-
-    try {
-      while (System.currentTimeMillis() - start < timeout) {
-        Result result = getRegionRow(metaTable, regionName);
+    try (Connection conn = ConnectionFactory.createConnection(conf);
+        Table metaTable = conn.getTable(TableName.META_TABLE_NAME)) {
+      Result result = null;
+      while ((System.currentTimeMillis() - start) < timeout) {
+        result = metaTable.get(new Get(regionName));
         if (result == null) {
           break;
         }
 
-        HRegionInfo region = HRegionInfo.getHRegionInfo(result);
+        HRegionInfo region = MetaTableAccessor.getHRegionInfo(result);
         if(region.isSplitParent()) {
-          PairOfSameType<HRegionInfo> pair = HRegionInfo.getDaughterRegions(result);
+          PairOfSameType<HRegionInfo> pair = MetaTableAccessor.getDaughterRegions(result);
           daughterA = pair.getFirst();
           daughterB = pair.getSecond();
           break;
@@ -228,10 +244,10 @@ class HBaseTestDataRegionAssigment {
       //if we are here, this means the region split is complete or timed out
       if (waitForDaughters) {
         long rem = timeout - (System.currentTimeMillis() - start);
-        blockUntilRegionIsInMeta(metaTable, rem, daughterA);
+        blockUntilRegionIsInMeta(conn, rem, daughterA);
 
         rem = timeout - (System.currentTimeMillis() - start);
-        blockUntilRegionIsInMeta(metaTable, rem, daughterB);
+        blockUntilRegionIsInMeta(conn, rem, daughterB);
 
         rem = timeout - (System.currentTimeMillis() - start);
         blockUntilRegionIsOpened(conf, rem, daughterA);
@@ -239,28 +255,17 @@ class HBaseTestDataRegionAssigment {
         rem = timeout - (System.currentTimeMillis() - start);
         blockUntilRegionIsOpened(conf, rem, daughterB);
       }
-    } finally {
-      IOUtils.closeQuietly(metaTable);
     }
     return true;
   }
 
-  private static Result getRegionRow(HTable metaTable, byte[] regionName)
-      throws IOException {
-    Get get = new Get(regionName);
-    return metaTable.get(get);
-  }
-
-  private static void blockUntilRegionIsInMeta(HTable metaTable, long timeout,
+  private static void blockUntilRegionIsInMeta(Connection conn, long timeout,
       HRegionInfo hri) throws IOException, InterruptedException {
     long start = System.currentTimeMillis();
     while (System.currentTimeMillis() - start < timeout) {
-      Result result = getRegionRow(metaTable, hri.getRegionName());
-      if (result != null) {
-        HRegionInfo info = HRegionInfo.getHRegionInfo(result);
-        if (info != null && !info.isOffline()) {
-          break;
-        }
+      HRegionLocation loc = MetaTableAccessor.getRegionLocation(conn, hri);
+      if (loc != null && !loc.getRegionInfo().isOffline()) {
+        break;
       }
       Threads.sleep(10);
     }
@@ -278,9 +283,8 @@ class HBaseTestDataRegionAssigment {
   private static void blockUntilRegionIsOpened(Configuration conf, long timeout,
       HRegionInfo hri) throws IOException, InterruptedException {
     long start = System.currentTimeMillis();
-    HTable table = new HTable(conf, hri.getTableName());
-
-    try {
+    try (Connection conn = ConnectionFactory.createConnection(conf);
+        Table table = conn.getTable(hri.getTable())) {
       byte [] row = hri.getStartKey();
       // Check for null/empty row. If we find one, use a key that is likely to
       // be in first region. If key '0' happens not to be in the given region
@@ -296,8 +300,6 @@ class HBaseTestDataRegionAssigment {
         }
         Threads.sleep(10);
       }
-    } finally {
-      IOUtils.closeQuietly(table);
     }
   }
 
