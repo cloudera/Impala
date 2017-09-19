@@ -812,6 +812,7 @@ public class CatalogOpExecutor {
       }
       PartitionStatsUtil.partStatsToParameters(partitionStats, partition);
       partition.putToParameters(StatsSetupConst.ROW_COUNT, String.valueOf(numRows));
+      // HMS requires this param for stats changes to take effect.
       partition.putToParameters(MetastoreShim.statsGeneratedViaStatsTaskParam());
       ++numTargetedPartitions;
       modifiedParts.add(partition);
@@ -830,6 +831,7 @@ public class CatalogOpExecutor {
     // Update the table's ROW_COUNT parameter.
     msTbl.putToParameters(StatsSetupConst.ROW_COUNT,
         String.valueOf(params.getTable_stats().num_rows));
+    // HMS requires this param for stats changes to take effect.
     Pair<String, String> statsTaskParam = MetastoreShim.statsGeneratedViaStatsTaskParam();
     msTbl.putToParameters(statsTaskParam.first, statsTaskParam.second);
     return numTargetedPartitions;
@@ -2787,7 +2789,8 @@ public class CatalogOpExecutor {
     }
   }
 
-  /** Applies an ALTER TABLE command to the metastore table.
+  /**
+   * Applies an ALTER TABLE command to the metastore table.
    * Note: The metastore interface is not very safe because it only accepts
    * an entire metastore.api.Table object rather than a delta of what to change. This
    * means an external modification to the table could be overwritten by an ALTER TABLE
@@ -2801,10 +2804,11 @@ public class CatalogOpExecutor {
     try (MetaStoreClient msClient = catalog_.getMetaStoreClient()) {
       lastDdlTime = calculateDdlTime(msTbl);
       msTbl.putToParameters("transient_lastDdlTime", Long.toString(lastDdlTime));
-      // TODO: Remove this workaround for HIVE-15653 to preserve table stats
-      // during table alterations.
-      msTbl.putToParameters(StatsSetupConst.STATS_GENERATED_VIA_STATS_TASK,
-          StatsSetupConst.TRUE);
+      // Avoid computing/setting stats on the HMS side because that may reset the
+      // 'numRows' table property (see HIVE-15653). The DO_NOT_UPDATE_STATS flag
+      // tells the HMS not to recompute/reset any statistics on its own. Any
+      // stats-related alterations passed in the RPC will still be applied.
+      msTbl.putToParameters(StatsSetupConst.DO_NOT_UPDATE_STATS, StatsSetupConst.TRUE);
       msClient.getHiveClient().alter_table(
           msTbl.getDbName(), msTbl.getTableName(), msTbl);
     } catch (TException e) {
