@@ -19,8 +19,9 @@ package org.apache.impala.util;
 
 import java.util.List;
 
-import org.apache.sentry.core.common.exception.SentryAlreadyExistsException;
-import org.apache.sentry.core.common.exception.SentryAccessDeniedException;
+import sentry.org.apache.sentry.core.common.exception.SentryUserException;
+import sentry.org.apache.sentry.core.common.exception.SentryAlreadyExistsException;
+import sentry.org.apache.sentry.core.common.exception.SentryAccessDeniedException;
 import org.apache.sentry.provider.db.service.thrift.SentryPolicyServiceClient;
 import org.apache.sentry.provider.db.service.thrift.TSentryGrantOption;
 import org.apache.sentry.provider.db.service.thrift.TSentryPrivilege;
@@ -39,7 +40,6 @@ import org.apache.impala.common.InternalException;
 import org.apache.impala.thrift.TPrivilege;
 import org.apache.impala.thrift.TPrivilegeLevel;
 import org.apache.impala.thrift.TPrivilegeScope;
-import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 
