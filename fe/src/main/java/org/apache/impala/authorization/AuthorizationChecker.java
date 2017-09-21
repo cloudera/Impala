@@ -26,9 +26,12 @@ import org.apache.impala.catalog.AuthorizationException;
 import org.apache.impala.catalog.AuthorizationPolicy;
 import org.apache.impala.common.InternalException;
 import org.apache.sentry.core.common.ActiveRoleSet;
+import org.apache.sentry.core.common.Model;
 import org.apache.sentry.core.common.Subject;
 import org.apache.sentry.core.model.db.DBModelAction;
 import org.apache.sentry.core.model.db.DBModelAuthorizable;
+import org.apache.sentry.core.model.db.HivePrivilegeModel;
+import org.apache.sentry.policy.common.PolicyEngine;
 import org.apache.sentry.policy.engine.common.CommonPolicyEngine;
 import org.apache.sentry.provider.cache.SimpleCacheProviderBackend;
 import org.apache.sentry.provider.common.ProviderBackend;
@@ -92,9 +95,23 @@ public class AuthorizationChecker {
       // Try to create an instance of the specified policy provider class.
       // Re-throw any exceptions that are encountered.
       String policyFile = config.getPolicyFile() == null ? "" : config.getPolicyFile();
-      return (ResourceAuthorizationProvider) ConstructorUtils.invokeConstructor(
+
+      // Check for correct Sentry ResourceAuthorizationProvider Constructor and call
+      if (ConstructorUtils.getAccessibleConstructor(
           Class.forName(config.getPolicyProviderClassName()),
-          new Object[] {policyFile, engine});
+          new Class[] {String.class, PolicyEngine.class}) != null) { // Sentry < 2.0 constructor
+        return (ResourceAuthorizationProvider) ConstructorUtils.invokeConstructor(
+            Class.forName(config.getPolicyProviderClassName()),
+            new Object[] {policyFile, engine});
+      } else if (ConstructorUtils.getAccessibleConstructor(
+          Class.forName(config.getPolicyProviderClassName()),
+              new Class[] {String.class, PolicyEngine.class, Model.class}) != null){ // Sentry 2.0+ constructor
+        return (ResourceAuthorizationProvider) ConstructorUtils.invokeConstructor(
+            Class.forName(config.getPolicyProviderClassName()),
+            new Object[] {policyFile, engine,  HivePrivilegeModel.getInstance()});
+      }
+      throw new IllegalStateException(String.format("Unable to find necessary Constructor for %s",
+          config.getPolicyProviderClassName()));
     } catch (Exception e) {
       // Re-throw as unchecked exception.
       throw new IllegalStateException(
