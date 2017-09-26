@@ -1935,6 +1935,9 @@ public class AnalyzeStmtsTest extends AnalyzerTest {
     AnalysisError("select functional.alltypes.*, max(string_col) from " +
         "functional.alltypes", "cannot combine '*' in select list with grouping or " +
         "aggregation");
+    AnalysisError("select * from functional.alltypes order by count(*)",
+        "select list expression not produced by aggregation output " +
+        "(missing from GROUP BY clause?): *");
 
     // only count() allows '*'
     AnalysisError("select avg(*) from functional.testtbl",
