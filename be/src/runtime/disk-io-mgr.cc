@@ -97,7 +97,7 @@ DEFINE_int32(max_free_io_buffers, 128,
 // uses about 6kB of memory. 20k file handles will thus reserve ~120MB of memory.
 // The actual amount of memory that is associated with a file handle can be larger
 // or smaller, depending on the replication factor for this file or the path name.
-DEFINE_uint64(max_cached_file_handles, 20000, "Maximum number of HDFS file handles "
+DEFINE_uint64(max_cached_file_handles, 0, "Maximum number of HDFS file handles "
     "that will be cached. Disabled if set to 0.");
 
 // The unused file handle timeout specifies how long a file handle will remain in the
@@ -109,7 +109,7 @@ DEFINE_uint64(max_cached_file_handles, 20000, "Maximum number of HDFS file handl
 // from being freed. When the metadata sees that a file has been deleted, the file handle
 // will no longer be used by future queries. Aging out this file handle allows the
 // disk space to be freed in an appropriate period of time.
-DEFINE_uint64(unused_file_handle_timeout_sec, 21600, "Maximum time, in seconds, that an "
+DEFINE_uint64(unused_file_handle_timeout_sec, 270, "Maximum time, in seconds, that an "
     "unused HDFS file handle will remain in the file handle cache. Disabled if set "
     "to 0.");
 
