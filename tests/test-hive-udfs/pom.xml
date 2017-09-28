@@ -30,8 +30,8 @@ under the License.
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <hadoop.version>${env.IMPALA_HADOOP_VERSION}</hadoop.version>
-    <hive.version>${env.IMPALA_HIVE_VERSION}</hive.version>
+    <hadoop.version>${env.IMPALA_HADOOP_VERSION_BASE}-SNAPSHOT</hadoop.version>
+    <hive.version>${env.IMPALA_HIVE_VERSION_BASE}-SNAPSHOT</hive.version>
   </properties>
 
   <dependencies>
