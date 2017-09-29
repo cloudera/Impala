@@ -470,7 +470,7 @@ def eval_section(section_str):
   p = subprocess.Popen(['/bin/bash', '-c', cmd], stdout=subprocess.PIPE)
   stdout, stderr = p.communicate()
   if stderr: print stderr
-  assert p.returncode == 0
+  if p.returncode != 0: print 'command failed - %s' % cmd
   return stdout.strip()
 
 def generate_statements(output_name, test_vectors, sections,

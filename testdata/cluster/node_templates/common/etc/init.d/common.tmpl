@@ -19,13 +19,12 @@ NODE_DIR="${NODE_DIR}"
 PID_DIR="$NODE_DIR/var/run"
 LOG_DIR="$NODE_DIR/var/log"
 
+export HADOOP_PID_DIR=$NODE_DIR/var/run
 export HADOOP_CONF_DIR="$NODE_DIR/etc/hadoop/conf"
-export YARN_CONF_DIR="$HADOOP_CONF_DIR"
 
 # Mark each process so they can be killed if needed. This is a safety mechanism for
 # stopping the processes if the pid file has been removed for whatever reason.
 export HADOOP_OPTS+=" -D${KILL_CLUSTER_MARKER}"
-export YARN_OPTS+=" -D${KILL_CLUSTER_MARKER}"
 # This is for KMS.
 export CATALINA_OPTS+=" -D${KILL_CLUSTER_MARKER}"
 

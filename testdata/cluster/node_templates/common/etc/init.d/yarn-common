@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-export YARN_LOG_DIR="$LOG_DIR/hadoop-yarn"
-export YARN_ROOT_LOGGER="${YARN_ROOT_LOGGER:-DEBUG,RFA}"
+export HADOOP_LOG_DIR="$LOG_DIR/hadoop-yarn"
+export HADOOP_ROOT_LOGGER="${HADOOP_ROOT_LOGGER:-DEBUG,RFA}"
 
-export YARN_LOGFILE=$(basename $0).log
+export HADOOP_LOGFILE=$(basename $0).log

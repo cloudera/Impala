@@ -456,9 +456,16 @@ export HADOOP_LIB_DIR=${HADOOP_LIB_DIR_OVERRIDE:-"${HADOOP_HOME}/lib"}
 # Please note that the * is inside quotes, thus it won't get expanded by bash but
 # by java, see "Understanding class path wildcards" at http://goo.gl/f0cfft
 export HADOOP_CLASSPATH="${HADOOP_CLASSPATH-}:${HADOOP_HOME}/share/hadoop/tools/lib/*"
+
 # YARN is configured to use LZO so the LZO jar needs to be in the hadoop classpath.
 export LZO_JAR_PATH="$HADOOP_LZO/build/hadoop-lzo-0.4.15.jar"
 HADOOP_CLASSPATH+=":$LZO_JAR_PATH"
+
+# C6 Hadoop paths
+HADOOP_CLASSPATH+=":${HADOOP_HOME}/share/hadoop/common/*"
+HADOOP_CLASSPATH+=":${HADOOP_HOME}/share/hadoop/common/lib/*"
+HADOOP_CLASSPATH+=":${HADOOP_HOME}/share/hadoop/mapreduce/*"
+HADOOP_CLASSPATH+=":${HADOOP_HOME}/share/hadoop/tools/lib/*"
 
 export MINI_DFS_BASE_DATA_DIR="$IMPALA_HOME/cdh-${CDH_MAJOR_VERSION}-hdfs-data"
 export PATH="$HADOOP_HOME/bin:$PATH"
@@ -550,6 +557,8 @@ if [ $USE_SYSTEM_GCC -eq 0 ]; then
   IMPALA_TOOLCHAIN_GCC_LIB="${IMPALA_TOOLCHAIN}/gcc-${IMPALA_GCC_VERSION}/lib64"
   LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${IMPALA_TOOLCHAIN_GCC_LIB}"
 fi
+
+export LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu/:$LD_LIBRARY_PATH
 
 export LD_PRELOAD="${LD_PRELOAD-}:${LIB_JSIG}"
 

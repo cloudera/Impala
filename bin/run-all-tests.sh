@@ -21,7 +21,8 @@
 # test suites.
 
 # Exit on reference to uninitialized variables and non-zero exit codes
-set -euo pipefail
+# XXX Temporary override for C6 while debugging.
+set -uo pipefail
 trap 'echo Error in $0 at line $LINENO: $(cd "'$PWD'" && awk "NR == $LINENO" $0)' ERR
 
 . "$IMPALA_HOME/bin/set-pythonpath.sh"
