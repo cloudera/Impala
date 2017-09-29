@@ -306,8 +306,10 @@ public class AuthorizationPolicy implements PrivilegeCache {
   @Override
    public Set<String> listPrivileges(Set<String> groups, Set<String> users, ActiveRoleSet roleSet,
       Authorizable... authorizationhierarchy) {
-    // TODO Need to be implemented if impala needs this functionality
-    return Collections.emptySet();
+    /* User based roles and authorization hierarchy is not currently supported.
+      Fallback to listing privileges using groups. */
+    return listPrivileges(groups, roleSet);
+
   }
 
   /**
@@ -316,8 +318,9 @@ public class AuthorizationPolicy implements PrivilegeCache {
   @Override
   public Set<String> listPrivileges(Set<String> groups, Set<String> users,
       ActiveRoleSet roleSet) {
-   // TODO Need to be implemented if impala needs this functionality
-   return Collections.emptySet();
+    /* User based roles and authorization hierarchy is not currently supported.
+      Fallback to listing privileges using groups. */
+    return listPrivileges(groups, roleSet);
   }
 
   /**
