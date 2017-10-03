@@ -77,6 +77,8 @@ public class AuthorizationChecker {
       if (config.isFileBasedPolicy()) {
         providerBe = new SimpleFileProviderBackend(config.getSentryConfig().getConfig(),
             config.getPolicyFile());
+        ProviderBackendContext context = new ProviderBackendContext();
+        providerBe.initialize(context);
       } else {
         // Note: The second parameter to the ProviderBackend is a "resourceFile" path
         // which is not used by Impala. We cannot pass 'null' so instead pass an empty
