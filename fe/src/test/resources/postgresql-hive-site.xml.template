@@ -202,4 +202,11 @@
   <value>org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe</value>
   <description>The default SerDe hive will use for the rcfile format</description>
 </property>
+
+<property>
+  <!-- Impala overrides this because we overwrite metastore schema with every column update. N.B. that
+       allowing this requires the serde to be ColumnarSerDe. -->
+  <name>hive.metastore.disallow.incompatible.col.type.changes</name>
+  <value>false</value>
+</property>
 </configuration>
