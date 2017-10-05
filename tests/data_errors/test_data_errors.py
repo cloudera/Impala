@@ -71,7 +71,7 @@ class TestHdfsFileOpenFailErrors(ImpalaTestSuite):
 class TestHdfsUnknownErrors(ImpalaTestSuite):
   @pytest.mark.execute_serially
   def test_hdfs_safe_mode_error_255(self, unique_database):
-    pytest.xfail("IMPALA-6109: Putting HDFS name node into safe mode trips up HBase")
+    pytest.xfail("CDH-59916: CDH6.x returns Error(30): Read-only file system instead")
     create_stmt = "create table {0}.safe_mode_fail (x int)".format(unique_database)
     insert_stmt = "insert into {0}.safe_mode_fail values (1)".format(unique_database)
     self.execute_query_expect_success(self.client, create_stmt)
