@@ -244,7 +244,7 @@ public class AnalyzeDDLTest extends FrontendTestBase {
         "'hdfs://localhost:20500/test-warehouse/alltypes/year=2010/month=10'");
     AnalyzesOk("alter table functional.alltypes add " +
         "partition(year=2050, month=10) location " +
-        "'s3n://bucket/test-warehouse/alltypes/year=2010/month=10'");
+        "'s3a://bucket/test-warehouse/alltypes/year=2010/month=10'");
     AnalyzesOk("alter table functional.alltypes add " +
         "partition(year=2050, month=10) location " +
         "'file:///test-warehouse/alltypes/year=2010/month=10'");
@@ -626,7 +626,7 @@ public class AnalyzeDDLTest extends FrontendTestBase {
     AnalyzesOk("alter table functional.alltypes set location " +
         "'hdfs://localhost:20500/test-warehouse/a/b'");
     AnalyzesOk("alter table functional.alltypes set location " +
-        "'s3n://bucket/test-warehouse/a/b'");
+        "'s3a://bucket/test-warehouse/a/b'");
     AnalyzesOk("alter table functional.alltypes set location " +
         "'file:///test-warehouse/a/b'");
 
@@ -1360,7 +1360,7 @@ public class AnalyzeDDLTest extends FrontendTestBase {
         "CLASS 'com.bar.Foo' API_VERSION 'V1'");
     AnalyzesOk("CREATE DATA SOURCE foo LOCATION 'hdfs://localhost:20500/a/b/foo.jar' " +
         "CLASS 'com.bar.Foo' API_VERSION 'V1'");
-    AnalyzesOk("CREATE DATA SOURCE foo LOCATION 's3n://bucket/a/b/foo.jar' " +
+    AnalyzesOk("CREATE DATA SOURCE foo LOCATION 's3a://bucket/a/b/foo.jar' " +
         "CLASS 'com.bar.Foo' API_VERSION 'V1'");
 
     AnalysisError("CREATE DATA SOURCE foo LOCATION 'blah://localhost:20500/foo.jar' " +
@@ -1387,7 +1387,7 @@ public class AnalyzeDDLTest extends FrontendTestBase {
     AnalyzesOk("create database new_db location " +
         "'hdfs://localhost:50200/test-warehouse/new_db'");
     AnalyzesOk("create database new_db location " +
-        "'s3n://bucket/test-warehouse/new_db'");
+        "'s3a://bucket/test-warehouse/new_db'");
     // Invalid URI.
     AnalysisError("create database new_db location " +
         "'blah://bucket/test-warehouse/new_db'",
@@ -1642,7 +1642,7 @@ public class AnalyzeDDLTest extends FrontendTestBase {
     AnalyzesOk("create table tbl like functional.alltypes location " +
         "'file:/test-warehouse/new_table'");
     AnalyzesOk("create table tbl like functional.alltypes location " +
-        "'s3n://bucket/test-warehouse/new_table'");
+        "'s3a://bucket/test-warehouse/new_table'");
     // Invalid URI values.
     AnalysisError("create table tbl like functional.alltypes location " +
         "'foofs://test-warehouse/new_table'",
@@ -1864,7 +1864,7 @@ public class AnalyzeDDLTest extends FrontendTestBase {
     AnalyzesOk("create table tbl (i int) location " +
         "'file:///test-warehouse/new_table'");
     AnalyzesOk("create table tbl (i int) location " +
-        "'s3n://bucket/test-warehouse/new_table'");
+        "'s3a://bucket/test-warehouse/new_table'");
     AnalyzesOk("ALTER TABLE functional_seq_snap.alltypes SET LOCATION " +
         "'file://test-warehouse/new_table'");
 
