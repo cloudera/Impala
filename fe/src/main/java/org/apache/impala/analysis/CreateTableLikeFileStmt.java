@@ -29,10 +29,10 @@ import com.google.common.collect.Maps;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsAction;
-import parquet.hadoop.ParquetFileReader;
-import parquet.hadoop.metadata.ParquetMetadata;
-import parquet.schema.OriginalType;
-import parquet.schema.PrimitiveType;
+import org.apache.parquet.hadoop.ParquetFileReader;
+import org.apache.parquet.hadoop.metadata.ParquetMetadata;
+import org.apache.parquet.schema.OriginalType;
+import org.apache.parquet.schema.PrimitiveType;
 
 import org.apache.impala.authorization.Privilege;
 import org.apache.impala.catalog.ArrayType;
@@ -71,7 +71,7 @@ public class CreateTableLikeFileStmt extends CreateTableStmt {
    * Throws Analysis exception for any failure, such as failing to read the file
    * or failing to parse the contents.
    */
-  private static parquet.schema.MessageType loadParquetSchema(Path pathToFile)
+  private static org.apache.parquet.schema.MessageType loadParquetSchema(Path pathToFile)
       throws AnalysisException {
     try {
       FileSystem fs = pathToFile.getFileSystem(FileSystemUtil.getConfiguration());
@@ -107,8 +107,8 @@ public class CreateTableLikeFileStmt extends CreateTableStmt {
    * Converts a "primitive" Parquet type to an Impala type.
    * A primitive type is a non-nested type with no annotations.
    */
-  private static Type convertPrimitiveParquetType(parquet.schema.Type parquetType)
-      throws AnalysisException {
+  private static Type convertPrimitiveParquetType(
+      org.apache.parquet.schema.Type parquetType) throws AnalysisException {
     Preconditions.checkState(parquetType.isPrimitive());
     PrimitiveType prim = parquetType.asPrimitiveType();
     switch (prim.getPrimitiveTypeName()) {
@@ -144,15 +144,15 @@ public class CreateTableLikeFileStmt extends CreateTableStmt {
    *   }
    * }
    */
-  private static MapType convertMap(parquet.schema.GroupType outerGroup)
+  private static MapType convertMap(org.apache.parquet.schema.GroupType outerGroup)
       throws AnalysisException {
     if (outerGroup.getFieldCount() != 1){
       throw new AnalysisException(String.format(ERROR_MSG, outerGroup.toString(),
           "MAP", "The logical MAP type must have exactly 1 inner field."));
     }
 
-    parquet.schema.Type innerField = outerGroup.getType(0);
-    if (!innerField.isRepetition(parquet.schema.Type.Repetition.REPEATED)){
+    org.apache.parquet.schema.Type innerField = outerGroup.getType(0);
+    if (!innerField.isRepetition(org.apache.parquet.schema.Type.Repetition.REPEATED)) {
       throw new AnalysisException(String.format(ERROR_MSG, outerGroup.toString(),
           "MAP", "The logical MAP type must have a repeated inner field."));
     }
@@ -161,7 +161,7 @@ public class CreateTableLikeFileStmt extends CreateTableStmt {
           "MAP", "The inner field of the logical MAP type must be a group."));
     }
 
-    parquet.schema.GroupType innerGroup = innerField.asGroupType();
+    org.apache.parquet.schema.GroupType innerGroup = innerField.asGroupType();
     // It does not matter whether innerGroup has an annotation or not (for example it may
     // be annotated with MAP_KEY_VALUE). We treat the case that innerGroup has an
     // annotation and the case the innerGroup does not have an annotation the same.
@@ -170,7 +170,7 @@ public class CreateTableLikeFileStmt extends CreateTableStmt {
           "MAP", "The inner field of the logical MAP type must have exactly 2 fields."));
     }
 
-    parquet.schema.Type key = innerGroup.getType(0);
+    org.apache.parquet.schema.Type key = innerGroup.getType(0);
     if (!key.getName().equals("key")) {
       throw new AnalysisException(String.format(ERROR_MSG, outerGroup.toString(),
           "MAP", "The name of the first field of the inner field of the logical MAP " +
@@ -180,7 +180,7 @@ public class CreateTableLikeFileStmt extends CreateTableStmt {
       throw new AnalysisException(String.format(ERROR_MSG, outerGroup.toString(),
           "MAP", "The key type of the logical MAP type must be primitive."));
     }
-    parquet.schema.Type value = innerGroup.getType(1);
+    org.apache.parquet.schema.Type value = innerGroup.getType(1);
     if (!value.getName().equals("value")) {
       throw new AnalysisException(String.format(ERROR_MSG, outerGroup.toString(),
           "MAP", "The name of the second field of the inner field of the logical MAP " +
@@ -193,10 +193,10 @@ public class CreateTableLikeFileStmt extends CreateTableStmt {
   /**
    * Converts a Parquet group type to an Impala struct Type.
    */
-  private static StructType convertStruct(parquet.schema.GroupType outerGroup)
+  private static StructType convertStruct(org.apache.parquet.schema.GroupType outerGroup)
       throws AnalysisException {
     ArrayList<StructField> structFields = new ArrayList<StructField>();
-    for (parquet.schema.Type field: outerGroup.getFields()) {
+    for (org.apache.parquet.schema.Type field: outerGroup.getFields()) {
       StructField f = new StructField(field.getName(), convertParquetType(field));
       structFields.add(f);
     }
@@ -216,15 +216,15 @@ public class CreateTableLikeFileStmt extends CreateTableStmt {
    *   }
    * }
    */
-  private static ArrayType convertArray(parquet.schema.GroupType outerGroup)
+  private static ArrayType convertArray(org.apache.parquet.schema.GroupType outerGroup)
       throws AnalysisException {
     if (outerGroup.getFieldCount() != 1) {
       throw new AnalysisException(String.format(ERROR_MSG, outerGroup.toString(),
           "LIST", "The logical LIST type must have exactly 1 inner field."));
     }
 
-    parquet.schema.Type innerField = outerGroup.getType(0);
-    if (!innerField.isRepetition(parquet.schema.Type.Repetition.REPEATED)) {
+    org.apache.parquet.schema.Type innerField = outerGroup.getType(0);
+    if (!innerField.isRepetition(org.apache.parquet.schema.Type.Repetition.REPEATED)) {
       throw new AnalysisException(String.format(ERROR_MSG, outerGroup.toString(),
           "LIST", "The inner field of the logical LIST type must be repeated."));
     }
@@ -237,7 +237,7 @@ public class CreateTableLikeFileStmt extends CreateTableStmt {
       return new ArrayType(convertParquetType(innerField));
     }
 
-    parquet.schema.GroupType innerGroup = innerField.asGroupType();
+    org.apache.parquet.schema.GroupType innerGroup = innerField.asGroupType();
     if (innerGroup.getFieldCount() != 1) {
       // From the Parquet Spec:
       // 2. If the repeated field is a group with multiple fields, then it's type is a
@@ -254,8 +254,8 @@ public class CreateTableLikeFileStmt extends CreateTableStmt {
    * stored as a "OriginalType". The Parquet documentation refers to these as logical
    * types, so we use that terminology here.
    */
-  private static Type convertLogicalParquetType(parquet.schema.Type parquetType)
-      throws AnalysisException {
+  private static Type convertLogicalParquetType(
+      org.apache.parquet.schema.Type parquetType) throws AnalysisException {
     OriginalType orig = parquetType.getOriginalType();
     if (orig == OriginalType.LIST) {
       return convertArray(parquetType.asGroupType());
@@ -295,7 +295,7 @@ public class CreateTableLikeFileStmt extends CreateTableStmt {
   /**
    * Converts a Parquet type into an Impala type.
    */
-  private static Type convertParquetType(parquet.schema.Type field)
+  private static Type convertParquetType(org.apache.parquet.schema.Type field)
       throws AnalysisException {
     Type type = null;
     // TODO for 2.3: If a field is not annotated with LIST, it can still be sometimes
@@ -325,11 +325,12 @@ public class CreateTableLikeFileStmt extends CreateTableStmt {
    */
   private static List<ColumnDef> extractParquetSchema(HdfsUri location)
       throws AnalysisException {
-    parquet.schema.MessageType parquetSchema = loadParquetSchema(location.getPath());
-    List<parquet.schema.Type> fields = parquetSchema.getFields();
+    org.apache.parquet.schema.MessageType parquetSchema = loadParquetSchema(
+        location.getPath());
+    List<org.apache.parquet.schema.Type> fields = parquetSchema.getFields();
     List<ColumnDef> schema = new ArrayList<ColumnDef>();
 
-    for (parquet.schema.Type field: fields) {
+    for (org.apache.parquet.schema.Type field: fields) {
       Type type = convertParquetType(field);
       Preconditions.checkNotNull(type);
       String colName = field.getName();
