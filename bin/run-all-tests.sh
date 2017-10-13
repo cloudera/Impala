@@ -30,7 +30,7 @@ trap 'echo Error in $0 at line $LINENO: $(cd "'$PWD'" && awk "NR == $LINENO" $0)
 # Allow picking up strategy from environment
 : ${EXPLORATION_STRATEGY:=core}
 : ${NUM_TEST_ITERATIONS:=1}
-: ${MAX_PYTEST_FAILURES:=10}
+: ${MAX_PYTEST_FAILURES:=100}
 KERB_ARGS=""
 
 . "${IMPALA_HOME}/bin/impala-config.sh" > /dev/null 2>&1
