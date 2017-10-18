@@ -19,18 +19,14 @@ package org.apache.impala.datagenerator;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.NavigableMap;
 
-import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.ClusterStatus;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
@@ -38,12 +34,14 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Get;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.util.PairOfSameType;
 import org.apache.hadoop.hbase.util.Threads;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -63,7 +61,6 @@ class HBaseTestDataRegionAssigment {
 
   private final static Logger LOG = LoggerFactory.getLogger(
       HBaseTestDataRegionAssigment.class);
-  private ClusterStatus clusterStatus = null;
   private final Configuration conf;
   private Connection connection = null;
   private final Admin admin;
@@ -81,7 +78,10 @@ class HBaseTestDataRegionAssigment {
     connection = ConnectionFactory.createConnection(conf);
     admin = connection.getAdmin();
     ClusterStatus clusterStatus = admin.getClusterStatus();
-    Collection<ServerName> regionServerNames = clusterStatus.getServers();
+    List<ServerName> regionServerNames =
+        new ArrayList<ServerName>(clusterStatus.getServers());
+    ServerName master = clusterStatus.getMaster();
+    regionServerNames.remove(master);
     sortedRS = new ArrayList<ServerName>(regionServerNames);
     Collections.sort(sortedRS);
   }
@@ -94,33 +94,42 @@ class HBaseTestDataRegionAssigment {
    * Split the table regions according to splitPoints and pair up adjacent regions to the
    * same server. Each region pair in ([unbound:1,1:3], [3:5,5:7], [7:9,9:unbound])
    * will be on the same server.
-   * The table must have data loaded and only a single region.
+   * The table must have data loaded.  We attempt to split even already partially split
+   * tables in order to facilitate recovery from partial transient failures.
    */
   public void performAssigment(String tableName) throws IOException,
     InterruptedException, TableNotFoundException {
-    HTableDescriptor[] desc = admin.listTables(tableName);
-    if (desc == null || desc.length == 0) {
+    TableName table = TableName.valueOf(tableName);
+    if (!admin.tableExists(table)) {
       throw new TableNotFoundException("Table " + tableName + " not found.");
     }
-    TableName table = TableName.valueOf(tableName);
-    if (admin.getTableRegions(table).size() == 1) {
+    if (admin.getRegions(table).size() <= splitPoints.length) {
       // Split into regions
       // The table has one region only to begin with. The logic of
       // blockUntilRegionSplit requires that the input regionName has performed a split.
       // If the table has already been split (i.e. regions count > 1), the same split
-      // call will be a no-op and this will cause blockUntilRegionSplit to break.
+      // call will be a no-op and this will cause blockUntilRegionSplit to break.  In
+      // that case, swallow the resulting exception. Other exceptions will be re-thrown.
       for (int i = 0; i < splitPoints.length; ++i) {
         admin.majorCompact(table);
-        List<HRegionInfo> regions = admin.getTableRegions(table);
-        HRegionInfo splitRegion = regions.get(regions.size() - 1);
+        List<RegionInfo> regions = admin.getRegions(table);
+        RegionInfo splitRegion = regions.get(regions.size() - 1);
         boolean done = false;
         int attempt = 0;
         for (; !done && attempt < MAX_SPLIT_ATTEMPTS; ++attempt) {
           // HBase seems to not always properly receive/process this split RPC,
           // so we need to retry the split/block several times.
-          admin.split(splitRegion.getTable(), Bytes.toBytes(splitPoints[i]));
-          done = blockUntilRegionSplit(conf, WAIT_FOR_SPLIT_TIMEOUT,
-              splitRegion.getRegionName(), true);
+          try {
+            admin.split(splitRegion.getTable(), Bytes.toBytes(splitPoints[i]));
+            done = blockUntilRegionSplit(conf, WAIT_FOR_SPLIT_TIMEOUT,
+               splitRegion.getRegionName(), true);
+          } catch (IOException ex) {
+            if (!ex.getMessage().equals(
+                "should not give a splitkey which equals to startkey!")) {
+              throw ex;
+            }
+            done = true;
+          }
         }
         if (!done) {
           throw new IllegalStateException(
@@ -134,22 +143,23 @@ class HBaseTestDataRegionAssigment {
     }
 
     // Sort the region by start key
-    List<HRegionInfo> regions = admin.getTableRegions(table);
+    List<RegionInfo> regions = admin.getRegions(table);
     Preconditions.checkArgument(regions.size() == splitPoints.length + 1);
-    Collections.sort(regions);
-
+    Collections.sort(regions, RegionInfo.COMPARATOR);
     // Pair up two adjacent regions to the same region server. That is,
     // region server 1 <- regions (unbound:1), (1:3)
     // region server 2 <- regions (3:5), (5:7)
     // region server 3 <- regions (7:9), (9:unbound)
-    NavigableMap<HRegionInfo, ServerName> expectedLocs = Maps.newTreeMap();
+    HashMap<String, ServerName> expectedLocs = Maps.newHashMap();
     for (int i = 0; i < regions.size(); ++i) {
-      HRegionInfo regionInfo = regions.get(i);
+      RegionInfo regionInfo = regions.get(i);
       int rsIdx = (i / 2) % sortedRS.size();
       ServerName regionServerName = sortedRS.get(rsIdx);
+      LOG.info("Moving " + regionInfo.getRegionNameAsString() +
+               " to " + regionServerName.getAddress());
       admin.move(regionInfo.getEncodedNameAsBytes(),
           regionServerName.getServerName().getBytes());
-      expectedLocs.put(regionInfo, regionServerName);
+      expectedLocs.put(regionInfo.getRegionNameAsString(), regionServerName);
     }
 
     // admin.move() is an asynchronous operation. Wait for the move to complete.
@@ -161,25 +171,26 @@ class HBaseTestDataRegionAssigment {
           MetaTableAccessor.getTableRegionsAndLocations(connection, table);
       Preconditions.checkState(pairs.size() == regions.size());
       for (Pair<HRegionInfo, ServerName> pair: pairs) {
-        HRegionInfo regionInfo = pair.getFirst();
+        RegionInfo regionInfo = pair.getFirst();
+        String regionName = regionInfo.getRegionNameAsString();
         ServerName serverName = pair.getSecond();
-        Preconditions.checkNotNull(expectedLocs.get(regionInfo));
-        LOG.error(printKey(regionInfo.getStartKey()) + " -> " +
-            serverName.getHostAndPort() + ", expecting " +
-            expectedLocs.get(regionInfo).getHostAndPort());
-        if (expectedLocs.get(regionInfo).equals(serverName)) {
+        Preconditions.checkNotNull(expectedLocs.get(regionName));
+        LOG.info(regionName + " " + printKey(regionInfo.getStartKey()) + " -> " +
+            serverName.getAddress().toString() + ", expecting " +
+            expectedLocs.get(regionName));
+        if (expectedLocs.get(regionName).equals(serverName)) {
            ++matched;
            continue;
         }
       }
       if (matched == regions.size()) break;
-      if (sleepCnt < 300) {
+      if (sleepCnt < 100) {
         Thread.sleep(100);
         ++sleepCnt;
         continue;
       }
       throw new IllegalStateException(
-          String.format("Failed to assign regions to servers after 30 seconds."));
+          String.format("Failed to assign regions to servers after 10 seconds."));
     }
 
     // Force a major compaction such that the HBase table is backed by deterministic
@@ -229,7 +240,6 @@ class HBaseTestDataRegionAssigment {
         if (result == null) {
           break;
         }
-
         HRegionInfo region = MetaTableAccessor.getHRegionInfo(result);
         if(region.isSplitParent()) {
           PairOfSameType<HRegionInfo> pair = MetaTableAccessor.getDaughterRegions(result);
