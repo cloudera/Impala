@@ -10,7 +10,7 @@
 
 SET BUFFER_POOL_LIMIT=40m;
 SET RUNTIME_FILTER_MODE=GLOBAL;
-SET RUNTIME_FILTER_WAIT_TIME_MS=30000;
+SET RUNTIME_FILTER_WAIT_TIME_MS=$RUNTIME_FILTER_WAIT_TIME_MS;
 SET RUNTIME_BLOOM_FILTER_SIZE=16M;
 select STRAIGHT_JOIN count(a.l_comment)
     from tpch_parquet.lineitem a join tpch_parquet.lineitem b
@@ -34,7 +34,7 @@ row_regex: .*1 of 1 Runtime Filter Published.*
 # subplan (on the LHS).
 ####################################################
 SET RUNTIME_FILTER_MODE=GLOBAL;
-SET RUNTIME_FILTER_WAIT_TIME_MS=30000;
+SET RUNTIME_FILTER_WAIT_TIME_MS=$RUNTIME_FILTER_WAIT_TIME_MS;
 select straight_join count(1)
     from alltypes a join complextypestbl b
         # b.id + 10 confuses planner, so it doesn't think it
@@ -64,7 +64,7 @@ row_regex: .*Rows rejected: 2.43K \(2432\).*
 # (when usually it would be selective).
 ####################################################
 SET RUNTIME_FILTER_MODE=GLOBAL;
-SET RUNTIME_FILTER_WAIT_TIME_MS=30000;
+SET RUNTIME_FILTER_WAIT_TIME_MS=$RUNTIME_FILTER_WAIT_TIME_MS;
 SET RUNTIME_FILTER_MIN_SIZE=128MB;
 SET RUNTIME_FILTER_MAX_SIZE=500MB;
 SET MEM_LIMIT=140MB;
@@ -79,7 +79,7 @@ row_regex: .*Files rejected: 0.*
 ---- QUERY
 # Confirm that with broadcast join, memory limit is not hit.
 SET RUNTIME_FILTER_MODE=GLOBAL;
-SET RUNTIME_FILTER_WAIT_TIME_MS=30000;
+SET RUNTIME_FILTER_WAIT_TIME_MS=$RUNTIME_FILTER_WAIT_TIME_MS;
 SET RUNTIME_FILTER_MIN_SIZE=128MB;
 SET RUNTIME_FILTER_MAX_SIZE=500MB;
 # Allocate enough memory for the join + filter + scan
