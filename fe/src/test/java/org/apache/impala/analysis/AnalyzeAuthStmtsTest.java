@@ -137,7 +137,7 @@ public class AnalyzeAuthStmtsTest extends AnalyzerTest {
       AnalyzesOk(String.format("%s ALL ON URI 'hdfs:////abc//123' %s myrole",
           formatArgs));
       AnalysisError(String.format("%s ALL ON URI 'xxxx:////abc//123' %s myrole",
-          formatArgs), "No FileSystem for scheme: xxxx");
+          formatArgs), "No FileSystem for scheme \"xxxx\"");
       AnalysisError(String.format("%s ALL ON DATABASE does_not_exist %s myrole",
           formatArgs), "Error setting privileges for database 'does_not_exist'. " +
           "Verify that the database exists and that you have permissions to issue " +

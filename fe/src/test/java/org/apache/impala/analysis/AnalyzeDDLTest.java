@@ -255,7 +255,7 @@ public class AnalyzeDDLTest extends FrontendTestBase {
     AnalysisError("alter table functional.alltypes add " +
         "partition(year=2050, month=10) location " +
         "'foofs://bar/test-warehouse/alltypes/year=2010/month=10'",
-        "No FileSystem for scheme: foofs");
+        "No FileSystem for scheme \"foofs\"");
     AnalysisError("alter table functional.alltypes add " +
         "partition(year=2050, month=10) location '  '",
         "URI path cannot be empty.");
@@ -294,7 +294,7 @@ public class AnalyzeDDLTest extends FrontendTestBase {
           " cached in 'testPool' with replication = 7" +
           " partition(year=2050, month=12) location" +
           " 'fil:///test-warehouse/alltypes/y2050m12' uncached",
-          "No FileSystem for scheme: fil");
+          "No FileSystem for scheme \"fil\"");
       // One of the partitions is cached in a non-existent pool.
       AnalysisError("alter table functional.alltypes add " + cl +
           " partition(year=2050, month=10) location" +
@@ -636,7 +636,7 @@ public class AnalyzeDDLTest extends FrontendTestBase {
     AnalysisError("alter table functional.alltypes set location 'test/warehouse'",
         "URI path must be absolute: test/warehouse");
     AnalysisError("alter table functional.alltypes set location 'blah:///warehouse/'",
-        "No FileSystem for scheme: blah");
+        "No FileSystem for scheme \"blah\"");
     AnalysisError("alter table functional.alltypes set location ''",
         "URI path cannot be empty.");
     AnalysisError("alter table functional.alltypes set location '      '",
@@ -898,7 +898,7 @@ public class AnalyzeDDLTest extends FrontendTestBase {
       AnalysisError(String.format("alter table functional.alltypes set %s " +
           "('avro.schema.url'='foo://bar/schema.avsc')", propertyType),
           "Failed to read Avro schema at: foo://bar/schema.avsc. " +
-          "No FileSystem for scheme: foo");
+          "No FileSystem for scheme \"foo\"");
 
       // Valid schema literal
       AnalyzesOk(String.format("alter table functional.alltypes set %s" +
@@ -1396,7 +1396,7 @@ public class AnalyzeDDLTest extends FrontendTestBase {
 
     AnalysisError("CREATE DATA SOURCE foo LOCATION 'blah://localhost:20500/foo.jar' " +
         "CLASS 'com.bar.Foo' API_VERSION 'V1'",
-        "No FileSystem for scheme: blah");
+        "No FileSystem for scheme \"blah\"");
     AnalysisError("CREATE DATA SOURCE " + DATA_SOURCE_NAME + " LOCATION '/foo.jar' " +
         "CLASS 'foo.Bar' API_VERSION 'V1'",
         "Data source already exists: " + DATA_SOURCE_NAME.toLowerCase());
@@ -1422,7 +1422,7 @@ public class AnalyzeDDLTest extends FrontendTestBase {
     // Invalid URI.
     AnalysisError("create database new_db location " +
         "'blah://bucket/test-warehouse/new_db'",
-        "No FileSystem for scheme: blah");
+        "No FileSystem for scheme \"blah\"");
   }
 
   @Test
@@ -1677,7 +1677,7 @@ public class AnalyzeDDLTest extends FrontendTestBase {
     // Invalid URI values.
     AnalysisError("create table tbl like functional.alltypes location " +
         "'foofs://test-warehouse/new_table'",
-        "No FileSystem for scheme: foofs");
+        "No FileSystem for scheme \"foofs\"");
     AnalysisError("create table functional.baz like functional.alltypes location '  '",
         "URI path cannot be empty.");
 
@@ -1902,12 +1902,12 @@ public class AnalyzeDDLTest extends FrontendTestBase {
     // Invalid URI values.
     AnalysisError("create table functional.foo (x int) location " +
         "'foofs://test-warehouse/new_table'",
-        "No FileSystem for scheme: foofs");
+        "No FileSystem for scheme \"foofs\"");
     AnalysisError("create table functional.foo (x int) location " +
         "'  '", "URI path cannot be empty.");
     AnalysisError("ALTER TABLE functional_seq_snap.alltypes SET LOCATION " +
         "'foofs://test-warehouse/new_table'",
-        "No FileSystem for scheme: foofs");
+        "No FileSystem for scheme \"foofs\"");
     AnalysisError("ALTER TABLE functional_seq_snap.alltypes SET LOCATION " +
         "'  '", "URI path cannot be empty.");
 
@@ -2573,7 +2573,7 @@ public class AnalyzeDDLTest extends FrontendTestBase {
     AnalysisError("create table foo_avro (i int) stored as avro tblproperties " +
         "('avro.schema.url'='foo://bar/schema.avsc')",
         "Failed to read Avro schema at: foo://bar/schema.avsc. " +
-        "No FileSystem for scheme: foo");
+        "No FileSystem for scheme \"foo\"");
 
     // Decimal parsing
     AnalyzesOk("create table foo_avro (i int) stored as avro tblproperties " +
@@ -2877,10 +2877,10 @@ public class AnalyzeDDLTest extends FrontendTestBase {
         "URI path must be absolute: bad-location");
     AnalysisError("create function foo() RETURNS int LOCATION " +
         "'blah://localhost:50200/bad-location' SYMBOL='c'",
-        "No FileSystem for scheme: blah");
+        "No FileSystem for scheme \"blah\"");
     AnalysisError("create function foo LOCATION " +
         "'blah://localhost:50200/bad-location' SYMBOL='c'",
-        "No FileSystem for scheme: blah");
+        "No FileSystem for scheme \"blah\"");
     AnalysisError("create function foo() RETURNS int LOCATION " +
         "'file:///foo.jar' SYMBOL='c'",
         "Could not load binary: file:///foo.jar");
