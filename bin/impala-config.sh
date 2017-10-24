@@ -500,9 +500,9 @@ export PATH="$HBASE_HOME/bin:$PATH"
 # Add the jars so hive can create hbase tables.
 export AUX_CLASSPATH="$AUX_CLASSPATH:$HBASE_HOME/lib/hbase-common-${IMPALA_HBASE_VERSION}.jar"
 export AUX_CLASSPATH="$AUX_CLASSPATH:$HBASE_HOME/lib/hbase-client-${IMPALA_HBASE_VERSION}.jar"
-export AUX_CLASSPATH="$AUX_CLASSPATH:$HBASE_HOME/lib/hbase-server-${IMPALA_HBASE_VERSION}.jar"
 export AUX_CLASSPATH="$AUX_CLASSPATH:$HBASE_HOME/lib/hbase-protocol-${IMPALA_HBASE_VERSION}.jar"
 export AUX_CLASSPATH="$AUX_CLASSPATH:$HBASE_HOME/lib/hbase-hadoop-compat-${IMPALA_HBASE_VERSION}.jar"
+# IMPALA-6111 removed hbase-server.jar for HBase 2.0 compatibility
 
 export HBASE_CONF_DIR="$HIVE_CONF_DIR"
 

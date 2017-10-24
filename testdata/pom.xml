@@ -64,12 +64,6 @@ under the License.
 
     <dependency>
       <groupId>org.apache.hbase</groupId>
-      <artifactId>hbase-server</artifactId>
-      <version>${hbase.version}</version>
-    </dependency>
-
-    <dependency>
-      <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-common</artifactId>
       <version>${hbase.version}</version>
     </dependency>
@@ -147,6 +141,14 @@ under the License.
 
   <repositories>
     <repository>
+      <id>cauldron.gbn.repo</id>
+      <url>http://cloudera-build-us-west-1.vpc.cloudera.com/s3/build/${env.CDH_GBN}/cdh6/6.x/maven-repository/</url>
+      <name>Cauldron Build GBN Repository</name>
+      <snapshots>
+        <enabled>true</enabled>
+      </snapshots>
+    </repository>
+    <repository>
       <id>cdh.rcs.releases.repo</id>
       <url>https://repository.cloudera.com/content/groups/cdh-releases-rcs</url>
       <name>CDH Releases Repository</name>
@@ -187,6 +189,14 @@ under the License.
       <name>Cloudera Third Party Repository</name>
       <snapshots>
         <enabled>false</enabled>
+      </snapshots>
+    </pluginRepository>
+    <pluginRepository>
+      <id>cauldron.gbn.repo</id>
+      <url>http://cloudera-build-us-west-1.vpc.cloudera.com/s3/build/${env.CDH_GBN}/cdh6/6.x/maven-repository/</url>
+      <name>Cauldron Build GBN Repository</name>
+      <snapshots>
+        <enabled>true</enabled>
       </snapshots>
     </pluginRepository>
     <pluginRepository>
