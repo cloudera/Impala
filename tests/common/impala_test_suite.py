@@ -98,8 +98,12 @@ HDFS_CONF = HdfsConfig(pytest.config.option.minicluster_xml_conf)
 TARGET_FILESYSTEM = os.getenv("TARGET_FILESYSTEM") or "hdfs"
 IMPALA_HOME = os.getenv("IMPALA_HOME")
 # Match any SET statement. Assume that query options' names
-# only contain alphabets and underscores.
-SET_PATTERN = re.compile(r'\s*set\s*([a-zA-Z_]+)=*', re.I)
+# only contain alphabets, underscores and digits after position 1.
+# The statement may include SQL line comments starting with --, which we need to
+# strip out. The test file parser already strips out comments starting with #.
+COMMENT_LINES_REGEX = r'(?:\s*--.*\n)*'
+SET_PATTERN = re.compile(
+    COMMENT_LINES_REGEX + r'\s*set\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*=*', re.I)
 
 # Base class for Impala tests. All impala test cases should inherit from this class
 class ImpalaTestSuite(BaseTestSuite):
