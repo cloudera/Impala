@@ -28,10 +28,7 @@
 # For more information look at testdata/bin/load-test-warehouse-snapshot.sh and
 # bin/load-data.py
 
-# C6 Hack to keep data load going even after intermittent failures.  We are
-# omitting -e for now because TCP-DS and functional query occasionally fail
-# with HDFS errors.
-set -uo pipefail
+set -euo pipefail
 trap 'echo Error in $0 at line $LINENO: $(cd "'$PWD'" && awk "NR == $LINENO" $0)' ERR
 
 . ${IMPALA_HOME}/bin/impala-config.sh > /dev/null 2>&1

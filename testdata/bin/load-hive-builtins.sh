@@ -17,8 +17,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Be lenient in case .jar paths move between releases
-set -uo pipefail
+set -euo pipefail
 trap 'echo Error in $0 at line $LINENO: $(cd "'$PWD'" && awk "NR == $LINENO" $0)' ERR
 
 . ${IMPALA_HOME}/bin/impala-config.sh > /dev/null 2>&1
