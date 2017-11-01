@@ -59,8 +59,9 @@ class TestPartitioning(ImpalaTestSuite):
 
     self.execute_query("create table %s (i int) partitioned by (b boolean)" % full_name)
 
-    # Insert some data using Hive. Due to HIVE-6590, Hive may create multiple
-    # partitions, mapping to the same boolean literal value.
+    # Insert some data using Hive. Due to HIVE-6590, Hive could create multiple
+    # partitions, mapping to the same boolean literal value.  The Hive issue has
+    # now been resolved, so this is a positive rather than a negative test.
     # For example, Hive may create partitions: /b=FALSE and /b=false, etc
     self.run_stmt_in_hive("INSERT INTO TABLE %s PARTITION(b=false) SELECT 1 from "\
         "functional.alltypes limit 1" % full_name)
@@ -75,16 +76,16 @@ class TestPartitioning(ImpalaTestSuite):
     # List the partitions. Show table stats returns 1 row for each partition + 1 summary
     # row
     result = self.execute_query("show table stats %s" % full_name)
-    assert len(result.data) == 3 + 1
+    assert len(result.data) == 2 + 1
 
-    # Verify Impala properly merges the results of the bad Hive metadata.
+    # Verify Impala properly merges the results of the Hive metadata.
     assert '13' == self.execute_scalar("select sum(i) from %s" % full_name);
     assert '10' == self.execute_scalar("select sum(i) from %s where b=true" % full_name)
     assert '3' == self.execute_scalar("select sum(i) from %s where b=false" % full_name)
 
     # INSERT into a boolean column is disabled in Impala due to this Hive bug.
     try:
-      self.execute_query("insert into %s partition(bool_col=true) select 1" % full_name)
+      self.execute_query("insert into %s partition(b=true) select 1" % full_name)
     except ImpalaBeeswaxException, e:
       assert 'AnalysisException: INSERT into table with BOOLEAN partition column (%s) '\
           'is not supported: %s' % ('b', full_name) in str(e)
