@@ -135,7 +135,12 @@ public class NumericLiteral extends LiteralExpr {
   @Override
   public boolean equals(Object obj) {
     if (!super.equals(obj)) return false;
-    return ((NumericLiteral) obj).value_.equals(value_);
+
+    NumericLiteral tmp = (NumericLiteral) obj;
+    if (!tmp.value_.equals(value_)) return false;
+    // Analyzed Numeric literals of different types are distinct.
+    if ((isAnalyzed() && tmp.isAnalyzed()) && (!getType().equals(tmp.getType()))) return false;
+    return true;
   }
 
   @Override
