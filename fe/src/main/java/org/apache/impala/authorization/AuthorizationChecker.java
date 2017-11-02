@@ -17,6 +17,7 @@
 
 package org.apache.impala.authorization;
 
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
@@ -28,6 +29,7 @@ import org.apache.impala.common.InternalException;
 import org.apache.sentry.core.common.ActiveRoleSet;
 import org.apache.sentry.core.common.Model;
 import org.apache.sentry.core.common.Subject;
+import org.apache.sentry.core.common.exception.SentryGroupNotFoundException;
 import org.apache.sentry.core.model.db.DBModelAction;
 import org.apache.sentry.core.model.db.DBModelAuthorizable;
 import org.apache.sentry.core.model.db.HivePrivilegeModel;
@@ -132,7 +134,13 @@ public class AuthorizationChecker {
    * local group mappings.
    */
   public Set<String> getUserGroups(User user) throws InternalException {
-    return provider_.getGroupMapping().getGroups(user.getShortName());
+    try {
+      return provider_.getGroupMapping().getGroups(user.getShortName());
+    } catch (SentryGroupNotFoundException e) {
+      // Sentry now throws exceptions when user does not exist; swallow the
+      // exception and just return an empty set for this case.
+      return Collections.emptySet();
+    }
   }
 
   /**
