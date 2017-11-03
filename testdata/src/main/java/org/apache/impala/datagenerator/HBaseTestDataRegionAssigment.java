@@ -25,7 +25,6 @@ import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.ClusterStatus;
-import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.ServerName;
@@ -167,10 +166,10 @@ class HBaseTestDataRegionAssigment {
     int sleepCnt = 0;
     while (true) {
       int matched = 0;
-      List<Pair<HRegionInfo, ServerName>> pairs =
+      List<Pair<RegionInfo, ServerName>> pairs =
           MetaTableAccessor.getTableRegionsAndLocations(connection, table);
       Preconditions.checkState(pairs.size() == regions.size());
-      for (Pair<HRegionInfo, ServerName> pair: pairs) {
+      for (Pair<RegionInfo, ServerName> pair: pairs) {
         RegionInfo regionInfo = pair.getFirst();
         String regionName = regionInfo.getRegionNameAsString();
         ServerName serverName = pair.getSecond();
@@ -231,7 +230,7 @@ class HBaseTestDataRegionAssigment {
       final byte[] regionName, boolean waitForDaughters)
       throws IOException, InterruptedException {
     long start = System.currentTimeMillis();
-    HRegionInfo daughterA = null, daughterB = null;
+    RegionInfo daughterA = null, daughterB = null;
     try (Connection conn = ConnectionFactory.createConnection(conf);
         Table metaTable = conn.getTable(TableName.META_TABLE_NAME)) {
       Result result = null;
@@ -240,9 +239,9 @@ class HBaseTestDataRegionAssigment {
         if (result == null) {
           break;
         }
-        HRegionInfo region = MetaTableAccessor.getHRegionInfo(result);
-        if(region.isSplitParent()) {
-          PairOfSameType<HRegionInfo> pair = MetaTableAccessor.getDaughterRegions(result);
+        RegionInfo region = MetaTableAccessor.getRegionInfo(result);
+        if (region.isSplitParent()) {
+          PairOfSameType<RegionInfo> pair = MetaTableAccessor.getDaughterRegions(result);
           daughterA = pair.getFirst();
           daughterB = pair.getSecond();
           break;
@@ -270,11 +269,11 @@ class HBaseTestDataRegionAssigment {
   }
 
   private static void blockUntilRegionIsInMeta(Connection conn, long timeout,
-      HRegionInfo hri) throws IOException, InterruptedException {
+      RegionInfo hri) throws IOException, InterruptedException {
     long start = System.currentTimeMillis();
     while (System.currentTimeMillis() - start < timeout) {
       HRegionLocation loc = MetaTableAccessor.getRegionLocation(conn, hri);
-      if (loc != null && !loc.getRegionInfo().isOffline()) {
+      if (loc != null && !loc.getRegion().isOffline()) {
         break;
       }
       Threads.sleep(10);
@@ -291,7 +290,7 @@ class HBaseTestDataRegionAssigment {
   * because it is an exclusive upper bound.
   */
   private static void blockUntilRegionIsOpened(Configuration conf, long timeout,
-      HRegionInfo hri) throws IOException, InterruptedException {
+      RegionInfo hri) throws IOException, InterruptedException {
     long start = System.currentTimeMillis();
     try (Connection conn = ConnectionFactory.createConnection(conf);
         Table table = conn.getTable(hri.getTable())) {
