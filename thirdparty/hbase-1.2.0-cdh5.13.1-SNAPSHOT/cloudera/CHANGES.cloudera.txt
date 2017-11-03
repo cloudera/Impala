@@ -1,3 +1,113 @@
+commit 3ed958bee3a6ab20a0f8361b9b95dade6828bae5
+Author: Peter Somogyi <psomogyi@cloudera.com>
+Date:   Mon Oct 2 14:57:05 2017 -0700
+
+    HBASE-18924 Backport HBASE-18568 (Correct metric of numRegions) to branch-1.2 and branch-1.3
+    
+    Signed-off-by: Mike Drob <mdrob@apache.org>
+    
+    (cherry picked from commit 2f0101df25b5096757aeb8e768d110fa9b8b686f)
+    
+    Change-Id: I998e8548b5c084a3b5e5097843fed188707e0fc2
+    Author: Peter Somogyi
+    Reason: Bug
+    Ref: CDH-59920
+
+commit 28dd4775ac99196960c202aae003878f939bfcbb
+Author: Huaxiang Sun <hsun@cloudera.com>
+Date:   Mon Sep 18 15:49:29 2017 -0700
+
+    HBASE-18577 test well-formed-ness of our client jars (addendem -- fix version)
+    
+    Author: Sean Busbey
+    Reason: Improvement
+    Ref: CDH-58625
+    
+    Change-Id: I72d4eb389ed9094c21201f5a61187c8fbf1baf53
+
+commit 79d8b6a5b8af1e2f761285ca5bb6e2b5e450a96c
+Author: Cesar Delgado <cdelgado@apple.com>
+Date:   Wed Aug 23 15:37:30 2017 -0700
+
+    HBASE-18675 Making {max,min}SessionTimeout configurable for MiniZooKeeperCluster
+    
+    Author: Cesar Delgado
+    Reason: Improvement
+    Ref: CDH-58823
+    
+    Change-Id: Iec60737d096727f03054e215f2fa6a0a85fab290
+    Signed-off-by: tedyu <yuzhihong@gmail.com>
+    Signed-off-by: Sean Busbey <busbey@apache.org>
+
+commit a83515653cc15bc14a6e19b8dabc79c472eca753
+Author: Sean Busbey <busbey@apache.org>
+Date:   Thu Aug 10 16:16:20 2017 -0500
+
+    HBASE-18577 test well-formed-ness of our client jars.
+    
+    Author: Sean Busbey
+    Reason: Improvement
+    Ref: CDH-58625
+    
+    * adds an IT that checks the contents of jars
+    * excludes our server side web apps and related deps (jaxb, jersey, jetty) from shaded jars
+    * excludes proto source files from shaded jars
+    * relocates codahale metrics, commons-crypto, and curator
+    * finishes relocating jets3t
+    * updates maven dependency plugin
+    * updates maven enforcer plugin
+    * CDH specific, keep jetty-util transitive from hbase-client that we don't use to keep compatibility of earlier CDH5,
+      exclude it from hbase-shaded-client.
+    
+    Change-Id: I644ba5a4a6e1a75f7956472b2d9624b3eab663a4
+    Signed-off-by: Michael Stack <stack@apache.org>
+
+commit 0ad6bcef43381039396b73fc377e2c8be905b7e3
+Author: Ashish Singhi <ashishsinghi@apache.org>
+Date:   Fri Jun 16 10:43:56 2017 +0530
+
+    HBASE-18212 reduce log level for unbuffer warning.
+    
+    In Standalone mode with local filesystem HBase logs Warning message:Failed to invoke 'unbuffer' method in class org.apache.hadoop.fs.FSDataInputStream
+    
+    Signed-off-by: Umesh Agashe <uagashe@cloudera.com>
+    Signed-off-by: Sean Busbey <busbey@apache.org>
+    
+    Change-Id: I22d5889fc9f169a8a5f9e9f7dc3d91b115f9d9a4
+    Author: Ashish Singhi
+    Reason: Improvement
+    Ref: CDH-59007
+    (cherry picked from commit ca56ca9175e48b313a59f40caca07847f1547c87)
+
+commit 6098360851a40bc64ca3e71e3bef65029528a961
+Author: Peter Somogyi <psomogyi@cloudera.com>
+Date:   Wed Sep 6 19:21:55 2017 +0200
+
+    JENKINS-1063 Increase resources for HBase unit tests
+    
+    The tests occasionally timed out or failed do to overloading.
+    Reducing surefire secondPartForkCount to 1.
+    
+    Change-Id: Ibb394e37264aaecb1d9ef50fceff050d78c785b9
+
+commit b0c772af385fc80bff0e8493e0580de4043835c7
+Author: Peter Somogyi <psomogyi@cloudera.com>
+Date:   Tue Aug 29 17:36:32 2017 +0200
+
+    HBASE-18665 ReversedScannerCallable invokes getRegionLocations incorrectly
+    
+    The way how ReversedScannerCallable#prepare called getRegionLocations was faulty.
+    Calling prepare with force reload used cache and vica versa.
+    
+    Signed-off-by: tedyu <yuzhihong@gmail.com>
+    
+    (cherry picked from commit 29ac8106988e06ca6cd620e8f4e60e5eb7498149)
+    
+    Change-Id: I7f828775f35b1c198f1e63877e9949ac1b02a5ee
+    Author: Peter Somogyi
+    Reason: Bug
+    Ref: CDH-58749
+
 commit 83b1dc6f0e7bfee8ee9f2462dacb841021a4c519
 Author: Jenkins <dev-kitchen@cloudera.com>
 Date:   Thu Aug 24 05:11:04 2017 -0700

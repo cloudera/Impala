@@ -39,6 +39,7 @@ import org.apache.hadoop.hive.metastore.api.TxnOpenException;
 import org.apache.hadoop.hive.metastore.partition.spec.PartitionSpecProxy;
 import org.apache.thrift.TException;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
@@ -1167,6 +1168,25 @@ public interface IMetaStoreClient {
    * @throws TException
    */
   void cancelDelegationToken(String tokenStrForm) throws MetaException, TException;
+
+  String getTokenStrForm() throws IOException;
+
+  boolean addToken(String tokenIdentifier, String delegationToken) throws TException;
+
+  boolean removeToken(String tokenIdentifier) throws TException;
+
+  String getToken(String tokenIdentifier) throws TException;
+
+  List<String> getAllTokenIdentifiers() throws TException;
+
+  int addMasterKey(String key) throws MetaException, TException;
+
+  void updateMasterKey(Integer seqNo, String key)
+      throws NoSuchObjectException, MetaException, TException;
+
+  boolean removeMasterKey(Integer keySeq) throws TException;
+
+  String[] getMasterKeys() throws TException;
 
   void createFunction(Function func)
       throws InvalidObjectException, MetaException, TException;

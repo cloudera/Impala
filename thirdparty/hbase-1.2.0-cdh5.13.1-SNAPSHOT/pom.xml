@@ -490,6 +490,11 @@
       <plugins>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-dependency-plugin</artifactId>
+          <version>${maven.dependency.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
            <artifactId>maven-javadoc-plugin</artifactId>
            <version>${javadoc.version}</version>
         </plugin>
@@ -855,6 +860,11 @@
             <configLocation>hbase/checkstyle.xml</configLocation>
             <suppressionsLocation>hbase/checkstyle-suppressions.xml</suppressionsLocation>
           </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-enforcer-plugin</artifactId>
+          <version>${maven.enforcer.version}</version>
         </plugin>
       </plugins>
     </pluginManagement>
@@ -1349,6 +1359,9 @@
     <findbugs-annotations>1.3.9-1</findbugs-annotations>
     <javadoc.version>2.10.3</javadoc.version>
     <asciidoctor.plugin.version>1.5.2.1</asciidoctor.plugin.version>
+    <maven.dependency.version>3.0.1</maven.dependency.version>
+    <!-- Keep 1.4 version becasue of HBASE-17351 -->
+    <maven.enforcer.version>1.4</maven.enforcer.version>
     <!-- General Packaging -->
     <package.prefix>/usr</package.prefix>
     <package.conf.dir>/etc/hbase</package.conf.dir>
@@ -1366,6 +1379,7 @@
     <annotations.test.jar>hbase-annotations-${project.version}-tests.jar</annotations.test.jar>
     <rsgroup.test.jar>hbase-rsgroup-${project.version}-tests.jar</rsgroup.test.jar>
     <surefire.version>2.19.1</surefire.version>
+    <shell-executable>bash</shell-executable>
     <surefire.provider>surefire-junit47</surefire.provider>
     <!-- default: run small & medium, medium with 2 threads -->
     <surefire.skipFirstPart>false</surefire.skipFirstPart>
@@ -1397,6 +1411,7 @@
     <!-- Surefire argLine defaults to Linux, cygwin argLine is used in the os.windows profile -->
     <argLine>${hbase-surefire.argLine}</argLine>
     <jacoco.version>0.7.5.201505241946</jacoco.version>
+    <!-- Keep 1.0-beta-3 version as previous CDH5 -->
     <extra.enforcer.version>1.0-beta-3</extra.enforcer.version>
     <!-- Location of test resources -->
     <test.build.classes>${project.build.directory}/test-classes</test.build.classes>
@@ -2762,7 +2777,9 @@
       </activation>
       <properties>
         <surefire.firstPartForkCount>1</surefire.firstPartForkCount>
-        <surefire.secondPartForkCount>5</surefire.secondPartForkCount>
+        <!-- CDH specific change: For unit testing we use machines with 4 cores only,
+             so reducing the number of forks. -->
+        <surefire.secondPartForkCount>1</surefire.secondPartForkCount>
         <surefire.skipFirstPart>false</surefire.skipFirstPart>
         <surefire.skipSecondPart>false</surefire.skipSecondPart>
         <surefire.firstPartGroups>org.apache.hadoop.hbase.testclassification.SmallTests</surefire.firstPartGroups>

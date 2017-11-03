@@ -228,7 +228,15 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
             throw new IllegalArgumentException("URI: " + s
                 + " does not have a scheme");
           }
-          metastoreUris[i++] = tmpUri;
+          metastoreUris[i++] = new URI(
+              tmpUri.getScheme(),
+              tmpUri.getUserInfo(),
+              ShimLoader.getHadoopThriftAuthBridge().getCanonicalHostName(tmpUri.getHost()),
+              tmpUri.getPort(),
+              tmpUri.getPath(),
+              tmpUri.getQuery(),
+              tmpUri.getFragment()
+          );
 
         }
       } catch (IllegalArgumentException e) {
@@ -1916,6 +1924,48 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
           "called only in thrift (non local) mode");
     }
     client.cancel_delegation_token(tokenStrForm);
+  }
+
+  @Override
+  public boolean addToken(String tokenIdentifier, String delegationToken) throws TException {
+     return client.add_token(tokenIdentifier, delegationToken);
+  }
+
+  @Override
+  public boolean removeToken(String tokenIdentifier) throws TException {
+    return client.remove_token(tokenIdentifier);
+  }
+
+  @Override
+  public String getToken(String tokenIdentifier) throws TException {
+    return client.get_token(tokenIdentifier);
+  }
+
+  @Override
+  public List<String> getAllTokenIdentifiers() throws TException {
+    return client.get_all_token_identifiers();
+  }
+
+  @Override
+  public int addMasterKey(String key) throws MetaException, TException {
+    return client.add_master_key(key);
+  }
+
+  @Override
+  public void updateMasterKey(Integer seqNo, String key)
+      throws NoSuchObjectException, MetaException, TException {
+    client.update_master_key(seqNo, key);
+  }
+
+  @Override
+  public boolean removeMasterKey(Integer keySeq) throws TException {
+    return client.remove_master_key(keySeq);
+  }
+
+  @Override
+  public String[] getMasterKeys() throws TException {
+    List<String> keyList = client.get_master_keys();
+    return keyList.toArray(new String[keyList.size()]);
   }
 
   @Override
