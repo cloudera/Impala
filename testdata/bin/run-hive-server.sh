@@ -62,9 +62,23 @@ done
 # Kill for a clean start.
 ${CLUSTER_BIN}/kill-hive-server.sh &> /dev/null
 
+# To configure Hive logging, there's a hive-log4j2.properties[.template]
+# file in fe/src/test/resources. To get it into the classpath earlier
+# than the hive-log4j2.properties file included in some Hive jars,
+# we must set HIVE_CONF_DIR. Because of https://issues.apache.org/jira/browse/HADOOP-15019,
+# when HIVE_CONF_DIR happens to equal HADOOP_CONF_DIR, it gets de-duped out of its
+# pole position in the CLASSPATH variable, so we add an extra "./" into the path
+# to avoid that.
+#
+# To debug log4j2 loading issues, add to HADOOP_CLIENT_OPTS:
+#   -Dorg.apache.logging.log4j.simplelog.StatusLogger.level=TRACE
+#
+# We use a unique -Dhive.log.file to distinguish the HiveMetaStore and HiveServer2 logs.
+export HIVE_CONF_DIR="${IMPALA_HOME}/./fe/src/test/resources"
+
 # Starts a Hive Metastore Server on the specified port.
-HADOOP_CLIENT_OPTS=-Xmx2024m hive --service metastore -p $HIVE_METASTORE_PORT \
-    > ${LOGDIR}/hive-metastore.out 2>&1 &
+HADOOP_CLIENT_OPTS="-Xmx2024m -Dhive.log.file=hive-metastore.log" \
+    hive --service metastore -p $HIVE_METASTORE_PORT > ${LOGDIR}/hive-metastore.out 2>&1 &
 
 # Wait for the Metastore to come up because HiveServer2 relies on it being live.
 ${CLUSTER_BIN}/wait-for-metastore.py --transport=${METASTORE_TRANSPORT}
@@ -72,7 +86,8 @@ ${CLUSTER_BIN}/wait-for-metastore.py --transport=${METASTORE_TRANSPORT}
 if [ ${ONLY_METASTORE} -eq 0 ]; then
   # Starts a HiveServer2 instance on the port specified by the HIVE_SERVER2_THRIFT_PORT
   # environment variable.
-  HADOOP_HEAPSIZE="2048" hive --service hiveserver2 > ${LOGDIR}/hive-server2.out 2>&1 &
+  HADOOP_HEAPSIZE="2048" HADOOP_CLIENT_OPTS="-Dhive.log.file=hive-server2.log" \
+    hive --service hiveserver2 > ${LOGDIR}/hive-server2.out 2>&1 &
 
   # Wait for the HiveServer2 service to come up because callers of this script
   # may rely on it being available.
