@@ -38,11 +38,12 @@
 # to choose a Maven repository with jars from that specific GBN, though this
 # does not currently always work.
 
-# In Cauldron builds, defer to GLOBAL_BUILD_NUMBER from environment.
-export CDH_GBN=${GLOBAL_BUILD_NUMBER:-}
+# Defer to $GLOBAL_BUILD_NUMBER OR $CDH_GBN, in that order.
+export CDH_GBN=${GLOBAL_BUILD_NUMBER:-${CDH_GBN:-}}
 VERSION="6.x"
 BRANCH="cdh${VERSION}"
 CDH_GBN_CONFIG="${IMPALA_HOME}/toolchain/cdh_components/cdh-gbn.sh"
+
 if [ ! "${CDH_GBN}" ]; then
   if [ -f "${CDH_GBN_CONFIG}" ]; then
     . "${CDH_GBN_CONFIG}"
@@ -54,6 +55,20 @@ if [ ! "${CDH_GBN}" ]; then
     echo "export CDH_GBN=${CDH_GBN}" > "${CDH_GBN_CONFIG}"
     echo "Using CDH_GBN ${CDH_GBN} based on BuildDB query."
   fi
+fi
+
+# Defer to IMPALAM_MAVEN_OPTIONS_OVERRIDE. If not set, download an m2-settings.xml file
+# and re-configure to use it.
+if [ ${IMPALA_MAVEN_OPTIONS_OVERRIDE:-} ]; then
+  export IMPALA_MAVEN_OPTIONS=${IMPALA_MAVEN_OPTIONS_OVERRIDE}
+else
+  MAVEN_CONFIG_FILE="${IMPALA_HOME}/toolchain/cdh_components/m2-settings.xml"
+  if [ ! -e "${MAVEN_CONFIG_FILE}" ]; then
+    mkdir -p "$(dirname ${MAVEN_CONFIG_FILE})"
+    curl --silent http://github.mtv.cloudera.com/raw/CDH/cdh/${BRANCH}/gbn-m2-settings.xml \
+      -o "${MAVEN_CONFIG_FILE}"
+  fi
+  export IMPALA_MAVEN_OPTIONS="-s ${MAVEN_CONFIG_FILE}"
 fi
 
 BUILD_REPO_BASE="http://cloudera-build-us-west-1.vpc.cloudera.com/s3/build/${CDH_GBN}/impala-minicluster-tarballs"

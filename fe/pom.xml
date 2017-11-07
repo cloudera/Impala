@@ -709,14 +709,6 @@ under the License.
 
   <repositories>
     <repository>
-      <id>cauldron.gbn.repo</id>
-      <url>http://cloudera-build-us-west-1.vpc.cloudera.com/s3/build/${env.CDH_GBN}/cdh6/6.x/maven-repository/</url>
-      <name>Cauldron Build GBN Repository</name>
-      <snapshots>
-        <enabled>true</enabled>
-      </snapshots>
-    </repository>
-    <repository>
        <id>apache.snapshots</id>
        <name>Apache Development Snapshot Repository</name>
         <url>https://repository.apache.org/content/repositories/snapshots/</url>
@@ -782,14 +774,6 @@ under the License.
       <name>Cloudera Third Party Repository</name>
       <snapshots>
         <enabled>false</enabled>
-      </snapshots>
-    </pluginRepository>
-    <pluginRepository>
-      <id>cauldron.gbn.repo</id>
-      <url>http://cloudera-build-us-west-1.vpc.cloudera.com/s3/build/${env.CDH_GBN}/cdh6/6.x/maven-repository/</url>
-      <name>Cauldron Build GBN Repository</name>
-      <snapshots>
-        <enabled>true</enabled>
       </snapshots>
     </pluginRepository>
     <pluginRepository>
