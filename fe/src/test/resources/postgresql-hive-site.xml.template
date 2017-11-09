@@ -95,6 +95,17 @@
   <name>hive.querylog.location</name>
   <value>${IMPALA_CLUSTER_LOGS_DIR}/hive</value>
 </property>
+<!-- TODO: Re-enable this.
+     We've experienced HiveServer2 running out of memory when the operation log
+     is enabled, because log4j is retaining the logs in memory.  -->
+<property>
+  <name>hive.server2.logging.operation.enabled</name>
+  <value>false</value>
+</property>
+<property>
+  <name>hive.server2.logging.operation.log.location</name>
+  <value>${IMPALA_CLUSTER_LOGS_DIR}/hive</value>
+</property>
 
 <!--property>
   <name>test.log.dir</name>
