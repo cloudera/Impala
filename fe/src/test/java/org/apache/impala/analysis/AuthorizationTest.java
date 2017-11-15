@@ -1839,7 +1839,7 @@ public class AuthorizationTest {
   public void TestShortUsernameUsed() throws Exception {
     // Different long variations of the same username.
     List<User> users = Lists.newArrayList(
-        new User(USER.getName() + "/abc.host.com@"),
+        new User(USER.getName() + "/abc.host.com"),
         new User(USER.getName() + "/abc.host.com@REAL.COM"),
         new User(USER.getName() + "@REAL.COM"));
     for (User user: users) {
