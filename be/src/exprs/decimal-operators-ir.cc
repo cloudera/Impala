@@ -681,6 +681,8 @@ BooleanVal DecimalOperators::CastToBooleanVal(
         ctx->impl()->GetConstFnAttr(FunctionContextImpl::DECIMAL_V2); \
     switch (ctx->impl()->GetConstFnAttr(FunctionContextImpl::RETURN_TYPE_SIZE)) { \
       case 4: { \
+        DCHECK_LE(x_size, 4); \
+        DCHECK_LE(y_size, 4); \
         Decimal4Value x_val = GetDecimal4Value(x, x_size, &overflow); \
         Decimal4Value y_val = GetDecimal4Value(y, y_size, &overflow); \
         Decimal4Value result = x_val.OP_FN<int32_t>(x_scale, y_val, y_scale, \
@@ -689,6 +691,8 @@ BooleanVal DecimalOperators::CastToBooleanVal(
         return DecimalVal(result.value()); \
       } \
       case 8: { \
+        DCHECK_LE(x_size, 8); \
+        DCHECK_LE(y_size, 8); \
         Decimal8Value x_val = GetDecimal8Value(x, x_size, &overflow); \
         Decimal8Value y_val = GetDecimal8Value(y, y_size, &overflow); \
         Decimal8Value result = x_val.OP_FN<int64_t>(x_scale, y_val, y_scale, \
@@ -720,13 +724,17 @@ BooleanVal DecimalOperators::CastToBooleanVal(
     int x_scale = ctx->impl()->GetConstFnAttr(FunctionContextImpl::ARG_TYPE_SCALE, 0); \
     int y_size = ctx->impl()->GetConstFnAttr(FunctionContextImpl::ARG_TYPE_SIZE, 1); \
     int y_scale = ctx->impl()->GetConstFnAttr(FunctionContextImpl::ARG_TYPE_SCALE, 1); \
+    int return_size = \
+        ctx->impl()->GetConstFnAttr(FunctionContextImpl::RETURN_TYPE_SIZE); \
     int return_precision = \
         ctx->impl()->GetConstFnAttr(FunctionContextImpl::RETURN_TYPE_PRECISION); \
     int return_scale = \
         ctx->impl()->GetConstFnAttr(FunctionContextImpl::RETURN_TYPE_SCALE); \
     bool round = \
         ctx->impl()->GetConstFnAttr(FunctionContextImpl::DECIMAL_V2); \
-    switch (ctx->impl()->GetConstFnAttr(FunctionContextImpl::RETURN_TYPE_SIZE)) { \
+    /* We need a type that is big enough for the result and the operands as well */ \
+    int max_size = ::max(::max(x_size, y_size), return_size); \
+    switch (max_size) { \
       case 4: { \
         Decimal4Value x_val = GetDecimal4Value(x, x_size, &overflow); \
         Decimal4Value y_val = GetDecimal4Value(y, y_size, &overflow); \
