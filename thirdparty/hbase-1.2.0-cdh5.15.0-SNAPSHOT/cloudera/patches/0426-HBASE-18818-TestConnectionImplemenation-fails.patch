@@ -1,0 +1,40 @@
+From e9410ec57ce6a5ec50a480edb41f8f3818d45369 Mon Sep 17 00:00:00 2001
+From: Michael Stack <stack@apache.org>
+Date: Thu, 14 Sep 2017 12:27:37 -0700
+Subject: [PATCH 426/438] HBASE-18818 TestConnectionImplemenation fails
+
+(cherry picked from commit 23a8027c7dec72706a865b77d0468a636d9a68a5)
+
+Change-Id: I5322eec558e52fc2c27e521d0d3b4cc233ca5c19
+Author: Michael Stack
+Reason: Bug
+Ref: CDH-61615
+---
+ .../hbase/client/TestConnectionImplementation.java |    4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestConnectionImplementation.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestConnectionImplementation.java
+index 49a2203..30f44ce 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestConnectionImplementation.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestConnectionImplementation.java
+@@ -67,7 +67,7 @@ public class TestConnectionImplementation {
+     // test that we fail to get a client to an unresolvable hostname, which
+     // means it won't be cached
+     ServerName badHost =
+-        ServerName.valueOf("unknownhost.example.com:" + HConstants.DEFAULT_MASTER_PORT,
++        ServerName.valueOf("unknownhost.invalid:" + HConstants.DEFAULT_MASTER_PORT,
+         System.currentTimeMillis());
+     conn.getAdmin(badHost);
+     fail("Obtaining admin to unresolvable hostname should have failed");
+@@ -86,7 +86,7 @@ public class TestConnectionImplementation {
+     // test that we fail to get a client to an unresolvable hostname, which
+     // means it won't be cached
+     ServerName badHost =
+-        ServerName.valueOf("unknownhost.example.com:" + HConstants.DEFAULT_REGIONSERVER_PORT,
++        ServerName.valueOf("unknownhost.invalid:" + HConstants.DEFAULT_REGIONSERVER_PORT,
+         System.currentTimeMillis());
+     conn.getAdmin(badHost);
+     fail("Obtaining client to unresolvable hostname should have failed");
+-- 
+1.7.9.5
+

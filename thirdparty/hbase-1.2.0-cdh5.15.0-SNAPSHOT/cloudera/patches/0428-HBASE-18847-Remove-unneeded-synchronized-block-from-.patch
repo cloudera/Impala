@@ -1,0 +1,47 @@
+From f0dc34c162e606f42167522710bfb14115a8ba29 Mon Sep 17 00:00:00 2001
+From: Rich Howarth <rich@rhowarth.org>
+Date: Thu, 21 Sep 2017 17:31:32 -0400
+Subject: [PATCH 428/438] HBASE-18847 Remove unneeded synchronized block from
+ HFileWriterV2 warning in branch-1.2
+
+Signed-off-by: Chia-Ping Tsai <chia7712@gmail.com>
+
+(cherry picked from commit 5e240625bfd4f9f22579bd949c755a934b03dcbf)
+
+Change-Id: I9deb686b9205e02bd6fb37ea957b6a07fda8a0ae
+Author: Rich Howarth
+Reason: Bug
+Ref: CDH-61616
+---
+ .../hadoop/hbase/io/hfile/HFileWriterV2.java       |   15 ++++++++-------
+ 1 file changed, 8 insertions(+), 7 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/HFileWriterV2.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/HFileWriterV2.java
+index 493238e..c36341a 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/HFileWriterV2.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/HFileWriterV2.java
+@@ -272,13 +272,14 @@ public class HFileWriterV2 extends AbstractHFileWriter {
+       newBlock();
+     }
+ 
+-    synchronized (HFileWriterV2.class) {
+-      if (WARN_CELL_WITH_TAGS && getFileContext().isIncludesTags()) {
+-        LOG.warn("A minimum HFile version of " + HFile.MIN_FORMAT_VERSION_WITH_TAGS
+-          + " is required to support cell attributes/tags. Consider setting "
+-          + HFile.FORMAT_VERSION_KEY + " accordingly.");
+-        WARN_CELL_WITH_TAGS = false;
+-      }
++    // Reads/writes from/to WARN_CELL_WITH_TAGS aren't thread-safe, but this
++    // is of limited concern because it should only result in limited extra logging
++
++    if (WARN_CELL_WITH_TAGS && getFileContext().isIncludesTags()) {
++      LOG.warn("A minimum HFile version of " + HFile.MIN_FORMAT_VERSION_WITH_TAGS
++        + " is required to support cell attributes/tags. Consider setting "
++        + HFile.FORMAT_VERSION_KEY + " accordingly.");
++      WARN_CELL_WITH_TAGS = false;
+     }
+ 
+     fsBlockWriter.write(cell);
+-- 
+1.7.9.5
+

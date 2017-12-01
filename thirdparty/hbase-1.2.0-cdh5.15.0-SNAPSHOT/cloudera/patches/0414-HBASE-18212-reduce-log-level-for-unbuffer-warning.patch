@@ -1,0 +1,75 @@
+From ca56ca9175e48b313a59f40caca07847f1547c87 Mon Sep 17 00:00:00 2001
+From: Ashish Singhi <ashishsinghi@apache.org>
+Date: Fri, 16 Jun 2017 10:43:56 +0530
+Subject: [PATCH 414/438] HBASE-18212 reduce log level for unbuffer warning.
+
+In Standalone mode with local filesystem HBase logs Warning message:Failed to invoke 'unbuffer' method in class org.apache.hadoop.fs.FSDataInputStream
+
+Signed-off-by: Umesh Agashe <uagashe@cloudera.com>
+Signed-off-by: Sean Busbey <busbey@apache.org>
+
+Change-Id: I22d5889fc9f169a8a5f9e9f7dc3d91b115f9d9a4
+Author: Ashish Singhi
+Reason: Improvement
+Ref: CDH-59007
+---
+ .../hadoop/hbase/io/FSDataInputStreamWrapper.java  |   27 ++++++++++++--------
+ 1 file changed, 16 insertions(+), 11 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/io/FSDataInputStreamWrapper.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/io/FSDataInputStreamWrapper.java
+index dc168da..ad749f3 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/io/FSDataInputStreamWrapper.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/io/FSDataInputStreamWrapper.java
+@@ -38,6 +38,7 @@ import com.google.common.annotations.VisibleForTesting;
+  */
+ public class FSDataInputStreamWrapper {
+   private static final Log LOG = LogFactory.getLog(FSDataInputStreamWrapper.class);
++  private static final boolean isLogTraceEnabled = LOG.isTraceEnabled();
+ 
+   private final HFileSystem hfs;
+   private final Path path;
+@@ -261,10 +262,11 @@ public class FSDataInputStreamWrapper {
+             try {
+               this.unbuffer = streamClass.getDeclaredMethod("unbuffer");
+             } catch (NoSuchMethodException | SecurityException e) {
+-              LOG.warn("Failed to find 'unbuffer' method in class " + streamClass
+-                  + " . So there may be a TCP socket connection "
+-                  + "left open in CLOSE_WAIT state.",
+-                e);
++              if (isLogTraceEnabled) {
++                LOG.trace("Failed to find 'unbuffer' method in class " + streamClass
++                    + " . So there may be a TCP socket connection "
++                    + "left open in CLOSE_WAIT state.", e);
++              }
+               return;
+             }
+             this.instanceOfCanUnbuffer = true;
+@@ -276,15 +278,18 @@ public class FSDataInputStreamWrapper {
+         try {
+           this.unbuffer.invoke(wrappedStream);
+         } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+-          LOG.warn("Failed to invoke 'unbuffer' method in class " + streamClass
+-              + " . So there may be a TCP socket connection left open in CLOSE_WAIT state.",
+-            e);
++          if (isLogTraceEnabled) {
++            LOG.trace("Failed to invoke 'unbuffer' method in class " + streamClass
++                + " . So there may be a TCP socket connection left open in CLOSE_WAIT state.", e);
++          }
+         }
+       } else {
+-        LOG.warn("Failed to find 'unbuffer' method in class " + streamClass
+-            + " . So there may be a TCP socket connection "
+-            + "left open in CLOSE_WAIT state. For more details check "
+-            + "https://issues.apache.org/jira/browse/HBASE-9393");
++        if (isLogTraceEnabled) {
++          LOG.trace("Failed to find 'unbuffer' method in class " + streamClass
++              + " . So there may be a TCP socket connection "
++              + "left open in CLOSE_WAIT state. For more details check "
++              + "https://issues.apache.org/jira/browse/HBASE-9393");
++        }
+       }
+     }
+   }
+-- 
+1.7.9.5
+

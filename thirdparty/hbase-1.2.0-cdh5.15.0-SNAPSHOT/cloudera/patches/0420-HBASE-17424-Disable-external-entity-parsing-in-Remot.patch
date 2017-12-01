@@ -1,0 +1,156 @@
+From fe2c09736bed82aabac9d7da1e29a7a463c6cb71 Mon Sep 17 00:00:00 2001
+From: Josh Elser <elserj@apache.org>
+Date: Tue, 3 Jan 2017 19:02:08 -0500
+Subject: [PATCH 420/438] HBASE-17424 Disable external entity parsing in
+ RemoteAdmin
+
+(cherry picked from commit 4f008bb01d5c7ef745333d37ddbf7a1b04ba1852)
+
+Change-Id: I6417f3780aae5cd5cc8ba1f458f268c3991b6669
+Author: Josh Elser
+Reason: Security
+Ref: CDH-61626
+---
+ .../hadoop/hbase/rest/client/RemoteAdmin.java      |   26 ++++++-
+ .../hadoop/hbase/rest/client/TestXmlParsing.java   |   76 ++++++++++++++++++++
+ 2 files changed, 100 insertions(+), 2 deletions(-)
+ create mode 100644 hbase-rest/src/test/java/org/apache/hadoop/hbase/rest/client/TestXmlParsing.java
+
+diff --git a/hbase-rest/src/main/java/org/apache/hadoop/hbase/rest/client/RemoteAdmin.java b/hbase-rest/src/main/java/org/apache/hadoop/hbase/rest/client/RemoteAdmin.java
+index e8845eb..de1e23f 100644
+--- a/hbase-rest/src/main/java/org/apache/hadoop/hbase/rest/client/RemoteAdmin.java
++++ b/hbase-rest/src/main/java/org/apache/hadoop/hbase/rest/client/RemoteAdmin.java
+@@ -26,6 +26,9 @@ import java.io.InterruptedIOException;
+ import javax.xml.bind.JAXBContext;
+ import javax.xml.bind.JAXBException;
+ import javax.xml.bind.Unmarshaller;
++import javax.xml.stream.XMLInputFactory;
++import javax.xml.stream.XMLStreamException;
++import javax.xml.stream.XMLStreamReader;
+ 
+ import org.apache.hadoop.hbase.classification.InterfaceAudience;
+ import org.apache.hadoop.hbase.classification.InterfaceStability;
+@@ -209,12 +212,12 @@ public class RemoteAdmin {
+         try {
+ 
+           return (StorageClusterVersionModel) getUnmarsheller().unmarshal(
+-              new ByteArrayInputStream(response.getBody()));
++              getInputStream(response));
+         } catch (JAXBException jaxbe) {
+ 
+           throw new IOException(
+               "Issue parsing StorageClusterVersionModel object in XML form: "
+-                  + jaxbe.getLocalizedMessage());
++                  + jaxbe.getLocalizedMessage(), jaxbe);
+         }
+       case 404:
+         throw new IOException("Cluster version not found");
+@@ -398,4 +401,23 @@ public class RemoteAdmin {
+     throw new IOException("get request to " + path.toString()
+         + " request timed out");
+   }
++
++  /**
++   * Convert the REST server's response to an XML reader.
++   *
++   * @param response The REST server's response.
++   * @return A reader over the parsed XML document.
++   * @throws IOException If the document fails to parse
++   */
++  private XMLStreamReader getInputStream(Response response) throws IOException {
++    try {
++      // Prevent the parser from reading XMl with external entities defined
++      XMLInputFactory xif = XMLInputFactory.newFactory();
++      xif.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
++      xif.setProperty(XMLInputFactory.SUPPORT_DTD, false);
++      return xif.createXMLStreamReader(new ByteArrayInputStream(response.getBody()));
++    } catch (XMLStreamException e) {
++      throw new IOException("Failed to parse XML", e);
++    }
++  }
+ }
+diff --git a/hbase-rest/src/test/java/org/apache/hadoop/hbase/rest/client/TestXmlParsing.java b/hbase-rest/src/test/java/org/apache/hadoop/hbase/rest/client/TestXmlParsing.java
+new file mode 100644
+index 0000000..56dc05e
+--- /dev/null
++++ b/hbase-rest/src/test/java/org/apache/hadoop/hbase/rest/client/TestXmlParsing.java
+@@ -0,0 +1,76 @@
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one or more
++ * contributor license agreements.  See the NOTICE file distributed with
++ * this work for additional information regarding copyright ownership.
++ * The ASF licenses this file to you under the Apache License, Version 2.0
++ * (the "License"); you may not use this file except in compliance with
++ * the License.  You may obtain a copy of the License at
++ *
++ * http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hbase.rest.client;
++
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertTrue;
++import static org.junit.Assert.fail;
++import static org.mockito.Mockito.mock;
++import static org.mockito.Mockito.when;
++
++import java.io.IOException;
++
++import org.apache.hadoop.hbase.HBaseConfiguration;
++import org.apache.hadoop.hbase.rest.Constants;
++import org.apache.hadoop.hbase.rest.model.StorageClusterVersionModel;
++import org.apache.hadoop.hbase.testclassification.SmallTests;
++import org.apache.hadoop.util.StringUtils;
++import org.junit.Test;
++import org.junit.experimental.categories.Category;
++
++/**
++ * Test class for {@link RemoteAdmin} to verify XML is parsed in a certain manner.
++ */
++@Category(SmallTests.class)
++public class TestXmlParsing {
++
++  @Test
++  public void testParsingClusterVersion() throws Exception {
++    final String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
++        + "<ClusterVersion>2.0.0</ClusterVersion>";
++    Client client = mock(Client.class);
++    RemoteAdmin admin = new RemoteAdmin(client, HBaseConfiguration.create(), null);
++    Response resp = new Response(200, null, xml.getBytes());
++
++    when(client.get("/version/cluster", Constants.MIMETYPE_XML)).thenReturn(resp);
++
++    StorageClusterVersionModel cv = admin.getClusterVersion();
++    assertEquals("2.0.0", cv.getVersion());
++  }
++
++  @Test
++  public void testFailOnExternalEntities() throws Exception {
++    final String externalEntitiesXml =
++        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
++        + " <!DOCTYPE foo [ <!ENTITY xxe SYSTEM \"/tmp/foo\"> ] >"
++        + " <ClusterVersion>&xee;</ClusterVersion>";
++    Client client = mock(Client.class);
++    RemoteAdmin admin = new RemoteAdmin(client, HBaseConfiguration.create(), null);
++    Response resp = new Response(200, null, externalEntitiesXml.getBytes());
++
++    when(client.get("/version/cluster", Constants.MIMETYPE_XML)).thenReturn(resp);
++
++    try {
++      admin.getClusterVersion();
++      fail("Expected getClusterVersion() to throw an exception");
++    } catch (IOException e) {
++      final String exceptionText = StringUtils.stringifyException(e);
++      final String expectedText = "The entity \"xee\" was referenced, but not declared.";
++      assertTrue("Exception does not contain expected text", exceptionText.contains(expectedText));
++    }
++  }
++}
+-- 
+1.7.9.5
+

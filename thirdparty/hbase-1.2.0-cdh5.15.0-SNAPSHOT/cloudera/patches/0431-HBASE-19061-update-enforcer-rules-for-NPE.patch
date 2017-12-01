@@ -1,0 +1,32 @@
+From a742aef3ad7adcf9bf241396b5afdfb72968dd16 Mon Sep 17 00:00:00 2001
+From: Mike Drob <mdrob@apache.org>
+Date: Fri, 20 Oct 2017 16:04:16 -0500
+Subject: [PATCH 431/438] HBASE-19061 update enforcer rules for NPE
+
+(cherry picked from commit e8124ab8c4181d2cedff02078f7c76d3e44c219f)
+
+Signed-off-by: Sean Busbey <busbey@apache.org>
+
+Change-Id: I29de8e204380e34d838de92f6316800bde436f26
+Reason: Build
+Ref: CDH-61630
+---
+ hbase-shaded/hbase-shaded-check-invariants/pom.xml |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/hbase-shaded/hbase-shaded-check-invariants/pom.xml b/hbase-shaded/hbase-shaded-check-invariants/pom.xml
+index bd14b91..73da5e1 100644
+--- a/hbase-shaded/hbase-shaded-check-invariants/pom.xml
++++ b/hbase-shaded/hbase-shaded-check-invariants/pom.xml
+@@ -76,7 +76,7 @@
+           <dependency>
+             <groupId>org.codehaus.mojo</groupId>
+             <artifactId>extra-enforcer-rules</artifactId>
+-            <version>1.0-beta-3</version>
++            <version>1.0-beta-6</version>
+           </dependency>
+         </dependencies>
+         <executions>
+-- 
+1.7.9.5
+

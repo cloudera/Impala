@@ -1,0 +1,703 @@
+From be051e4e0ee92e75460727f50a7c56b0081b745f Mon Sep 17 00:00:00 2001
+From: Sean Busbey <busbey@apache.org>
+Date: Thu, 10 Aug 2017 16:16:20 -0500
+Subject: [PATCH 415/438] HBASE-18577 test well-formed-ness of our client
+ jars.
+
+Author: Sean Busbey
+Reason: Improvement
+Ref: CDH-58625
+
+* adds an IT that checks the contents of jars
+* excludes our server side web apps and related deps (jaxb, jersey, jetty) from shaded jars
+* excludes proto source files from shaded jars
+* relocates codahale metrics, commons-crypto, and curator
+* finishes relocating jets3t
+* updates maven dependency plugin
+* updates maven enforcer plugin
+* CDH specific, keep jetty-util transitive from hbase-client that we don't use to keep compatibility of earlier CDH5,
+  exclude it from hbase-shaded-client.
+
+Change-Id: I644ba5a4a6e1a75f7956472b2d9624b3eab663a4
+Signed-off-by: Michael Stack <stack@apache.org>
+---
+ hbase-shaded/hbase-shaded-check-invariants/pom.xml |  186 ++++++++++++++++++++
+ .../resources/ensure-jars-have-correct-contents.sh |   75 ++++++++
+ hbase-shaded/hbase-shaded-client/pom.xml           |   40 +++++
+ hbase-shaded/hbase-shaded-server/pom.xml           |  126 +++++++++++++
+ hbase-shaded/pom.xml                               |   85 ++++++++-
+ pom.xml                                            |   15 ++
+ 6 files changed, 526 insertions(+), 1 deletion(-)
+ create mode 100644 hbase-shaded/hbase-shaded-check-invariants/pom.xml
+ create mode 100644 hbase-shaded/hbase-shaded-check-invariants/src/test/resources/ensure-jars-have-correct-contents.sh
+
+diff --git a/hbase-shaded/hbase-shaded-check-invariants/pom.xml b/hbase-shaded/hbase-shaded-check-invariants/pom.xml
+new file mode 100644
+index 0000000..bd14b91
+--- /dev/null
++++ b/hbase-shaded/hbase-shaded-check-invariants/pom.xml
+@@ -0,0 +1,186 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<!--
++ Licensed under the Apache License, Version 2.0 (the "License");
++ you may not use this file except in compliance with the License.
++ You may obtain a copy of the License at
++   http://www.apache.org/licenses/LICENSE-2.0
++ Unless required by applicable law or agreed to in writing, software
++ distributed under the License is distributed on an "AS IS" BASIS,
++ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ See the License for the specific language governing permissions and
++ limitations under the License. See accompanying LICENSE file.
++-->
++<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
++         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
++  <modelVersion>4.0.0</modelVersion>
++  <parent>
++    <artifactId>hbase</artifactId>
++    <groupId>org.apache.hbase</groupId>
++    <version>1.2.0-cdh5.14.0-SNAPSHOT</version>
++    <relativePath>../..</relativePath>
++  </parent>
++  <artifactId>hbase-shaded-check-invariants</artifactId>
++  <packaging>pom</packaging>
++
++  <description>
++  Enforces our invariants for our shaded artifacts. e.g. shaded clients have
++  a specific set of transitive dependencies and shaded clients only contain
++  classes that are in particular packages. Does the enforcement through
++  the maven-enforcer-plugin and and integration test.
++  </description>
++  <name>Apache HBase Shaded Packaging Invariants</name>
++
++  <properties>
++  </properties>
++
++  <dependencies>
++    <dependency>
++      <groupId>org.apache.hbase</groupId>
++      <artifactId>hbase-shaded-client</artifactId>
++      <version>${project.version}</version>
++    </dependency>
++    <dependency>
++      <groupId>org.apache.hbase</groupId>
++      <artifactId>hbase-shaded-server</artifactId>
++      <version>${project.version}</version>
++    </dependency>
++    <!-- parent pom defines these for children. :( :( :( -->
++    <dependency>
++      <groupId>com.github.stephenc.findbugs</groupId>
++      <artifactId>findbugs-annotations</artifactId>
++      <scope>provided</scope>
++    </dependency>
++    <dependency>
++      <groupId>log4j</groupId>
++      <artifactId>log4j</artifactId>
++      <scope>provided</scope>
++    </dependency>
++    <!-- Test dependencies -->
++    <dependency>
++      <groupId>junit</groupId>
++      <artifactId>junit</artifactId>
++      <scope>provided</scope>
++    </dependency>
++    <dependency>
++      <groupId>org.mockito</groupId>
++      <artifactId>mockito-all</artifactId>
++      <scope>provided</scope>
++    </dependency>
++  </dependencies>
++  <build>
++    <plugins>
++      <plugin>
++        <groupId>org.apache.maven.plugins</groupId>
++        <artifactId>maven-enforcer-plugin</artifactId>
++        <dependencies>
++          <dependency>
++            <groupId>org.codehaus.mojo</groupId>
++            <artifactId>extra-enforcer-rules</artifactId>
++            <version>1.0-beta-3</version>
++          </dependency>
++        </dependencies>
++        <executions>
++          <execution>
++            <id>enforce-banned-dependencies</id>
++            <goals>
++              <goal>enforce</goal>
++            </goals>
++            <configuration>
++              <skip>true</skip>
++              <rules>
++                <banTransitiveDependencies>
++<!--
++                  <message>
++    Our client-facing artifacts are not supposed to have additional dependencies
++    and one or more of them do. The output from the enforcer plugin should give
++    specifics.
++                  </message>
++-->
++                  <excludes>
++                    <!-- We leave logging stuff alone -->
++                    <exclude>org.slf4j:*</exclude>
++                    <exclude>log4j:*</exclude>
++                    <exclude>commons-logging:*</exclude>
++                    <!-- annotations that never change -->
++                    <exclude>com.google.code.findbugs:*</exclude>
++                    <exclude>com.github.stephenc.findbugs:*</exclude>
++                    <!-- We leave HTrace as an unshaded dependnecy on purpose so that tracing within a JVM will work -->
++                    <exclude>org.apache.htrace:*</exclude>
++                  </excludes>
++                </banTransitiveDependencies>
++                <banDuplicateClasses>
++                  <findAllDuplicates>true</findAllDuplicates>
++                </banDuplicateClasses>
++              </rules>
++            </configuration>
++          </execution>
++        </executions>
++      </plugin>
++      <plugin>
++        <groupId>org.apache.maven.plugins</groupId>
++        <artifactId>maven-resources-plugin</artifactId>
++        <executions>
++          <execution>
++            <id>test-resources</id>
++            <phase>pre-integration-test</phase>
++            <goals>
++              <goal>testResources</goal>
++            </goals>
++          </execution>
++        </executions>
++      </plugin>
++      <plugin>
++        <!-- create a maven pom property that has all of our dependencies.
++             below in the integration-test phase we'll pass this list
++             of paths to our jar checker script.
++          -->
++        <groupId>org.apache.maven.plugins</groupId>
++        <artifactId>maven-dependency-plugin</artifactId>
++        <executions>
++          <execution>
++            <id>put-client-artifacts-in-a-property</id>
++            <phase>pre-integration-test</phase>
++            <goals>
++              <goal>build-classpath</goal>
++            </goals>
++            <configuration>
++              <excludeScope>provided</excludeScope>
++              <excludeTransitive>true</excludeTransitive>
++              <outputProperty>hbase-client-artifacts</outputProperty>
++            </configuration>
++          </execution>
++        </executions>
++      </plugin>
++      <!--
++        Check that we actually relocated everything we included.
++        It's critical that we don't ship third party dependencies that haven't
++        been relocated under our pacakge space, since this will lead to
++        difficult to debug classpath errors for downstream. Unfortunately, that
++        means inspecting all the jars.
++        -->
++      <plugin>
++        <groupId>org.codehaus.mojo</groupId>
++        <artifactId>exec-maven-plugin</artifactId>
++        <executions>
++          <execution>
++            <id>check-jar-contents</id>
++            <phase>integration-test</phase>
++            <goals>
++              <goal>exec</goal>
++            </goals>
++            <configuration>
++              <executable>${shell-executable}</executable>
++              <workingDirectory>${project.build.testOutputDirectory}</workingDirectory>
++              <requiresOnline>false</requiresOnline>
++              <arguments>
++                <argument>ensure-jars-have-correct-contents.sh</argument>
++                <argument>${hbase-client-artifacts}</argument>
++              </arguments>
++            </configuration>
++          </execution>
++        </executions>
++      </plugin>
++    </plugins>
++  </build>
++
++</project>
+diff --git a/hbase-shaded/hbase-shaded-check-invariants/src/test/resources/ensure-jars-have-correct-contents.sh b/hbase-shaded/hbase-shaded-check-invariants/src/test/resources/ensure-jars-have-correct-contents.sh
+new file mode 100644
+index 0000000..7c64baa
+--- /dev/null
++++ b/hbase-shaded/hbase-shaded-check-invariants/src/test/resources/ensure-jars-have-correct-contents.sh
+@@ -0,0 +1,75 @@
++#!/usr/bin/env bash
++# Licensed to the Apache Software Foundation (ASF) under one
++# or more contributor license agreements.  See the NOTICE file
++# distributed with this work for additional information
++# regarding copyright ownership.  The ASF licenses this file
++# to you under the Apache License, Version 2.0 (the
++# "License"); you may not use this file except in compliance
++# with the License.  You may obtain a copy of the License at
++#
++#     http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++
++# Usage: $0 [/path/to/some/example.jar:/path/to/another/example/created.jar]
++#
++# accepts a single command line argument with a colon separated list of
++# paths to jars to check. Iterates through each such passed jar and checks
++# all the contained paths to make sure they follow the below constructed
++# safe list.
++
++# we have to allow the directories that lead to the org/apache/hadoop dir
++allowed_expr="(^org/$|^org/apache/$"
++# We allow the following things to exist in our client artifacts:
++#   * classes in packages that start with org.apache.hadoop, which by
++#     convention should be in a path that looks like org/apache/hadoop
++allowed_expr+="|^org/apache/hadoop/"
++#   * whatever in the "META-INF" directory
++allowed_expr+="|^META-INF/"
++#   * the folding tables from jcodings
++allowed_expr+="|^tables/"
++#   * Hadoop's and HBase's default configuration files, which have the form
++#     "_module_-default.xml"
++allowed_expr+="|^[^-]*-default.xml$"
++#   * Hadoop's versioning properties files, which have the form
++#     "_module_-version-info.properties"
++allowed_expr+="|^[^-]*-version-info.properties$"
++#   * Hadoop's application classloader properties file.
++allowed_expr+="|^org.apache.hadoop.application-classloader.properties$"
++# public suffix list used by httpcomponents
++allowed_expr+="|^mozilla/$"
++allowed_expr+="|^mozilla/public-suffix-list.txt$"
++# Comes from commons-configuration, not sure if relocatable.
++allowed_expr+="|^digesterRules.xml$"
++allowed_expr+="|^properties.dtd$"
++allowed_expr+="|^PropertyList-1.0.dtd$"
++
++
++allowed_expr+=")"
++declare -i bad_artifacts=0
++declare -a bad_contents
++IFS=: read -r -d '' -a artifact_list < <(printf '%s\0' "$1")
++for artifact in "${artifact_list[@]}"; do
++  bad_contents=($(jar tf "${artifact}" | grep -v -E "${allowed_expr}"))
++  if [ ${#bad_contents[@]} -gt 0 ]; then
++    echo "[ERROR] Found artifact with unexpected contents: '${artifact}'"
++    echo "    Please check the following and either correct the build or update"
++    echo "    the allowed list with reasoning."
++    echo ""
++    for bad_line in "${bad_contents[@]}"; do
++      echo "    ${bad_line}"
++    done
++    bad_artifacts=${bad_artifacts}+1
++  else
++    echo "[INFO] Artifact looks correct: '$(basename "${artifact}")'"
++  fi
++done
++
++# if there was atleast one bad artifact, exit with failure
++if [ "${bad_artifacts}" -gt 0 ]; then
++  exit 1
++fi
+diff --git a/hbase-shaded/hbase-shaded-client/pom.xml b/hbase-shaded/hbase-shaded-client/pom.xml
+index 2d9e288..dcc0a0f 100644
+--- a/hbase-shaded/hbase-shaded-client/pom.xml
++++ b/hbase-shaded/hbase-shaded-client/pom.xml
+@@ -51,6 +51,46 @@
+         <dependency>
+             <groupId>org.apache.hbase</groupId>
+             <artifactId>hbase-client</artifactId>
++            <!-- CDH specific change, they are included in hbase-client to keep
++                 compatibilty with earlies CDH5.
++              -->
++            <exclusions>
++              <!-- Classes in hadoop-core are not needed -->
++              <exclusion>
++                <groupId>org.apache.hadoop</groupId>
++                <artifactId>hadoop-core</artifactId>
++              </exclusion>
++              <!-- Included as dependencies for hadoop-common, not needed -->
++              <exclusion>
++                <groupId>com.sun.jersey</groupId>
++                <artifactId>jersey-core</artifactId>
++              </exclusion>
++              <exclusion>
++                <groupId>com.sun.jersey</groupId>
++                <artifactId>jersey-json</artifactId>
++              </exclusion>
++              <exclusion>
++                <groupId>com.sun.jersey</groupId>
++                <artifactId>jersey-json</artifactId>
++              </exclusion>
++              <exclusion>
++                <groupId>javax.servlet.jsp</groupId>
++                <artifactId>jsp-api</artifactId>
++              </exclusion>
++              <exclusion>
++                <groupId>javax.servlet</groupId>
++                <artifactId>servlet-api</artifactId>
++              </exclusion>
++              <!-- Excluded here instead of in hbase-client, to keep compatibilty of earlier CDH5 -->
++              <exclusion>
++                <groupId>org.mortbay.jetty</groupId>
++                <artifactId>jetty-util</artifactId>
++              </exclusion>
++              <exclusion>
++                <groupId>junit</groupId>
++                <artifactId>junit</artifactId>
++              </exclusion>
++            </exclusions>
+         </dependency>
+     </dependencies>
+ 
+diff --git a/hbase-shaded/hbase-shaded-server/pom.xml b/hbase-shaded/hbase-shaded-server/pom.xml
+index d951326..70902ac 100644
+--- a/hbase-shaded/hbase-shaded-server/pom.xml
++++ b/hbase-shaded/hbase-shaded-server/pom.xml
+@@ -51,6 +51,132 @@
+         <dependency>
+             <groupId>org.apache.hbase</groupId>
+             <artifactId>hbase-server</artifactId>
++            <exclusions>
++              <!-- CDH specific change, classes in hadoop-core and hadoop-common are not needed -->
++              <exclusion>
++                <groupId>org.apache.hadoop</groupId>
++                <artifactId>hadoop-core</artifactId>
++              </exclusion>
++              <exclusion>
++                <groupId>org.apache.hadoop</groupId>
++                <artifactId>hadoop-hdfs</artifactId>
++              </exclusion>
++              <!-- CDH specific change, it is included in hbase-server to keep
++                   compatibilty with earlies CDH5, it needs to be excluded as it
++                   is only for test.
++                -->
++              <exclusion>
++                <groupId>org.hamcrest</groupId>
++                <artifactId>hamcrest-core</artifactId>
++              </exclusion>
++              <!-- CDH specific change, included to keep dependencies the same as earlier CDH5 -->
++              <exclusion>
++                <groupId>com.github.stephenc.high-scale-lib</groupId>
++                <artifactId>high-scale-lib</artifactId>
++              </exclusion>
++              <!-- Jaxb-api is a part of Java SE now -->
++              <exclusion>
++                <groupId>javax.xml.bind</groupId>
++                <artifactId>jaxb-api</artifactId>
++              </exclusion>
++              <!-- Our MR support doesn't include the YARN stuff for
++                   making embedded webapps
++                -->
++              <exclusion>
++                <groupId>javax.servlet</groupId>
++                <artifactId>servlet-api</artifactId>
++              </exclusion>
++              <exclusion>
++                <groupId>com.google.inject</groupId>
++                <artifactId>guice</artifactId>
++              </exclusion>
++              <exclusion>
++                <groupId>com.google.inject.extensions</groupId>
++                <artifactId>guice-servlet</artifactId>
++              </exclusion>
++              <!-- Jersey not used by our MR support -->
++              <exclusion>
++                <groupId>javax.ws.rs</groupId>
++                <artifactId>javax.ws.rs-api</artifactId>
++              </exclusion>
++              <exclusion>
++                <groupId>com.sun.jersey</groupId>
++                <artifactId>jersey-server</artifactId>
++              </exclusion>
++              <exclusion>
++                <groupId>com.sun.jersey</groupId>
++                <artifactId>jersey-client</artifactId>
++              </exclusion>
++              <exclusion>
++                <groupId>com.sun.jersey</groupId>
++                <artifactId>jersey-core</artifactId>
++              </exclusion>
++              <exclusion>
++                <groupId>com.sun.jersey</groupId>
++                <artifactId>jersey-json</artifactId>
++              </exclusion>
++              <exclusion>
++                <groupId>com.sun.jersey.contribs</groupId>
++                <artifactId>jersey-guice</artifactId>
++              </exclusion>
++              <!-- Jetty not used by our MR support -->
++              <exclusion>
++                <groupId>org.mortbay.jetty</groupId>
++                <artifactId>jetty-sslengine</artifactId>
++              </exclusion>
++              <exclusion>
++                <groupId>org.mortbay.jetty</groupId>
++                <artifactId>jetty</artifactId>
++              </exclusion>
++              <exclusion>
++                <groupId>org.mortbay.jetty</groupId>
++                <artifactId>jetty-util</artifactId>
++              </exclusion>
++              <exclusion>
++                <groupId>org.mortbay.jetty</groupId>
++                <artifactId>jsp-2.1</artifactId>
++              </exclusion>
++              <exclusion>
++                <groupId>org.mortbay.jetty</groupId>
++                <artifactId>jsp-api-2.1</artifactId>
++              </exclusion>
++              <exclusion>
++                <groupId>org.mortbay.jetty</groupId>
++                <artifactId>servlet-api-2.5</artifactId>
++              </exclusion>
++              <exclusion>
++                <groupId>org.eclipse.jetty</groupId>
++                <artifactId>jetty-server</artifactId>
++              </exclusion>
++              <exclusion>
++                <groupId>org.eclipse.jetty</groupId>
++                <artifactId>jetty-servlet</artifactId>
++              </exclusion>
++              <exclusion>
++                <groupId>org.eclipse.jetty</groupId>
++                <artifactId>jetty-util</artifactId>
++              </exclusion>
++              <exclusion>
++                <groupId>org.eclipse.jetty</groupId>
++                <artifactId>jetty-util-ajax</artifactId>
++              </exclusion>
++              <exclusion>
++                <groupId>org.eclipse.jetty</groupId>
++                <artifactId>jetty-jsp</artifactId>
++              </exclusion>
++              <exclusion>
++                <groupId>org.eclipse.jetty</groupId>
++                <artifactId>jetty-webapp</artifactId>
++              </exclusion>
++              <exclusion>
++                <groupId>org.glassfish.jersey.containers</groupId>
++                <artifactId>jersey-container-servlet-core</artifactId>
++              </exclusion>
++              <exclusion>
++                <groupId>org.glassfish.jersey.media</groupId>
++                <artifactId>jersey-media-json-jackson1</artifactId>
++              </exclusion>
++            </exclusions>
+         </dependency>
+     </dependencies>
+ 
+diff --git a/hbase-shaded/pom.xml b/hbase-shaded/pom.xml
+index ebfa5bc..4203835 100644
+--- a/hbase-shaded/pom.xml
++++ b/hbase-shaded/pom.xml
+@@ -40,6 +40,7 @@
+     <modules>
+         <module>hbase-shaded-client</module>
+         <module>hbase-shaded-server</module>
++        <module>hbase-shaded-check-invariants</module>
+     </modules>
+     <dependencies>
+       <dependency>
+@@ -48,6 +49,21 @@
+          <version>${project.version}</version>
+          <optional>true</optional>
+       </dependency>
++      <dependency>
++        <groupId>junit</groupId>
++        <artifactId>junit</artifactId>
++        <scope>test</scope>
++      </dependency>
++      <!-- put the log implementations to optional -->
++      <dependency>
++        <groupId>log4j</groupId>
++        <artifactId>log4j</artifactId>
++      </dependency>
++      <dependency>
++        <groupId>org.slf4j</groupId>
++        <artifactId>slf4j-log4j12</artifactId>
++        <version>${slf4j.version}</version>
++      </dependency>
+     </dependencies>
+     <build>
+         <plugins>
+@@ -119,7 +135,6 @@
+                                 <createSourcesJar>false</createSourcesJar>
+                                 <shadedArtifactAttached>false</shadedArtifactAttached>
+                                 <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
+-                                <dependencyReducedPomLocation>${project.build.directory}/dependency-reduced-pom.xml</dependencyReducedPomLocation>
+                                 <shadeTestJar>false</shadeTestJar>
+                                 <artifactSet>
+                                     <excludes>
+@@ -136,6 +151,10 @@
+                                 <relocations>
+                                     <!-- top level com not including sun-->
+                                     <relocation>
++                                        <pattern>com.codahale</pattern>
++                                        <shadedPattern>org.apache.hadoop.hbase.shaded.com.codahale</shadedPattern>
++                                    </relocation>
++                                    <relocation>
+                                         <pattern>com.google</pattern>
+                                         <shadedPattern>org.apache.hadoop.hbase.shaded.com.google</shadedPattern>
+                                     </relocation>
+@@ -215,6 +234,11 @@
+                                         <pattern>org.jets3t</pattern>
+                                         <shadedPattern>org.apache.hadoop.hbase.shaded.org.jets3t</shadedPattern>
+                                     </relocation>
++                                    <!-- poorly named add-on package from jets3t dependency. TODO can we just exclude these? -->
++                                    <relocation>
++                                        <pattern>contribs.mx</pattern>
++                                        <shadedPattern>org.apache.hadoop.hbase.shaded.contribs.mx</shadedPattern>
++                                    </relocation>
+                                     <relocation>
+                                         <pattern>org.objectweb</pattern>
+                                         <shadedPattern>org.apache.hadoop.hbase.shaded.org.objectweb</shadedPattern>
+@@ -227,6 +251,10 @@
+                                         <shadedPattern>org.apache.hadoop.hbase.shaded.org.apache.avro</shadedPattern>
+                                     </relocation>
+                                     <relocation>
++                                        <pattern>org.apache.curator</pattern>
++                                        <shadedPattern>org.apache.hadoop.hbase.shaded.org.apache.curator</shadedPattern>
++                                    </relocation>
++                                    <relocation>
+                                         <pattern>org.apache.directory</pattern>
+                                         <shadedPattern>org.apache.hadoop.hbase.shaded.org.apache.directory</shadedPattern>
+                                     </relocation>
+@@ -269,6 +297,10 @@
+                                         <shadedPattern>org.apache.hadoop.hbase.shaded.org.apache.commons.configuration</shadedPattern>
+                                     </relocation>
+                                     <relocation>
++                                        <pattern>org.apache.commons.crypto</pattern>
++                                        <shadedPattern>org.apache.hadoop.hbase.shaded.org.apache.commons.crypto</shadedPattern>
++                                    </relocation>
++                                    <relocation>
+                                         <pattern>org.apache.commons.daemon</pattern>
+                                         <shadedPattern>org.apache.hadoop.hbase.shaded.org.apache.commons.daemon</shadedPattern>
+                                     </relocation>
+@@ -339,6 +371,9 @@
+                                     <resources>
+                                       <resource>LICENSE.txt</resource>
+                                       <resource>ASL2.0</resource>
++                                      <resource>LICENSE-junit.txt</resource>
++                                      <!-- also this unneeded doc -->
++                                      <resource>overview.html</resource>
+                                     </resources>
+                                   </transformer>
+                                   <!-- Where notices exist, just concat them -->
+@@ -347,6 +382,54 @@
+                                     <projectName>${project.name}</projectName>
+                                   </transformer>
+                                 </transformers>
++                                <filters>
++                                  <filter>
++                                    <!-- this is a signed osgi bundle -->
++                                    <artifact>org.eclipse.jetty.orbit:javax.servlet.jsp.jstl</artifact>
++                                    <excludes>
++                                      <exclude>META-INF/ECLIPSEF.SF</exclude>
++                                      <exclude>META-INF/ECLIPSEF.RSA</exclude>
++                                    </excludes>
++                                  </filter>
++                                  <filter>
++                                    <!-- server side webapps that we don't need -->
++                                    <artifact>org.apache.hbase:hbase-server</artifact>
++                                    <excludes>
++                                      <exclude>hbase-webapps/*</exclude>
++                                      <exclude>hbase-webapps/**/*</exclude>
++                                    </excludes>
++                                  </filter>
++                                  <filter>
++                                    <!-- server side webapps that we don't need -->
++                                    <artifact>org.apache.hadoop:hadoop-yarn-common</artifact>
++                                    <excludes>
++                                      <exclude>webapps/*</exclude>
++                                      <exclude>webapps/**/*</exclude>
++                                    </excludes>
++                                  </filter>
++                                  <filter>
++                                    <!-- proto source files aren't needed -->
++                                    <artifact>*:*</artifact>
++                                    <excludes>
++                                      <exclude>*.proto</exclude>
++                                      <exclude>**/*.proto</exclude>
++                                    </excludes>
++                                  </filter>
++                                  <filter>
++                                    <!-- skip french localization -->
++                                    <artifact>org.apache.commons:commons-math3</artifact>
++                                    <excludes>
++                                      <exclude>assets/org/apache/commons/math3/**/*</exclude>
++                                    </excludes>
++                                  </filter>
++                                  <filter>
++                                    <!-- appears to be the result of a conflict in hadoop artifacts -->
++                                    <artifact>org.apache.hadoop:*</artifact>
++                                    <excludes>
++                                      <exclude>mapred-default.xml.orig</exclude>
++                                    </excludes>
++                                  </filter>
++                                </filters>
+                             </configuration>
+                         </execution>
+                     </executions>
+diff --git a/pom.xml b/pom.xml
+index 3102487..cf13f48 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -490,6 +490,11 @@
+       <plugins>
+         <plugin>
+           <groupId>org.apache.maven.plugins</groupId>
++          <artifactId>maven-dependency-plugin</artifactId>
++          <version>${maven.dependency.version}</version>
++        </plugin>
++        <plugin>
++          <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-javadoc-plugin</artifactId>
+            <version>${javadoc.version}</version>
+         </plugin>
+@@ -856,6 +861,11 @@
+             <suppressionsLocation>hbase/checkstyle-suppressions.xml</suppressionsLocation>
+           </configuration>
+         </plugin>
++        <plugin>
++          <groupId>org.apache.maven.plugins</groupId>
++          <artifactId>maven-enforcer-plugin</artifactId>
++          <version>${maven.enforcer.version}</version>
++        </plugin>
+       </plugins>
+     </pluginManagement>
+     <plugins>
+@@ -1349,6 +1359,9 @@
+     <findbugs-annotations>1.3.9-1</findbugs-annotations>
+     <javadoc.version>2.10.3</javadoc.version>
+     <asciidoctor.plugin.version>1.5.2.1</asciidoctor.plugin.version>
++    <maven.dependency.version>3.0.1</maven.dependency.version>
++    <!-- Keep 1.4 version becasue of HBASE-17351 -->
++    <maven.enforcer.version>1.4</maven.enforcer.version>
+     <!-- General Packaging -->
+     <package.prefix>/usr</package.prefix>
+     <package.conf.dir>/etc/hbase</package.conf.dir>
+@@ -1366,6 +1379,7 @@
+     <annotations.test.jar>hbase-annotations-${project.version}-tests.jar</annotations.test.jar>
+     <rsgroup.test.jar>hbase-rsgroup-${project.version}-tests.jar</rsgroup.test.jar>
+     <surefire.version>2.19.1</surefire.version>
++    <shell-executable>bash</shell-executable>
+     <surefire.provider>surefire-junit47</surefire.provider>
+     <!-- default: run small & medium, medium with 2 threads -->
+     <surefire.skipFirstPart>false</surefire.skipFirstPart>
+@@ -1397,6 +1411,7 @@
+     <!-- Surefire argLine defaults to Linux, cygwin argLine is used in the os.windows profile -->
+     <argLine>${hbase-surefire.argLine}</argLine>
+     <jacoco.version>0.7.5.201505241946</jacoco.version>
++    <!-- Keep 1.0-beta-3 version as previous CDH5 -->
+     <extra.enforcer.version>1.0-beta-3</extra.enforcer.version>
+     <!-- Location of test resources -->
+     <test.build.classes>${project.build.directory}/test-classes</test.build.classes>
+-- 
+1.7.9.5
+

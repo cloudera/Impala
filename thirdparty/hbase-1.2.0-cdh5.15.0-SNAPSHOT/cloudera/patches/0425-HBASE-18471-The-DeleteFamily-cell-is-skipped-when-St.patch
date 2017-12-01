@@ -1,0 +1,218 @@
+From 04d9c63b75b9617e8ac354fa62bdac47aba6e181 Mon Sep 17 00:00:00 2001
+From: Chia-Ping Tsai <chia7712@gmail.com>
+Date: Sat, 19 Aug 2017 02:13:34 +0800
+Subject: [PATCH 425/438] HBASE-18471 The DeleteFamily cell is skipped when
+ StoreScanner seeks to next column
+
+(cherry picked from commit 658b01e26e08bb80a130671e6aaad58de258b376)
+
+Change-Id: Ic4a9ac602fdc9fbb925a2e391814d283071f299c
+Author: Chia-Ping Tsai
+Reason: Bug
+Ref: CDH-61580
+---
+ .../hbase/regionserver/ScanQueryMatcher.java       |  102 ++++++++++++++++++++
+ .../hadoop/hbase/client/TestFromClientSide3.java   |   62 ++++++++++++
+ 2 files changed, 164 insertions(+)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/ScanQueryMatcher.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/ScanQueryMatcher.java
+index 2ee9ee1..4272272 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/ScanQueryMatcher.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/ScanQueryMatcher.java
+@@ -566,6 +566,17 @@ public class ScanQueryMatcher {
+   }
+ 
+   public Cell getKeyForNextColumn(Cell kv) {
++    // We aren't sure whether any DeleteFamily cells exist, so we can't skip to next column.
++    // see HBASE-18471
++    // see TestFromClientSide3#testScanAfterDeletingSpecifiedRow
++    if (kv.getQualifierLength() == 0) {
++      Cell nextKey = createNextOnRowCol(kv);
++      if (nextKey != kv) {
++        return nextKey;
++      }
++      // The cell is at the end of row/family/qualifier, so it is impossible to find any DeleteFamily cells.
++      // Let us seek to next column.
++    }
+     ColumnCount nextColumn = columns.getColumnHint();
+     if (nextColumn == null) {
+       return KeyValueUtil.createLastOnRow(
+@@ -697,4 +708,95 @@ public class ScanQueryMatcher {
+      */
+     INCLUDE_AND_SEEK_NEXT_ROW,
+   }
++
++  /**
++   * @return An new cell is located following input cell. If both of type and timestamp are
++   *         minimum, the input cell will be returned directly.
++   */
++  private static Cell createNextOnRowCol(Cell cell) {
++    long ts = cell.getTimestamp();
++    byte type = cell.getTypeByte();
++    if (type != Type.Minimum.getCode()) {
++      type = KeyValue.Type.values()[KeyValue.Type.codeToType(type).ordinal() - 1].getCode();
++    } else if (ts != HConstants.OLDEST_TIMESTAMP) {
++      ts = ts - 1;
++      type = Type.Maximum.getCode();
++    } else {
++      return cell;
++    }
++    return createNextOnRowCol(cell, ts, type);
++  }
++
++  private static Cell createNextOnRowCol(final Cell cell, final long ts, final byte type) {
++    return new Cell() {
++      @Override
++      public byte[] getRowArray() { return cell.getRowArray(); }
++
++      @Override
++      public int getRowOffset() { return cell.getRowOffset(); }
++
++      @Override
++      public short getRowLength() { return cell.getRowLength(); }
++
++      @Override
++      public byte[] getFamilyArray() { return cell.getFamilyArray(); }
++
++      @Override
++      public int getFamilyOffset() { return cell.getFamilyOffset(); }
++
++      @Override
++      public byte getFamilyLength() { return cell.getFamilyLength(); }
++
++      @Override
++      public byte[] getQualifierArray() { return cell.getQualifierArray(); }
++
++      @Override
++      public int getQualifierOffset() { return cell.getQualifierOffset(); }
++
++      @Override
++      public int getQualifierLength() { return cell.getQualifierLength(); }
++
++      @Override
++      public long getTimestamp() { return ts; }
++
++      @Override
++      public byte getTypeByte() {return type; }
++
++      @Override
++      public long getMvccVersion() { return cell.getMvccVersion(); }
++
++      @Override
++      public long getSequenceId() { return cell.getSequenceId(); }
++
++      @Override
++      public byte[] getValueArray() { return cell.getValueArray(); }
++
++      @Override
++      public int getValueOffset() { return cell.getValueOffset(); }
++
++      @Override
++      public int getValueLength() { return cell.getValueLength(); }
++
++      @Override
++      public byte[] getTagsArray() { return cell.getTagsArray(); }
++
++      @Override
++      public int getTagsOffset() { return cell.getTagsOffset(); }
++
++      @Override
++      public int getTagsLength() { return cell.getTagsLength(); }
++
++      @Override
++      public byte[] getValue() { return cell.getValue(); }
++
++      @Override
++      public byte[] getFamily() { return cell.getFamily(); }
++
++      @Override
++      public byte[] getQualifier() { return cell.getQualifier(); }
++
++      @Override
++      public byte[] getRow() {return cell.getRow(); }
++    };
++  }
+ }
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestFromClientSide3.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestFromClientSide3.java
+index 08ccc42..8709c37 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestFromClientSide3.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestFromClientSide3.java
+@@ -37,6 +37,8 @@ import static junit.framework.Assert.assertFalse;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.hbase.Cell;
++import org.apache.hadoop.hbase.CellUtil;
+ import org.apache.hadoop.hbase.HBaseTestingUtility;
+ import org.apache.hadoop.hbase.HColumnDescriptor;
+ import org.apache.hadoop.hbase.HConstants;
+@@ -159,6 +161,66 @@ public class TestFromClientSide3 {
+     }
+   }
+ 
++  private static List<Cell> toList(ResultScanner scanner) {
++    try {
++      List<Cell> cells = new ArrayList<>();
++      for (Result r : scanner) {
++        cells.addAll(r.listCells());
++      }
++      return cells;
++    } finally {
++      scanner.close();
++    }
++  }
++
++  @Test
++  public void testScanAfterDeletingSpecifiedRow() throws IOException {
++    TableName tableName = TableName.valueOf("testScanAfterDeletingSpecifiedRow");
++    HTableDescriptor desc = new HTableDescriptor(tableName);
++    desc.addFamily(new HColumnDescriptor(FAMILY));
++    TEST_UTIL.getHBaseAdmin().createTable(desc);
++    byte[] row = Bytes.toBytes("SpecifiedRow");
++    byte[] value0 = Bytes.toBytes("value_0");
++    byte[] value1 = Bytes.toBytes("value_1");
++    try (Table t = TEST_UTIL.getConnection().getTable(tableName)) {
++      Put put = new Put(row);
++      put.addColumn(FAMILY, QUALIFIER, VALUE);
++      t.put(put);
++      Delete d = new Delete(row);
++      t.delete(d);
++      put = new Put(row);
++      put.addColumn(FAMILY, null, value0);
++      t.put(put);
++      put = new Put(row);
++      put.addColumn(FAMILY, null, value1);
++      t.put(put);
++      List<Cell> cells = toList(t.getScanner(new Scan()));
++      assertEquals(1, cells.size());
++      assertEquals("value_1", Bytes.toString(CellUtil.cloneValue(cells.get(0))));
++
++      cells = toList(t.getScanner(new Scan().addFamily(FAMILY)));
++      assertEquals(1, cells.size());
++      assertEquals("value_1", Bytes.toString(CellUtil.cloneValue(cells.get(0))));
++
++      cells = toList(t.getScanner(new Scan().addColumn(FAMILY, QUALIFIER)));
++      assertEquals(0, cells.size());
++
++      TEST_UTIL.getHBaseAdmin().flush(tableName);
++      cells = toList(t.getScanner(new Scan()));
++      assertEquals(1, cells.size());
++      assertEquals("value_1", Bytes.toString(CellUtil.cloneValue(cells.get(0))));
++
++      cells = toList(t.getScanner(new Scan().addFamily(FAMILY)));
++      assertEquals(1, cells.size());
++      assertEquals("value_1", Bytes.toString(CellUtil.cloneValue(cells.get(0))));
++
++      cells = toList(t.getScanner(new Scan().addColumn(FAMILY, QUALIFIER)));
++      assertEquals(0, cells.size());
++    } finally {
++      TEST_UTIL.deleteTable(tableName);
++    }
++  }
++
+   // override the config settings at the CF level and ensure priority
+   @Test(timeout = 60000)
+   public void testAdvancedConfigOverride() throws Exception {
+-- 
+1.7.9.5
+

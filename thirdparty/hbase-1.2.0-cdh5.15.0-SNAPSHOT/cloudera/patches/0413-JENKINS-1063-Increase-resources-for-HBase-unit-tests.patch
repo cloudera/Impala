@@ -1,0 +1,32 @@
+From 6518dcb7bc3ba2be1578c898752823ba985e5bdb Mon Sep 17 00:00:00 2001
+From: Peter Somogyi <psomogyi@cloudera.com>
+Date: Wed, 6 Sep 2017 19:21:55 +0200
+Subject: [PATCH 413/438] JENKINS-1063 Increase resources for HBase unit tests
+
+The tests occasionally timed out or failed do to overloading.
+Reducing surefire secondPartForkCount to 1.
+
+Change-Id: Ibb394e37264aaecb1d9ef50fceff050d78c785b9
+(cherry picked from commit 6098360851a40bc64ca3e71e3bef65029528a961)
+---
+ pom.xml |    4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/pom.xml b/pom.xml
+index bff21be..3102487 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -2762,7 +2762,9 @@
+       </activation>
+       <properties>
+         <surefire.firstPartForkCount>1</surefire.firstPartForkCount>
+-        <surefire.secondPartForkCount>5</surefire.secondPartForkCount>
++        <!-- CDH specific change: For unit testing we use machines with 4 cores only,
++             so reducing the number of forks. -->
++        <surefire.secondPartForkCount>1</surefire.secondPartForkCount>
+         <surefire.skipFirstPart>false</surefire.skipFirstPart>
+         <surefire.skipSecondPart>false</surefire.skipSecondPart>
+         <surefire.firstPartGroups>org.apache.hadoop.hbase.testclassification.SmallTests</surefire.firstPartGroups>
+-- 
+1.7.9.5
+

@@ -1,0 +1,57 @@
+From ff3d8128112fc3bc10879730c65f54adf548b322 Mon Sep 17 00:00:00 2001
+From: Zach York <zyork@amazon.com>
+Date: Thu, 31 Aug 2017 10:25:32 -0700
+Subject: [PATCH 419/438] HBASE-18757 Fix improper bitwise & in bucketcache
+ offset calculation
+
+This correctly casts the operand to a long to avoid negative offsets created by sign extending the integer operand.
+
+Signed-off-by: tedyu <yuzhihong@gmail.com>
+
+(cherry picked from commit dde799577bf190cb5a4b4b2fcaab72183d3c39c9)
+
+Change-Id: Ib7bb756327928e9db82baa9c844d9586f2c3c89e
+Author: Zach York
+Reason: Bug
+Ref: CDH-61610
+---
+ .../hadoop/hbase/io/hfile/bucket/BucketCache.java  |    4 ++--
+ .../hbase/io/hfile/bucket/TestBucketCache.java     |    9 +++++++++
+ 2 files changed, 11 insertions(+), 2 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/bucket/BucketCache.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/bucket/BucketCache.java
+index f174709..286d8d9 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/bucket/BucketCache.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/io/hfile/bucket/BucketCache.java
+@@ -1146,8 +1146,8 @@ public class BucketCache implements BlockCache, HeapSize {
+     }
+ 
+     long offset() { // Java has no unsigned numbers
+-      long o = ((long) offsetBase) & 0xFFFFFFFF;
+-      o += (((long) (offset1)) & 0xFF) << 32;
++      long o = ((long) offsetBase) & 0xFFFFFFFFL; //This needs the L cast otherwise it will be sign extended as a negative number.
++      o += (((long) (offset1)) & 0xFF) << 32; //The 0xFF here does not need the L cast because it is treated as a positive int.
+       return o << 8;
+     }
+ 
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/io/hfile/bucket/TestBucketCache.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/io/hfile/bucket/TestBucketCache.java
+index 7aef1d6..5a2eb01 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/io/hfile/bucket/TestBucketCache.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/io/hfile/bucket/TestBucketCache.java
+@@ -267,4 +267,13 @@ public class TestBucketCache {
+ 
+     TEST_UTIL.cleanupTestDir();
+   }
++
++  @Test
++  public void testOffsetProducesPositiveOutput() {
++    //This number is picked because it produces negative output if the values isn't ensured to be positive.
++    //See HBASE-18757 for more information.
++    long testValue = 549888460800L;
++    BucketCache.BucketEntry bucketEntry = new BucketCache.BucketEntry(testValue, 10, 10L, true);
++    assertEquals(testValue, bucketEntry.offset());
++  }
+ }
+-- 
+1.7.9.5
+

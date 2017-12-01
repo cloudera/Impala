@@ -1,0 +1,45 @@
+From 11a455688f3a7cc613617cb6fe519d8be2998320 Mon Sep 17 00:00:00 2001
+From: Guangxu Cheng <guangxucheng@gmail.com>
+Date: Tue, 17 Oct 2017 15:46:38 +0800
+Subject: [PATCH 429/438] HBASE-18907 Methods missing rpc timeout parameter in
+ HTable
+
+Signed-off-by: tedyu <yuzhihong@gmail.com>
+
+(cherry picked from commit 58dba2e173f40d91bd54c73fe62c4fc052d72c94)
+
+Change-Id: Ie46e0347202a63c6dae8cbf2910e98df0aeab043
+Author: Guangxu Cheng
+Reason: Bug
+Ref: CDH-61619
+---
+ .../org/apache/hadoop/hbase/client/HTable.java     |    6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/HTable.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/HTable.java
+index 5a56e11..1205fd6 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/HTable.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/HTable.java
+@@ -1128,7 +1128,8 @@ public class HTable implements HTableInterface, RegionLocator {
+         return null;
+       }
+     };
+-    rpcCallerFactory.<Void> newCaller().callWithRetries(callable, this.operationTimeout);
++    rpcCallerFactory.<Void> newCaller(rpcTimeout).callWithRetries(callable,
++        this.operationTimeout);
+   }
+ 
+   /**
+@@ -1425,7 +1426,8 @@ public class HTable implements HTableInterface, RegionLocator {
+             }
+           }
+         };
+-    return rpcCallerFactory.<Boolean> newCaller().callWithRetries(callable, this.operationTimeout);
++    return rpcCallerFactory.<Boolean> newCaller(rpcTimeout).callWithRetries(callable,
++        this.operationTimeout);
+   }
+ 
+   /**
+-- 
+1.7.9.5
+

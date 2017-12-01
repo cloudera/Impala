@@ -1,0 +1,111 @@
+From acb51915b648ffb26a720fcbeeee78eb0a6089b7 Mon Sep 17 00:00:00 2001
+From: chenheng <chenheng@apache.org>
+Date: Tue, 3 May 2016 12:45:18 +1000
+Subject: [PATCH 417/438] HBASE-15714 We are calling checkRow() twice in
+ doMiniBatchMutation()
+
+(cherry picked from commit 0ee3ca2a781f60cdaa9433a0a4f20bf3a146e4e6)
+
+Change-Id: I63ab2d8fdb9633541c050b9885094a79826a453f
+Author: chenheng
+Reason: Bug
+Ref: CDH-56915
+---
+ .../apache/hadoop/hbase/regionserver/HRegion.java  |   18 ++++++++++++------
+ .../hbase/regionserver/TestAtomicOperation.java    |    4 ++--
+ 2 files changed, 14 insertions(+), 8 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
+index d886ee7..f3d87b5 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
+@@ -3083,7 +3083,7 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+         // get the next one.
+         RowLock rowLock = null;
+         try {
+-          rowLock = getRowLock(mutation.getRow(), true);
++          rowLock = getRowLockInternal(mutation.getRow(), true);
+         } catch (IOException ioe) {
+           LOG.warn("Failed getting lock in batch put, row="
+             + Bytes.toStringBinary(mutation.getRow()), ioe);
+@@ -3426,8 +3426,9 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+       checkFamily(family);
+       get.addColumn(family, qualifier);
+ 
++      checkRow(row, "checkAndMutate");
+       // Lock row - note that doBatchMutate will relock this row if called
+-      RowLock rowLock = getRowLock(get.getRow());
++      RowLock rowLock = getRowLockInternal(get.getRow(), false);
+       // wait for all previous transactions to complete (with lock held)
+       mvcc.await();
+       try {
+@@ -3536,8 +3537,9 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+       checkFamily(family);
+       get.addColumn(family, qualifier);
+ 
++      checkRow(row, "checkAndRowMutate");
+       // Lock row - note that doBatchMutate will relock this row if called
+-      RowLock rowLock = getRowLock(get.getRow());
++      RowLock rowLock = getRowLockInternal(get.getRow(), false);
+       // wait for all previous transactions to complete (with lock held)
+       mvcc.await();
+       try {
+@@ -5181,6 +5183,10 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+   public RowLock getRowLock(byte[] row, boolean readLock) throws IOException {
+     // Make sure the row is inside of this region before getting the lock for it.
+     checkRow(row, "row lock");
++    return getRowLockInternal(row, readLock);
++  }
++
++  protected RowLock getRowLockInternal(byte[] row, boolean readLock) throws IOException {
+     // create an object to use a a key in the row lock map
+     HashedBytes rowKey = new HashedBytes(row);
+ 
+@@ -7051,7 +7057,7 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+         for (byte[] row : rowsToLock) {
+           // Attempt to lock all involved rows, throw if any lock times out
+           // use a writer lock for mixed reads and writes
+-          acquiredRowLocks.add(getRowLock(row));
++          acquiredRowLocks.add(getRowLockInternal(row, false));
+         }
+         // 3. Region lock
+         lock(this.updatesLock.readLock(), acquiredRowLocks.isEmpty() ? 1 : acquiredRowLocks.size());
+@@ -7282,7 +7288,7 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+     WALKey walKey = null;
+     boolean doRollBackMemstore = false;
+     try {
+-      rowLock = getRowLock(row);
++      rowLock = getRowLockInternal(row, false);
+       assert rowLock != null;
+       try {
+         lock(this.updatesLock.readLock());
+@@ -7557,7 +7563,7 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+     List<Cell> memstoreCells = new ArrayList<Cell>();
+     Durability effectiveDurability = getEffectiveDurability(increment.getDurability());
+     try {
+-      rowLock = getRowLock(increment.getRow());
++      rowLock = getRowLockInternal(increment.getRow(), false);
+       long txid = 0;
+       try {
+         lock(this.updatesLock.readLock());
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestAtomicOperation.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestAtomicOperation.java
+index a02f56a..4dde75e 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestAtomicOperation.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestAtomicOperation.java
+@@ -626,11 +626,11 @@ public class TestAtomicOperation {
+     }
+ 
+     @Override
+-    public RowLock getRowLock(final byte[] row, boolean readLock) throws IOException {
++    public RowLock getRowLockInternal(final byte[] row, boolean readLock) throws IOException {
+       if (testStep == TestStep.CHECKANDPUT_STARTED) {
+         latch.countDown();
+       }
+-      return new WrappedRowLock(super.getRowLock(row, readLock));
++      return new WrappedRowLock(super.getRowLockInternal(row, readLock));
+     }
+ 
+     public class WrappedRowLock implements RowLock {
+-- 
+1.7.9.5
+

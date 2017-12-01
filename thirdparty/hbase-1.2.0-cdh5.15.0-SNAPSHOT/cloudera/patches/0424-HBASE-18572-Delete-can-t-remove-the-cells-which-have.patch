@@ -1,0 +1,378 @@
+From 471974e864ba4886bd1b4d37a1e76802cd11146e Mon Sep 17 00:00:00 2001
+From: Chia-Ping Tsai <chia7712@gmail.com>
+Date: Sat, 19 Aug 2017 01:57:08 +0800
+Subject: [PATCH 424/438] HBASE-18572 Delete can't remove the cells which have
+ no visibility label
+
+(cherry picked from commit d810b8eb5e0bad174e80f861547066132058d521)
+CDH NOTE: TestVisibilityLabelsWithDeletes had to bee slightly modified.
+
+Change-Id: I3c69294be5335e0fb0f73f6ccaa97bec32e59994
+Author: Chia-Ping Tsai
+Reason: Bug
+Ref: CDH-61589
+---
+ .../DefaultVisibilityLabelServiceImpl.java         |   12 +-
+ .../security/visibility/VisibilityController.java  |    4 +
+ .../visibility/VisibilityScanDeleteTracker.java    |   19 +-
+ .../ExpAsStringVisibilityLabelServiceImpl.java     |    4 +
+ .../TestVisibilityLabelsWithDeletes.java           |  197 ++++++++++++++++++++
+ 5 files changed, 228 insertions(+), 8 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/security/visibility/DefaultVisibilityLabelServiceImpl.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/security/visibility/DefaultVisibilityLabelServiceImpl.java
+index 615b0c5..63fc4ad 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/security/visibility/DefaultVisibilityLabelServiceImpl.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/security/visibility/DefaultVisibilityLabelServiceImpl.java
+@@ -576,12 +576,16 @@ public class DefaultVisibilityLabelServiceImpl implements VisibilityLabelService
+   @Override
+   public boolean matchVisibility(List<Tag> putVisTags, Byte putTagsFormat, List<Tag> deleteVisTags,
+       Byte deleteTagsFormat) throws IOException {
+-    if ((deleteTagsFormat != null && deleteTagsFormat == SORTED_ORDINAL_SERIALIZATION_FORMAT)
+-        && (putTagsFormat == null || putTagsFormat == SORTED_ORDINAL_SERIALIZATION_FORMAT)) {
+-      if (putVisTags.size() == 0) {
+-        // Early out if there are no tags in the cell
++      // Early out if there are no tags in both of cell and delete
++      if (putVisTags.isEmpty() && deleteVisTags.isEmpty()) {
++        return true;
++      }
++      // Early out if one of the tags is empty
++      if (putVisTags.isEmpty() ^ deleteVisTags.isEmpty()) {
+         return false;
+       }
++    if ((deleteTagsFormat != null && deleteTagsFormat == SORTED_ORDINAL_SERIALIZATION_FORMAT)
++        && (putTagsFormat == null || putTagsFormat == SORTED_ORDINAL_SERIALIZATION_FORMAT)) {
+       if (putTagsFormat == null) {
+         return matchUnSortedVisibilityTags(putVisTags, deleteVisTags);
+       } else {
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/security/visibility/VisibilityController.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/security/visibility/VisibilityController.java
+index d8e91e6..1093e91 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/security/visibility/VisibilityController.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/security/visibility/VisibilityController.java
+@@ -1087,6 +1087,10 @@ public class VisibilityController extends BaseMasterAndRegionObserver implements
+     public ReturnCode filterKeyValue(Cell cell) throws IOException {
+       List<Tag> putVisTags = new ArrayList<Tag>();
+       Byte putCellVisTagsFormat = VisibilityUtils.extractVisibilityTags(cell, putVisTags);
++      if (putVisTags.isEmpty() && deleteCellVisTags.isEmpty()) {
++        // Early out if there are no tags in the cell
++        return ReturnCode.INCLUDE;
++      }
+       boolean matchFound = VisibilityLabelServiceManager
+           .getInstance().getVisibilityLabelService()
+           .matchVisibility(putVisTags, putCellVisTagsFormat, deleteCellVisTags,
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/security/visibility/VisibilityScanDeleteTracker.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/security/visibility/VisibilityScanDeleteTracker.java
+index 77786ad..a9565a9 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/security/visibility/VisibilityScanDeleteTracker.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/security/visibility/VisibilityScanDeleteTracker.java
+@@ -20,6 +20,7 @@ package org.apache.hadoop.hbase.security.visibility;
+ 
+ import java.io.IOException;
+ import java.util.ArrayList;
++import java.util.Collections;
+ import java.util.List;
+ 
+ import org.apache.commons.logging.Log;
+@@ -43,6 +44,10 @@ public class VisibilityScanDeleteTracker extends ScanDeleteTracker {
+ 
+   private static final Log LOG = LogFactory.getLog(VisibilityScanDeleteTracker.class);
+ 
++  /**
++   * This tag is used for the DELETE cell which has no visibility label.
++   */
++  private static final List<Tag> EMPTY_TAG = Collections.EMPTY_LIST;
+   // Its better to track the visibility tags in delete based on each type.  Create individual
+   // data structures for tracking each of them.  This would ensure that there is no tracking based
+   // on time and also would handle all cases where deletefamily or deletecolumns is specified with
+@@ -116,9 +121,8 @@ public class VisibilityScanDeleteTracker extends ScanDeleteTracker {
+   private boolean extractDeleteCellVisTags(Cell delCell, Type type) {
+     // If tag is present in the delete
+     boolean hasVisTag = false;
+-    if (delCell.getTagsLength() > 0) {
+-      Byte deleteCellVisTagsFormat = null;
+-      switch (type) {
++    Byte deleteCellVisTagsFormat = null;
++    switch (type) {
+       case DeleteFamily:
+         List<Tag> delTags = new ArrayList<Tag>();
+         if (visibilityTagsDeleteFamily == null) {
+@@ -129,6 +133,8 @@ public class VisibilityScanDeleteTracker extends ScanDeleteTracker {
+           visibilityTagsDeleteFamily.add(new Triple<List<Tag>, Byte, Long>(delTags,
+               deleteCellVisTagsFormat, delCell.getTimestamp()));
+           hasVisTag = true;
++        } else {
++          visibilityTagsDeleteFamily.add(new Triple<>(EMPTY_TAG, deleteCellVisTagsFormat, delCell.getTimestamp()));
+         }
+         break;
+       case DeleteFamilyVersion:
+@@ -141,6 +147,8 @@ public class VisibilityScanDeleteTracker extends ScanDeleteTracker {
+           visibilityTagsDeleteFamilyVersion.add(new Triple<List<Tag>, Byte, Long>(delTags,
+               deleteCellVisTagsFormat, delCell.getTimestamp()));
+           hasVisTag = true;
++        } else {
++          visibilityTagsDeleteFamilyVersion.add(new Triple<>(EMPTY_TAG, deleteCellVisTagsFormat, delCell.getTimestamp()));
+         }
+         break;
+       case DeleteColumn:
+@@ -153,6 +161,8 @@ public class VisibilityScanDeleteTracker extends ScanDeleteTracker {
+           visibilityTagsDeleteColumns.add(new Pair<List<Tag>, Byte>(delTags,
+               deleteCellVisTagsFormat));
+           hasVisTag = true;
++        } else {
++          visibilityTagsDeleteColumns.add(new Pair<>(EMPTY_TAG, deleteCellVisTagsFormat));
+         }
+         break;
+       case Delete:
+@@ -165,11 +175,12 @@ public class VisibilityScanDeleteTracker extends ScanDeleteTracker {
+           visiblityTagsDeleteColumnVersion.add(new Pair<List<Tag>, Byte>(delTags,
+               deleteCellVisTagsFormat));
+           hasVisTag = true;
++        } else {
++          visiblityTagsDeleteColumnVersion.add(new Pair<>(EMPTY_TAG, deleteCellVisTagsFormat));
+         }
+         break;
+       default:
+         throw new IllegalArgumentException("Invalid delete type");
+-      }
+     }
+     return hasVisTag;
+   }
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/security/visibility/ExpAsStringVisibilityLabelServiceImpl.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/security/visibility/ExpAsStringVisibilityLabelServiceImpl.java
+index c4360b0..1a1de60 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/security/visibility/ExpAsStringVisibilityLabelServiceImpl.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/security/visibility/ExpAsStringVisibilityLabelServiceImpl.java
+@@ -427,6 +427,10 @@ public class ExpAsStringVisibilityLabelServiceImpl implements VisibilityLabelSer
+ 
+   private static boolean checkForMatchingVisibilityTagsWithSortedOrder(List<Tag> putVisTags,
+       List<Tag> deleteVisTags) {
++    // Early out if there are no tags in both of cell and delete
++    if (putVisTags.isEmpty() && deleteVisTags.isEmpty()) {
++      return true;
++    }
+     boolean matchFound = false;
+     // If the size does not match. Definitely we are not comparing the equal
+     // tags.
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/security/visibility/TestVisibilityLabelsWithDeletes.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/security/visibility/TestVisibilityLabelsWithDeletes.java
+index dd2b5fb..a7c9fed 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/security/visibility/TestVisibilityLabelsWithDeletes.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/security/visibility/TestVisibilityLabelsWithDeletes.java
+@@ -28,9 +28,12 @@ import java.util.ArrayList;
+ import java.util.Arrays;
+ import java.util.List;
+ 
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hbase.Cell;
+ import org.apache.hadoop.hbase.CellScanner;
++import org.apache.hadoop.hbase.CellUtil;
+ import org.apache.hadoop.hbase.HBaseTestingUtility;
+ import org.apache.hadoop.hbase.HColumnDescriptor;
+ import org.apache.hadoop.hbase.HConstants;
+@@ -65,6 +68,7 @@ import org.junit.rules.TestName;
+  */
+ @Category(MediumTests.class)
+ public class TestVisibilityLabelsWithDeletes {
++  private static final Log LOG = LogFactory.getLog(TestVisibilityLabelsWithDeletes.class);
+   private static final String TOPSECRET = "TOPSECRET";
+   private static final String PUBLIC = "PUBLIC";
+   private static final String PRIVATE = "PRIVATE";
+@@ -3277,4 +3281,197 @@ public class TestVisibilityLabelsWithDeletes {
+   public static <T> List<T> createList(T... ts) {
+     return new ArrayList<>(Arrays.asList(ts));
+   }
++
++
++  private enum DeleteMark {
++    ROW,
++    FAMILY,
++    FAMILY_VERSION,
++    COLUMN,
++    CELL
++  }
++
++  private static Delete addDeleteMark(Delete d, DeleteMark mark, long now) {
++    switch (mark) {
++      case ROW:
++        break;
++      case FAMILY:
++        d.addFamily(fam);
++        break;
++      case FAMILY_VERSION:
++        d.addFamilyVersion(fam, now);
++        break;
++      case COLUMN:
++        d.addColumns(fam, qual);
++        break;
++      case CELL:
++        d.addColumn(fam, qual);
++        break;
++      default:
++        break;
++    }
++    return d;
++  }
++
++  @Test
++  public void testDeleteCellWithoutVisibility() throws IOException, InterruptedException {
++    for (DeleteMark mark : DeleteMark.values()) {
++      testDeleteCellWithoutVisibility(mark);
++    }
++  }
++
++  private void testDeleteCellWithoutVisibility(DeleteMark mark) throws IOException, InterruptedException {
++    setAuths();
++    final TableName tableName = TableName.valueOf("testDeleteCellWithoutVisibility-" + mark.name());
++    Admin hBaseAdmin = TEST_UTIL.getHBaseAdmin();
++    HColumnDescriptor colDesc = new HColumnDescriptor(fam);
++    colDesc.setMaxVersions(5);
++    HTableDescriptor desc = new HTableDescriptor(tableName);
++    desc.addFamily(colDesc);
++    hBaseAdmin.createTable(desc);
++    long now = System.currentTimeMillis();
++    List<Put> puts = new ArrayList<>(1);
++    Put put = new Put(row1);
++    if (mark == DeleteMark.FAMILY_VERSION) {
++      put.addColumn(fam, qual, now, value);
++    } else {
++      put.addColumn(fam, qual, value);
++    }
++
++    puts.add(put);
++    try (Table table = TEST_UTIL.getConnection().getTable(tableName)){
++      table.put(puts);
++      Result r = table.get(new Get(row1));
++      assertEquals(1, r.size());
++      assertEquals(Bytes.toString(value), Bytes.toString(CellUtil.cloneValue(r.rawCells()[0])));
++
++      Delete d = addDeleteMark(new Delete(row1), mark, now);
++      table.delete(d);
++      r = table.get(new Get(row1));
++      assertEquals(0, r.size());
++    }
++  }
++
++  @Test
++  public void testDeleteCellWithVisibility() throws IOException, InterruptedException {
++    for (DeleteMark mark : DeleteMark.values()) {
++      testDeleteCellWithVisibility(mark);
++      testDeleteCellWithVisibilityV2(mark);
++    }
++  }
++
++  private void testDeleteCellWithVisibility(DeleteMark mark) throws IOException, InterruptedException {
++    setAuths();
++    final TableName tableName = TableName.valueOf("testDeleteCellWithVisibility-" + mark.name());
++    Admin hBaseAdmin = TEST_UTIL.getHBaseAdmin();
++    HColumnDescriptor colDesc = new HColumnDescriptor(fam);
++    colDesc.setMaxVersions(5);
++    HTableDescriptor desc = new HTableDescriptor(tableName);
++    desc.addFamily(colDesc);
++    hBaseAdmin.createTable(desc);
++    long now = System.currentTimeMillis();
++    List<Put> puts = new ArrayList<>(2);
++    Put put = new Put(row1);
++    if (mark == DeleteMark.FAMILY_VERSION) {
++      put.addColumn(fam, qual, now, value);
++    } else {
++      put.addColumn(fam, qual, value);
++    }
++    puts.add(put);
++    put = new Put(row1);
++    if (mark == DeleteMark.FAMILY_VERSION) {
++      put.addColumn(fam, qual, now, value1);
++    } else {
++      put.addColumn(fam, qual, value1);
++    }
++    put.setCellVisibility(new CellVisibility(PRIVATE));
++    puts.add(put);
++    try (Table table = TEST_UTIL.getConnection().getTable(tableName)) {
++      table.put(puts);
++      Result r = table.get(new Get(row1));
++      assertEquals(0, r.size());
++      Get getPrivate = new Get(row1);
++      getPrivate.setAuthorizations(new Authorizations(PRIVATE));
++      r = table.get(getPrivate);
++      assertEquals(1, r.size());
++      assertEquals(Bytes.toString(value1), Bytes.toString(CellUtil.cloneValue(r.rawCells()[0])));
++
++      Delete d = addDeleteMark(new Delete(row1), mark, now);
++      table.delete(d);
++
++      r = table.get(new Get(row1));
++      assertEquals(0, r.size());
++      r = table.get(getPrivate);
++      assertEquals(1, r.size());
++      assertEquals(Bytes.toString(value1), Bytes.toString(CellUtil.cloneValue(r.rawCells()[0])));
++
++      Delete deletePrivate = new Delete(row1);
++      deletePrivate.setCellVisibility(new CellVisibility(PRIVATE));
++      d = addDeleteMark(deletePrivate, mark, now);
++      table.delete(d);
++
++      r = table.get(new Get(row1));
++      assertEquals(0, r.size());
++      getPrivate.setAuthorizations(new Authorizations(PRIVATE));
++      r = table.get(getPrivate);
++      assertEquals(0, r.size());
++    }
++  }
++
++  private void testDeleteCellWithVisibilityV2(DeleteMark mark) throws IOException, InterruptedException {
++    setAuths();
++    final TableName tableName = TableName.valueOf("testDeleteCellWithVisibilityV2-" + mark.name());
++    Admin hBaseAdmin = TEST_UTIL.getHBaseAdmin();
++    HColumnDescriptor colDesc = new HColumnDescriptor(fam);
++    colDesc.setMaxVersions(5);
++    HTableDescriptor desc = new HTableDescriptor(tableName);
++    desc.addFamily(colDesc);
++    hBaseAdmin.createTable(desc);
++    long now = System.currentTimeMillis();
++    List<Put> puts = new ArrayList<>(2);
++    Put put = new Put(row1);
++    put.setCellVisibility(new CellVisibility(PRIVATE));
++    if (mark == DeleteMark.FAMILY_VERSION) {
++      put.addColumn(fam, qual, now, value);
++    } else {
++      put.addColumn(fam, qual, value);
++    }
++    puts.add(put);
++    put = new Put(row1);
++    if (mark == DeleteMark.FAMILY_VERSION) {
++      put.addColumn(fam, qual, now, value1);
++    } else {
++      put.addColumn(fam, qual, value1);
++    }
++    puts.add(put);
++    try (Table table = TEST_UTIL.getConnection().getTable(tableName)){
++      table.put(puts);
++      Result r = table.get(new Get(row1));
++      assertEquals(1, r.size());
++      assertEquals(Bytes.toString(value1), Bytes.toString(CellUtil.cloneValue(r.rawCells()[0])));
++      Get getPrivate = new Get(row1);
++      getPrivate.setAuthorizations(new Authorizations(PRIVATE));
++      r = table.get(getPrivate);
++      assertEquals(1, r.size());
++      assertEquals(Bytes.toString(value1), Bytes.toString(CellUtil.cloneValue(r.rawCells()[0])));
++
++      Delete d = addDeleteMark(new Delete(row1), mark, now);
++      table.delete(d);
++
++      r = table.get(new Get(row1));
++      assertEquals(0, r.size());
++      r = table.get(getPrivate);
++      assertEquals(0, r.size());
++
++      Delete deletePrivate = new Delete(row1);
++      deletePrivate.setCellVisibility(new CellVisibility(PRIVATE));
++      d = addDeleteMark(deletePrivate, mark, now);
++      table.delete(d);
++
++      r = table.get(new Get(row1));
++      assertEquals(0, r.size());
++      r = table.get(getPrivate);
++      assertEquals(0, r.size());
++    }
++  }
+ }
+-- 
+1.7.9.5
+

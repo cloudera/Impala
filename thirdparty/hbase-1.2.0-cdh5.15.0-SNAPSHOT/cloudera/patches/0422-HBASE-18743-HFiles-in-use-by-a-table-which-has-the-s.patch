@@ -1,0 +1,80 @@
+From 86fbd043d636bd3441b2e737bb73f55d27bd4908 Mon Sep 17 00:00:00 2001
+From: tedyu <yuzhihong@gmail.com>
+Date: Mon, 4 Sep 2017 07:56:47 -0700
+Subject: [PATCH 422/438] HBASE-18743 HFiles in use by a table which has the
+ same name and namespace with a default table cloned
+ from snapshot may be deleted when that snapshot and
+ default table are deleted (wenbang)
+
+(cherry picked from commit 9b0f2fa3e225554f6b36028c276f056fe27dfe7e)
+
+Change-Id: I2c1a0cc3eeb3ce5287ed046838bbd80b143ad61e
+Author: tedyu
+Reason: Bug
+Ref: CDH-61608
+---
+ .../java/org/apache/hadoop/hbase/TableName.java    |    2 +-
+ .../org/apache/hadoop/hbase/TestNamespace.java     |   12 ++++++++++++
+ .../org/apache/hadoop/hbase/io/TestHFileLink.java  |    5 +++--
+ 3 files changed, 16 insertions(+), 3 deletions(-)
+
+diff --git a/hbase-common/src/main/java/org/apache/hadoop/hbase/TableName.java b/hbase-common/src/main/java/org/apache/hadoop/hbase/TableName.java
+index 198a5eb..9904c78 100644
+--- a/hbase-common/src/main/java/org/apache/hadoop/hbase/TableName.java
++++ b/hbase-common/src/main/java/org/apache/hadoop/hbase/TableName.java
+@@ -388,7 +388,7 @@ public final class TableName implements Comparable<TableName> {
+ 
+     for (TableName tn : tableCache) {
+       if (qualifierAsString.equals(tn.getQualifierAsString()) &&
+-          namespaceAsString.equals(tn.getNameAsString())) {
++          namespaceAsString.equals(tn.getNamespaceAsString())) {
+         return tn;
+       }
+     }
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/TestNamespace.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/TestNamespace.java
+index d72b176..ea24eb8 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/TestNamespace.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/TestNamespace.java
+@@ -421,4 +421,16 @@ public class TestNamespace {
+     fail("Should have thrown exception " + exceptionClass);
+   }
+ 
++  @Test
++  public void testValueOfNamespaceAndQualifier() {
++    TableName name0 = TableName.valueOf("table");
++    TableName name1 = TableName.valueOf("table", "table");
++    assertEquals(NamespaceDescriptor.DEFAULT_NAMESPACE_NAME_STR, name0.getNamespaceAsString());
++    assertEquals("table", name0.getQualifierAsString());
++    assertEquals("table", name0.getNameAsString());
++    assertEquals("table", name1.getNamespaceAsString());
++    assertEquals("table", name1.getQualifierAsString());
++    assertEquals("table:table", name1.getNameAsString());
++  }
++
+ }
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/io/TestHFileLink.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/io/TestHFileLink.java
+index 044975d..e4d09c3 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/io/TestHFileLink.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/io/TestHFileLink.java
+@@ -102,7 +102,8 @@ public class TestHFileLink {
+           TableName.NAMESPACE_DELIM, '=') + "=" + encodedRegion + "-" + storeFileName;
+ 
+       TableName tableNames[] = {TableName.valueOf("tableName1"),
+-          TableName.valueOf("ns", "tableName2")};
++          TableName.valueOf("ns", "tableName2"),
++              TableName.valueOf("refTable:refTable")};
+ 
+       for( TableName tableName : tableNames) {
+         Path tableDir = FSUtils.getTableDir(rootDir, tableName);
+@@ -112,7 +113,7 @@ public class TestHFileLink {
+         //Verify back reference creation
+         assertEquals(encodedRegion+"."+
+             tableName.getNameAsString().replace(TableName.NAMESPACE_DELIM, '='),
+-            HFileLink.createBackReferenceName(tableName.getNameAsString(),
++            HFileLink.createBackReferenceName(FSUtils.getTableName(tableDir).getNameAsString(),
+                 encodedRegion));
+ 
+         //verify parsing back reference
+-- 
+1.7.9.5
+

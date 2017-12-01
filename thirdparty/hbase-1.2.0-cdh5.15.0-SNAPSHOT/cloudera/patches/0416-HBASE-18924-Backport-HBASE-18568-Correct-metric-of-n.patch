@@ -1,0 +1,42 @@
+From 3dc2633d4df5daa5cbf413e3c7764cf802211192 Mon Sep 17 00:00:00 2001
+From: Peter Somogyi <psomogyi@cloudera.com>
+Date: Mon, 2 Oct 2017 14:57:05 -0700
+Subject: [PATCH 416/438] HBASE-18924 Backport HBASE-18568 (Correct metric of
+ numRegions) to branch-1.2 and branch-1.3
+
+Signed-off-by: Mike Drob <mdrob@apache.org>
+
+(cherry picked from commit 2f0101df25b5096757aeb8e768d110fa9b8b686f)
+
+Change-Id: I6c2ab911a3b5c57394d0f3b391846fce2cd27303
+Author: Peter Somogyi
+Reason: Bug
+Ref: CDH-59920
+---
+ .../regionserver/MetricsRegionSourceImpl.java      |    3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionSourceImpl.java b/hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionSourceImpl.java
+index 535037c..0fa99e3 100644
+--- a/hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionSourceImpl.java
++++ b/hbase-hadoop2-compat/src/main/java/org/apache/hadoop/hbase/regionserver/MetricsRegionSourceImpl.java
+@@ -69,6 +69,7 @@ public class MetricsRegionSourceImpl implements MetricsRegionSource {
+                                  MetricsRegionAggregateSourceImpl aggregate) {
+     this.regionWrapper = regionWrapper;
+     agg = aggregate;
++    hashCode = regionWrapper.getRegionHashCode();
+     agg.register(this);
+ 
+     LOG.debug("Creating new MetricsRegionSourceImpl for table " +
+@@ -106,8 +107,6 @@ public class MetricsRegionSourceImpl implements MetricsRegionSource {
+ 
+     regionScanTimeKey = regionNamePrefix + MetricsRegionServerSource.SCAN_TIME_KEY;
+     regionScanTime = registry.newTimeHistogram(regionScanTimeKey);
+-
+-    hashCode = regionWrapper.getRegionHashCode();
+   }
+ 
+   @Override
+-- 
+1.7.9.5
+

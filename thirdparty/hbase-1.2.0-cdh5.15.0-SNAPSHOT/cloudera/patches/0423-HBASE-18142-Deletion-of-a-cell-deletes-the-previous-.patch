@@ -1,0 +1,221 @@
+From 87282a803566b57a1d19c8882091facfa5641cf0 Mon Sep 17 00:00:00 2001
+From: Chun-Hao Tang <tang7526@gmail.com>
+Date: Mon, 18 Sep 2017 16:06:00 +0800
+Subject: [PATCH 423/438] HBASE-18142 Deletion of a cell deletes the previous
+ versions too
+
+Signed-off-by: Chia-Ping Tsai <chia7712@gmail.com>
+
+(cherry picked from commit 316dd45cca4ec0c740627e5a49da535ca11fd4ce)
+
+Change-Id: Ief949d4bc36fe2cc02cdc0ee191c4bf3f2c79961
+Author: Chun-Hao Tang
+Reason: Bug
+Ref: CDH-61570
+---
+ hbase-shell/src/main/ruby/hbase/table.rb           |   15 ++++---
+ hbase-shell/src/main/ruby/shell/commands/delete.rb |    6 +--
+ .../src/main/ruby/shell/commands/deleteall.rb      |    2 +-
+ hbase-shell/src/test/ruby/hbase/table_test.rb      |   46 ++++++++------------
+ 4 files changed, 32 insertions(+), 37 deletions(-)
+
+diff --git a/hbase-shell/src/main/ruby/hbase/table.rb b/hbase-shell/src/main/ruby/hbase/table.rb
+index d1d8079..c86cab9 100644
+--- a/hbase-shell/src/main/ruby/hbase/table.rb
++++ b/hbase-shell/src/main/ruby/hbase/table.rb
+@@ -102,7 +102,7 @@ flush and drop just by typing:
+ Note that after dropping a table, your reference to it becomes useless and further usage
+ is undefined (and not recommended).
+ EOF
+-      end
++    end
+ 
+     #---------------------------------------------------------------------------------------------
+ 
+@@ -162,14 +162,16 @@ EOF
+     #----------------------------------------------------------------------------------------------
+     # Delete a cell
+     def _delete_internal(row, column,
+-    			timestamp = org.apache.hadoop.hbase.HConstants::LATEST_TIMESTAMP, args = {})
+-      _deleteall_internal(row, column, timestamp, args)
++                timestamp = org.apache.hadoop.hbase.HConstants::LATEST_TIMESTAMP,
++                args = {}, all_version = false)
++      _deleteall_internal(row, column, timestamp, args, all_version)
+     end
+ 
+     #----------------------------------------------------------------------------------------------
+     # Delete a row
+     def _deleteall_internal(row, column = nil,
+-    		timestamp = org.apache.hadoop.hbase.HConstants::LATEST_TIMESTAMP, args = {})
++            timestamp = org.apache.hadoop.hbase.HConstants::LATEST_TIMESTAMP,
++            args = {}, all_version = true)
+       # delete operation doesn't need read permission. Retaining the read check for
+       # meta table as a part of HBASE-5837.
+       if is_meta_table?
+@@ -191,9 +193,12 @@ EOF
+          visibility = args[VISIBILITY]
+          set_cell_visibility(d, visibility) if visibility
+       end
+-      if column
++      if column && all_version
+         family, qualifier = parse_column_name(column)
+         d.deleteColumns(family, qualifier, timestamp)
++      elsif column && !all_version
++        family, qualifier = parse_column_name(column)
++        d.deleteColumn(family, qualifier, timestamp)
+       end
+       @table.delete(d)
+     end
+diff --git a/hbase-shell/src/main/ruby/shell/commands/delete.rb b/hbase-shell/src/main/ruby/shell/commands/delete.rb
+index dcb8341..79e38f0 100644
+--- a/hbase-shell/src/main/ruby/shell/commands/delete.rb
++++ b/hbase-shell/src/main/ruby/shell/commands/delete.rb
+@@ -40,15 +40,15 @@ t to table 't1', the corresponding command would be:
+ EOF
+       end
+ 
+-      def command(table, row, column, 
++      def command(table, row, column = nil,
+       				timestamp = org.apache.hadoop.hbase.HConstants::LATEST_TIMESTAMP, args = {})
+         delete(table(table), row, column, timestamp, args)
+       end
+ 
+-      def delete(table, row, column, 
++      def delete(table, row, column = nil,
+       				timestamp = org.apache.hadoop.hbase.HConstants::LATEST_TIMESTAMP, args = {})
+         format_simple_command do
+-          table._delete_internal(row, column, timestamp, args)
++          table._delete_internal(row, column, timestamp, args, false)
+         end
+       end
+     end
+diff --git a/hbase-shell/src/main/ruby/shell/commands/deleteall.rb b/hbase-shell/src/main/ruby/shell/commands/deleteall.rb
+index e6118c9..46f3bfa 100644
+--- a/hbase-shell/src/main/ruby/shell/commands/deleteall.rb
++++ b/hbase-shell/src/main/ruby/shell/commands/deleteall.rb
+@@ -49,7 +49,7 @@ EOF
+       def deleteall(table, row, column = nil,
+                     timestamp = org.apache.hadoop.hbase.HConstants::LATEST_TIMESTAMP, args = {})
+         format_simple_command do
+-          table._deleteall_internal(row, column, timestamp, args)
++          table._deleteall_internal(row, column, timestamp, args, true)
+         end
+       end
+     end
+diff --git a/hbase-shell/src/test/ruby/hbase/table_test.rb b/hbase-shell/src/test/ruby/hbase/table_test.rb
+index d74c6d8..8704ec5 100644
+--- a/hbase-shell/src/test/ruby/hbase/table_test.rb
++++ b/hbase-shell/src/test/ruby/hbase/table_test.rb
+@@ -104,20 +104,14 @@ module Hbase
+       @test_name = "hbase_shell_tests_table"
+       create_test_table(@test_name)
+       @test_table = table(@test_name)
+-      
++
+       # Insert data to perform delete operations
+-      @test_table.put("101", "x:a", "1")
+-      @test_table.put("101", "x:a", "2", Time.now.to_i)
+-      
+-      @test_table.put("102", "x:a", "1", 1212)
+-      @test_table.put("102", "x:a", "2", 1213)
+-      
+-      @test_table.put(103, "x:a", "3")
+-      @test_table.put(103, "x:a", "4")
+-      
++      @test_table.put("102", "x:a", "2", 1212)
++      @test_table.put(103, "x:a", "3", 1214)
++
+       @test_table.put("104", "x:a", 5)
+       @test_table.put("104", "x:b", 6)
+-      
++
+       @test_table.put(105, "x:a", "3")
+       @test_table.put(105, "x:a", "4")
+     end
+@@ -149,20 +143,16 @@ module Hbase
+ 
+     #-------------------------------------------------------------------------------
+ 
+-    define_test "delete should work without timestamp" do
+-      @test_table.delete("101", "x:a")
+-      res = @test_table._get_internal('101', 'x:a')
+-      assert_nil(res)
+-    end
+-
+-    define_test "delete should work with timestamp" do
+-      @test_table.delete("102", "x:a", 1214)
++    define_test "delete should work with string keys" do
++      @test_table.delete('102', 'x:a', 1212)
+       res = @test_table._get_internal('102', 'x:a')
+       assert_nil(res)
+     end
+ 
+     define_test "delete should work with integer keys" do
+-      @test_table.delete(103, "x:a")
++      res = @test_table._get_internal('103', 'x:a')
++      assert_not_nil(res)
++      @test_table.delete(103, 'x:a', 1214)
+       res = @test_table._get_internal('103', 'x:a')
+       assert_nil(res)
+     end
+@@ -375,8 +365,8 @@ module Hbase
+           assert_not_nil(/value=98/.match(res['x:d']))
+         ensure
+           # clean up newly added columns for this test only.
+-          @test_table.delete(1, "x:c")
+-          @test_table.delete(1, "x:d")
++          @test_table.deleteall(1, 'x:c')
++          @test_table.deleteall(1, 'x:d')
+         end
+     end
+ 
+@@ -392,7 +382,7 @@ module Hbase
+         assert_nil(res)
+       ensure
+         # clean up newly added columns for this test only.
+-        @test_table.delete(1, "x:v")
++        @test_table.deleteall(1, 'x:v')
+       end
+     end
+ 
+@@ -575,8 +565,8 @@ module Hbase
+         assert_not_nil(/value=98/.match(res['1']['x:d']))
+       ensure
+         # clean up newly added columns for this test only.
+-        @test_table.delete(1, "x:c")
+-        @test_table.delete(1, "x:d")
++        @test_table.deleteall(1, 'x:c')
++        @test_table.deleteall(1, 'x:d')
+       end
+     end
+ 
+@@ -594,7 +584,7 @@ module Hbase
+         assert_equal(res, {}, "Result is not empty")
+       ensure
+         # clean up newly added columns for this test only.
+-        @test_table.delete(1, "x:v")
++        @test_table.deleteall(1, 'x:v')
+       end
+     end
+ 
+@@ -610,7 +600,7 @@ module Hbase
+         assert_nil(res['2'])
+       ensure
+         # clean up newly added columns for this test only.
+-        @test_table.delete(4, "x:a")
++        @test_table.deleteall(4, 'x:a')
+       end
+     end
+ 
+@@ -623,7 +613,7 @@ module Hbase
+         res = @test_table._get_internal('ttlTest', 'x:a')
+         assert_nil(res)
+       ensure
+-        @test_table.delete('ttlTest', 'x:a')
++        @test_table.deleteall('ttlTest', 'x:a')
+       end
+     end
+ 
+-- 
+1.7.9.5
+

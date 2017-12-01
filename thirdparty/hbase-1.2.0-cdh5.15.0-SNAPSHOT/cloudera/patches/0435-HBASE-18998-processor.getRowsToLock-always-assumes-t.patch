@@ -1,0 +1,64 @@
+From a87ff6ec377aa4756b63ddff06abb1ace274fefb Mon Sep 17 00:00:00 2001
+From: tedyu <yuzhihong@gmail.com>
+Date: Fri, 13 Oct 2017 08:46:07 -0700
+Subject: [PATCH 435/438] HBASE-18998 processor.getRowsToLock() always assumes
+ there is some row being locked
+
+(cherry picked from commit a68465fba79bfe7fae9fdd72e0b8d07fccefca0e)
+
+Change-Id: I0c4154ba93d07cef54e37191f96e4cdf2104fe37
+Author: tedyu
+Reason: Bug
+Ref: CDH-61624
+---
+ .../apache/hadoop/hbase/regionserver/HRegion.java  |   18 +++++++++---------
+ 1 file changed, 9 insertions(+), 9 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
+index f3d87b5..f37b3e7 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java
+@@ -7183,10 +7183,10 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+       try {
+         processor.process(now, region, mutations, walEdit);
+       } catch (IOException e) {
++        String row = processor.getRowsToLock().isEmpty() ? "" :
++          " on row(s):" + Bytes.toStringBinary(processor.getRowsToLock().iterator().next()) + "...";
+         LOG.warn("RowProcessor:" + processor.getClass().getName() +
+-            " throws Exception on row(s):" +
+-            Bytes.toStringBinary(
+-              processor.getRowsToLock().iterator().next()) + "...", e);
++            " throws Exception" + row, e);
+         throw e;
+       }
+       return;
+@@ -7201,10 +7201,10 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+             processor.process(now, region, mutations, walEdit);
+             return null;
+           } catch (IOException e) {
++            String row = processor.getRowsToLock().isEmpty() ? "" :
++              " on row(s):" + Bytes.toStringBinary(processor.getRowsToLock().iterator().next()) + "...";
+             LOG.warn("RowProcessor:" + processor.getClass().getName() +
+-                " throws Exception on row(s):" +
+-                Bytes.toStringBinary(
+-                    processor.getRowsToLock().iterator().next()) + "...", e);
++                " throws Exception" + row, e);
+             throw e;
+           }
+         }
+@@ -7213,9 +7213,9 @@ public class HRegion implements HeapSize, PropagatingConfigurationObserver, Regi
+     try {
+       task.get(timeout, TimeUnit.MILLISECONDS);
+     } catch (TimeoutException te) {
+-      LOG.error("RowProcessor timeout:" + timeout + " ms on row(s):" +
+-          Bytes.toStringBinary(processor.getRowsToLock().iterator().next()) +
+-          "...");
++      String row = processor.getRowsToLock().isEmpty() ? "" :
++        " on row(s):" + Bytes.toStringBinary(processor.getRowsToLock().iterator().next()) + "...";
++      LOG.error("RowProcessor timeout:" + timeout + " ms" + row);
+       throw new IOException(te);
+     } catch (Exception e) {
+       throw new IOException(e);
+-- 
+1.7.9.5
+

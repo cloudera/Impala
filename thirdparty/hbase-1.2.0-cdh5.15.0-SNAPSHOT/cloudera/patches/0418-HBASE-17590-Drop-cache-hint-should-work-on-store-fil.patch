@@ -1,0 +1,77 @@
+From 099adfae5c321ee753f3d6f1361fb2d1179d9fb8 Mon Sep 17 00:00:00 2001
+From: Ashu Pachauri <ashu210890@gmail.com>
+Date: Thu, 12 Oct 2017 17:36:23 +0800
+Subject: [PATCH 418/438] HBASE-17590 Drop cache hint should work on store
+ file write path
+
+Signed-off-by: Chia-Ping Tsai <chia7712@gmail.com>
+
+(cherry picked from commit 146f3851e9525ff68a716697528f1764ddb8c214)
+
+Change-Id: Ic4fa9927ae13f62bb4a7749da8d5b44ca127e9b8
+Author: Ashu Pachauri
+Reason: Bug
+Ref: CDH-61566
+---
+ .../hadoop/hbase/regionserver/StoreFile.java       |   12 +++++++-----
+ 1 file changed, 7 insertions(+), 5 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/StoreFile.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/StoreFile.java
+index 4bf7161..87972d1 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/StoreFile.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/StoreFile.java
+@@ -589,7 +589,7 @@ public class StoreFile {
+     private Path filePath;
+     private InetSocketAddress[] favoredNodes;
+     private HFileContext fileContext;
+-
++    private boolean shouldDropCacheBehind;
+     public WriterBuilder(Configuration conf, CacheConfig cacheConf,
+         FileSystem fs) {
+       this.conf = conf;
+@@ -656,8 +656,8 @@ public class StoreFile {
+       return this;
+     }
+ 
+-    public WriterBuilder withShouldDropCacheBehind(boolean shouldDropCacheBehind/*NOT USED!!*/) {
+-      // TODO: HAS NO EFFECT!!! FIX!!
++    public WriterBuilder withShouldDropCacheBehind(boolean shouldDropCacheBehind) {
++      this.shouldDropCacheBehind = shouldDropCacheBehind;
+       return this;
+     }
+     /**
+@@ -692,7 +692,7 @@ public class StoreFile {
+         comparator = KeyValue.COMPARATOR;
+       }
+       return new Writer(fs, filePath,
+-          conf, cacheConf, comparator, bloomType, maxKeyCount, favoredNodes, fileContext);
++          conf, cacheConf, comparator, bloomType, maxKeyCount, favoredNodes, fileContext, shouldDropCacheBehind);
+     }
+   }
+ 
+@@ -787,19 +787,21 @@ public class StoreFile {
+      *        for Bloom filter size in {@link HFile} format version 1.
+      * @param favoredNodes
+      * @param fileContext - The HFile context
++     * @param shouldDropCacheBehind Drop pages written to page cache after writing the store file.
+      * @throws IOException problem writing to FS
+      */
+     private Writer(FileSystem fs, Path path,
+         final Configuration conf,
+         CacheConfig cacheConf,
+         final KVComparator comparator, BloomType bloomType, long maxKeys,
+-        InetSocketAddress[] favoredNodes, HFileContext fileContext)
++        InetSocketAddress[] favoredNodes, HFileContext fileContext, boolean shouldDropCacheBehind)
+             throws IOException {
+       writer = HFile.getWriterFactory(conf, cacheConf)
+           .withPath(fs, path)
+           .withComparator(comparator)
+           .withFavoredNodes(favoredNodes)
+           .withFileContext(fileContext)
++          .withShouldDropCacheBehind(shouldDropCacheBehind)
+           .create();
+ 
+       this.kvComparator = comparator;
+-- 
+1.7.9.5
+

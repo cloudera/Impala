@@ -1,0 +1,43 @@
+From 02ad44a8ca1aabc68c57125b948273743caf373c Mon Sep 17 00:00:00 2001
+From: Sean Busbey <busbey@cloudera.com>
+Date: Thu, 16 Nov 2017 20:54:02 -0600
+Subject: [PATCH 430/438] CLOUDERA-BUILD update cdh precommit personality for
+ HBASE-18505
+
+Change-Id: Iec75650c94559e59ca53144ed29a86212da12dfe
+Author: Mike Drob
+Reason: Test
+Ref: CDH-60377
+(cherry picked from commit 42a34fe0141e8a23ac3f0c90906cfbdc0324903e)
+---
+ cloudera/cdh-personality.sh |    7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/cloudera/cdh-personality.sh b/cloudera/cdh-personality.sh
+index 9b70075..de84a50 100644
+--- a/cloudera/cdh-personality.sh
++++ b/cloudera/cdh-personality.sh
+@@ -14,7 +14,7 @@
+ # See the License for the specific language governing permissions and
+ # limitations under the License.
+ 
+-# Last updated from upstream dev-support/hbase-personality on commit
++# first updated from upstream dev-support/hbase-personality on commit
+ #     41be3bc2cc42565335d55f553c536b1fce2aa023
+ #
+ #   - Removed hadoop-check test, since CDH only has 1 Hadoop version
+@@ -107,6 +107,11 @@ function personality_modules
+   # use -Dtest.exclude.pattern/-Dtest to exclude/include the
+   # tests respectively.
+   if [[ ${testtype} = unit ]]; then
++    # if the modules include root, skip all the submodules HBASE-18505
++    if [[ "${CHANGED_MODULES[*]}" =~ \. ]]; then
++      CHANGED_MODULES=(.)
++    fi
++
+     extra="${extra} -PrunAllTests"
+     if [[ -n "${EXCLUDED_TESTS}" ]]; then
+       extra="${extra} -Dtest.exclude.pattern=${EXCLUDED_TESTS}"
+-- 
+1.7.9.5
+

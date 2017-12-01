@@ -1,0 +1,64 @@
+From ee90470e0e6043462b1fa6a52e6de50558644ace Mon Sep 17 00:00:00 2001
+From: Abhishek Singh Chouhan <achouhan@apache.org>
+Date: Mon, 13 Nov 2017 17:16:31 +0530
+Subject: [PATCH 432/438] HBASE-19215 Incorrect exception handling on the
+ client causes incorrect call timeouts and byte
+ buffer allocations on the server
+
+Signed-off-by: Andrew Purtell <apurtell@apache.org>
+Amending-Author: Andrew Purtell <apurtell@apache.org>
+
+Conflicts:
+	hbase-client/src/main/java/org/apache/hadoop/hbase/ipc/BlockingRpcConnection.java
+(cherry picked from commit 0cc34b8f620e91cbd3fba53a7f3186b8d830c851)
+
+Change-Id: Icf29cd392daedb5841246d2312f5f3014cbae562
+Author: Abhishek Singh Chouhan
+Reason: Bug
+Ref: CDH-62009
+---
+ .../java/org/apache/hadoop/hbase/ipc/IPCUtil.java  |    8 ++++++++
+ .../org/apache/hadoop/hbase/ipc/RpcClientImpl.java |    7 +++++--
+ 2 files changed, 13 insertions(+), 2 deletions(-)
+
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/ipc/IPCUtil.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/ipc/IPCUtil.java
+index 734227c..b81852b 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/ipc/IPCUtil.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/ipc/IPCUtil.java
+@@ -309,4 +309,12 @@ public class IPCUtil {
+     Preconditions.checkArgument(totalSize < Integer.MAX_VALUE);
+     return totalSize;
+   }
++
++  static IOException toIOE(Throwable t) {
++    if (t instanceof IOException) {
++      return (IOException) t;
++    } else {
++      return new IOException(t);
++    }
++  }
+ }
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/ipc/RpcClientImpl.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/ipc/RpcClientImpl.java
+index b003c9a..3998076 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/ipc/RpcClientImpl.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/ipc/RpcClientImpl.java
+@@ -920,11 +920,14 @@ public class RpcClientImpl extends AbstractRpcClient {
+         try {
+           call.callStats.setRequestSizeBytes(IPCUtil.write(this.out, header, call.param,
+               cellBlock));
+-        } catch (IOException e) {
++        } catch (Throwable t) {
++          if (LOG.isTraceEnabled()) {
++            LOG.trace("Error while writing call, call_id:" + call.id, t);
++          }
+           // We set the value inside the synchronized block, this way the next in line
+           //  won't even try to write. Otherwise we might miss a call in the calls map?
+           shouldCloseConnection.set(true);
+-          writeException = e;
++          writeException = IPCUtil.toIOE(t);
+           interrupt();
+         }
+       }
+-- 
+1.7.9.5
+

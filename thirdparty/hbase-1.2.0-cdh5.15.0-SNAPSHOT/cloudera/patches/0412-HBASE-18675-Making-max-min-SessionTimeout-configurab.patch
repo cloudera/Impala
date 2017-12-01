@@ -1,0 +1,34 @@
+From 54c9b340ffe2c8815bfe1c196a98ce2b2b97531f Mon Sep 17 00:00:00 2001
+From: Cesar Delgado <cdelgado@apple.com>
+Date: Wed, 23 Aug 2017 15:37:30 -0700
+Subject: [PATCH 412/438] HBASE-18675 Making {max,min}SessionTimeout
+ configurable for MiniZooKeeperCluster
+
+Author: Cesar Delgado
+Reason: Improvement
+Ref: CDH-58823
+
+Change-Id: Iec60737d096727f03054e215f2fa6a0a85fab290
+Signed-off-by: tedyu <yuzhihong@gmail.com>
+Signed-off-by: Sean Busbey <busbey@apache.org>
+---
+ .../hbase/zookeeper/MiniZooKeeperCluster.java      |    3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/zookeeper/MiniZooKeeperCluster.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/zookeeper/MiniZooKeeperCluster.java
+index 8b6f9de..97102ab 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/zookeeper/MiniZooKeeperCluster.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/zookeeper/MiniZooKeeperCluster.java
+@@ -224,6 +224,9 @@ public class MiniZooKeeperCluster {
+       }
+ 
+       ZooKeeperServer server = new ZooKeeperServer(dir, dir, tickTimeToUse);
++      // Setting {min,max}SessionTimeout defaults to be the same as in Zookeeper
++      server.setMinSessionTimeout(configuration.getInt("hbase.zookeeper.property.minSessionTimeout", -1));
++      server.setMaxSessionTimeout(configuration.getInt("hbase.zookeeper.property.maxSessionTimeout", -1));
+       NIOServerCnxnFactory standaloneServerFactory;
+       while (true) {
+         try {
+-- 
+1.7.9.5
+
