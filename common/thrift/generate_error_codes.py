@@ -336,7 +336,8 @@ error_codes = (
 
   ("DISK_IO_ERROR", 110, "Disk I/O error: $0"),
 
-
+  ("LZ4_COMPRESSION_INPUT_TOO_LARGE", 111,
+   "The input size is too large for LZ4 compression: $0"),
 )
 
 import sys
