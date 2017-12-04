@@ -390,12 +390,12 @@ public class SentryPolicyService {
   public List<TSentryRole> listAllRoles(User requestingUser) throws ImpalaException {
     SentryServiceClient client = new SentryServiceClient();
     try {
-      return Lists.newArrayList(client.get().listRoles(requestingUser.getShortName()));
+      return Lists.newArrayList(client.get().listAllRoles(requestingUser.getShortName()));
     } catch (SentryAccessDeniedException e) {
       throw new AuthorizationException(String.format(ACCESS_DENIED_ERROR_MSG,
           requestingUser.getName(), "LIST_ROLES"));
     } catch (Exception e) {
-      throw new InternalException("Error making 'listRoles' RPC to Sentry Service: ", e);
+      throw new InternalException("Error making 'listAllRoles' RPC to Sentry Service: ", e);
     } finally {
       client.close();
     }

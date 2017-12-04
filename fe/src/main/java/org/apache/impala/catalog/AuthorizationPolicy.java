@@ -304,18 +304,6 @@ public class AuthorizationPolicy implements PrivilegeCache {
    * Returns a set of privilege strings in Sentry format.
    */
   @Override
-   public Set<String> listPrivileges(Set<String> groups, Set<String> users, ActiveRoleSet roleSet,
-      Authorizable... authorizationhierarchy) {
-    /* User based roles and authorization hierarchy is not currently supported.
-      Fallback to listing privileges using groups. */
-    return listPrivileges(groups, roleSet);
-
-  }
-
-  /**
-   * Returns a set of privilege strings in Sentry format.
-   */
-  @Override
   public Set<String> listPrivileges(Set<String> groups, Set<String> users,
       ActiveRoleSet roleSet) {
     /* User based roles and authorization hierarchy is not currently supported.
