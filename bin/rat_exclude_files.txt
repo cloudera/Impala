@@ -111,6 +111,8 @@ tests/shell/bad_impalarc
 tests/shell/good_impalarc
 tests/shell/shell.cmds
 tests/shell/shell2.cmds
+tests/shell/shell_case_sensitive.cmds
+tests/shell/shell_case_sensitive2.cmds
 tests/shell/shell_error.cmds
 tests/shell/test_close_queries.sql
 tests/shell/test_file_comments.sql
