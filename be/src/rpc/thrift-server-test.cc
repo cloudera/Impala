@@ -54,6 +54,7 @@ DECLARE_int32(beeswax_port);
 
 DECLARE_string(keytab_file);
 DECLARE_string(principal);
+DECLARE_string(be_principal);
 DECLARE_string(krb5_conf);
 
 string IMPALA_HOME(getenv("IMPALA_HOME"));
@@ -136,7 +137,10 @@ class ThriftParamsTest : public ThriftTestBase<testing::TestWithParam<KerberosSw
       CreateServiceKeytab(spn, &kt_path);
 
       FLAGS_keytab_file = kt_path;
-      FLAGS_principal = Substitute("$0@$1", spn, realm);
+      // We explicitly set 'principal' and 'be_principal' even though 'principal' won't be
+      // used to test IMPALA-6256.
+      FLAGS_principal = "dummy-service/host@realm";
+      FLAGS_be_principal = Substitute("$0@$1", spn, realm);
 
     }
 
@@ -150,6 +154,7 @@ class ThriftParamsTest : public ThriftTestBase<testing::TestWithParam<KerberosSw
       StopKdc();
       FLAGS_keytab_file.clear();
       FLAGS_principal.clear();
+      FLAGS_be_principal.clear();
       FLAGS_krb5_conf.clear();
       EXPECT_OK(FileSystemUtil::RemovePaths({unique_test_dir_.string()}));
     }
