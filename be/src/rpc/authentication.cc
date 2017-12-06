@@ -129,6 +129,11 @@ static vector<sasl_callback_t> KERB_INT_CALLBACKS;  // Internal kerberos connect
 static vector<sasl_callback_t> KERB_EXT_CALLBACKS;  // External kerberos connections
 static vector<sasl_callback_t> LDAP_EXT_CALLBACKS;  // External LDAP connections
 
+// The name of the application passed to Sasl which will retain reference to it.
+// This is initialized the first time InitAuth() is called. Future call must pass
+// the same 'appname' or InitAuth() will fail.
+static string APP_NAME;
+
 // Path to the file based credential cache that we pass to the KRB5CCNAME environment
 // variable.
 static const string KRB5CCNAME_PATH = "/tmp/krb5cc_impala_internal";
@@ -562,6 +567,12 @@ void SaslSetMutex() {
 
 
 Status InitAuth(const string& appname) {
+  if (APP_NAME.empty()) {
+    APP_NAME = appname;
+  } else if (APP_NAME != appname) {
+    return Status(TErrorCode::SASL_APP_NAME_MISMATCH, APP_NAME, appname);
+  }
+
   // We only set up Sasl things if we are indeed going to be using Sasl.
   // Checking of these flags for sanity is done later, but this check is good
   // enough at this early stage:
@@ -644,7 +655,7 @@ Status InitAuth(const string& appname) {
     SaslSetMutex();
     try {
       // We assume all impala processes are both server and client.
-      sasl::TSaslServer::SaslInit(GENERAL_CALLBACKS, appname);
+      sasl::TSaslServer::SaslInit(GENERAL_CALLBACKS, APP_NAME.c_str());
       sasl::TSaslClient::SaslInit(GENERAL_CALLBACKS);
     } catch (sasl::SaslServerImplException& e) {
       stringstream err_msg;
