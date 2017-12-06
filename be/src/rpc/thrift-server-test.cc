@@ -109,7 +109,7 @@ template <class T> class ThriftTestBase : public T {
 
 // The path of the current executable file that is required for passing into the SASL
 // library as the 'application name'.
-string current_executable_path;
+static string CURRENT_EXECUTABLE_PATH;
 
 // This class allows us to run all the tests that derive from this in the modes enumerated
 // in 'KerberosSwitch'.
@@ -145,8 +145,8 @@ class ThriftParamsTest : public ThriftTestBase<testing::TestWithParam<KerberosSw
     }
 
     // Make sure that we have a valid string in the 'current_executable_path'.
-    ASSERT_FALSE(current_executable_path.empty());
-    ASSERT_OK(InitAuth(current_executable_path));
+    ASSERT_FALSE(CURRENT_EXECUTABLE_PATH.empty());
+    ASSERT_OK(InitAuth(CURRENT_EXECUTABLE_PATH));
   }
 
   virtual void TearDown() {
@@ -632,6 +632,6 @@ int main(int argc, char** argv) {
   impala::InitCommonRuntime(argc, argv, false, impala::TestInfo::BE_TEST);
 
   // Fill in the path of the current binary for use by the tests.
-  current_executable_path = argv[0];
+  CURRENT_EXECUTABLE_PATH = argv[0];
   return RUN_ALL_TESTS();
 }
