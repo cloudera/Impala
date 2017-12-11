@@ -1730,7 +1730,7 @@ DecimalTestCase decimal_cases[] = {
   { "cast(0.1 as decimal(13,12)) - "
     "cast(99999999999999999999999999999999999999 as decimal(38,0))",
      {{ false, true, 0, 38, 12 },
-      { true, false, 0, 38, 6 }}},
+      { false, true, 0, 38, 6 }}},
   // Test multiply operator
   { "cast(1.23 as decimal(30,2)) * cast(1 as decimal(10,3))",
     {{ false, false, 123000, 38, 5 }}},
