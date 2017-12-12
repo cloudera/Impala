@@ -29,7 +29,7 @@
   <url>.</url>
 
   <properties>
-    <hadoop.version>${env.IMPALA_HADOOP_VERSION_BASE}-SNAPSHOT</hadoop.version>
+    <hadoop.version>${env.IMPALA_HADOOP_VERSION}</hadoop.version>
   </properties>
 
   <repositories>

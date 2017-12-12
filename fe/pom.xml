@@ -38,12 +38,12 @@ under the License.
     <beeswax_port>21000</beeswax_port>
     <impalad>localhost</impalad>
     <testExecutionMode>reduced</testExecutionMode>
-    <hadoop.version>${env.IMPALA_HADOOP_VERSION_BASE}-SNAPSHOT</hadoop.version>
-    <hive.version>${env.IMPALA_HIVE_VERSION_BASE}-SNAPSHOT</hive.version>
+    <hadoop.version>${env.IMPALA_HADOOP_VERSION}</hadoop.version>
+    <hive.version>${env.IMPALA_HIVE_VERSION}</hive.version>
     <hive.major.version>${env.IMPALA_HIVE_MAJOR_VERSION}</hive.major.version>
-    <sentry.version>${env.IMPALA_SENTRY_VERSION_BASE}-SNAPSHOT</sentry.version>
-    <hbase.version>${env.IMPALA_HBASE_VERSION_BASE}-SNAPSHOT</hbase.version>
-    <parquet.version>${env.IMPALA_PARQUET_VERSION}-SNAPSHOT</parquet.version>
+    <sentry.version>${env.IMPALA_SENTRY_VERSION}</sentry.version>
+    <hbase.version>${env.IMPALA_HBASE_VERSION}</hbase.version>
+    <parquet.version>${env.IMPALA_PARQUET_VERSION}</parquet.version>
     <impala.extdatasrc.api.version>1.0-SNAPSHOT</impala.extdatasrc.api.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <kudu.version>${env.KUDU_JAVA_VERSION}</kudu.version>
