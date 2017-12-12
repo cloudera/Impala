@@ -461,12 +461,6 @@ export HADOOP_CLASSPATH="${HADOOP_CLASSPATH-}:${HADOOP_HOME}/share/hadoop/tools/
 export LZO_JAR_PATH="$HADOOP_LZO/build/hadoop-lzo-0.4.15.jar"
 HADOOP_CLASSPATH+=":$LZO_JAR_PATH"
 
-# C6 Hadoop paths
-HADOOP_CLASSPATH+=":${HADOOP_HOME}/share/hadoop/common/*"
-HADOOP_CLASSPATH+=":${HADOOP_HOME}/share/hadoop/common/lib/*"
-HADOOP_CLASSPATH+=":${HADOOP_HOME}/share/hadoop/mapreduce/*"
-HADOOP_CLASSPATH+=":${HADOOP_HOME}/share/hadoop/tools/lib/*"
-
 export MINI_DFS_BASE_DATA_DIR="$IMPALA_HOME/cdh-${CDH_MAJOR_VERSION}-hdfs-data"
 export PATH="$HADOOP_HOME/bin:$PATH"
 
