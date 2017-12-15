@@ -1607,12 +1607,9 @@ Status PartitionedAggregationNode::CodegenUpdateSlot(LlvmCodeGen* codegen,
   } else if ((agg_op == AggFn::MIN || agg_op == AggFn::MAX) && dst_is_numeric_or_bool) {
     bool is_min = agg_op == AggFn::MIN;
     src.CodegenBranchIfNull(&builder, ret_block);
-    Function* min_max_fn = codegen->CodegenMinMax(slot_desc->type(), is_min);
-    Value* dst_value = builder.CreateLoad(dst_slot_ptr, "dst_val");
-    Value* min_max_args[] = {dst_value, src.GetVal()};
-    Value* result =
-        builder.CreateCall(min_max_fn, min_max_args, is_min ? "min_value" : "max_value");
-    builder.CreateStore(result, dst_slot_ptr);
+    codegen->CodegenMinMax(
+        &builder, slot_desc->type(), src.GetVal(), dst_slot_ptr, is_min, *fn);
+
     // Dst may have been NULL, make sure to unset the NULL bit.
     DCHECK(slot_desc->is_nullable());
     slot_desc->CodegenSetNullIndicator(
