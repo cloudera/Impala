@@ -295,10 +295,18 @@ class ClientRequestState {
   /// * server_profile_ tracks time spent inside the ImpalaServer,
   ///   but not inside fragment execution, i.e. the time taken to
   ///   register and set-up the query and for rows to be fetched.
-  //
+  ///
   /// There's a fourth profile which is not built here (but is a
   /// child of profile_); the execution profile which tracks the
   /// actual fragment execution.
+  ///
+  /// Redaction: Only the following info strings in the profile are redacted as they
+  /// are expected to contain sensitive information like schema/column references etc.
+  /// Other fields are left unredacted.
+  /// - Query Statement
+  /// - Query Plan
+  /// - Query Status
+  /// - Error logs
   RuntimeProfile profile_;
   RuntimeProfile server_profile_;
   RuntimeProfile summary_profile_;
