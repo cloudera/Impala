@@ -445,16 +445,15 @@ class DiskIoMgr : public CacheLineAligned {
     /// Maximum length in bytes for hdfsRead() calls.
     int64_t MaxReadChunkSize() const;
 
-    /// Opens the file for this range. This function only modifies state in this range.
-    /// If 'use_file_handle_cache' is true and this is a local hdfs file, then this scan
-    /// range will not maintain an exclusive file handle. It will borrow an hdfs file
-    /// handle from the file handle cache for each Read(), so Open() does nothing.
-    /// If 'use_file_handle_cache' is false or this is a remote hdfs file or this is
-    /// a local OS file, Open() will maintain a file handle on the scan range for
-    /// exclusive use by this scan range. An exclusive hdfs file handle still comes
-    /// from the cache, but it is a newly opened file handle that is held for the
-    /// entire duration of a scan range's lifetime and destroyed in Close().
-    /// All local OS files are opened using normal OS file APIs.
+  /// Opens the file for this range. This function only modifies state in this range.
+  /// If 'use_file_handle_cache' is true and this is a local hdfs file, then this scan
+  /// range will not maintain an exclusive file handle. It will borrow an hdfs file
+  /// handle from the file handle cache for each Read(), so Open() does nothing.
+  /// If 'use_file_handle_cache' is false or this is a remote hdfs file or this is
+  /// a local OS file, Open() will open a file handle on the scan range for
+  /// exclusive use by this scan range. The scan range is the exclusive owner of the
+  /// file handle, and the file handle is destroyed in Close().
+  /// All local OS files are opened using normal OS file APIs.
     Status Open(bool use_file_handle_cache) WARN_UNUSED_RESULT;
 
     /// Closes the file for this range. This function only modifies state in this range.
@@ -508,16 +507,16 @@ class DiskIoMgr : public CacheLineAligned {
     DiskIoRequestContext* reader_ = nullptr;
 
     /// File handle either to hdfs or local fs (FILE*)
-    /// The hdfs file handle is only stored here in three cases:
+    /// The hdfs file handle is stored here in three cases:
     /// 1. The file handle cache is off (max_cached_file_handles == 0).
     /// 2. The scan range is using hdfs caching.
     /// -OR-
     /// 3. The hdfs file is expected to be remote (expected_local_ == false)
-    /// In each case, the scan range gets a new file handle from the file handle cache
-    /// at Open(), holds it exclusively, and destroys it in Close().
+    /// In each case, the scan range gets a new ExclusiveHdfsFileHandle at Open(),
+    /// owns it exclusively, and destroys it in Close().
     union {
       FILE* local_file_ = nullptr;
-      HdfsFileHandle* exclusive_hdfs_fh_;
+      ExclusiveHdfsFileHandle* exclusive_hdfs_fh_;
     };
 
     /// Tagged union that holds a buffer for the cases when there is a buffer allocated
@@ -775,25 +774,28 @@ class DiskIoMgr : public CacheLineAligned {
   /// for debugging.
   bool Validate() const;
 
-  /// Given a FS handle, name and last modified time of the file, gets an HdfsFileHandle
-  /// from the file handle cache. If 'require_new_handle' is true, the cache will open
-  /// a fresh file handle. On success, records statistics about whether this was
-  /// a cache hit or miss in the 'reader' as well as at the system level. In case of an
-  /// error returns nullptr.
-  HdfsFileHandle* GetCachedHdfsFileHandle(const hdfsFS& fs,
-      std::string* fname, int64_t mtime, DiskIoRequestContext *reader,
-      bool require_new_handle);
+  /// Given a FS handle, name and last modified time of the file, construct a new
+  /// ExclusiveHdfsFileHandle. In the case of an error, returns nullptr.
+  ExclusiveHdfsFileHandle* GetExclusiveHdfsFileHandle(const hdfsFS& fs,
+      std::string* fname, int64_t mtime, DiskIoRequestContext* reader);
+
+  /// Releases an exclusive file handle, destroying it
+  void ReleaseExclusiveHdfsFileHandle(ExclusiveHdfsFileHandle* fid);
+
+  /// Given a FS handle, name and last modified time of the file, gets a
+  /// CachedHdfsFileHandle from the file handle cache. On success, records statistics
+  /// about whether this was a cache hit or miss in the 'reader' as well as at the
+  /// system level. In case of an error returns nullptr.
+  CachedHdfsFileHandle* GetCachedHdfsFileHandle(const hdfsFS& fs,
+      std::string* fname, int64_t mtime, DiskIoRequestContext* reader);
 
   /// Releases a file handle back to the file handle cache when it is no longer in use.
-  /// If 'destroy_handle' is true, the file handle cache will close the file handle
-  /// immediately.
-  void ReleaseCachedHdfsFileHandle(std::string* fname, HdfsFileHandle* fid,
-      bool destroy_handle);
+  void ReleaseCachedHdfsFileHandle(std::string* fname, CachedHdfsFileHandle* fid);
 
   /// Reopens a file handle by destroying the file handle and getting a fresh
   /// file handle from the cache. Returns an error if the file could not be reopened.
   Status ReopenCachedHdfsFileHandle(const hdfsFS& fs, std::string* fname, int64_t mtime,
-      HdfsFileHandle** fid);
+      CachedHdfsFileHandle** fid);
 
   /// Garbage collect unused I/O buffers up to 'bytes_to_free', or all the buffers if
   /// 'bytes_to_free' is -1.
@@ -897,13 +899,10 @@ class DiskIoMgr : public CacheLineAligned {
   /// round-robin assignment for that case.
   static AtomicInt32 next_disk_id_;
 
-  // Number of file handle cache partitions to use
-  static const size_t NUM_FILE_HANDLE_CACHE_PARTITIONS = 16;
-
   // Caching structure that maps file names to cached file handles. The cache has an upper
   // limit of entries defined by FLAGS_max_cached_file_handles. Evicted cached file
   // handles are closed.
-  FileHandleCache<NUM_FILE_HANDLE_CACHE_PARTITIONS> file_handle_cache_;
+  FileHandleCache file_handle_cache_;
 
   /// Returns the index into free_buffers_ for a given buffer size
   int free_buffers_idx(int64_t buffer_size);
