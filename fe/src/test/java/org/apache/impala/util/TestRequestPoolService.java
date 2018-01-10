@@ -30,6 +30,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.impala.common.ByteUnits;
 import org.apache.impala.common.InternalException;
 import org.apache.impala.thrift.TErrorCode;
@@ -107,6 +108,10 @@ public class TestRequestPoolService {
       poolService_.llamaConfWatcher_.setCheckIntervalMs(CHECK_INTERVAL_MS);
     }
     poolService_.start();
+    // Make sure that the Hadoop configuration from classpath is used for the allocation
+    // config.
+    Configuration conf = poolService_.getAllocationConfMap();
+    Assert.assertTrue(conf.getBoolean("impala.core-site.overridden", false));
   }
 
   @After

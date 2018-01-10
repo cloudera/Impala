@@ -126,6 +126,10 @@ public class RequestPoolService {
   // is reset when the allocation configuration file changes and other threads access it.
   private final AtomicReference<AllocationConfiguration> allocationConf_;
 
+  /// The configuration map that was passed into 'allocationConf_'. Used only for
+  /// testing. Racy to access from multiple threads.
+  private final Configuration allocationConfMap_;
+
   // Watches the Llama configuration file for changes.
   @VisibleForTesting
   final FileWatchService llamaConfWatcher_;
@@ -170,10 +174,13 @@ public class RequestPoolService {
       throw new IllegalArgumentException(
           "Unable to find allocation configuration file: " + fsAllocationPath);
     }
-    Configuration allocConf = new Configuration(false);
+    // Load the default Hadoop configuration files for picking up overrides like custom
+    // group mapping plugins etc.
+    Configuration allocConf = new Configuration();
     allocConf.set(FairSchedulerConfiguration.ALLOCATION_FILE, fsAllocationURL.getPath());
     allocLoader_ = new AllocationFileLoaderService();
     allocLoader_.init(allocConf);
+    allocationConfMap_ = allocConf;
 
     if (!Strings.isNullOrEmpty(llamaSitePath)) {
       llamaConfUrl_ = getURL(llamaSitePath);
@@ -449,5 +456,14 @@ public class RequestPoolService {
     shortName = requestingUser.getShortName();
     UserGroupInformation ugi = UserGroupInformation.createRemoteUser(shortName);
     return allocationConf_.get().hasAccess(pool, QueueACL.SUBMIT_APPLICATIONS, ugi);
+  }
+
+  /**
+   * Returns the AllocationConfiguration corresponding to this instance of
+   * RequestPoolService.
+   */
+  @VisibleForTesting
+  Configuration getAllocationConfMap() {
+    return allocationConfMap_;
   }
 }
