@@ -181,6 +181,13 @@ public class PlannerTest extends PlannerTestBase {
   }
 
   @Test
+  public void testUnionHostsNumEst() {
+    TQueryOptions options = defaultQueryOptions();
+    options.setExplain_level(TExplainLevel.EXTENDED);
+    runPlannerTestFile("union_hosts_num_est", options);
+  }
+
+  @Test
   public void testValues() {
     runPlannerTestFile("values");
   }
