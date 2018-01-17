@@ -191,8 +191,7 @@ public class KuduTable extends Table {
     numClusteringCols_ = 0;
     org.apache.kudu.client.KuduTable kuduTable = null;
     // Connect to Kudu to retrieve table metadata
-    KuduClient kuduClient = KuduUtil.getKuduClient(getKuduMasterHosts());
-    try {
+    try (KuduClient kuduClient = KuduUtil.createKuduClient(getKuduMasterHosts())) {
       kuduTable = kuduClient.openTable(kuduTableName_);
     } catch (KuduException e) {
       throw new ImpalaRuntimeException(
@@ -396,8 +395,7 @@ public class KuduTable extends Table {
     resultSchema.addToColumns(new TColumn("Leader Replica", Type.STRING.toThrift()));
     resultSchema.addToColumns(new TColumn("# Replicas", Type.INT.toThrift()));
 
-    KuduClient client = KuduUtil.getKuduClient(getKuduMasterHosts());
-    try {
+    try (KuduClient client = KuduUtil.createKuduClient(getKuduMasterHosts())) {
       org.apache.kudu.client.KuduTable kuduTable = client.openTable(kuduTableName_);
       List<LocatedTablet> tablets =
           kuduTable.getTabletsLocations(BackendConfig.INSTANCE.getKuduClientTimeoutMs());
@@ -440,8 +438,7 @@ public class KuduTable extends Table {
     // Build column header
     String header = "RANGE (" + Joiner.on(',').join(getRangePartitioningColNames()) + ")";
     resultSchema.addToColumns(new TColumn(header, Type.STRING.toThrift()));
-    KuduClient client = KuduUtil.getKuduClient(getKuduMasterHosts());
-    try {
+    try (KuduClient client = KuduUtil.createKuduClient(getKuduMasterHosts())) {
       org.apache.kudu.client.KuduTable kuduTable = client.openTable(kuduTableName_);
       // The Kudu table API will return the partitions in sorted order by value.
       List<String> partitions = kuduTable.getFormattedRangePartitions(
