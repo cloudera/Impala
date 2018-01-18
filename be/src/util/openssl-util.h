@@ -20,10 +20,31 @@
 
 #include <openssl/aes.h>
 #include <openssl/sha.h>
+#include <openssl/ssl.h>
 
 #include "common/status.h"
 
 namespace impala {
+
+// From https://github.com/apache/kudu/commit/b88117415a02699c12a6eacbf065c4140ee0963c
+//
+// Hard code OpenSSL flag values from OpenSSL 1.0.1e[1][2] when compiling
+// against OpenSSL 1.0.0 and below. We detect when running against a too-old
+// version of OpenSSL using these definitions at runtime so that Kudu has full
+// functionality when run against a new OpenSSL version, even if it's compiled
+// against an older version.
+//
+// [1]: https://github.com/openssl/openssl/blob/OpenSSL_1_0_1e/ssl/ssl.h#L605-L609
+// [2]: https://github.com/openssl/openssl/blob/OpenSSL_1_0_1e/ssl/tls1.h#L166-L172
+#ifndef TLS1_1_VERSION
+#define TLS1_1_VERSION 0x0302
+#endif
+#ifndef TLS1_2_VERSION
+#define TLS1_2_VERSION 0x0303
+#endif
+
+/// Returns the maximum supported TLS version available in the linked OpenSSL library.
+int MaxSupportedTlsVersion();
 
 /// Add entropy from the system RNG to OpenSSL's global RNG. Called at system startup
 /// and again periodically to add new entropy.
