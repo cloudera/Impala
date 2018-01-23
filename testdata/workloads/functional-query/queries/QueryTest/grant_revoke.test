@@ -332,6 +332,48 @@ select * from grant_rev_db.test_tbl1
 ---- TYPES
 INT
 ====
+---- USER
+test_user
+---- QUERY
+create role some_test_role
+---- CATCH
+User 'test_user' does not have privileges to execute: CREATE_ROLE
+====
+---- USER
+test_user
+---- QUERY
+drop role grant_revoke_test_ALL_SERVER
+---- CATCH
+User 'test_user' does not have privileges to execute: DROP_ROLE
+====
+---- USER
+test_user
+---- QUERY
+grant role grant_revoke_test_ALL_SERVER to group `$GROUP_NAME`
+---- CATCH
+User 'test_user' does not have privileges to execute: GRANT_ROLE
+====
+---- USER
+test_user
+---- QUERY
+revoke role grant_revoke_test_ALL_SERVER from group `$GROUP_NAME`
+---- CATCH
+User 'test_user' does not have privileges to execute: REVOKE_ROLE
+====
+---- USER
+test_user
+---- QUERY
+grant all on server to grant_revoke_test_ALL_SERVER
+---- CATCH
+User 'test_user' does not have privileges to execute: GRANT_PRIVILEGE
+====
+---- USER
+test_user
+---- QUERY
+revoke all on server from grant_revoke_test_ALL_SERVER
+---- CATCH
+User 'test_user' does not have privileges to execute: REVOKE_PRIVILEGE
+====
 ---- QUERY
 # Set up a role to test the WITH GRANT OPTION. Assumes that tests are not running as
 # 'root' and that 'root' exists on all machines.
