@@ -114,6 +114,11 @@ public class HBaseTable extends Table {
   private static final String HBASE_STORAGE_HANDLER =
       "org.apache.hadoop.hive.hbase.HBaseStorageHandler";
 
+  // Original table name property for backwards compatibility with the original spec.
+  // This changed upstream in with HIVE-18366 during C6 timeframe.  This is a workaround
+  // to get tests working again.
+  private static final String HBASE_TABLE_NAME_COMPAT = "hbase.table.name";
+
   // Column family of HBase row key
   private static final String ROW_KEY_COLUMN_FAMILY = ":key";
 
@@ -438,22 +443,30 @@ public class HBaseTable extends Table {
   }
 
   /**
-   * This method is completely copied from Hive's HBaseStorageHandler.java.
+   * This method was originally copied from Hive's HBaseStorageHandler.java;
+   * Now it implements a backwards compatible interface that allows both newer
+   * and older versions of Hive to work.
    */
   private String getHBaseTableName(org.apache.hadoop.hive.metastore.api.Table tbl) {
-    // Give preference to TBLPROPERTIES over SERDEPROPERTIES
-    // (really we should only use TBLPROPERTIES, so this is just
-    // for backwards compatibility with the original specs).
+    // The table name property was renamed and moved several times. We look up
+    // the table name in the following order:
+    //   1) Try looking up HbaseSerDe.HBASE_TABLE_NAME in TBLPROPERTIES; return it if found
+    //   2) Try looking up HBASE_TABLE_NAME_COMPAT in TBLPROPERTIRES; return it if found
+    //   3) Try looking up HBASE_TABLE_NAME_COMPAT in SERDEPROPERTIES; return it if found
+    //   4) Return dbName.tableName, stripped of any default prefix.
+
     String tableName = tbl.getParameters().get(HBaseSerDe.HBASE_TABLE_NAME);
-    if (tableName == null) {
-      tableName = tbl.getSd().getSerdeInfo().getParameters().get(
-          HBaseSerDe.HBASE_TABLE_NAME);
-    }
-    if (tableName == null) {
-      tableName = tbl.getDbName() + "." + tbl.getTableName();
-      if (tableName.startsWith(DEFAULT_PREFIX)) {
-        tableName = tableName.substring(DEFAULT_PREFIX.length());
-      }
+    if (tableName != null) return tableName;
+
+    tableName = tbl.getParameters().get(HBASE_TABLE_NAME_COMPAT);
+    if (tableName != null) return tableName;
+
+    tableName = tbl.getSd().getSerdeInfo().getParameters().get(HBASE_TABLE_NAME_COMPAT);
+    if (tableName != null) return tableName;
+
+    tableName = tbl.getDbName() + "." + tbl.getTableName();
+    if (tableName.startsWith(DEFAULT_PREFIX)) {
+      tableName = tableName.substring(DEFAULT_PREFIX.length());
     }
     return tableName;
   }
