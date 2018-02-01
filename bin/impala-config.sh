@@ -123,16 +123,16 @@ fi
 export IMPALA_KUDU_VERSION=cdh5-1.5.0_5.13.2-impala-toolchain
 
 # Kudu version used to identify Java client jar from maven
-export KUDU_JAVA_VERSION=1.5.0-cdh5.13.2-SNAPSHOT
+export KUDU_JAVA_VERSION=1.5.0-cdh5.13.2
 
 # Versions of Hadoop ecosystem dependencies.
 # ------------------------------------------
 export CDH_MAJOR_VERSION=5
-export IMPALA_HADOOP_VERSION=2.6.0-cdh5.13.2-SNAPSHOT
-export IMPALA_HBASE_VERSION=1.2.0-cdh5.13.2-SNAPSHOT
-export IMPALA_HIVE_VERSION=1.1.0-cdh5.13.2-SNAPSHOT
-export IMPALA_SENTRY_VERSION=1.5.1-cdh5.13.2-SNAPSHOT
-export IMPALA_PARQUET_VERSION=1.5.0-cdh5.13.2-SNAPSHOT
+export IMPALA_HADOOP_VERSION=2.6.0-cdh5.13.2
+export IMPALA_HBASE_VERSION=1.2.0-cdh5.13.2
+export IMPALA_HIVE_VERSION=1.1.0-cdh5.13.2
+export IMPALA_SENTRY_VERSION=1.5.1-cdh5.13.2
+export IMPALA_PARQUET_VERSION=1.5.0-cdh5.13.2
 export IMPALA_LLAMA_MINIKDC_VERSION=1.0.0
 
 # Source the branch and local config override files here to override any
