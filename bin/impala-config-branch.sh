@@ -73,7 +73,7 @@ fi
 
 BUILD_REPO_BASE="http://cloudera-build-us-west-1.vpc.cloudera.com/s3/build/${CDH_GBN}/impala-minicluster-tarballs"
 
-export IMPALA_HADOOP_VERSION_BASE=3.0.0-alpha3-${BRANCH}
+export IMPALA_HADOOP_VERSION_BASE=3.0.0-${BRANCH}
 export IMPALA_HADOOP_VERSION=${IMPALA_HADOOP_VERSION_BASE}-${CDH_GBN}
 export IMPALA_HADOOP_URL=${BUILD_REPO_BASE}/hadoop-${IMPALA_HADOOP_VERSION}.tar.gz
 export IMPALA_HBASE_VERSION_BASE=2.0.0-${BRANCH}
