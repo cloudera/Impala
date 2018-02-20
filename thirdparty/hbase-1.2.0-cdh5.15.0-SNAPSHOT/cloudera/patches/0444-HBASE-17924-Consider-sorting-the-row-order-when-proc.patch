@@ -1,0 +1,123 @@
+From 73b756eab288e947c6a789e6d6e68f954016b9bf Mon Sep 17 00:00:00 2001
+From: Andrew Purtell <apurtell@apache.org>
+Date: Mon, 8 May 2017 16:23:13 -0700
+Subject: [PATCH 444/444] HBASE-17924 Consider sorting the row order when
+ processing multi() ops before taking rowlocks
+ (Allan Yang)
+
+(cherry picked from commit 959deb0e5c7c43c2cda6fe4b5c4d46ed80d3d8e6)
+
+Author: Andrew Purtell
+Reason: Improvement
+Ref: CDH-65018
+Change-Id: I770bbb710e39e05e369695167b19ec07e2466ada
+---
+ .../hadoop/hbase/regionserver/RSRpcServices.java   |   21 ++++++++++++++++++--
+ .../org/apache/hadoop/hbase/wal/WALSplitter.java   |   21 +++++++++++++++++++-
+ 2 files changed, 39 insertions(+), 3 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/RSRpcServices.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/RSRpcServices.java
+index 9f40fd8..e3715ca 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/RSRpcServices.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/RSRpcServices.java
+@@ -25,6 +25,7 @@ import java.net.BindException;
+ import java.net.InetSocketAddress;
+ import java.net.UnknownHostException;
+ import java.util.ArrayList;
++import java.util.Arrays;
+ import java.util.Collections;
+ import java.util.HashMap;
+ import java.util.Iterator;
+@@ -731,6 +732,14 @@ public class RSRpcServices implements HBaseRPCErrorHandler,
+     long before = EnvironmentEdgeManager.currentTime();
+     boolean batchContainsPuts = false, batchContainsDelete = false;
+     try {
++      /** HBASE-17924
++       * mutationActionMap is a map to map the relation between mutations and actions
++       * since mutation array may have been reoredered.In order to return the right
++       * result or exception to the corresponding actions, We need to know which action
++       * is the mutation belong to. We can't sort ClientProtos.Action array, since they
++       * are bonded to cellscanners.
++       */
++      Map<Mutation, ClientProtos.Action> mutationActionMap = new HashMap<Mutation, ClientProtos.Action>();
+       int i = 0;
+       for (ClientProtos.Action action: mutations) {
+         MutationProto m = action.getMutation();
+@@ -742,6 +751,7 @@ public class RSRpcServices implements HBaseRPCErrorHandler,
+           mutation = ProtobufUtil.toDelete(m, cells);
+           batchContainsDelete = true;
+         }
++        mutationActionMap.put(mutation, action);
+         mArray[i++] = mutation;
+         quota.addMutation(mutation);
+       }
+@@ -749,11 +759,15 @@ public class RSRpcServices implements HBaseRPCErrorHandler,
+       if (!region.getRegionInfo().isMetaTable()) {
+         regionServer.cacheFlusher.reclaimMemStoreMemory();
+       }
+-
++      // HBASE-17924
++      // sort to improve lock efficiency
++      Arrays.sort(mArray);
+       OperationStatus[] codes = region.batchMutate(mArray, HConstants.NO_NONCE,
+         HConstants.NO_NONCE);
+       for (i = 0; i < codes.length; i++) {
+-        int index = mutations.get(i).getIndex();
++        Mutation currentMutation = mArray[i];
++        ClientProtos.Action currentAction = mutationActionMap.get(currentMutation);
++        int index = currentAction.getIndex();
+         Exception e = null;
+         switch (codes[i].getOperationStatusCode()) {
+           case BAD_FAMILY:
+@@ -1746,6 +1760,9 @@ public class RSRpcServices implements HBaseRPCErrorHandler,
+           walEntries.add(walEntry);
+         }
+         if(edits!=null && !edits.isEmpty()) {
++          // HBASE-17924
++          // sort to improve lock efficiency
++          Collections.sort(edits);
+           long replaySeqId = (entry.getKey().hasOrigSequenceNumber()) ?
+             entry.getKey().getOrigSequenceNumber() : entry.getKey().getLogSequenceNumber();
+           OperationStatus[] result = doReplayBatchOp(region, edits, replaySeqId);
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/wal/WALSplitter.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/wal/WALSplitter.java
+index 3b81e2a..f62646c 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/wal/WALSplitter.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/wal/WALSplitter.java
+@@ -2226,7 +2226,7 @@ public class WALSplitter {
+   }
+ 
+   /** A struct used by getMutationsFromWALEntry */
+-  public static class MutationReplay {
++  public static class MutationReplay implements Comparable<MutationReplay> {
+     public MutationReplay(MutationType type, Mutation mutation, long nonceGroup, long nonce) {
+       this.type = type;
+       this.mutation = mutation;
+@@ -2242,6 +2242,25 @@ public class WALSplitter {
+     public final Mutation mutation;
+     public final long nonceGroup;
+     public final long nonce;
++
++    @Override
++    public int compareTo(final MutationReplay d) {
++      return this.mutation.compareTo(d.mutation);
++    }
++
++    @Override
++    public boolean equals(Object obj) {
++      if(!(obj instanceof MutationReplay)) {
++        return false;
++      } else {
++        return this.compareTo((MutationReplay)obj) == 0;
++      }
++    }
++
++    @Override
++    public int hashCode() {
++      return this.mutation.hashCode();
++    }
+   }
+ 
+   /**
+-- 
+1.7.9.5
+

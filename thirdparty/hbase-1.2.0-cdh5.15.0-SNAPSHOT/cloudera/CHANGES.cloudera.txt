@@ -1,3 +1,92 @@
+commit 73b756eab288e947c6a789e6d6e68f954016b9bf
+Author: Andrew Purtell <apurtell@apache.org>
+Date:   Mon May 8 16:23:13 2017 -0700
+
+    HBASE-17924 Consider sorting the row order when processing multi() ops before taking rowlocks (Allan Yang)
+    
+    (cherry picked from commit 959deb0e5c7c43c2cda6fe4b5c4d46ed80d3d8e6)
+    
+    Author: Andrew Purtell
+    Reason: Improvement
+    Ref: CDH-65018
+    Change-Id: I770bbb710e39e05e369695167b19ec07e2466ada
+
+commit e0991c4e6db23bbc8989fd0f422e986ec589a3cf
+Author: Michael Stack <stack@apache.org>
+Date:   Mon Nov 20 12:31:07 2017 -0800
+
+    CDH-62141 Backport CDH5.7 MultiTableInputFormatBase Connection handling and
+    HBASE-19299 for Cerner
+    
+    Backports hbase-1.2 (CDH5.7+) Connection handling in MultiTableInputFormatBase#getSplits
+    to older hbase-1.0x CDHs; e.g. CDH5.5.
+    
+    M hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/MultiTableInputFormatBase.java
+     Small change where we make the Connection and Admin once up front just
+     inside a try. A new finally clause closes them out when done. Change
+     looks big but it is just a right-shift of a bunch of code.
+    
+    M hbase-server/src/test/java/org/apache/hadoop/hbase/mapreduce/TestMultiTableInputFormatBase.java
+     New test that verifies only one Connection made. This test was
+     added upstream as HBASE-19299 Assert only one Connection is constructed
+     when calculating splits in a MultiTableInputFormat
+    
+    Change-Id: Iacdbb18dfc862be04a810adf0e0a0b1896413066
+    Reason: Bug
+    Author: stack
+    Ref: CDH-62141
+
+commit 0faffd3dc6f3496966d52f4cb0f8b015523c9c54
+Author: huaxiang sun <huaxiangsun@apache.org>
+Date:   Wed Jan 3 12:24:05 2018 -0800
+
+    HBASE-18625 Splitting of region with replica, doesn't update region list in serverHolding. A server crash leads to overlap.
+    
+    Reason: Bug
+    Author: Huaxiang Sun <huaxiangsun@gmail.com>
+    Ref: CDH-63473
+    
+    Change-Id: I9d950508f7ba3a7fb15af9bd35e09ba66ec23944
+    Signed-off-by: ramkrishna.s.vasudevan<ramkrishna.s.vasudevan@intel.com>
+
+commit 02af9b1acb31e1501af47c5dcf8d92fae99b6075
+Author: tedyu <yuzhihong@gmail.com>
+Date:   Mon Apr 25 13:26:47 2016 -0700
+
+    HBASE-14252 RegionServers fail to start when setting hbase.ipc.server.callqueue.scan.ratio to 0 (Yubao Liu and Ted Yu)
+    
+    Reason: Bug
+    Author: tedyu <yuzhihong@gmail.com>
+    Ref: CDH-63018
+    
+    Change-Id: Ib24f6e30c51a808d9f539c30d63b76c2971d9482
+
+commit fcb8c7f912e57e8fe366c7783cb6c2804786b4cc
+Author: Andrew Purtell <apurtell@apache.org>
+Date:   Tue Nov 1 19:09:17 2016 -0700
+
+    HBASE-16980 TestRowProcessorEndpoint failing consistently (Yu Li)
+    
+    (cherry picked from commit 8b7053fb392b621f62bfe2c4d47a7d03945d44bd)
+    
+    Change-Id: I3e0dc8939ad73ba489f4e2e61e59ea43c095c486
+    Author: Andrew Purtell
+    Reason: Bug
+    Ref: CDH-47213
+
+commit 02f8b7ee5552a8a8f00b8aeb00f4a0bc91f6663e
+Author: Michael Stack <stack@apache.org>
+Date:   Fri Dec 1 13:43:22 2017 -0800
+
+    CDH-61751 Backport 'HBASE-18233 We shouldn't wait for readlock in
+    doMiniBatchMutation in case of deadlock'
+    
+    Author: stack
+    Reason: Bug
+    Ref: CDH-61751
+    
+    Change-Id: I0217cf0394d385fecf6717107ba438be0c51e49d
+
 commit 90ed9880e9d3de2617b37fc0f09580b3a03cec84
 Author: Jenkins <dev-kitchen@cloudera.com>
 Date:   Tue Nov 28 07:42:39 2017 -0800

@@ -1,0 +1,60 @@
+From 02af9b1acb31e1501af47c5dcf8d92fae99b6075 Mon Sep 17 00:00:00 2001
+From: tedyu <yuzhihong@gmail.com>
+Date: Mon, 25 Apr 2016 13:26:47 -0700
+Subject: [PATCH 441/444] HBASE-14252 RegionServers fail to start when setting
+ hbase.ipc.server.callqueue.scan.ratio to 0 (Yubao
+ Liu and Ted Yu)
+
+Reason: Bug
+Author: tedyu <yuzhihong@gmail.com>
+Ref: CDH-63018
+
+Change-Id: Ib24f6e30c51a808d9f539c30d63b76c2971d9482
+---
+ .../hadoop/hbase/ipc/RWQueueRpcExecutor.java       |    2 +-
+ .../hadoop/hbase/ipc/TestSimpleRpcScheduler.java   |   16 ++++++++++++++++
+ 2 files changed, 17 insertions(+), 1 deletion(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/RWQueueRpcExecutor.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/RWQueueRpcExecutor.java
+index 0d98ea9..6118225 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/RWQueueRpcExecutor.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/RWQueueRpcExecutor.java
+@@ -137,7 +137,7 @@ public class RWQueueRpcExecutor extends RpcExecutor {
+     this.numScanQueues = numScanQueues;
+     this.writeBalancer = getBalancer(numWriteQueues);
+     this.readBalancer = getBalancer(numReadQueues);
+-    this.scanBalancer = getBalancer(numScanQueues);
++    this.scanBalancer = numScanQueues > 0 ? getBalancer(numScanQueues) : null;
+ 
+     queues = new ArrayList<BlockingQueue<CallRunner>>(writeHandlersCount + readHandlersCount);
+     LOG.debug(name + " writeQueues=" + numWriteQueues + " writeHandlers=" + writeHandlersCount +
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/ipc/TestSimpleRpcScheduler.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/ipc/TestSimpleRpcScheduler.java
+index bb694e3..cdb8aa9 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/ipc/TestSimpleRpcScheduler.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/ipc/TestSimpleRpcScheduler.java
+@@ -234,6 +234,22 @@ public class TestSimpleRpcScheduler {
+   }
+ 
+   @Test
++  public void testScanQueueWithZeroScanRatio() throws Exception {
++    Configuration schedConf = HBaseConfiguration.create();
++    schedConf.setFloat(SimpleRpcScheduler.CALL_QUEUE_HANDLER_FACTOR_CONF_KEY, 1.0f);
++    schedConf.setFloat(SimpleRpcScheduler.CALL_QUEUE_READ_SHARE_CONF_KEY, 0.5f);
++    schedConf.setFloat(SimpleRpcScheduler.CALL_QUEUE_SCAN_SHARE_CONF_KEY, 0f);
++
++    PriorityFunction priority = mock(PriorityFunction.class);
++    when(priority.getPriority(any(RequestHeader.class), any(Message.class),
++      any(User.class))).thenReturn(HConstants.NORMAL_QOS);
++
++    RpcScheduler scheduler = new SimpleRpcScheduler(schedConf, 2, 1, 1, priority,
++                                                    HConstants.QOS_THRESHOLD);
++    assertNotEquals(scheduler, null);
++  }
++
++  @Test
+   public void testScanQueues() throws Exception {
+     Configuration schedConf = HBaseConfiguration.create();
+     schedConf.setFloat(SimpleRpcScheduler.CALL_QUEUE_HANDLER_FACTOR_CONF_KEY, 1.0f);
+-- 
+1.7.9.5
+

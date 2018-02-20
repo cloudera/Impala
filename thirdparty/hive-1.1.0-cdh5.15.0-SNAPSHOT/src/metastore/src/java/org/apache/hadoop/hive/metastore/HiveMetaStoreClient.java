@@ -228,15 +228,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
             throw new IllegalArgumentException("URI: " + s
                 + " does not have a scheme");
           }
-          metastoreUris[i++] = new URI(
-              tmpUri.getScheme(),
-              tmpUri.getUserInfo(),
-              ShimLoader.getHadoopThriftAuthBridge().getCanonicalHostName(tmpUri.getHost()),
-              tmpUri.getPort(),
-              tmpUri.getPath(),
-              tmpUri.getQuery(),
-              tmpUri.getFragment()
-          );
+          metastoreUris[i++] = tmpUri;
 
         }
       } catch (IllegalArgumentException e) {
