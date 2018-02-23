@@ -89,3 +89,6 @@ export IMPALA_PARQUET_VERSION=1.9.0-${BRANCH}
 export IMPALA_AVRO_JAVA_VERSION=1.8.2-${BRANCH}
 export KUDU_JAVA_VERSION=1.6.0-${BRANCH}-SNAPSHOT
 export IMPALA_KITE_VERSION=1.0.0-${BRANCH}-SNAPSHOT
+
+# All builds on this branch should support Kudu.
+export KUDU_IS_SUPPORTED=true
