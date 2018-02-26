@@ -460,6 +460,10 @@ aggregation(SUM, NumStatsFilteredRowGroups): 0
 ====
 ---- QUERY
 # Check that all the row groups are skipped using null_count stat
+#
+# NOTE: "IMPALA-6113: Skip row groups with predicates on NULL columns"
+# is not present in this branch, so this query and the subsequent
+# one are modified to account for that.
 create table table_for_null_count_test (i int, j int) stored as parquet;
 insert into table_for_null_count_test values (1, NULL), (2, NULL), (3, NULL);
 select count(*) from table_for_null_count_test where j < 3;
@@ -467,7 +471,7 @@ select count(*) from table_for_null_count_test where j < 3;
 0
 ---- RUNTIME_PROFILE
 aggregation(SUM, NumRowGroups): 1
-aggregation(SUM, NumStatsFilteredRowGroups): 1
+aggregation(SUM, NumStatsFilteredRowGroups): 0
 ====
 ---- QUERY
 # Insert another row group where not all the 'j' values are NULL
@@ -477,7 +481,7 @@ select i from table_for_null_count_test where j < 3;
 4
 ---- RUNTIME_PROFILE
 aggregation(SUM, NumRowGroups): 2
-aggregation(SUM, NumStatsFilteredRowGroups): 1
+aggregation(SUM, NumStatsFilteredRowGroups): 0
 ====
 ---- QUERY
 # Turning off parquet stats and verifying that no row groups are skipped
