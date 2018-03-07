@@ -43,6 +43,7 @@ export CDH_GBN=${GLOBAL_BUILD_NUMBER:-${CDH_GBN:-}}
 VERSION="6.0.0"
 BRANCH="cdh${VERSION}"
 CDH_GBN_CONFIG="${IMPALA_HOME}/toolchain/cdh_components/cdh-gbn.sh"
+CDH_REPO_BRANCH="cdh6.0.0_beta1"
 
 if [ ! "${CDH_GBN}" ]; then
   if [ -f "${CDH_GBN_CONFIG}" ]; then
@@ -65,7 +66,7 @@ else
   MAVEN_CONFIG_FILE="${IMPALA_HOME}/toolchain/cdh_components/m2-settings.xml"
   if [ ! -e "${MAVEN_CONFIG_FILE}" ]; then
     mkdir -p "$(dirname ${MAVEN_CONFIG_FILE})"
-    curl --silent http://github.mtv.cloudera.com/raw/CDH/cdh/${BRANCH}/gbn-m2-settings.xml \
+    curl --fail --show-error --silent http://github.mtv.cloudera.com/raw/CDH/cdh/${CDH_REPO_BRANCH}/gbn-m2-settings.xml \
       -o "${MAVEN_CONFIG_FILE}"
   fi
   export IMPALA_MAVEN_OPTIONS="-s ${MAVEN_CONFIG_FILE}"
