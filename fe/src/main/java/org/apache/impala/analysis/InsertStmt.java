@@ -335,7 +335,7 @@ public class InsertStmt extends StatementBase {
             "Unknown column '" + columnName + "' in column permutation");
       }
 
-      if (!mentionedColumnNames.add(columnName)) {
+      if (!mentionedColumnNames.add(column.getName())) {
         throw new AnalysisException(
             "Duplicate column '" + columnName + "' in column permutation");
       }
