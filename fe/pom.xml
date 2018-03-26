@@ -217,6 +217,14 @@ under the License.
       <groupId>org.apache.hive</groupId>
       <artifactId>hive-service</artifactId>
       <version>${hive.version}</version>
+      <!-- hive-service pulls in a non-CDH version of hadoop-client via
+           this dependency, which we don't need -->
+      <exclusions>
+        <exclusion>
+          <groupId>org.apache.hive</groupId>
+          <artifactId>hive-llap-server</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.apache.hive</groupId>
