@@ -50,7 +50,7 @@ if [ ! "${CDH_GBN}" ]; then
     . "${CDH_GBN_CONFIG}"
     echo "Using CDH_GBN ${CDH_GBN} based on ${CDH_GBN_CONFIG}"
   else
-    export CDH_GBN=$(curl --silent 'http://builddb.infra.cloudera.com/query?product=cdh;tag=impala-minicluster-tarballs,official;version='"${VERSION}")
+    export CDH_GBN=$(curl --silent 'http://builddb.infra.cloudera.com/query?product=cdh;tag=impala-minicluster-tarballs,official;version='"${VERSION}-beta1")
     [ "${CDH_GBN}" ]  # Assert we got something
     mkdir -p "$(dirname ${CDH_GBN_CONFIG})"
     echo "export CDH_GBN=${CDH_GBN}" > "${CDH_GBN_CONFIG}"
