@@ -288,6 +288,13 @@ enum TImpalaQueryOptions {
 
   // The maximum row size that memory is reserved for, in bytes.
   MAX_ROW_SIZE,
+
+  // When a query has both grouping and distinct exprs, impala can optionally include the
+  // distinct exprs in the hash exchange of the first aggregation phase to spread the data
+  // among more nodes. However, this plan requires another hash exchange on the grouping
+  // exprs in the second phase which is not required when omitting the distinct exprs in
+  // the first phase. Shuffling by both is better if the grouping exprs have low NDVs.
+  SHUFFLE_DISTINCT_EXPRS,
 }
 
 // The summary of a DML statement.

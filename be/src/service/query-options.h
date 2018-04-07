@@ -41,7 +41,7 @@ typedef std::unordered_map<string, beeswax::TQueryOptionLevel::type>
 // the DCHECK.
 #define QUERY_OPTS_TABLE\
   DCHECK_EQ(_TImpalaQueryOptions_VALUES_TO_NAMES.size(),\
-      TImpalaQueryOptions::MAX_ROW_SIZE + 1);\
+      TImpalaQueryOptions::SHUFFLE_DISTINCT_EXPRS + 1);\
   QUERY_OPT_FN(abort_on_default_limit_exceeded, ABORT_ON_DEFAULT_LIMIT_EXCEEDED,\
       TQueryOptionLevel::DEPRECATED)\
   QUERY_OPT_FN(abort_on_error, ABORT_ON_ERROR, TQueryOptionLevel::REGULAR)\
@@ -129,6 +129,8 @@ typedef std::unordered_map<string, beeswax::TQueryOptionLevel::type>
   QUERY_OPT_FN(min_spillable_buffer_size, MIN_SPILLABLE_BUFFER_SIZE,\
       TQueryOptionLevel::ADVANCED)\
   QUERY_OPT_FN(max_row_size, MAX_ROW_SIZE, TQueryOptionLevel::REGULAR)\
+  QUERY_OPT_FN(shuffle_distinct_exprs, SHUFFLE_DISTINCT_EXPRS,\
+      TQueryOptionLevel::ADVANCED)\
   ;
 
 
@@ -146,7 +148,7 @@ std::string DebugQueryOptions(const TQueryOptions& query_options);
 
 /// Bitmask for the values of TQueryOptions.
 /// TODO: Find a way to set the size based on the number of fields.
-typedef std::bitset<64> QueryOptionsMask;
+typedef std::bitset<65> QueryOptionsMask;
 
 /// Updates the query options in dst from those in src where the query option is set
 /// (i.e. src->__isset.PROPERTY is true) and the corresponding bit in mask is set. If

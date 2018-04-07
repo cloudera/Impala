@@ -569,6 +569,11 @@ Status impala::SetQueryOption(const string& key, const string& value,
         query_options->__set_max_row_size(max_row_size_bytes);
         break;
       }
+      case TImpalaQueryOptions::SHUFFLE_DISTINCT_EXPRS: {
+        query_options->__set_shuffle_distinct_exprs(
+                iequals(value, "true") || iequals(value, "1"));
+        break;
+      }
       default:
         // We hit this DCHECK(false) if we forgot to add the corresponding entry here
         // when we add a new query option.

@@ -287,6 +287,13 @@ struct TQueryOptions {
   // sophisticated strategies - e.g. reserving a small number of buffers large enough to
   // fit maximum-sized rows.
   60: optional i64 max_row_size = 524288;
+
+  // When a query has both grouping and distinct exprs, impala can optionally include the
+  // distinct exprs in the hash exchange of the first aggregation phase to spread the data
+  // among more nodes. However, this plan requires another hash exchange on the grouping
+  // exprs in the second phase which is not required when omitting the distinct exprs in
+  // the first phase. Shuffling by both is better if the grouping exprs have low NDVs.
+  64: optional bool shuffle_distinct_exprs = true;
 }
 
 // Impala currently has two types of sessions: Beeswax and HiveServer2
