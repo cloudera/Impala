@@ -1662,6 +1662,27 @@ public class AuthorizationStmtTest extends FrontendTestBase {
         .error(createError("functional"), onDatabase("functional", allExcept(
             TPrivilegeLevel.ALL, TPrivilegeLevel.OWNER, TPrivilegeLevel.CREATE)));
 
+    // IMPALA-6451: CTAS for Kudu tables on non-external tables and without
+    // TBLPROPERTIES ('kudu.master_addresses') should not require ALL/OWNER privileges
+    // on SERVER.
+    // The statement below causes the SQL statement to be rewritten.
+    authorize("create table functional.kudu_tbl primary key (bigint_col) " +
+        "stored as kudu as " +
+        "select bigint_col, string_col, current_timestamp() as ins_date " +
+        "from functional.alltypes " +
+        "where exists (select 1 from functional.alltypes)")
+        .ok(onServer(TPrivilegeLevel.ALL))
+        .ok(onServer(TPrivilegeLevel.OWNER))
+        .ok(onDatabase("functional", TPrivilegeLevel.CREATE, TPrivilegeLevel.INSERT,
+            TPrivilegeLevel.SELECT))
+        .error(createError("functional"))
+        .error(createError("functional"), onServer(allExcept(TPrivilegeLevel.ALL,
+            TPrivilegeLevel.OWNER, TPrivilegeLevel.CREATE, TPrivilegeLevel.INSERT,
+            TPrivilegeLevel.SELECT)))
+        .error(createError("functional"), onDatabase("functional", allExcept(
+            TPrivilegeLevel.ALL, TPrivilegeLevel.OWNER, TPrivilegeLevel.CREATE,
+            TPrivilegeLevel.INSERT, TPrivilegeLevel.SELECT)));
+
     // Database does not exist.
     authorize("create table nodb.new_table(i int)")
         .error(createError("nodb"))
