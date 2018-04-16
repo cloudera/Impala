@@ -37,13 +37,13 @@ under the License.
     <testExecutionMode>reduced</testExecutionMode>
 
     <!-- Customized for cdh6.x -->
-    <hadoop.version>${env.IMPALA_HADOOP_VERSION_BASE}-SNAPSHOT</hadoop.version>
-    <hive.version>${env.IMPALA_HIVE_VERSION_BASE}-SNAPSHOT</hive.version>
+    <hadoop.version>${env.IMPALA_HADOOP_VERSION_BASE}</hadoop.version>
+    <hive.version>${env.IMPALA_HIVE_VERSION_BASE}</hive.version>
     <hive.major.version>${env.IMPALA_HIVE_MAJOR_VERSION}</hive.major.version>
-    <sentry.version>${env.IMPALA_SENTRY_VERSION_BASE}-SNAPSHOT</sentry.version>
-    <hbase.version>${env.IMPALA_HBASE_VERSION_BASE}-SNAPSHOT</hbase.version>
-    <parquet.version>${env.IMPALA_PARQUET_VERSION}-SNAPSHOT</parquet.version>
-    <avro.version>${env.IMPALA_AVRO_JAVA_VERSION}-SNAPSHOT</avro.version>
+    <sentry.version>${env.IMPALA_SENTRY_VERSION_BASE}</sentry.version>
+    <hbase.version>${env.IMPALA_HBASE_VERSION_BASE}</hbase.version>
+    <parquet.version>${env.IMPALA_PARQUET_VERSION}</parquet.version>
+    <avro.version>${env.IMPALA_AVRO_JAVA_VERSION}</avro.version>
 
     <kite.version>${env.IMPALA_KITE_VERSION}</kite.version>
     <thrift.version>${env.IMPALA_THRIFT_JAVA_VERSION}</thrift.version>

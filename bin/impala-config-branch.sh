@@ -40,7 +40,7 @@
 
 # Defer to $GLOBAL_BUILD_NUMBER OR $CDH_GBN, in that order.
 export CDH_GBN=${GLOBAL_BUILD_NUMBER:-${CDH_GBN:-}}
-VERSION="6.0.0"
+VERSION="6.0.0-beta1"
 BRANCH="cdh${VERSION}"
 CDH_GBN_CONFIG="${IMPALA_HOME}/toolchain/cdh_components/cdh-gbn.sh"
 CDH_REPO_BRANCH="cdh6.0.0_beta1"
@@ -50,7 +50,7 @@ if [ ! "${CDH_GBN}" ]; then
     . "${CDH_GBN_CONFIG}"
     echo "Using CDH_GBN ${CDH_GBN} based on ${CDH_GBN_CONFIG}"
   else
-    export CDH_GBN=$(curl --silent 'http://builddb.infra.cloudera.com/query?product=cdh;tag=impala-minicluster-tarballs,official;version='"${VERSION}-beta1")
+    export CDH_GBN=$(curl --silent 'http://builddb.infra.cloudera.com/query?product=cdh;tag=impala-minicluster-tarballs,official;version='"${VERSION}")
     [ "${CDH_GBN}" ]  # Assert we got something
     mkdir -p "$(dirname ${CDH_GBN_CONFIG})"
     echo "export CDH_GBN=${CDH_GBN}" > "${CDH_GBN_CONFIG}"
@@ -88,8 +88,8 @@ export IMPALA_SENTRY_VERSION=${IMPALA_SENTRY_VERSION_BASE}-${CDH_GBN}
 export IMPALA_SENTRY_URL=${BUILD_REPO_BASE}/sentry-${IMPALA_SENTRY_VERSION}.tar.gz
 export IMPALA_PARQUET_VERSION=1.9.0-${BRANCH}
 export IMPALA_AVRO_JAVA_VERSION=1.8.2-${BRANCH}
-export KUDU_JAVA_VERSION=1.6.0-${BRANCH}-SNAPSHOT
-export IMPALA_KITE_VERSION=1.0.0-${BRANCH}-SNAPSHOT
+export KUDU_JAVA_VERSION=1.6.0-${BRANCH}
+export IMPALA_KITE_VERSION=1.0.0-${BRANCH}
 
 # All builds on this branch should support Kudu.
 export KUDU_IS_SUPPORTED=true
