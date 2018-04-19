@@ -43,7 +43,7 @@ export CDH_GBN=${GLOBAL_BUILD_NUMBER:-${CDH_GBN:-}}
 VERSION="6.x"
 BRANCH="cdh${VERSION}"
 CDH_GBN_CONFIG="${IMPALA_HOME}/toolchain/cdh_components/cdh-gbn.sh"
-CURL="curl --fail --show-error --silent"
+WGET="wget --no-verbose -O -"
 
 if [ ! "${CDH_GBN}" ]; then
   if [ -f "${CDH_GBN_CONFIG}" ]; then
@@ -51,7 +51,7 @@ if [ ! "${CDH_GBN}" ]; then
     echo "Using CDH_GBN ${CDH_GBN} based on ${CDH_GBN_CONFIG}"
   else
     BUILDDB_QUERY='http://builddb.infra.cloudera.com/query?product=cdh;tag=impala-minicluster-tarballs,official;version='"${VERSION}"
-    export CDH_GBN=$($CURL "${BUILDDB_QUERY}")
+    export CDH_GBN=$($WGET "${BUILDDB_QUERY}")
     [ "${CDH_GBN}" ]  # Assert we got something
     mkdir -p "$(dirname ${CDH_GBN_CONFIG})"
     echo "export CDH_GBN=${CDH_GBN}" > "${CDH_GBN_CONFIG}"
@@ -67,8 +67,8 @@ else
   MAVEN_CONFIG_FILE="${IMPALA_HOME}/toolchain/cdh_components/m2-settings.xml"
   if [ ! -e "${MAVEN_CONFIG_FILE}" ]; then
     mkdir -p "$(dirname ${MAVEN_CONFIG_FILE})"
-    $CURL http://github.mtv.cloudera.com/raw/CDH/cdh/${BRANCH}/gbn-m2-settings.xml \
-      -o "${MAVEN_CONFIG_FILE}"
+    $WGET http://github.mtv.cloudera.com/raw/CDH/cdh/${BRANCH}/gbn-m2-settings.xml \
+      -O "${MAVEN_CONFIG_FILE}"
   fi
   export IMPALA_MAVEN_OPTIONS="-s ${MAVEN_CONFIG_FILE}"
 fi
