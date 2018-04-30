@@ -174,6 +174,22 @@ void Statestore::Topic::DeleteIfVersionsMatch(TopicEntry::Version version,
   }
 }
 
+void Statestore::Topic::ClearAllEntries() {
+  entries_.clear();
+  topic_update_log_.clear();
+  int64_t key_size_metric_val = key_size_metric_->GetValue();
+  key_size_metric_->SetValue(std::max(static_cast<int64_t>(0),
+      key_size_metric_val - total_key_size_bytes_));
+  int64_t value_size_metric_val = value_size_metric_->GetValue();
+  value_size_metric_->SetValue(std::max(static_cast<int64_t>(0),
+      value_size_metric_val - total_value_size_bytes_));
+  int64_t topic_size_metric_val = topic_size_metric_->GetValue();
+  topic_size_metric_->SetValue(std::max(static_cast<int64_t>(0),
+      topic_size_metric_val - (total_value_size_bytes_ + total_key_size_bytes_)));
+  total_value_size_bytes_ = 0;
+  total_key_size_bytes_ = 0;
+}
+
 Statestore::Subscriber::Subscriber(const SubscriberId& subscriber_id,
     const RegistrationId& registration_id, const TNetworkAddress& network_address,
     const vector<TTopicRegistration>& subscribed_topics)
@@ -498,6 +514,15 @@ Status Statestore::SendTopicUpdate(Subscriber* subscriber, bool* update_skipped)
       }
 
       Topic* topic = &topic_it->second;
+      // Check if the subscriber indicated that the topic entries should be
+      // cleared.
+      if (update.__isset.clear_topic_entries && update.clear_topic_entries) {
+        DCHECK(!update.__isset.from_version);
+        LOG(INFO) << "Received request for clearing the entries of topic: "
+                  << update.topic_name << " from: " << subscriber->id();
+        topic->ClearAllEntries();
+      }
+
       for (const TTopicItem& item: update.topic_entries) {
         subscriber->AddTransientUpdate(update.topic_name, item.key,
             topic->Put(item.key, item.value, item.deleted));
