@@ -93,8 +93,8 @@ class InboundTransfer {
 
   faststring buf_;
 
-  uint32_t total_length_;
-  uint32_t cur_offset_;
+  int32_t total_length_;
+  int32_t cur_offset_;
 
   DISALLOW_COPY_AND_ASSIGN(InboundTransfer);
 };
