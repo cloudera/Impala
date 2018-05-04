@@ -183,10 +183,6 @@ MonoTime RpcContext::GetClientDeadline() const {
   return call_->GetClientDeadline();
 }
 
-MonoTime RpcContext::GetTimeReceived() const {
-  return call_->GetTimeReceived();
-}
-
 Trace* RpcContext::trace() {
   return call_->trace();
 }
