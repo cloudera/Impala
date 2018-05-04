@@ -19,67 +19,45 @@ package org.apache.impala.authorization;
 
 import java.util.EnumSet;
 
-import org.apache.sentry.core.common.Action;
+import org.apache.sentry.core.model.db.DBModelAction;
 
 /**
- * Maps an Impala Privilege to one or more Sentry "Actions".
+ * Maps an Impala Privilege to one or more Hive Access "Actions".
  */
 public enum Privilege {
-  ALL(SentryAction.ALL, false),
-  ALTER(SentryAction.ALL, false),
-  DROP(SentryAction.ALL, false),
-  CREATE(SentryAction.ALL, false),
-  INSERT(SentryAction.INSERT, false),
-  SELECT(SentryAction.SELECT, false),
-  REFRESH(SentryAction.REFRESH, false),
+  ALL(DBModelAction.ALL, false),
+  ALTER(DBModelAction.ALL, false),
+  DROP(DBModelAction.ALL, false),
+  CREATE(DBModelAction.ALL, false),
+  INSERT(DBModelAction.INSERT, false),
+  SELECT(DBModelAction.SELECT, false),
   // Privileges required to view metadata on a server object.
-  VIEW_METADATA(EnumSet.of(SentryAction.INSERT, SentryAction.SELECT,
-      SentryAction.REFRESH), true),
+  VIEW_METADATA(EnumSet.of(DBModelAction.INSERT, DBModelAction.SELECT), true),
   // Special privilege that is used to determine if the user has any valid privileges
   // on a target object.
-  ANY(EnumSet.allOf(SentryAction.class), true),
+  ANY(EnumSet.allOf(DBModelAction.class), true),
   ;
 
-  private final EnumSet<SentryAction> actions;
+  private final EnumSet<DBModelAction> actions;
 
   // Determines whether to check if the user has ANY the privileges defined in the
   // actions list or whether to check if the user has ALL of the privileges in the
   // actions list.
   private final boolean anyOf_;
 
-  /**
-   * This enum provides a list of Sentry actions used in Impala.
-   */
-  public enum SentryAction implements Action {
-    SELECT("select"),
-    INSERT("insert"),
-    REFRESH("refresh"),
-    ALL("*");
-
-    private final String value;
-
-    SentryAction(String value) {
-      this.value = value;
-    }
-
-    public String getValue() {
-      return value;
-    }
-  }
-
-  private Privilege(EnumSet<SentryAction> actions, boolean anyOf) {
+  private Privilege(EnumSet<DBModelAction> actions, boolean anyOf) {
     this.actions = actions;
     this.anyOf_ = anyOf;
   }
 
-  private Privilege(SentryAction action, boolean anyOf) {
+  private Privilege(DBModelAction action, boolean anyOf) {
     this(EnumSet.of(action), anyOf);
   }
 
   /*
-   * Returns the set of Sentry Access Actions mapping to this Privilege.
+   * Returns the set of Hive Access Actions mapping to this Privilege.
    */
-  public EnumSet<SentryAction> getSentryActions() {
+  public EnumSet<DBModelAction> getHiveActions() {
     return actions;
   }
 

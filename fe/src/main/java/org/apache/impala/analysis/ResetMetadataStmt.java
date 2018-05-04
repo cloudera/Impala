@@ -97,7 +97,7 @@ public class ResetMetadataStmt extends StatementBase {
         // Verify the user has privileges to access this table. Will throw if the parent
         // database does not exists. Don't call getTable() to avoid loading the table
         // metadata if it is not yet in this impalad's catalog cache.
-        if (!analyzer.dbContainsTable(dbName, tableName_.getTbl(), Privilege.REFRESH)) {
+        if (!analyzer.dbContainsTable(dbName, tableName_.getTbl(), Privilege.ANY)) {
           // Only throw an exception when the table does not exist for refresh statements
           // since 'invalidate metadata' should add/remove tables created/dropped external
           // to Impala.
@@ -110,14 +110,10 @@ public class ResetMetadataStmt extends StatementBase {
       } else {
         // Verify the user has privileges to access this table.
         analyzer.registerPrivReq(new PrivilegeRequestBuilder()
-            .onTable(dbName, tableName_.getTbl()).allOf(Privilege.REFRESH)
-            .toRequest());
+            .onTable(dbName, tableName_.getTbl()).any().toRequest());
       }
-    } else if (database_ != null) {
-      analyzer.registerPrivReq(new PrivilegeRequestBuilder()
-          .onDb(database_).allOf(Privilege.REFRESH).toRequest());
     } else {
-      analyzer.registerPrivReq(new PrivilegeRequest(Privilege.REFRESH));
+      analyzer.registerPrivReq(new PrivilegeRequest(Privilege.ALL));
     }
   }
 
