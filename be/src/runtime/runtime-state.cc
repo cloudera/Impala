@@ -40,7 +40,6 @@
 #include "runtime/mem-tracker.h"
 #include "runtime/query-state.h"
 #include "runtime/runtime-filter-bank.h"
-#include "runtime/thread-resource-mgr.h"
 #include "runtime/timestamp-value.h"
 #include "util/auth-util.h" // for GetEffectiveUser()
 #include "util/bitmap.h"
@@ -107,8 +106,8 @@ void RuntimeState::Init() {
   SCOPED_TIMER(profile_->total_time_counter());
 
   // Register with the thread mgr
-  resource_pool_ = exec_env_->thread_mgr()->CreatePool();
-  DCHECK(resource_pool_ != nullptr);
+  resource_pool_ = exec_env_->thread_mgr()->RegisterPool();
+  DCHECK(resource_pool_ != NULL);
 
   total_thread_statistics_ = ADD_THREAD_COUNTERS(runtime_profile(), "TotalThreads");
   total_storage_wait_timer_ = ADD_TIMER(runtime_profile(), "TotalStorageWaitTime");
@@ -230,7 +229,7 @@ void RuntimeState::ReleaseResources() {
   DCHECK(!released_resources_);
   if (filter_bank_ != nullptr) filter_bank_->Close();
   if (resource_pool_ != nullptr) {
-    exec_env_->thread_mgr()->DestroyPool(move(resource_pool_));
+    exec_env_->thread_mgr()->UnregisterPool(resource_pool_);
   }
   // Release any memory associated with codegen.
   if (codegen_ != nullptr) codegen_->Close();

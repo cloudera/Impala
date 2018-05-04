@@ -30,7 +30,6 @@
 #include "runtime/runtime-state.h"
 #include "runtime/mem-tracker.h"
 #include "runtime/row-batch.h"
-#include "runtime/thread-resource-mgr.h"
 #include "util/debug-util.h"
 #include "util/disk-info.h"
 #include "util/runtime-profile-counters.h"
@@ -212,6 +211,9 @@ Status HdfsScanNode::Open(RuntimeState* state) {
 
   if (file_descs_.empty() || progress_.done()) return Status::OK();
 
+  // We need at least one scanner thread to make progress. We need to make this
+  // reservation before any ranges are issued.
+  runtime_state_->resource_pool()->ReserveOptionalTokens(1);
   if (runtime_state_->query_options().num_scanner_threads > 0) {
     max_num_scanner_threads_ = runtime_state_->query_options().num_scanner_threads;
   }
@@ -293,7 +295,7 @@ bool HdfsScanNode::EnoughMemoryForScannerThread(bool new_thread) {
   return est_additional_scanner_mem < mem_tracker()->SpareCapacity();
 }
 
-void HdfsScanNode::ThreadTokenAvailableCb(ThreadResourcePool* pool) {
+void HdfsScanNode::ThreadTokenAvailableCb(ThreadResourceMgr::ResourcePool* pool) {
   // This is called to start up new scanner threads. It's not a big deal if we
   // spin up more than strictly necessary since they will go through and terminate
   // promptly. However, we want to minimize that by checking a conditions.
@@ -326,20 +328,17 @@ void HdfsScanNode::ThreadTokenAvailableCb(ThreadResourcePool* pool) {
       break;
     }
 
-    bool first_thread = active_scanner_thread_counter_.value() == 0;
     // Cases 5 and 6.
-    if (!first_thread &&
+    if (active_scanner_thread_counter_.value() > 0 &&
         (materialized_row_batches_->Size() >= max_materialized_row_batches_ ||
          !EnoughMemoryForScannerThread(true))) {
       break;
     }
 
     // Case 7 and 8.
-    if (first_thread) {
-      // The first thread is required to make progress on the scan.
-      pool->AcquireThreadToken();
-    } else if (active_scanner_thread_counter_.value() >= max_num_scanner_threads_
-        || !pool->TryAcquireThreadToken()) {
+    bool is_reserved = false;
+    if (active_scanner_thread_counter_.value() >= max_num_scanner_threads_ ||
+        !pool->TryAcquireThreadToken(&is_reserved)) {
       break;
     }
 
@@ -348,7 +347,7 @@ void HdfsScanNode::ThreadTokenAvailableCb(ThreadResourcePool* pool) {
         PrintId(runtime_state_->fragment_instance_id()), id(),
         num_scanner_threads_started_counter_->value());
 
-    auto fn = [this, first_thread]() { this->ScannerThread(first_thread); };
+    auto fn = [this]() { this->ScannerThread(); };
     std::unique_ptr<Thread> t;
     status =
       Thread::Create(FragmentInstanceState::FINST_THREAD_GROUP_NAME, name, fn, &t, true);
@@ -358,7 +357,7 @@ void HdfsScanNode::ThreadTokenAvailableCb(ThreadResourcePool* pool) {
       // serves two purposes. First, it prevents a mutual recursion between this function
       // and ReleaseThreadToken()->InvokeCallbacks(). Second, Thread::Create() failed and
       // is likely to continue failing for future callbacks.
-      pool->ReleaseThreadToken(first_thread, true);
+      pool->ReleaseThreadToken(false, true);
 
       // Abort the query. This is still holding the lock_, so done_ is known to be
       // false and status_ must be ok.
@@ -373,7 +372,7 @@ void HdfsScanNode::ThreadTokenAvailableCb(ThreadResourcePool* pool) {
   }
 }
 
-void HdfsScanNode::ScannerThread(bool first_thread) {
+void HdfsScanNode::ScannerThread() {
   SCOPED_THREAD_COUNTER_MEASUREMENT(scanner_thread_counters());
   SCOPED_THREAD_COUNTER_MEASUREMENT(runtime_state_->total_thread_statistics());
 
@@ -475,7 +474,7 @@ void HdfsScanNode::ScannerThread(bool first_thread) {
   COUNTER_ADD(&active_scanner_thread_counter_, -1);
 
 exit:
-  runtime_state_->resource_pool()->ReleaseThreadToken(first_thread);
+  runtime_state_->resource_pool()->ReleaseThreadToken(false);
   for (auto& ctx: filter_ctxs) ctx.expr_eval->Close(runtime_state_);
   filter_mem_pool.FreeAll();
   expr_results_pool.FreeAll();

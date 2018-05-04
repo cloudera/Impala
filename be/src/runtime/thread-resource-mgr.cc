@@ -42,65 +42,87 @@ ThreadResourceMgr::ThreadResourceMgr(int threads_quota) {
   } else {
     system_threads_quota_ = threads_quota;
   }
+  per_pool_quota_ = 0;
 }
 
-ThreadResourcePool::ThreadResourcePool(ThreadResourceMgr* parent)
+ThreadResourceMgr::ResourcePool::ResourcePool(ThreadResourceMgr* parent)
   : parent_(parent) {
 }
 
-unique_ptr<ThreadResourcePool> ThreadResourceMgr::CreatePool() {
+void ThreadResourceMgr::ResourcePool::Reset() {
+  num_threads_ = 0;
+  num_reserved_optional_threads_ = 0;
+  thread_callbacks_.clear();
+  num_callbacks_ = 0;
+  next_callback_idx_ = 0;
+  max_quota_ = INT_MAX;
+}
+
+void ThreadResourceMgr::ResourcePool::ReserveOptionalTokens(int num) {
+  DCHECK_GE(num, 0);
+  num_reserved_optional_threads_ = num;
+}
+
+ThreadResourceMgr::ResourcePool* ThreadResourceMgr::RegisterPool() {
   unique_lock<mutex> l(lock_);
-  unique_ptr<ThreadResourcePool> pool =
-      unique_ptr<ThreadResourcePool>(new ThreadResourcePool(this));
-  pools_.insert(pool.get());
+  ResourcePool* pool = NULL;
+  if (free_pool_objs_.empty()) {
+    pool = new ResourcePool(this);
+  } else {
+    pool = free_pool_objs_.front();
+    free_pool_objs_.pop_front();
+  }
+
+  DCHECK(pool != NULL);
+  DCHECK(pools_.find(pool) == pools_.end());
+  pools_.insert(pool);
+  pool->Reset();
 
   // Added a new pool, update the quotas for each pool.
-  UpdatePoolQuotas(pool.get());
+  UpdatePoolQuotas(pool);
   return pool;
 }
 
-void ThreadResourceMgr::DestroyPool(unique_ptr<ThreadResourcePool> pool) {
-  DCHECK(pool != nullptr);
-  DCHECK(pool->parent_ != nullptr) << "Already unregistered";
-  DCHECK_EQ(pool->num_callbacks_.Load(), 0);
+void ThreadResourceMgr::UnregisterPool(ResourcePool* pool) {
+  DCHECK(pool != NULL);
+  DCHECK_EQ(pool->num_callbacks_, 0);
   unique_lock<mutex> l(lock_);
-  DCHECK(pools_.find(pool.get()) != pools_.end());
-  pools_.erase(pool.get());
-  pool->parent_ = nullptr;
-  pool.reset();
+  DCHECK(pools_.find(pool) != pools_.end());
+  pools_.erase(pool);
+  free_pool_objs_.push_back(pool);
   UpdatePoolQuotas();
 }
 
-int ThreadResourcePool::AddThreadAvailableCb(ThreadAvailableCb fn) {
+int ThreadResourceMgr::ResourcePool::AddThreadAvailableCb(ThreadAvailableCb fn) {
   unique_lock<mutex> l(lock_);
   // The id is unique for each callback and is monotonically increasing.
   int id = thread_callbacks_.size();
   thread_callbacks_.push_back(fn);
-  num_callbacks_.Add(1);
+  ++num_callbacks_;
   return id;
 }
 
-void ThreadResourcePool::RemoveThreadAvailableCb(int id) {
+void ThreadResourceMgr::ResourcePool::RemoveThreadAvailableCb(int id) {
   unique_lock<mutex> l(lock_);
-  DCHECK(!thread_callbacks_[id].empty());
-  DCHECK_GT(num_callbacks_.Load(), 0);
-  thread_callbacks_[id].clear();
-  num_callbacks_.Add(-1);
+  DCHECK(thread_callbacks_[id] != NULL);
+  DCHECK_GT(num_callbacks_, 0);
+  thread_callbacks_[id] = NULL;
+  --num_callbacks_;
 }
 
-void ThreadResourcePool::InvokeCallbacks() {
+void ThreadResourceMgr::ResourcePool::InvokeCallbacks() {
   // We need to grab a lock before issuing the callbacks to prevent the
   // them from being removed while it is happening.
   // Note: this is unlikely to be a big deal for performance currently
   // since this is only called with any frequency on (1) the scanner thread
   // completion path and (2) pool unregistration.
-  if (num_available_threads() > 0 && num_callbacks_.Load() > 0) {
+  if (num_available_threads() > 0 && num_callbacks_ > 0) {
     int num_invoked = 0;
     unique_lock<mutex> l(lock_);
-    while (num_available_threads() > 0 && num_invoked < num_callbacks_.Load()) {
+    while (num_available_threads() > 0 && num_invoked < num_callbacks_) {
       DCHECK_LT(next_callback_idx_, thread_callbacks_.size());
       ThreadAvailableCb fn = thread_callbacks_[next_callback_idx_];
-      if (LIKELY(!fn.empty())) {
+      if (LIKELY(fn != NULL)) {
         ++num_invoked;
         fn(this);
       }
@@ -110,45 +132,15 @@ void ThreadResourcePool::InvokeCallbacks() {
   }
 }
 
-void ThreadResourceMgr::UpdatePoolQuotas(ThreadResourcePool* new_pool) {
+void ThreadResourceMgr::UpdatePoolQuotas(ResourcePool* new_pool) {
   if (pools_.empty()) return;
-  per_pool_quota_.Store(
-      ceil(static_cast<double>(system_threads_quota_) / pools_.size()));
+  per_pool_quota_ =
+      ceil(static_cast<double>(system_threads_quota_) / pools_.size());
   // Only invoke callbacks on pool unregistration.
   if (new_pool == NULL) {
-    for (ThreadResourcePool* pool : pools_) {
+    for (Pools::iterator it = pools_.begin(); it != pools_.end(); ++it) {
+      ResourcePool* pool = *it;
       pool->InvokeCallbacks();
     }
   }
-}
-
-bool ThreadResourcePool::TryAcquireThreadToken() {
-  while (true) {
-    int64_t previous_num_threads = num_threads_.Load();
-    int64_t new_optional_threads = (previous_num_threads >> 32) + 1;
-    int64_t new_required_threads = previous_num_threads & 0xFFFFFFFF;
-    if (new_optional_threads + new_required_threads > quota()) return false;
-    int64_t new_value = new_optional_threads << 32 | new_required_threads;
-    // Atomically swap the new value if no one updated num_threads_.  We do not
-    // care about the ABA problem here.
-    if (num_threads_.CompareAndSwap(previous_num_threads, new_value)) return true;
-  }
-}
-
-void ThreadResourcePool::ReleaseThreadToken(
-    bool required, bool skip_callbacks) {
-  if (required) {
-    DCHECK_GT(num_required_threads(), 0);
-    num_threads_.Add(-1);
-  } else {
-    DCHECK_GT(num_optional_threads(), 0);
-    while (true) {
-      int64_t previous_num_threads = num_threads_.Load();
-      int64_t new_optional_threads = (previous_num_threads >> 32) - 1;
-      int64_t new_required_threads = previous_num_threads & 0xFFFFFFFF;
-      int64_t new_value = new_optional_threads << 32 | new_required_threads;
-      if (num_threads_.CompareAndSwap(previous_num_threads, new_value)) break;
-    }
-  }
-  if (!skip_callbacks) InvokeCallbacks();
 }

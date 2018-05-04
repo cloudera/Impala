@@ -27,7 +27,6 @@
 #include "runtime/mem-pool.h"
 #include "runtime/runtime-state.h"
 #include "runtime/row-batch.h"
-#include "runtime/thread-resource-mgr.h"
 #include "runtime/tuple-row.h"
 #include "util/disk-info.h"
 #include "util/runtime-profile-counters.h"
@@ -44,7 +43,6 @@ KuduScanNode::KuduScanNode(ObjectPool* pool, const TPlanNode& tnode,
     : KuduScanNodeBase(pool, tnode, descs),
       num_active_scanners_(0),
       done_(false),
-      max_num_scanner_threads_(CpuInfo::num_cores()),
       thread_avail_cb_id_(-1) {
   DCHECK(KuduIsAvailable());
 
@@ -70,10 +68,12 @@ Status KuduScanNode::Open(RuntimeState* state) {
   num_scanner_threads_started_counter_ =
       ADD_COUNTER(runtime_profile(), NUM_SCANNER_THREADS_STARTED, TUnit::UNIT);
 
+  // Reserve one thread.
+  state->resource_pool()->ReserveOptionalTokens(1);
   if (state->query_options().num_scanner_threads > 0) {
-    max_num_scanner_threads_ = runtime_state_->query_options().num_scanner_threads;
+    state->resource_pool()->set_max_quota(
+        state->query_options().num_scanner_threads);
   }
-  DCHECK_GT(max_num_scanner_threads_, 0);
 
   if (filter_ctxs_.size() > 0) WaitForRuntimeFilters();
 
@@ -138,20 +138,14 @@ void KuduScanNode::Close(RuntimeState* state) {
   KuduScanNodeBase::Close(state);
 }
 
-void KuduScanNode::ThreadAvailableCb(ThreadResourcePool* pool) {
+void KuduScanNode::ThreadAvailableCb(ThreadResourceMgr::ResourcePool* pool) {
   while (true) {
     unique_lock<mutex> lock(lock_);
     // All done or all tokens are assigned.
     if (done_ || !HasScanToken()) break;
-    bool first_thread = active_scanner_thread_counter_.value() == 0;
 
-    // Check if we can get a token. We need at least one thread to run.
-    if (first_thread) {
-      pool->AcquireThreadToken();
-    } else if (active_scanner_thread_counter_.value() >= max_num_scanner_threads_
-        || !pool->TryAcquireThreadToken()) {
-      break;
-    }
+    // Check if we can get a token.
+    if (!pool->TryAcquireThreadToken()) break;
 
     string name = Substitute(
         "kudu-scanner-thread (finst:$0, plan-node-id:$1, thread-idx:$2)",
@@ -160,9 +154,7 @@ void KuduScanNode::ThreadAvailableCb(ThreadResourcePool* pool) {
 
     // Reserve the first token so no other thread picks it up.
     const string* token = GetNextScanToken();
-    auto fn = [this, first_thread, token, name]() {
-      this->RunScannerThread(first_thread, name, token);
-    };
+    auto fn = [this, token, name]() { this->RunScannerThread(name, token); };
     std::unique_ptr<Thread> t;
     Status status =
       Thread::Create(FragmentInstanceState::FINST_THREAD_GROUP_NAME, name, fn, &t, true);
@@ -171,7 +163,7 @@ void KuduScanNode::ThreadAvailableCb(ThreadResourcePool* pool) {
       // serves two purposes. First, it prevents a mutual recursion between this function
       // and ReleaseThreadToken()->InvokeCallbacks(). Second, Thread::Create() failed and
       // is likely to continue failing for future callbacks.
-      pool->ReleaseThreadToken(first_thread, true);
+      pool->ReleaseThreadToken(false, true);
 
       // Abort the query. This is still holding the lock_, so done_ is known to be
       // false and status_ must be ok.
@@ -209,8 +201,7 @@ Status KuduScanNode::ProcessScanToken(KuduScanner* scanner, const string& scan_t
   return Status::OK();
 }
 
-void KuduScanNode::RunScannerThread(
-    bool first_thread, const string& name, const string* initial_token) {
+void KuduScanNode::RunScannerThread(const string& name, const string* initial_token) {
   DCHECK(initial_token != NULL);
   SCOPED_THREAD_COUNTER_MEASUREMENT(scanner_thread_counters());
   SCOPED_THREAD_COUNTER_MEASUREMENT(runtime_state_->total_thread_statistics());
@@ -266,7 +257,7 @@ void KuduScanNode::RunScannerThread(
   // lock_ is released before calling ThreadResourceMgr::ReleaseThreadToken() which
   // invokes ThreadAvailableCb() which attempts to take the same lock.
   VLOG_RPC << "Thread done: " << name;
-  runtime_state_->resource_pool()->ReleaseThreadToken(first_thread);
+  runtime_state_->resource_pool()->ReleaseThreadToken(false);
 }
 
 void KuduScanNode::SetDoneInternal() {
