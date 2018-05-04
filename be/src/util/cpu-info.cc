@@ -91,7 +91,7 @@ static struct {
   { "popcnt",    CpuInfo::POPCNT },
   { "avx",       CpuInfo::AVX },
   { "avx2",      CpuInfo::AVX2 },
-  { "pclmulqdq", CpuInfo::PCLMULQDQ }
+  { "pclmuldqd", CpuInfo::PCLMULQDQ }
 };
 static const long num_flags = sizeof(flag_mappings) / sizeof(flag_mappings[0]);
 
