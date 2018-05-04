@@ -23,7 +23,6 @@
 #include "common/status.h"
 #include "exec/kudu-util.h"
 #include "kudu/rpc/rpc_context.h"
-#include "kudu/util/monotime.h"
 #include "rpc/rpc-mgr.h"
 #include "runtime/krpc-data-stream-mgr.h"
 #include "runtime/exec-env.h"
@@ -37,8 +36,6 @@
 #include "common/names.h"
 
 using kudu::rpc::RpcContext;
-using kudu::MonoDelta;
-using kudu::MonoTime;
 
 static const string queue_limit_msg = "(Advanced) Limit on RPC payloads consumption for "
     "DataStreamService. " + Substitute(MEM_UNITS_HELP_MSG, "the process memory limit");
@@ -85,26 +82,12 @@ void DataStreamService::TransmitData(const TransmitDataRequestPB* request,
 }
 
 template<typename ResponsePBType>
-void DataStreamService::RespondRpc(const Status& status,
-    ResponsePBType* response, kudu::rpc::RpcContext* ctx) {
-  MonoDelta duration(MonoTime::Now().GetDeltaSince(ctx->GetTimeReceived()));
-  status.ToProto(response->mutable_status());
-  response->set_receiver_latency_ns(duration.ToNanoseconds());
-  ctx->RespondSuccess();
-}
-
-template<typename ResponsePBType>
 void DataStreamService::RespondAndReleaseRpc(const Status& status,
     ResponsePBType* response, kudu::rpc::RpcContext* ctx, MemTracker* mem_tracker) {
   mem_tracker->Release(ctx->GetTransferSize());
-  RespondRpc(status, response, ctx);
+  status.ToProto(response->mutable_status());
+  ctx->RespondSuccess();
 }
-
-template void DataStreamService::RespondRpc(const Status& status,
-    TransmitDataResponsePB* response, kudu::rpc::RpcContext* ctx);
-
-template void DataStreamService::RespondRpc(const Status& status,
-    EndDataStreamResponsePB* response, kudu::rpc::RpcContext* ctx);
 
 template void DataStreamService::RespondAndReleaseRpc(const Status& status,
     TransmitDataResponsePB* response, kudu::rpc::RpcContext* ctx,
