@@ -189,9 +189,8 @@ public class PrivilegeSpec implements ParseNode {
     switch (scope_) {
       case SERVER:
         if (privilegeLevel_ != TPrivilegeLevel.ALL &&
-            privilegeLevel_ != TPrivilegeLevel.REFRESH &&
-            privilegeLevel_ != TPrivilegeLevel.CREATE) {
-          throw new AnalysisException("Only 'ALL', 'REFRESH', or 'CREATE' privilege " +
+            privilegeLevel_ != TPrivilegeLevel.REFRESH) {
+          throw new AnalysisException("Only 'ALL' or 'REFRESH' privilege " +
               "may be applied at SERVER scope in privilege spec.");
         }
         break;
@@ -270,15 +269,11 @@ public class PrivilegeSpec implements ParseNode {
    * 1. The table name is not valid.
    * 2. Table is not loaded in the catalog.
    * 3. Table does not exist.
-   * 4. The privilege level is not supported on tables, e.g. CREATE.
    */
   private Table analyzeTargetTable(Analyzer analyzer) throws AnalysisException {
     Preconditions.checkState(scope_ == TPrivilegeScope.TABLE ||
         scope_ == TPrivilegeScope.COLUMN);
     Preconditions.checkState(!Strings.isNullOrEmpty(tableName_.getTbl()));
-    if (privilegeLevel_ == TPrivilegeLevel.CREATE) {
-      throw new AnalysisException("Create-level privileges on tables are not supported.");
-    }
     Table table = null;
     try {
       dbName_ = analyzer.getTargetDbName(tableName_);

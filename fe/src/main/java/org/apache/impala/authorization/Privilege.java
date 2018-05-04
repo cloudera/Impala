@@ -28,7 +28,7 @@ public enum Privilege {
   ALL(SentryAction.ALL, false),
   ALTER(SentryAction.ALL, false),
   DROP(SentryAction.ALL, false),
-  CREATE(SentryAction.CREATE, false),
+  CREATE(SentryAction.ALL, false),
   INSERT(SentryAction.INSERT, false),
   SELECT(SentryAction.SELECT, false),
   REFRESH(SentryAction.REFRESH, false),
@@ -54,7 +54,6 @@ public enum Privilege {
     SELECT("select"),
     INSERT("insert"),
     REFRESH("refresh"),
-    CREATE("create"),
     ALL("*");
 
     private final String value;
