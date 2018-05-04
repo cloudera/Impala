@@ -295,7 +295,6 @@ set(CLANG_INCLUDE_FLAGS
   "-I${GFLAGS_INCLUDE_DIR}"
   "-I${RAPIDJSON_INCLUDE_DIR}"
   "-I${AVRO_INCLUDE_DIR}"
-  "-I${ORC_INCLUDE_DIR}"
   # Include Boost as a system directory to suppress warnings from headers.
   "-isystem${BOOST_INCLUDEDIR}"
   # Required so that jni.h can be found during Clang compilation
@@ -448,7 +447,6 @@ set (IMPALA_DEPENDENCIES
   zlib
   bzip2
   avro
-  orc
   java_jvm
   kudu_client)
 

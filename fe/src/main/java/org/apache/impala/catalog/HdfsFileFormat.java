@@ -62,10 +62,6 @@ public enum HdfsFileFormat {
       "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
       "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
       true, true),
-  ORC("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat",
-      "org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat",
-      "org.apache.hadoop.hive.ql.io.orc.OrcSerde",
-      false, true),
   KUDU("org.apache.kudu.mapreduce.KuduTableInputFormat",
       "org.apache.kudu.mapreduce.KuduTableOutputFormat",
       "", false, false);
@@ -103,23 +99,19 @@ public enum HdfsFileFormat {
       "parquet.hive.MapredParquetInputFormat"
   };
 
-  private static Map<String, HdfsFileFormat> VALID_INPUT_FORMATS;
-  public static void init(boolean enableOrcScanner) {
-    ImmutableMap.Builder<String, HdfsFileFormat> builder =
-        ImmutableMap.<String, HdfsFileFormat>builder()
-            .put(RC_FILE.inputFormat(), RC_FILE)
-            .put(TEXT.inputFormat(), TEXT)
-            .put(LZO_TEXT.inputFormat(), TEXT)
-            .put(SEQUENCE_FILE.inputFormat(), SEQUENCE_FILE)
-            .put(AVRO.inputFormat(), AVRO)
-            .put(PARQUET.inputFormat(), PARQUET)
-            .put(PARQUET_LEGACY_INPUT_FORMATS[0], PARQUET)
-            .put(PARQUET_LEGACY_INPUT_FORMATS[1], PARQUET)
-            .put(PARQUET_LEGACY_INPUT_FORMATS[2], PARQUET)
-            .put(KUDU.inputFormat(), KUDU);
-    if (enableOrcScanner) builder.put(ORC.inputFormat(), ORC);
-    VALID_INPUT_FORMATS = builder.build();
-  }
+  private static final Map<String, HdfsFileFormat> VALID_INPUT_FORMATS =
+      ImmutableMap.<String, HdfsFileFormat>builder()
+          .put(RC_FILE.inputFormat(), RC_FILE)
+          .put(TEXT.inputFormat(), TEXT)
+          .put(LZO_TEXT.inputFormat(), TEXT)
+          .put(SEQUENCE_FILE.inputFormat(), SEQUENCE_FILE)
+          .put(AVRO.inputFormat(), AVRO)
+          .put(PARQUET.inputFormat(), PARQUET)
+          .put(PARQUET_LEGACY_INPUT_FORMATS[0], PARQUET)
+          .put(PARQUET_LEGACY_INPUT_FORMATS[1], PARQUET)
+          .put(PARQUET_LEGACY_INPUT_FORMATS[2], PARQUET)
+          .put(KUDU.inputFormat(), KUDU)
+          .build();
 
   /**
    * Returns true if the string describes an input format class that we support.
@@ -153,7 +145,6 @@ public enum HdfsFileFormat {
       case TEXT: return HdfsFileFormat.TEXT;
       case SEQUENCE_FILE: return HdfsFileFormat.SEQUENCE_FILE;
       case AVRO: return HdfsFileFormat.AVRO;
-      case ORC: return HdfsFileFormat.ORC;
       case PARQUET: return HdfsFileFormat.PARQUET;
       case KUDU: return HdfsFileFormat.KUDU;
       default:
@@ -168,7 +159,6 @@ public enum HdfsFileFormat {
       case TEXT: return THdfsFileFormat.TEXT;
       case SEQUENCE_FILE: return THdfsFileFormat.SEQUENCE_FILE;
       case AVRO: return THdfsFileFormat.AVRO;
-      case ORC: return THdfsFileFormat.ORC;
       case PARQUET: return THdfsFileFormat.PARQUET;
       case KUDU: return THdfsFileFormat.KUDU;
       default:
@@ -180,7 +170,6 @@ public enum HdfsFileFormat {
   public String toSql(HdfsCompression compressionType) {
     switch (this) {
       case RC_FILE: return "RCFILE";
-      case ORC: return "ORC";
       case TEXT:
         if (compressionType == HdfsCompression.LZO ||
             compressionType == HdfsCompression.LZO_INDEX) {
@@ -251,7 +240,6 @@ public enum HdfsFileFormat {
       case SEQUENCE_FILE:
       case AVRO:
       case PARQUET:
-      case ORC:
         return true;
       case KUDU:
         return false;

@@ -23,7 +23,6 @@
 #include "exec/hdfs-rcfile-scanner.h"
 #include "exec/hdfs-avro-scanner.h"
 #include "exec/hdfs-parquet-scanner.h"
-#include "exec/hdfs-orc-scanner.h"
 
 #include <avro/errors.h>
 #include <avro/schema.h>
@@ -452,8 +451,6 @@ Status HdfsScanNodeBase::IssueInitialScanRanges(RuntimeState* state) {
   // Issue initial ranges for all file types.
   RETURN_IF_ERROR(HdfsParquetScanner::IssueInitialRanges(this,
       matching_per_type_files[THdfsFileFormat::PARQUET]));
-  RETURN_IF_ERROR(HdfsOrcScanner::IssueInitialRanges(this,
-      matching_per_type_files[THdfsFileFormat::ORC]));
   RETURN_IF_ERROR(HdfsTextScanner::IssueInitialRanges(this,
       matching_per_type_files[THdfsFileFormat::TEXT]));
   RETURN_IF_ERROR(BaseSequenceScanner::IssueInitialRanges(this,
@@ -584,9 +581,6 @@ Status HdfsScanNodeBase::CreateAndOpenScanner(HdfsPartitionDescriptor* partition
       break;
     case THdfsFileFormat::PARQUET:
       scanner->reset(new HdfsParquetScanner(this, runtime_state_));
-      break;
-    case THdfsFileFormat::ORC:
-      scanner->reset(new HdfsOrcScanner(this, runtime_state_));
       break;
     default:
       return Status(Substitute("Unknown Hdfs file format type: $0",

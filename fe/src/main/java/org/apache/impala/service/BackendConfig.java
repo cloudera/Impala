@@ -23,7 +23,6 @@ import static org.apache.hadoop.fs.CommonConfigurationKeysPublic
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.security.authentication.util.KerberosName;
 import org.apache.impala.analysis.SqlScanner;
-import org.apache.impala.catalog.HdfsFileFormat;
 import org.apache.impala.thrift.TBackendGflags;
 
 import com.google.common.base.Preconditions;
@@ -46,7 +45,6 @@ public class BackendConfig {
     Preconditions.checkNotNull(cfg);
     INSTANCE = new BackendConfig(cfg);
     SqlScanner.init(cfg.getReserved_words_version());
-    HdfsFileFormat.init(cfg.isEnable_orc_scanner());
     initAuthToLocal();
   }
 
