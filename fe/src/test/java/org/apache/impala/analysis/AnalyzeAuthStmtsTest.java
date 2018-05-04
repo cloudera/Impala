@@ -164,7 +164,9 @@ public class AnalyzeAuthStmtsTest extends AnalyzerTest {
           formatArgs));
       AnalyzesOk(String.format("%s INSERT ON DATABASE functional %s myrole",
           formatArgs));
-      AnalyzesOk(String.format("%s INSERT ON SERVER %s myrole", formatArgs));
+      AnalysisError(String.format("%s INSERT ON SERVER %s myrole", formatArgs),
+          "Only 'ALL', 'REFRESH', 'CREATE', 'ALTER', or 'DROP' privilege may be " +
+          "applied at SERVER scope in privilege spec.");
       AnalysisError(String.format("%s INSERT ON URI 'hdfs:////abc//123' %s myrole",
           formatArgs), "Only 'ALL' privilege may be applied at URI scope in privilege " +
           "spec.");
@@ -178,7 +180,9 @@ public class AnalyzeAuthStmtsTest extends AnalyzerTest {
           "%s SELECT ON TABLE functional_kudu.alltypessmall %s myrole", formatArgs));
       AnalyzesOk(String.format("%s SELECT ON DATABASE functional %s myrole",
           formatArgs));
-      AnalyzesOk(String.format("%s SELECT ON SERVER %s myrole", formatArgs));
+      AnalysisError(String.format("%s SELECT ON SERVER %s myrole", formatArgs),
+          "Only 'ALL', 'REFRESH', 'CREATE', 'ALTER', or 'DROP' privilege may be " +
+          "applied at SERVER scope in privilege spec.");
       AnalysisError(String.format("%s SELECT ON URI 'hdfs:////abc//123' %s myrole",
           formatArgs), "Only 'ALL' privilege may be applied at URI scope in privilege " +
           "spec.");
