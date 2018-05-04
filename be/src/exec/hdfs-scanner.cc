@@ -779,7 +779,6 @@ void HdfsScanner::CheckFiltersEffectiveness() {
 
 Status HdfsScanner::IssueFooterRanges(HdfsScanNodeBase* scan_node,
     const THdfsFileFormat::type& file_type, const vector<HdfsFileDesc*>& files) {
-  DCHECK(!files.empty());
   vector<ScanRange*> footer_ranges;
   for (int i = 0; i < files.size(); ++i) {
     // Compute the offset of the file footer.
@@ -829,9 +828,7 @@ Status HdfsScanner::IssueFooterRanges(HdfsScanNodeBase* scan_node,
   }
   // The threads that process the footer will also do the scan, so we mark all the files
   // as complete here.
-  if (footer_ranges.size() > 0) {
-    RETURN_IF_ERROR(scan_node->AddDiskIoRanges(footer_ranges, files.size()));
-  }
+  RETURN_IF_ERROR(scan_node->AddDiskIoRanges(footer_ranges, files.size()));
   return Status::OK();
 }
 
