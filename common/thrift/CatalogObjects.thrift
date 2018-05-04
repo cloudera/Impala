@@ -470,8 +470,7 @@ enum TPrivilegeLevel {
   SELECT,
   REFRESH,
   CREATE,
-  ALTER,
-  DROP
+  ALTER
 }
 
 // Represents a privilege in an authorization policy. Privileges contain the level

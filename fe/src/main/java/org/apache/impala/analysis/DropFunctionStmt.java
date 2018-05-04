@@ -85,10 +85,13 @@ public class DropFunctionStmt extends StatementBase {
           false);
     }
 
+    // For now, if authorization is enabled, the user needs ALL on the server
+    // to drop functions.
+    // TODO: this is not the right granularity but acceptable for now.
     analyzer.registerPrivReq(new PrivilegeRequest(
-        new AuthorizeableFn(desc_.dbName(), desc_.signatureString()), Privilege.DROP));
+        new AuthorizeableFn(desc_.dbName(), desc_.signatureString()), Privilege.ALL));
 
-    Db db =  analyzer.getDb(desc_.dbName(), false);
+    Db db =  analyzer.getDb(desc_.dbName(), Privilege.DROP, false);
     if (db == null && !ifExists_) {
       throw new AnalysisException(Analyzer.DB_DOES_NOT_EXIST_ERROR_MSG + desc_.dbName());
     }

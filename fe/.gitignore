@@ -33,9 +33,6 @@ src/test/resources/authz-policy.ini
 # Generated minicluster config
 src/test/resources/minicluster-conf.xml
 
-# Generated hive-log4j2.properties file
-src/test/resources/hive-log4j2.properties
-
 # Generated thrift files
 generated-sources
 
