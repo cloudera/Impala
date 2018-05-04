@@ -46,7 +46,6 @@ import org.apache.hadoop.hive.metastore.api.LongColumnStatsData;
 import org.apache.hadoop.hive.metastore.api.MetaException;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.apache.hadoop.hive.metastore.api.Partition;
-import org.apache.hadoop.hive.metastore.api.PrincipalType;
 import org.apache.hadoop.hive.metastore.api.SerDeInfo;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.StringColumnStatsData;
@@ -977,8 +976,6 @@ public class CatalogOpExecutor {
     if (params.getLocation() != null) {
       db.setLocationUri(params.getLocation());
     }
-    db.setOwnerName(params.getOwner());
-    db.setOwnerType(PrincipalType.USER);
     if (LOG.isTraceEnabled()) LOG.trace("Creating database " + dbName);
     Db newDb = null;
     synchronized (metastoreDdlLock_) {
