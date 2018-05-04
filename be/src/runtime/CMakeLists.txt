@@ -37,7 +37,6 @@ add_library(Runtime
   data-stream-sender.cc
   debug-options.cc
   descriptors.cc
-  dml-exec-state.cc
   exec-env.cc
   fragment-instance-state.cc
   hbase-table.cc

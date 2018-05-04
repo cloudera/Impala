@@ -161,24 +161,24 @@ class Coordinator::BackendState {
     int64_t last_report_time_ms_ = 0;
 
     /// owned by coordinator object pool provided in the c'tor, created in Update()
-    RuntimeProfile* profile_ = nullptr;
+    RuntimeProfile* profile_;
 
     /// true if the final report has been received for the fragment instance.
     /// Used to handle duplicate done ReportExecStatus RPC messages. Used only
     /// in ApplyExecStatusReport()
-    bool done_ = false;
+    bool done_;
 
     /// true after the first call to profile->Update()
-    bool profile_created_ = false;
+    bool profile_created_;
 
     /// cumulative size of all splits; set in c'tor
-    int64_t total_split_size_ = 0;
+    int64_t total_split_size_;
 
     /// wall clock timer for this instance
     MonotonicStopWatch stopwatch_;
 
     /// total scan ranges complete across all scan nodes
-    int64_t total_ranges_complete_ = 0;
+    int64_t total_ranges_complete_;
 
     /// SCAN_RANGES_COMPLETE_COUNTERs in profile_
     std::vector<RuntimeProfile::Counter*> scan_ranges_complete_counters_;
@@ -215,7 +215,7 @@ class Coordinator::BackendState {
   boost::mutex lock_;
 
   // number of in-flight instances
-  int num_remaining_instances_ = 0;
+  int num_remaining_instances_;
 
   /// If the status indicates an error status, execution has either been aborted by the
   /// executing impalad (which then reported the error) or cancellation has been
@@ -235,15 +235,15 @@ class Coordinator::BackendState {
   ErrorLogMap error_log_;
 
   /// Time, in ms, that it took to execute the ExecRemoteFragment() RPC.
-  int64_t rpc_latency_ = 0;
+  int64_t rpc_latency_;
 
   /// If true, ExecPlanFragment() rpc has been sent - even if it was not determined to be
   /// successful.
-  bool rpc_sent_ = false;
+  bool rpc_sent_;
 
   /// peak memory used for this query (value of that node's query memtracker's
   /// peak_consumption()
-  int64_t peak_consumption_ = 0;
+  int64_t peak_consumption_;
 
   /// Set in ApplyExecStatusReport(). Uses MonotonicMillis().
   int64_t last_report_time_ms_ = 0;
