@@ -18,46 +18,45 @@
 #include "rpc/rpc-mgr-test-base.h"
 #include "service/fe-support.h"
 
-DECLARE_bool(use_kudu_kinit);
-DECLARE_bool(use_krpc);
-
-DECLARE_string(be_principal);
-DECLARE_string(hostname);
-DECLARE_string(principal);
 DECLARE_string(ssl_client_ca_certificate);
 DECLARE_string(ssl_server_certificate);
 DECLARE_string(ssl_private_key);
 
-// The principal name and the realm used for creating the mini-KDC.
-// To be initialized at main().
-static string kdc_principal;
-static string kdc_realm;
-
 namespace impala {
+
+static int kdc_port = GetServerPort();
 
 class RpcMgrKerberizedTest :
     public RpcMgrTestBase<testing::TestWithParam<KerberosSwitch> > {
-
   virtual void SetUp() override {
-    KerberosSwitch k = GetParam();
-    FLAGS_use_krpc = true;
-    FLAGS_use_kudu_kinit = k == USE_KRPC_KUDU_KERBEROS;
-    FLAGS_principal = "dummy-service/host@realm";
-    FLAGS_be_principal = strings::Substitute("$0@$1", kdc_principal, kdc_realm);
+    IpAddr ip;
+    ASSERT_OK(HostnameToIpAddr(FLAGS_hostname, &ip));
+    string spn = Substitute("impala-test/$0", ip);
+
+    kdc_wrapper_.reset(new MiniKdcWrapper(
+        std::move(spn), "KRBTEST.COM", "24h", "7d", kdc_port));
+    DCHECK(kdc_wrapper_.get() != nullptr);
+
+    ASSERT_OK(kdc_wrapper_->SetupAndStartMiniKDC(GetParam()));
     ASSERT_OK(InitAuth(CURRENT_EXECUTABLE_PATH));
+
     RpcMgrTestBase::SetUp();
   }
 
   virtual void TearDown() override {
-    FLAGS_principal.clear();
-    FLAGS_be_principal.clear();
+    ASSERT_OK(kdc_wrapper_->TearDownMiniKDC(GetParam()));
+    RpcMgrTestBase::TearDown();
   }
+
+ private:
+  boost::scoped_ptr<MiniKdcWrapper> kdc_wrapper_;
 };
 
+// TODO: IMPALA-6477: This test breaks on CentOS 6.4. Re-enable after a fix.
 INSTANTIATE_TEST_CASE_P(KerberosOnAndOff,
                         RpcMgrKerberizedTest,
-                        ::testing::Values(USE_KRPC_IMPALA_KERBEROS,
-                                          USE_KRPC_KUDU_KERBEROS));
+                        ::testing::Values(USE_KUDU_KERBEROS,
+                                          USE_IMPALA_KERBEROS));
 
 TEST_P(RpcMgrKerberizedTest, MultipleServicesTls) {
   // TODO: We're starting a seperate RpcMgr here instead of configuring
@@ -82,34 +81,12 @@ TEST_P(RpcMgrKerberizedTest, MultipleServicesTls) {
 
 } // namespace impala
 
-using impala::Status;
-
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   impala::InitCommonRuntime(argc, argv, true, impala::TestInfo::BE_TEST);
   impala::InitFeSupport();
 
-  // Set up and start KDC.
-  impala::IpAddr ip;
-  impala::Status status = impala::HostnameToIpAddr(FLAGS_hostname, &ip);
-  DCHECK(status.ok());
-  kdc_principal = Substitute("impala-test/$0", ip);
-  kdc_realm = "KRBTEST.COM";
-
-  int port = impala::FindUnusedEphemeralPort(nullptr);
-  std::unique_ptr<impala::MiniKdcWrapper> kdc;
-  status = impala::MiniKdcWrapper::SetupAndStartMiniKDC(
-      kdc_principal, kdc_realm, "24h", "7d", port, &kdc);
-  DCHECK(status.ok());
-
   // Fill in the path of the current binary for use by the tests.
   CURRENT_EXECUTABLE_PATH = argv[0];
-  int retval = RUN_ALL_TESTS();
-
-  // Shutdown KDC.
-  status = kdc->TearDownMiniKDC();
-  DCHECK(status.ok());
-
-  return retval;
-
+  return RUN_ALL_TESTS();
 }
