@@ -76,7 +76,6 @@ import com.google.common.base.Preconditions;
 public class ImpaladCatalog extends Catalog {
   private static final Logger LOG = Logger.getLogger(ImpaladCatalog.class);
   private static final TUniqueId INITIAL_CATALOG_SERVICE_ID = new TUniqueId(0L, 0L);
-  public static final String BUILTINS_DB = "_impala_builtins";
 
   // The last known Catalog Service ID. If the ID changes, it indicates the CatalogServer
   // has restarted.
@@ -99,13 +98,8 @@ public class ImpaladCatalog extends Catalog {
   // Used during table creation.
   private final String defaultKuduMasterHosts_;
 
-  // DB that contains all builtins
-  private static Db builtinsDb_;
-
   public ImpaladCatalog(String defaultKuduMasterHosts) {
     super();
-    builtinsDb_ = new BuiltinsDb(BUILTINS_DB);
-    addDb(builtinsDb_);
     defaultKuduMasterHosts_ = defaultKuduMasterHosts;
     // Ensure the contents of the CatalogObjectVersionQueue instance are cleared when a
     // new instance of ImpaladCatalog is created (see IMPALA-6486).
@@ -542,6 +536,4 @@ public class ImpaladCatalog extends Catalog {
     }
   }
   public TUniqueId getCatalogServiceId() { return catalogServiceId_; }
-
-  public static Db getBuiltinsDb() { return builtinsDb_; }
 }

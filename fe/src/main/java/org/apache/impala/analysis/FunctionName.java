@@ -21,7 +21,6 @@ import java.util.ArrayList;
 
 import org.apache.impala.catalog.Catalog;
 import org.apache.impala.catalog.Db;
-import org.apache.impala.catalog.ImpaladCatalog;
 import org.apache.impala.common.AnalysisException;
 import org.apache.impala.thrift.TFunctionName;
 import com.google.common.base.Joiner;
@@ -119,16 +118,15 @@ public class FunctionName {
     }
 
     // Resolve the database for this function.
-    Db builtinDb = ImpaladCatalog.getBuiltinsDb();
+    Db builtinDb = analyzer.getCatalog().getBuiltinsDb();
     if (!isFullyQualified()) {
       db_ = analyzer.getDefaultDb();
       if (preferBuiltinsDb && builtinDb.containsFunction(fn_)) {
-        db_ = ImpaladCatalog.BUILTINS_DB;
+        db_ = Catalog.BUILTINS_DB;
       }
     }
     Preconditions.checkNotNull(db_);
-    isBuiltin_ = db_.equals(ImpaladCatalog.BUILTINS_DB) &&
-        builtinDb.containsFunction(fn_);
+    isBuiltin_ = db_.equals(Catalog.BUILTINS_DB) && builtinDb.containsFunction(fn_);
     isAnalyzed_ = true;
   }
 
