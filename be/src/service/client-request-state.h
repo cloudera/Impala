@@ -159,11 +159,12 @@ class ClientRequestState {
   Coordinator* coord() const { return coord_.get(); }
   QuerySchedule* schedule() { return schedule_.get(); }
 
-  /// Admission control resource pool associated with this query.
+  /// Resource pool associated with this query, or an empty string if the schedule has not
+  /// been created and had the pool set yet, or this StmtType doesn't go through admission
+  /// control.
   std::string request_pool() const {
-    return query_ctx_.__isset.request_pool ? query_ctx_.request_pool : "";
+    return schedule_ == nullptr ? "" : schedule_->request_pool();
   }
-
   int num_rows_fetched() const { return num_rows_fetched_; }
   void set_fetched_rows() { fetched_rows_ = true; }
   bool fetched_rows() const { return fetched_rows_; }

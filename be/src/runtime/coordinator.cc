@@ -93,6 +93,8 @@ Status Coordinator::Exec() {
   VLOG_QUERY << "Exec() query_id=" << PrintId(query_id())
              << " stmt=" << request.query_ctx.client_request.stmt;
   stmt_type_ = request.stmt_type;
+  query_ctx_ = request.query_ctx;
+  query_ctx_.__set_request_pool(schedule_.request_pool());
 
   query_profile_ =
       RuntimeProfile::Create(obj_pool(), "Execution Profile " + PrintId(query_id()));
@@ -115,7 +117,7 @@ Status Coordinator::Exec() {
   // TODO: revisit this, it may not be true anymore
   lock_guard<mutex> l(lock_);
 
-  query_state_ = ExecEnv::GetInstance()->query_exec_mgr()->CreateQueryState(query_ctx());
+  query_state_ = ExecEnv::GetInstance()->query_exec_mgr()->CreateQueryState(query_ctx_);
   query_state_->AcquireExecResourceRefcount(); // Decremented in ReleaseExecResources().
   filter_mem_tracker_ = query_state_->obj_pool()->Add(new MemTracker(
       -1, "Runtime Filter (Coordinator)", query_state_->query_mem_tracker(), false));
@@ -353,7 +355,7 @@ void Coordinator::StartBackendExec() {
   for (BackendState* backend_state: backend_states_) {
     ExecEnv::GetInstance()->exec_rpc_thread_pool()->Offer(
         [backend_state, this, &debug_options]() {
-          backend_state->Exec(query_ctx(), debug_options, filter_routing_table_,
+          backend_state->Exec(query_ctx_, debug_options, filter_routing_table_,
             exec_complete_barrier_.get());
         });
   }
@@ -783,7 +785,7 @@ void Coordinator::ReleaseAdmissionControlResources() {
 void Coordinator::ReleaseAdmissionControlResourcesLocked() {
   if (released_admission_control_resources_) return;
   LOG(INFO) << "Release admission control resources for query_id="
-            << PrintId(query_ctx().query_id);
+            << PrintId(query_ctx_.query_id);
   AdmissionController* admission_controller =
       ExecEnv::GetInstance()->admission_controller();
   DCHECK(admission_controller != nullptr);
@@ -942,7 +944,7 @@ void Coordinator::FilterState::Disable(MemTracker* tracker) {
 }
 
 const TUniqueId& Coordinator::query_id() const {
-  return query_ctx().query_id;
+  return query_ctx_.query_id;
 }
 
 void Coordinator::GetTExecSummary(TExecSummary* exec_summary) {
