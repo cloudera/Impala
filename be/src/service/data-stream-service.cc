@@ -27,7 +27,6 @@
 #include "runtime/krpc-data-stream-mgr.h"
 #include "runtime/exec-env.h"
 #include "runtime/row-batch.h"
-#include "util/memory-metrics.h"
 #include "util/parse-util.h"
 #include "testutil/fault-injection-util.h"
 
@@ -46,7 +45,7 @@ DEFINE_int32(datastream_service_num_svc_threads, 0, "Number of threads for proce
 
 namespace impala {
 
-DataStreamService::DataStreamService(MetricGroup* metric_group)
+DataStreamService::DataStreamService()
   : DataStreamServiceIf(ExecEnv::GetInstance()->rpc_mgr()->metric_entity(),
         ExecEnv::GetInstance()->rpc_mgr()->result_tracker()) {
   MemTracker* process_mem_tracker = ExecEnv::GetInstance()->process_mem_tracker();
@@ -55,7 +54,6 @@ DataStreamService::DataStreamService(MetricGroup* metric_group)
       &is_percent, process_mem_tracker->limit());
   mem_tracker_.reset(new MemTracker(
       bytes_limit, "Data Stream Service Queue", process_mem_tracker));
-  MemTrackerMetric::CreateMetrics(metric_group, mem_tracker_.get(), "DataStreamService");
 }
 
 Status DataStreamService::Init() {
