@@ -1201,16 +1201,23 @@ class QueryRunner(object):
     return hash_thread.result
 
 
-def load_tpc_queries(workload):
-  """Returns a list of TPC queries. 'workload' should either be 'tpch' or 'tpcds'."""
+def load_tpc_queries(workload, load_in_kudu=False):
+  """Returns a list of TPC queries. 'workload' should either be 'tpch' or 'tpcds'.
+  If 'load_in_kudu' is True, it loads only queries specified for the Kudu storage
+  engine.
+  """
   LOG.info("Loading %s queries", workload)
   queries = list()
   query_dir = os.path.join(
       os.path.dirname(__file__), "..", "..", "testdata", "workloads", workload, "queries")
-  # IMPALA-6715 and others from the past: This pattern enforces the queries we actually
-  # find. Both workload directories contain other queries that are not part of the TPC
-  # spec.
-  file_name_pattern = re.compile(r"^{0}-(q.*).test$".format(workload))
+  if load_in_kudu:
+    engine = "kudu-"
+    file_name_pattern = re.compile(r"%s-%s(q\d+).test$" % (workload, engine))
+  else:
+    # IMPALA-6715 and others from the past: This pattern enforces the queries we actually
+    # find. Both workload directories contain other queries that are not part of the TPC
+    # spec.
+    file_name_pattern = re.compile(r"^{0}-(q.*).test$".format(workload))
   for query_file in os.listdir(query_dir):
     match = file_name_pattern.search(query_file)
     if not match:
@@ -2127,8 +2134,7 @@ def main():
       with impala.cursor(db_name=args.tpch_nested_db) as cursor:
         queries.extend(generate_compute_stats_queries(cursor))
   if args.tpch_kudu_db:
-    tpch_kudu_queries = load_tpc_queries("tpch")
-    assert len(tpch_kudu_queries) == EXPECTED_TPCH_QUERIES_COUNT
+    tpch_kudu_queries = load_tpc_queries("tpch", load_in_kudu=True)
     for query in tpch_kudu_queries:
       query.db_name = args.tpch_kudu_db
     queries.extend(tpch_kudu_queries)
@@ -2140,8 +2146,7 @@ def main():
         prepare_database(cursor)
         queries.extend(generate_DML_queries(cursor, args.dml_mod_values))
   if args.tpcds_kudu_db:
-    tpcds_kudu_queries = load_tpc_queries("tpcds")
-    assert len(tpcds_kudu_queries) == EXPECTED_TPCDS_QUERIES_COUNT
+    tpcds_kudu_queries = load_tpc_queries("tpcds", load_in_kudu=True)
     for query in tpcds_kudu_queries:
       query.db_name = args.tpcds_kudu_db
     queries.extend(tpcds_kudu_queries)
