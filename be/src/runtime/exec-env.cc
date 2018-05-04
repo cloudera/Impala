@@ -79,7 +79,7 @@ DEFINE_int32(state_store_subscriber_port, 23000,
     "port where StatestoreSubscriberService should be exported");
 DEFINE_int32(num_hdfs_worker_threads, 16,
     "(Advanced) The number of threads in the global HDFS operation pool");
-DEFINE_bool(use_krpc, true, "If true, use KRPC for the DataStream subsystem. "
+DEFINE_bool(use_krpc, false, "If true, use KRPC for the DataStream subsystem. "
     "Otherwise use Thrift RPC.");
 
 DECLARE_int32(state_store_port);

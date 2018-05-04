@@ -419,7 +419,7 @@ KrpcDataStreamMgr::~KrpcDataStreamMgr() {
   shutdown_promise_.Set(true);
   deserialize_pool_.Shutdown();
   LOG(INFO) << "Waiting for data-stream-mgr maintenance thread...";
-  if (maintenance_thread_.get() != nullptr) maintenance_thread_->Join();
+  maintenance_thread_->Join();
   LOG(INFO) << "Waiting for deserialization thread pool...";
   deserialize_pool_.Join();
 }
