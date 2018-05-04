@@ -194,15 +194,6 @@ public class HdfsPartition implements Comparable<HdfsPartition> {
     public String getFileName() { return fbFileDescriptor_.fileName(); }
     public long getFileLength() { return fbFileDescriptor_.length(); }
 
-    /** Compute the total length of files in fileDescs */
-    public static long computeTotalFileLength(Collection<FileDescriptor> fileDescs) {
-      long totalLength = 0;
-      for (FileDescriptor fileDesc: fileDescs) {
-        totalLength += fileDesc.getFileLength();
-      }
-      return totalLength;
-    }
-
     public HdfsCompression getFileCompression() {
       return HdfsCompression.valueOf(FbCompression.name(fbFileDescriptor_.compression()));
     }
