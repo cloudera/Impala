@@ -756,6 +756,7 @@ void KrpcDataStreamSender::Close(RuntimeState* state) {
   ScalarExprEvaluator::Close(partition_expr_evals_, state);
   ScalarExpr::Close(partition_exprs_);
   DataSink::Close(state);
+  closed_ = true;
 }
 
 Status KrpcDataStreamSender::SerializeBatch(
