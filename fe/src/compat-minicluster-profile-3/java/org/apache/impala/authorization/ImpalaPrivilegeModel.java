@@ -25,11 +25,12 @@ import org.apache.sentry.core.common.Model;
 
 /**
  * Delegates to HivePrivilegeModel for getImplyMethodMap(), but
- * uses Impala's BitFieldActionFactory implementation.
+ * adds "refresh" to the BitFieldActionFactory.
  */
 public class ImpalaPrivilegeModel implements Model {
   public static final ImpalaPrivilegeModel INSTANCE = new ImpalaPrivilegeModel();
-  private final ImpalaActionFactory actionFactory = new ImpalaActionFactory();
+
+  private ImpalaActionFactory actionFactory = new ImpalaActionFactory();
 
   @Override
   public Map<String, ImplyMethodType> getImplyMethodMap() {
@@ -40,4 +41,5 @@ public class ImpalaPrivilegeModel implements Model {
   public BitFieldActionFactory getBitFieldActionFactory() {
     return actionFactory;
   }
+
 }

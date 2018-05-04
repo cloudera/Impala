@@ -16,42 +16,64 @@
  */
 package org.apache.impala.authorization;
 
-import com.google.common.base.Preconditions;
-import org.apache.impala.authorization.Privilege.ImpalaAction;
 import org.apache.sentry.core.common.BitFieldAction;
 import org.apache.sentry.core.common.BitFieldActionFactory;
+import org.apache.sentry.core.model.db.AccessConstants;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
- * An implementation of BitFieldActionFactory for Impala.
+ * Almost identical to HiveActionFactory, but extended to allow
+ * for "refresh".
  */
 public class ImpalaActionFactory extends BitFieldActionFactory {
-  @Override
-  public List<? extends BitFieldAction> getActionsByCode(int actionCode) {
-    Preconditions.checkArgument(
-        actionCode >= 1 && actionCode <= ImpalaAction.ALL.getCode(),
-        String.format("Action code must between 1 and %d.", ImpalaAction.ALL.getCode()));
 
-    List<BitFieldAction> actions = new ArrayList<>();
-    for (ImpalaAction action : ImpalaAction.values()) {
-      if ((action.getCode() & actionCode) == action.getCode()) {
-        actions.add(action.getBitFieldAction());
-      }
+  enum ActionType {
+    SELECT(AccessConstants.SELECT, 1),
+    INSERT(AccessConstants.INSERT, 2),
+    ALTER(AccessConstants.ALTER, 4),
+    CREATE(AccessConstants.CREATE, 8),
+    DROP(AccessConstants.DROP, 16),
+    INDEX(AccessConstants.INDEX, 32),
+    LOCK(AccessConstants.LOCK, 64),
+    // "refresh" isn't available in AccessConstants, so using an Impala constant.
+    REFRESH(Privilege.SentryAction.REFRESH.name(), 128),
+
+    // For the compatibility, ALL, ALL_STAR, SOME have the same binary value;
+    // They have the different names which are "ALL", "*", "+"
+    ALL(AccessConstants.ACTION_ALL, SELECT.getCode() | INSERT.getCode() | ALTER.getCode() | CREATE.getCode() |
+            DROP.getCode() | INDEX.getCode() | LOCK.getCode() | REFRESH.getCode()),
+    ALL_STAR(AccessConstants.ALL, ALL.getCode()),
+    SOME(AccessConstants.SOME, ALL.getCode());
+
+    final private String name;
+    final private int code;
+
+    ActionType(String name, int code) {
+      this.name = name;
+      this.code = code;
     }
-    return actions;
+
+    public int getCode() {
+      return code;
+    }
+
+    public String getName() {
+      return name;
+    }
   }
 
-  @Override
-  public BitFieldAction getActionByName(String name) {
-    Preconditions.checkNotNull(name);
+  public List<? extends BitFieldAction> getActionsByCode(int actionCode) {
+    return null;
+  }
 
-    for (ImpalaAction action : ImpalaAction.values()) {
-      if (action.getValue().equalsIgnoreCase(name)) {
-        return action.getBitFieldAction();
+  public BitFieldAction getActionByName(String name) {
+    for (ActionType action : ActionType.values()) {
+      if (action.name.equalsIgnoreCase(name)) {
+        return new BitFieldAction(action.getName(), action.getCode());
       }
     }
     return null;
   }
+
 }
