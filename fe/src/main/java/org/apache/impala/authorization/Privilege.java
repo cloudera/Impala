@@ -26,7 +26,7 @@ import org.apache.sentry.core.common.Action;
  */
 public enum Privilege {
   ALL(SentryAction.ALL, false),
-  ALTER(SentryAction.ALTER, false),
+  ALTER(SentryAction.ALL, false),
   DROP(SentryAction.ALL, false),
   CREATE(SentryAction.CREATE, false),
   INSERT(SentryAction.INSERT, false),
@@ -55,7 +55,6 @@ public enum Privilege {
     INSERT("insert"),
     REFRESH("refresh"),
     CREATE("create"),
-    ALTER("alter"),
     ALL("*");
 
     private final String value;
