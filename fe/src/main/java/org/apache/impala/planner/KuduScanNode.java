@@ -162,8 +162,7 @@ public class KuduScanNode extends ScanNode {
             "outdated and need to be refreshed.");
       }
 
-      Type kuduColType =
-          KuduUtil.toImpalaType(kuduCol.getType(), kuduCol.getTypeAttributes());
+      Type kuduColType = KuduUtil.toImpalaType(kuduCol.getType());
       if (!colType.equals(kuduColType)) {
         throw new ImpalaRuntimeException("Column '" + colName + "' is type " +
             kuduColType.toSql() + " but Impala expected " + colType.toSql() +
