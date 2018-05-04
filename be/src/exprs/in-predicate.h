@@ -350,8 +350,7 @@ void InPredicate::SetLookupPrepare(
   state->contains_null = false;
   // Collect all values in a vector to use the bulk insert API to avoid N^2 behavior
   // with flat_set.
-  std::vector<SetType> element_list;
-  element_list.reserve(ctx->GetNumArgs() - 1);
+  vector<SetType> element_list(ctx->GetNumArgs());
   for (int i = 1; i < ctx->GetNumArgs(); ++i) {
     DCHECK(ctx->IsArgConstant(i));
     T* arg = reinterpret_cast<T*>(ctx->GetConstantArg(i));
