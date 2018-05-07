@@ -38,9 +38,6 @@ if "${CLUSTER_DIR}/admin" is_kerberized; then
   KERB_ARGS="--use_kerberos"
 fi
 
-# Enable KRPC during tests (default: false).
-: ${TEST_KRPC:=false}
-
 # Parametrized Test Options
 # Run FE Tests
 : ${FE_TEST:=true}
@@ -53,8 +50,7 @@ fi
 : ${JDBC_TEST:=true}
 # Run Cluster Tests
 : ${CLUSTER_TEST:=true}
-# Extra arguments passed to start-impala-cluster for tests. These do not apply to custom
-# cluster tests.
+# Extra arguments passed to start-impala-cluster for tests
 : ${TEST_START_CLUSTER_ARGS:=}
 # Extra args to pass to run-tests.py
 : ${RUN_TESTS_ARGS:=}
@@ -69,12 +65,6 @@ if [[ "${TARGET_FILESYSTEM}" == "local" ]]; then
 else
   TEST_START_CLUSTER_ARGS="${TEST_START_CLUSTER_ARGS} --cluster_size=3"
 fi
-
-# If KRPC tests are enabled, pass the corresponding flag during cluster start.
-if [[ "${TEST_KRPC}" != "false" ]]; then
-  TEST_START_CLUSTER_ARGS="${TEST_START_CLUSTER_ARGS} --use_krpc"
-fi
-
 # Indicates whether code coverage reports should be generated.
 : ${CODE_COVERAGE:=false}
 
@@ -121,12 +111,6 @@ COMMON_PYTEST_ARGS="--maxfail=${MAX_PYTEST_FAILURES} --exploration_strategy=core
 if [[ "${TARGET_FILESYSTEM}" == "local" ]]; then
   # Only one impalad is supported when running against local filesystem.
   COMMON_PYTEST_ARGS+=" --impalad=localhost:21000"
-fi
-
-# If KRPC tests are enabled, pass the corresponding flag to pytest. This includes the
-# end-to-end tests and the custom cluster tests.
-if [[ "${TEST_KRPC}" != "false" ]]; then
-  COMMON_PYTEST_ARGS+=" --test_krpc"
 fi
 
 # For logging when using run-step.
