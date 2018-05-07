@@ -226,23 +226,12 @@ Status BufferPool::ExtractBuffer(
 
 Status BufferPool::AllocateBuffer(
     ClientHandle* client, int64_t len, BufferHandle* handle) {
-  RETURN_IF_ERROR(client->impl_->PrepareToAllocateBuffer(len, true, nullptr));
+  RETURN_IF_ERROR(client->impl_->PrepareToAllocateBuffer(len));
   Status status = allocator_->Allocate(client, len, handle);
-  // If the allocation failed, update client's accounting to reflect the failure.
-  if (!status.ok()) client->impl_->FreedBuffer(len);
-  return status;
-}
-
-Status BufferPool::AllocateUnreservedBuffer(
-    ClientHandle* client, int64_t len, BufferHandle* handle) {
-  DCHECK(!handle->is_open());
-  bool success;
-  RETURN_IF_ERROR(client->impl_->PrepareToAllocateBuffer(len, false, &success));
-  if (!success) return Status::OK(); // Leave 'handle' closed to indicate failure.
-
-  Status status = allocator_->Allocate(client, len, handle);
-  // If the allocation failed, update client's accounting to reflect the failure.
-  if (!status.ok()) client->impl_->FreedBuffer(len);
+  if (!status.ok()) {
+    // Allocation failed - update client's accounting to reflect the failure.
+    client->impl_->FreedBuffer(len);
+  }
   return status;
 }
 
@@ -557,34 +546,14 @@ Status BufferPool::Client::FinishMoveEvictedToPinned(Page* page) {
   return Status::OK();
 }
 
-Status BufferPool::Client::PrepareToAllocateBuffer(
-    int64_t len, bool reserved, bool* success) {
-  if (success != nullptr) *success = false;
-  // Don't need to hold the client's 'lock_' yet because 'reservation_' operations are
-  // threadsafe.
-  if (reserved) {
-    // The client must have already reserved the memory.
-    reservation_.AllocateFrom(len);
-  } else {
-    DCHECK(success != nullptr);
-    // The client may not have reserved the memory.
-    if (!reservation_.IncreaseReservationToFitAndAllocate(len)) return Status::OK();
-  }
-
-  {
-    unique_lock<mutex> lock(lock_);
-    // Clean enough pages to allow allocation to proceed without violating our eviction
-    // policy.
-    Status status = CleanPages(&lock, len);
-    if (!status.ok()) {
-      // Reverse the allocation.
-      reservation_.ReleaseTo(len);
-      return status;
-    }
-    buffers_allocated_bytes_ += len;
-    DCHECK_CONSISTENCY();
-  }
-  if (success != nullptr) *success = true;
+Status BufferPool::Client::PrepareToAllocateBuffer(int64_t len) {
+  unique_lock<mutex> lock(lock_);
+  // Clean enough pages to allow allocation to proceed without violating our eviction
+  // policy. This can fail, so only update the accounting once success is ensured.
+  RETURN_IF_ERROR(CleanPages(&lock, len));
+  reservation_.AllocateFrom(len);
+  buffers_allocated_bytes_ += len;
+  DCHECK_CONSISTENCY();
   return Status::OK();
 }
 
