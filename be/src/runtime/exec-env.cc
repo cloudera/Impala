@@ -67,7 +67,7 @@
 #include "common/names.h"
 
 using boost::algorithm::join;
-using kudu::rpc::GeneratedServiceIf;
+using kudu::rpc::ServiceIf;
 using namespace strings;
 
 DEFINE_string(catalog_service_host, "localhost",
@@ -150,7 +150,6 @@ ExecEnv::ExecEnv(const string& hostname, int backend_port, int krpc_port,
     frontend_(new Frontend()),
     async_rpc_pool_(new CallableThreadPool("rpc-pool", "async-rpc-sender", 8, 10000)),
     query_exec_mgr_(new QueryExecMgr()),
-    rpc_metrics_(metrics_->GetOrCreateChildGroup("rpc")),
     enable_webserver_(FLAGS_enable_webserver && webserver_port > 0),
     backend_address_(MakeNetworkAddress(hostname, backend_port)) {
 

@@ -16,7 +16,6 @@
 // under the License.
 
 #include "rpc/rpc-mgr-test-base.h"
-#include "service/fe-support.h"
 
 DECLARE_string(ssl_client_ca_certificate);
 DECLARE_string(ssl_server_certificate);
@@ -28,7 +27,7 @@ static int kdc_port = GetServerPort();
 
 class RpcMgrKerberizedTest :
     public RpcMgrTestBase<testing::TestWithParam<KerberosSwitch> > {
-  virtual void SetUp() override {
+  virtual void SetUp() {
     IpAddr ip;
     ASSERT_OK(HostnameToIpAddr(FLAGS_hostname, &ip));
     string spn = Substitute("impala-test/$0", ip);
@@ -43,7 +42,7 @@ class RpcMgrKerberizedTest :
     RpcMgrTestBase::SetUp();
   }
 
-  virtual void TearDown() override {
+  virtual void TearDown() {
     ASSERT_OK(kdc_wrapper_->TearDownMiniKDC(GetParam()));
     RpcMgrTestBase::TearDown();
   }
@@ -83,8 +82,7 @@ TEST_P(RpcMgrKerberizedTest, MultipleServicesTls) {
 
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
-  impala::InitCommonRuntime(argc, argv, true, impala::TestInfo::BE_TEST);
-  impala::InitFeSupport();
+  impala::InitCommonRuntime(argc, argv, false, impala::TestInfo::BE_TEST);
 
   // Fill in the path of the current binary for use by the tests.
   CURRENT_EXECUTABLE_PATH = argv[0];

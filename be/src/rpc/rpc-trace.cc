@@ -22,7 +22,6 @@
 #include <gutil/strings/substitute.h>
 
 #include "common/logging.h"
-#include "rpc/rpc-mgr.h"
 #include "util/debug-util.h"
 #include "util/time.h"
 #include "util/webserver.h"
@@ -40,8 +39,6 @@ const string RPC_PROCESSING_TIME_DISTRIBUTION_METRIC_KEY = "rpc-method.$0.call_d
 // web-based summary page.
 class RpcEventHandlerManager {
  public:
-  RpcEventHandlerManager(RpcMgr* rpc_mgr) : rpc_mgr_(rpc_mgr) {}
-
   // Adds an event handler to the list of those tracked
   void RegisterEventHandler(RpcEventHandler* event_handler);
 
@@ -67,19 +64,14 @@ class RpcEventHandlerManager {
   // after they are started, event handlers have a lifetime equivalent to the length of
   // the process.
   vector<RpcEventHandler*> event_handlers_;
-
-  // Points to an RpcMgr. If this is not null, then its metrics will be included in the
-  // output of JsonCallback. Not owned, but the object must be guaranteed to live as long
-  // as the process lives.
-  RpcMgr* rpc_mgr_ = nullptr;
 };
 
 // Only instance of RpcEventHandlerManager
 scoped_ptr<RpcEventHandlerManager> handler_manager;
 
-void impala::InitRpcEventTracing(Webserver* webserver, RpcMgr* rpc_mgr) {
-  handler_manager.reset(new RpcEventHandlerManager(rpc_mgr));
-  if (webserver != nullptr) {
+void impala::InitRpcEventTracing(Webserver* webserver) {
+  handler_manager.reset(new RpcEventHandlerManager());
+  if (webserver != NULL) {
     Webserver::UrlCallback json = bind<void>(
         mem_fn(&RpcEventHandlerManager::JsonCallback), handler_manager.get(), _1, _2);
     webserver->RegisterUrlCallback("/rpcz", "rpcz.tmpl", json);
@@ -91,7 +83,7 @@ void impala::InitRpcEventTracing(Webserver* webserver, RpcMgr* rpc_mgr) {
 }
 
 void RpcEventHandlerManager::RegisterEventHandler(RpcEventHandler* event_handler) {
-  DCHECK(event_handler != nullptr);
+  DCHECK(event_handler != NULL);
   lock_guard<mutex> l(lock_);
   event_handlers_.push_back(event_handler);
 }
@@ -106,7 +98,6 @@ void RpcEventHandlerManager::JsonCallback(const Webserver::ArgumentMap& args,
     servers.PushBack(server, document->GetAllocator());
   }
   document->AddMember("servers", servers, document->GetAllocator());
-  if (rpc_mgr_ != nullptr) rpc_mgr_->ToJson(document);
 }
 
 void RpcEventHandlerManager::ResetCallback(const Webserver::ArgumentMap& args,
@@ -146,7 +137,7 @@ void RpcEventHandler::ResetAll() {
 
 RpcEventHandler::RpcEventHandler(const string& server_name, MetricGroup* metrics) :
     server_name_(server_name), metrics_(metrics) {
-  if (handler_manager.get() != nullptr) handler_manager->RegisterEventHandler(this);
+  if (handler_manager.get() != NULL) handler_manager->RegisterEventHandler(this);
 }
 
 void RpcEventHandler::ToJson(Value* server, Document* document) {
