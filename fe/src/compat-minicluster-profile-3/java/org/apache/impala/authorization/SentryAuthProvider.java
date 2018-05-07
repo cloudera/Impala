@@ -70,7 +70,7 @@ class SentryAuthProvider {
 
       return (ResourceAuthorizationProvider) ConstructorUtils.invokeConstructor(
           Class.forName(config.getPolicyProviderClassName()),
-          new Object[] {policyFile, engine, ImpalaPrivilegeModel.INSTANCE});
+          new Object[] {policyFile, engine, HivePrivilegeModel.getInstance()});
     } catch (Exception e) {
       // Re-throw as unchecked exception.
       throw new IllegalStateException(
