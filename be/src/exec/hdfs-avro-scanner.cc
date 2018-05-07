@@ -759,18 +759,23 @@ Status HdfsAvroScanner::CodegenMaterializeTuple(const HdfsScanNodeBase* node,
   llvm::LLVMContext& context = codegen->context();
   LlvmBuilder builder(context);
 
-  llvm::PointerType* this_ptr_type = codegen->GetStructPtrType<HdfsAvroScanner>();
+  llvm::Type* this_type = codegen->GetType(HdfsAvroScanner::LLVM_CLASS_NAME);
+  DCHECK(this_type != nullptr);
+  llvm::PointerType* this_ptr_type = llvm::PointerType::get(this_type, 0);
 
   TupleDescriptor* tuple_desc = const_cast<TupleDescriptor*>(node->tuple_desc());
   llvm::StructType* tuple_type = tuple_desc->GetLlvmStruct(codegen);
   if (tuple_type == nullptr) return Status("Could not generate tuple struct.");
   llvm::Type* tuple_ptr_type = llvm::PointerType::get(tuple_type, 0);
 
-  llvm::PointerType* tuple_opaque_ptr_type = codegen->GetStructPtrType<Tuple>();
+  llvm::Type* tuple_opaque_type = codegen->GetType(Tuple::LLVM_CLASS_NAME);
+  llvm::PointerType* tuple_opaque_ptr_type = llvm::PointerType::get(tuple_opaque_type, 0);
 
-  llvm::Type* data_ptr_type = codegen->ptr_ptr_type(); // char**
-  llvm::Type* mempool_type = codegen->GetStructPtrType<MemPool>();
-  llvm::Type* schema_element_type = codegen->GetStructPtrType<AvroSchemaElement>();
+  llvm::Type* data_ptr_type = llvm::PointerType::get(codegen->ptr_type(), 0); // char**
+  llvm::Type* mempool_type =
+      llvm::PointerType::get(codegen->GetType(MemPool::LLVM_CLASS_NAME), 0);
+  llvm::Type* schema_element_type =
+      codegen->GetPtrType(AvroSchemaElement::LLVM_CLASS_NAME);
 
   // Schema can be null if metadata is stale. See test in
   // queries/QueryTest/avro-schema-changes.test.
@@ -787,7 +792,7 @@ Status HdfsAvroScanner::CodegenMaterializeTuple(const HdfsScanNodeBase* node,
   std::vector<llvm::Function*> helper_functions;
 
   // prototype re-used several times by amending with SetName()
-  LlvmCodeGen::FnPrototype prototype(codegen, "", codegen->bool_type());
+  LlvmCodeGen::FnPrototype prototype(codegen, "", codegen->boolean_type());
   prototype.AddArgument(LlvmCodeGen::NamedVariable("this", this_ptr_type));
   prototype.AddArgument(LlvmCodeGen::NamedVariable("record_schema", schema_element_type));
   prototype.AddArgument(LlvmCodeGen::NamedVariable("pool", mempool_type));
@@ -928,9 +933,9 @@ Status HdfsAvroScanner::CodegenReadRecord(const SchemaPath& path,
       llvm::Function* read_union_fn =
           codegen->GetFunction(IRFunction::READ_UNION_TYPE, false);
       llvm::Value* null_union_pos_val =
-          codegen->GetI32Constant(field->null_union_position);
+          codegen->GetIntConstant(TYPE_INT, field->null_union_position);
       if (is_null_ptr == nullptr) {
-        is_null_ptr = codegen->CreateEntryBlockAlloca(*builder, codegen->bool_type(),
+        is_null_ptr = codegen->CreateEntryBlockAlloca(*builder, codegen->boolean_type(),
             "is_null_ptr");
       }
       llvm::Value* is_null_ptr_cast =
@@ -1090,7 +1095,7 @@ Status HdfsAvroScanner::CodegenDecodeAvroData(const HdfsScanNodeBase* node,
 
   int tuple_byte_size = node->tuple_desc()->byte_size();
   replaced = codegen->ReplaceCallSitesWithValue(fn,
-      codegen->GetI32Constant(tuple_byte_size), "tuple_byte_size");
+      codegen->GetIntConstant(TYPE_INT, tuple_byte_size), "tuple_byte_size");
   DCHECK_EQ(replaced, 1);
 
   fn->setName("DecodeAvroData");

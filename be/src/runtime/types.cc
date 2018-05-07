@@ -345,16 +345,18 @@ ostream& operator<<(ostream& os, const ColumnType& type) {
 
 llvm::ConstantStruct* ColumnType::ToIR(LlvmCodeGen* codegen) const {
   // ColumnType = { i32, i32, i32, i32, <vector>, <vector> }
-  llvm::StructType* column_type_type = codegen->GetStructType<ColumnType>();
+  llvm::StructType* column_type_type =
+      llvm::cast<llvm::StructType>(codegen->GetType(LLVM_CLASS_NAME));
 
   DCHECK_EQ(sizeof(type), sizeof(int32_t));
-  llvm::Constant* type_field = codegen->GetI32Constant(type);
+  llvm::Constant* type_field = llvm::ConstantInt::get(codegen->int_type(), type);
   DCHECK_EQ(sizeof(len), sizeof(int32_t));
-  llvm::Constant* len_field = codegen->GetI32Constant(len);
+  llvm::Constant* len_field = llvm::ConstantInt::get(codegen->int_type(), len);
   DCHECK_EQ(sizeof(precision), sizeof(int32_t));
-  llvm::Constant* precision_field = codegen->GetI32Constant(precision);
+  llvm::Constant* precision_field =
+      llvm::ConstantInt::get(codegen->int_type(), precision);
   DCHECK_EQ(sizeof(scale), sizeof(int32_t));
-  llvm::Constant* scale_field = codegen->GetI32Constant(scale);
+  llvm::Constant* scale_field = llvm::ConstantInt::get(codegen->int_type(), scale);
 
   // Create empty 'children' and 'field_names' vectors
   DCHECK(children.empty()) << "Nested types NYI";

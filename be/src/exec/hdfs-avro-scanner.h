@@ -100,8 +100,6 @@ class HdfsAvroScanner : public BaseSequenceScanner {
       llvm::Function** decode_avro_data_fn)
       WARN_UNUSED_RESULT;
 
-  static const char* LLVM_CLASS_NAME;
-
  protected:
   /// Implementation of BaseSeqeunceScanner super class methods
   virtual FileHeader* AllocateFileHeader();
@@ -311,6 +309,8 @@ class HdfsAvroScanner : public BaseSequenceScanner {
 
   /// Unit test constructor
   HdfsAvroScanner();
+
+  static const char* LLVM_CLASS_NAME;
 };
 } // namespace impala
 

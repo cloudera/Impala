@@ -132,10 +132,10 @@ Status TextConverter::CodegenWriteSlot(LlvmCodeGen* codegen,
   llvm::PointerType* tuple_ptr_type = tuple_type->getPointerTo();
 
   LlvmCodeGen::FnPrototype prototype(
-      codegen, "WriteSlot", codegen->bool_type());
+      codegen, "WriteSlot", codegen->GetType(TYPE_BOOLEAN));
   prototype.AddArgument(LlvmCodeGen::NamedVariable("tuple_arg", tuple_ptr_type));
   prototype.AddArgument(LlvmCodeGen::NamedVariable("data", codegen->ptr_type()));
-  prototype.AddArgument(LlvmCodeGen::NamedVariable("len", codegen->i32_type()));
+  prototype.AddArgument(LlvmCodeGen::NamedVariable("len", codegen->GetType(TYPE_INT)));
 
   LlvmBuilder builder(codegen->context());
   llvm::Value* args[3];
@@ -160,7 +160,7 @@ Status TextConverter::CodegenWriteSlot(LlvmCodeGen* codegen,
           llvm::ArrayRef<llvm::Value*>(
               {args[1], args[2], codegen->CastPtrToLlvmPtr(codegen->ptr_type(),
                                      const_cast<char*>(null_col_val)),
-                  codegen->GetI32Constant(len)}));
+                  codegen->GetIntConstant(TYPE_INT, len)}));
     }
   } else {
     // Constant FALSE as branch condition. We rely on later optimization passes
@@ -174,7 +174,7 @@ Status TextConverter::CodegenWriteSlot(LlvmCodeGen* codegen,
     builder.SetInsertPoint(check_zero_block);
     // If len == 0 and it is not a string col, set slot to NULL
     llvm::Value* null_len =
-        builder.CreateICmpEQ(args[2], codegen->GetI32Constant(0));
+        builder.CreateICmpEQ(args[2], codegen->GetIntConstant(TYPE_INT, 0));
     builder.CreateCondBr(null_len, set_null_block, parse_slot_block);
   }
 
@@ -192,7 +192,7 @@ Status TextConverter::CodegenWriteSlot(LlvmCodeGen* codegen,
     DCHECK(slot_desc->type().type != TYPE_CHAR);
     if (slot_desc->type().type == TYPE_VARCHAR) {
       // determine if we need to truncate the string
-      llvm::Value* maxlen = codegen->GetI32Constant(slot_desc->type().len);
+      llvm::Value* maxlen = codegen->GetIntConstant(TYPE_INT, slot_desc->type().len);
       llvm::Value* len_lt_maxlen =
           builder.CreateICmpSLT(args[2], maxlen, "len_lt_maxlen");
       llvm::Value* minlen =
@@ -259,7 +259,7 @@ Status TextConverter::CodegenWriteSlot(LlvmCodeGen* codegen,
     llvm::BasicBlock *parse_success_block, *parse_failed_block;
     codegen->CreateIfElseBlocks(*fn, "parse_success", "parse_fail",
         &parse_success_block, &parse_failed_block);
-    LlvmCodeGen::NamedVariable parse_result("parse_result", codegen->i32_type());
+    LlvmCodeGen::NamedVariable parse_result("parse_result", codegen->GetType(TYPE_INT));
     llvm::Value* parse_result_ptr = codegen->CreateEntryBlockAlloca(*fn, parse_result);
 
     llvm::CallInst* parse_return;
@@ -268,8 +268,8 @@ Status TextConverter::CodegenWriteSlot(LlvmCodeGen* codegen,
     if (slot_desc->type().type == TYPE_DECIMAL) {
       // Special case for decimal since it has additional precision/scale parameters
       parse_return = builder.CreateCall(parse_fn, {args[1], args[2],
-          codegen->GetI32Constant(slot_desc->type().precision),
-          codegen->GetI32Constant(slot_desc->type().scale), parse_result_ptr});
+          codegen->GetIntConstant(TYPE_INT, slot_desc->type().precision),
+          codegen->GetIntConstant(TYPE_INT, slot_desc->type().scale), parse_result_ptr});
     } else if (slot_desc->type().type == TYPE_TIMESTAMP) {
       // If the return value is large (more than 16 bytes in our toolchain) the first
       // parameter would be a pointer to value parsed and the return value of callee
@@ -281,7 +281,7 @@ Status TextConverter::CodegenWriteSlot(LlvmCodeGen* codegen,
     }
     llvm::Value* parse_result_val = builder.CreateLoad(parse_result_ptr, "parse_result");
     llvm::Value* failed_value =
-        codegen->GetI32Constant(StringParser::PARSE_FAILURE);
+        codegen->GetIntConstant(TYPE_INT, StringParser::PARSE_FAILURE);
 
     // Check for parse error.
     llvm::Value* parse_failed =
@@ -289,7 +289,7 @@ Status TextConverter::CodegenWriteSlot(LlvmCodeGen* codegen,
     if (strict_mode) {
       // In strict_mode, also check if parse_result is PARSE_OVERFLOW.
       llvm::Value* overflow_value =
-          codegen->GetI32Constant(StringParser::PARSE_OVERFLOW);
+          codegen->GetIntConstant(TYPE_INT, StringParser::PARSE_OVERFLOW);
       llvm::Value* parse_overflow =
           builder.CreateICmpEQ(parse_result_val, overflow_value, "overflowed");
       parse_failed = builder.CreateOr(parse_failed, parse_overflow, "failed_or");

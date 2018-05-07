@@ -369,10 +369,10 @@ Status LlvmCodeGen::CreateImpalaCodegen(RuntimeState* state,
   SCOPED_THREAD_COUNTER_MEASUREMENT(codegen->llvm_thread_counters_);
 
   // Get type for StringValue
-  codegen->string_value_type_ = codegen->GetStructType<StringValue>();
+  codegen->string_value_type_ = codegen->GetType(StringValue::LLVM_CLASS_NAME);
 
   // Get type for TimestampValue
-  codegen->timestamp_value_type_ = codegen->GetStructType<TimestampValue>();
+  codegen->timestamp_value_type_ = codegen->GetType(TimestampValue::LLVM_CLASS_NAME);
 
   // Verify size is correct
   const llvm::DataLayout& data_layout = codegen->execution_engine()->getDataLayout();
@@ -425,7 +425,7 @@ Status LlvmCodeGen::Init(unique_ptr<llvm::Module> module) {
   module_->setDataLayout(execution_engine_->getDataLayout());
 
   void_type_ = llvm::Type::getVoidTy(context());
-  ptr_type_ = llvm::PointerType::get(i8_type(), 0);
+  ptr_type_ = llvm::PointerType::get(GetType(TYPE_TINYINT), 0);
   true_value_ = llvm::ConstantInt::get(context(), llvm::APInt(1, true, true));
   false_value_ = llvm::ConstantInt::get(context(), llvm::APInt(1, false, true));
 
@@ -493,30 +493,30 @@ string LlvmCodeGen::GetIR(bool full_module) const {
   return str;
 }
 
-llvm::Type* LlvmCodeGen::GetSlotType(const ColumnType& type) {
+llvm::Type* LlvmCodeGen::GetType(const ColumnType& type) {
   switch (type.type) {
     case TYPE_NULL:
       return llvm::Type::getInt1Ty(context());
     case TYPE_BOOLEAN:
-      return bool_type();
+      return llvm::Type::getInt1Ty(context());
     case TYPE_TINYINT:
-      return i8_type();
+      return llvm::Type::getInt8Ty(context());
     case TYPE_SMALLINT:
-      return i16_type();
+      return llvm::Type::getInt16Ty(context());
     case TYPE_INT:
-      return i32_type();
+      return llvm::Type::getInt32Ty(context());
     case TYPE_BIGINT:
-      return i64_type();
+      return llvm::Type::getInt64Ty(context());
     case TYPE_FLOAT:
-      return float_type();
+      return llvm::Type::getFloatTy(context());
     case TYPE_DOUBLE:
-      return double_type();
+      return llvm::Type::getDoubleTy(context());
     case TYPE_STRING:
     case TYPE_VARCHAR:
       return string_value_type_;
     case TYPE_FIXED_UDA_INTERMEDIATE:
       // Represent this as an array of bytes.
-      return llvm::ArrayType::get(i8_type(), type.len);
+      return llvm::ArrayType::get(GetType(TYPE_TINYINT), type.len);
     case TYPE_CHAR:
       // IMPALA-3207: Codegen for CHAR is not yet implemented, this should not
       // be called for TYPE_CHAR.
@@ -532,18 +532,18 @@ llvm::Type* LlvmCodeGen::GetSlotType(const ColumnType& type) {
   }
 }
 
-llvm::PointerType* LlvmCodeGen::GetSlotPtrType(const ColumnType& type) {
-  return llvm::PointerType::get(GetSlotType(type), 0);
+llvm::PointerType* LlvmCodeGen::GetPtrType(const ColumnType& type) {
+  return llvm::PointerType::get(GetType(type), 0);
 }
 
-llvm::Type* LlvmCodeGen::GetNamedType(const string& name) {
+llvm::Type* LlvmCodeGen::GetType(const string& name) {
   llvm::Type* type = module_->getTypeByName(name);
   DCHECK(type != NULL) << name;
   return type;
 }
 
-llvm::PointerType* LlvmCodeGen::GetNamedPtrType(const string& name) {
-  llvm::Type* type = GetNamedType(name);
+llvm::PointerType* LlvmCodeGen::GetPtrType(const string& name) {
+  llvm::Type* type = GetType(name);
   DCHECK(type != NULL) << name;
   return llvm::PointerType::get(type, 0);
 }
@@ -556,15 +556,32 @@ llvm::PointerType* LlvmCodeGen::GetPtrPtrType(llvm::Type* type) {
   return llvm::PointerType::get(llvm::PointerType::get(type, 0), 0);
 }
 
-llvm::PointerType* LlvmCodeGen::GetNamedPtrPtrType(const string& name) {
-  return llvm::PointerType::get(GetNamedPtrType(name), 0);
+llvm::PointerType* LlvmCodeGen::GetPtrPtrType(const string& name) {
+  return llvm::PointerType::get(GetPtrType(name), 0);
 }
 
 // Llvm doesn't let you create a PointerValue from a c-side ptr.  Instead
 // cast it to an int and then to 'type'.
 llvm::Value* LlvmCodeGen::CastPtrToLlvmPtr(llvm::Type* type, const void* ptr) {
-  llvm::Constant* const_int = GetI64Constant((int64_t)ptr);
+  llvm::Constant* const_int =
+      llvm::ConstantInt::get(llvm::Type::getInt64Ty(context()), (int64_t)ptr);
   return llvm::ConstantExpr::getIntToPtr(const_int, type);
+}
+
+llvm::Constant* LlvmCodeGen::GetIntConstant(PrimitiveType type, uint64_t val) {
+  switch (type) {
+    case TYPE_TINYINT:
+      return llvm::ConstantInt::get(context(), llvm::APInt(8, val));
+    case TYPE_SMALLINT:
+      return llvm::ConstantInt::get(context(), llvm::APInt(16, val));
+    case TYPE_INT:
+      return llvm::ConstantInt::get(context(), llvm::APInt(32, val));
+    case TYPE_BIGINT:
+      return llvm::ConstantInt::get(context(), llvm::APInt(64, val));
+    default:
+      DCHECK(false);
+      return NULL;
+  }
 }
 
 llvm::Constant* LlvmCodeGen::GetIntConstant(
@@ -590,7 +607,7 @@ llvm::AllocaInst* LlvmCodeGen::CreateEntryBlockAlloca(
     llvm::Function* f, const NamedVariable& var) {
   llvm::IRBuilder<> tmp(&f->getEntryBlock(), f->getEntryBlock().begin());
   llvm::AllocaInst* alloca = tmp.CreateAlloca(var.type, NULL, var.name.c_str());
-  if (var.type == GetNamedType(CodegenAnyVal::LLVM_DECIMALVAL_NAME)) {
+  if (var.type == GetType(CodegenAnyVal::LLVM_DECIMALVAL_NAME)) {
     // Generated functions may manipulate DecimalVal arguments via SIMD instructions such
     // as 'movaps' that require 16-byte memory alignment. LLVM uses 8-byte alignment by
     // default, so explicitly set the alignment for DecimalVals.
@@ -610,7 +627,7 @@ llvm::AllocaInst* LlvmCodeGen::CreateEntryBlockAlloca(const LlvmBuilder& builder
   llvm::Function* fn = builder.GetInsertBlock()->getParent();
   llvm::IRBuilder<> tmp(&fn->getEntryBlock(), fn->getEntryBlock().begin());
   llvm::AllocaInst* alloca =
-      tmp.CreateAlloca(type, GetI32Constant(num_entries), name);
+      tmp.CreateAlloca(type, GetIntConstant(TYPE_INT, num_entries), name);
   alloca->setAlignment(alignment);
   return alloca;
 }
@@ -828,7 +845,7 @@ Status LlvmCodeGen::LoadFunction(const TFunction& fn, const std::string& symbol,
     }
 
     // The "FunctionContext*" argument.
-    prototype.AddArgument("ctx", GetNamedPtrType("class.impala_udf::FunctionContext"));
+    prototype.AddArgument("ctx", GetPtrType("class.impala_udf::FunctionContext"));
 
     // The "fixed" arguments for the UDF function, followed by the variable arguments,
     // if any.
@@ -838,7 +855,7 @@ Status LlvmCodeGen::LoadFunction(const TFunction& fn, const std::string& symbol,
     }
 
     if (has_varargs) {
-      prototype.AddArgument("num_var_arg", i32_type());
+      prototype.AddArgument("num_var_arg", GetType(TYPE_INT));
       // Get the vararg type from the first vararg.
       prototype.AddArgument(
           "var_arg", CodegenAnyVal::GetUnloweredPtrType(this, arg_types[num_fixed_args]));
@@ -926,7 +943,8 @@ int LlvmCodeGen::ReplaceCallSitesWithValue(
 
 int LlvmCodeGen::ReplaceCallSitesWithBoolConst(llvm::Function* caller, bool constant,
     const string& target_name) {
-  llvm::Value* replacement = GetBoolConstant(constant);
+  llvm::Value* replacement =
+      llvm::ConstantInt::get(llvm::Type::getInt1Ty(context()), constant);
   return ReplaceCallSitesWithValue(caller, replacement, target_name);
 }
 
@@ -965,7 +983,7 @@ int LlvmCodeGen::InlineConstFnAttrs(const FunctionContext::TypeDesc& ret_type,
     int i_val = static_cast<int>(i_arg->getSExtValue());
     DCHECK(state_ != nullptr);
     // All supported constants are currently integers.
-    call_instr->replaceAllUsesWith(GetI32Constant(
+    call_instr->replaceAllUsesWith(llvm::ConstantInt::get(GetType(TYPE_INT),
         FunctionContextImpl::GetConstFnAttr(state_, ret_type, arg_types, t_val, i_val)));
     call_instr->eraseFromParent();
     ++replaced;
@@ -1237,7 +1255,7 @@ void LlvmCodeGen::DestroyModule() {
 void LlvmCodeGen::AddFunctionToJit(llvm::Function* fn, void** fn_ptr) {
   DCHECK(finalized_functions_.find(fn) != finalized_functions_.end())
       << "Attempted to add a non-finalized function to Jit: " << fn->getName().str();
-  llvm::Type* decimal_val_type = GetNamedType(CodegenAnyVal::LLVM_DECIMALVAL_NAME);
+  llvm::Type* decimal_val_type = GetType(CodegenAnyVal::LLVM_DECIMALVAL_NAME);
   if (fn->getReturnType() == decimal_val_type) {
     // Per the x86 calling convention ABI, DecimalVals should be returned via an extra
     // first DecimalVal* argument. We generate non-compliant functions that return the
@@ -1390,7 +1408,7 @@ void LlvmCodeGen::CodegenMinMax(LlvmBuilder* builder, const ColumnType& type,
 Status LlvmCodeGen::LoadIntrinsics() {
   // Load memcpy
   {
-    llvm::Type* types[] = {ptr_type(), ptr_type(), i32_type()};
+    llvm::Type* types[] = {ptr_type(), ptr_type(), GetType(TYPE_INT)};
     llvm::Function* fn =
         llvm::Intrinsic::getDeclaration(module_, llvm::Intrinsic::memcpy, types);
     if (fn == NULL) {
@@ -1430,7 +1448,7 @@ void LlvmCodeGen::CodegenMemcpy(
     LlvmBuilder* builder, llvm::Value* dst, llvm::Value* src, int size) {
   DCHECK_GE(size, 0);
   if (size == 0) return;
-  llvm::Value* size_val = GetI64Constant(size);
+  llvm::Value* size_val = GetIntConstant(TYPE_BIGINT, size);
   CodegenMemcpy(builder, dst, src, size_val);
 }
 
@@ -1446,14 +1464,15 @@ void LlvmCodeGen::CodegenMemset(
   DCHECK(dst->getType()->isPointerTy()) << Print(dst);
   DCHECK_GE(size, 0);
   if (size == 0) return;
-  llvm::Value* value_const = GetI8Constant(value);
+  llvm::Value* value_const = GetIntConstant(TYPE_TINYINT, value);
   builder->CreateMemSet(dst, value_const, size, /* no alignment */ 0);
 }
 
 void LlvmCodeGen::CodegenClearNullBits(
     LlvmBuilder* builder, llvm::Value* tuple_ptr, const TupleDescriptor& tuple_desc) {
   llvm::Value* int8_ptr = builder->CreateBitCast(tuple_ptr, ptr_type(), "int8_ptr");
-  llvm::Value* null_bytes_offset = GetI32Constant(tuple_desc.null_bytes_offset());
+  llvm::Value* null_bytes_offset =
+      llvm::ConstantInt::get(int_type(), tuple_desc.null_bytes_offset());
   llvm::Value* null_bytes_ptr =
       builder->CreateInBoundsGEP(int8_ptr, null_bytes_offset, "null_bytes_ptr");
   CodegenMemset(builder, null_bytes_ptr, 0, tuple_desc.num_null_bytes());
@@ -1464,13 +1483,13 @@ llvm::Value* LlvmCodeGen::CodegenMemPoolAllocate(LlvmBuilder* builder,
   DCHECK(pool_val != nullptr);
   DCHECK(size_val->getType()->isIntegerTy());
   DCHECK_LE(size_val->getType()->getIntegerBitWidth(), 64);
-  DCHECK_EQ(pool_val->getType(), GetStructPtrType<MemPool>());
+  DCHECK_EQ(pool_val->getType(), GetPtrType(MemPool::LLVM_CLASS_NAME));
   // Extend 'size_val' to i64 if necessary
   if (size_val->getType()->getIntegerBitWidth() < 64) {
-    size_val = builder->CreateSExt(size_val, i64_type());
+    size_val = builder->CreateSExt(size_val, bigint_type());
   }
   llvm::Function* allocate_fn = GetFunction(IRFunction::MEMPOOL_ALLOCATE, false);
-  llvm::Value* alignment = GetI32Constant(MemPool::DEFAULT_ALIGNMENT);
+  llvm::Value* alignment = GetIntConstant(TYPE_INT, MemPool::DEFAULT_ALIGNMENT);
   llvm::Value* fn_args[] = {pool_val, size_val, alignment};
   return builder->CreateCall(allocate_fn, fn_args, name);
 }
@@ -1533,10 +1552,10 @@ llvm::Function* LlvmCodeGen::GetHashFunction(int num_bytes) {
     // Generate a function to hash these bytes
     stringstream ss;
     ss << "CrcHash" << num_bytes;
-    FnPrototype prototype(this, ss.str(), i32_type());
+    FnPrototype prototype(this, ss.str(), GetType(TYPE_INT));
     prototype.AddArgument(LlvmCodeGen::NamedVariable("data", ptr_type()));
-    prototype.AddArgument(LlvmCodeGen::NamedVariable("len", i32_type()));
-    prototype.AddArgument(LlvmCodeGen::NamedVariable("seed", i32_type()));
+    prototype.AddArgument(LlvmCodeGen::NamedVariable("len", GetType(TYPE_INT)));
+    prototype.AddArgument(LlvmCodeGen::NamedVariable("seed", GetType(TYPE_INT)));
 
     llvm::Value* args[3];
     LlvmBuilder builder(context());
@@ -1551,38 +1570,38 @@ llvm::Function* LlvmCodeGen::GetHashFunction(int num_bytes) {
 
     // Generate the crc instructions starting with the highest number of bytes
     if (num_bytes >= 8) {
-      llvm::Value* result_64 = builder.CreateZExt(result, i64_type());
-      llvm::Value* ptr = builder.CreateBitCast(data, i64_ptr_type());
+      llvm::Value* result_64 = builder.CreateZExt(result, GetType(TYPE_BIGINT));
+      llvm::Value* ptr = builder.CreateBitCast(data, GetPtrType(TYPE_BIGINT));
       int i = 0;
       while (num_bytes >= 8) {
-        llvm::Value* index[] = {GetI32Constant(i++)};
+        llvm::Value* index[] = {GetIntConstant(TYPE_INT, i++)};
         llvm::Value* d = builder.CreateLoad(builder.CreateInBoundsGEP(ptr, index));
         result_64 =
             builder.CreateCall(crc64_fn, llvm::ArrayRef<llvm::Value*>({result_64, d}));
         num_bytes -= 8;
       }
-      result = builder.CreateTrunc(result_64, i32_type());
-      llvm::Value* index[] = {GetI32Constant(i * 8)};
+      result = builder.CreateTrunc(result_64, GetType(TYPE_INT));
+      llvm::Value* index[] = {GetIntConstant(TYPE_INT, i * 8)};
       // Update data to past the 8-byte chunks
       data = builder.CreateInBoundsGEP(data, index);
     }
 
     if (num_bytes >= 4) {
       DCHECK_LT(num_bytes, 8);
-      llvm::Value* ptr = builder.CreateBitCast(data, i32_ptr_type());
+      llvm::Value* ptr = builder.CreateBitCast(data, GetPtrType(TYPE_INT));
       llvm::Value* d = builder.CreateLoad(ptr);
       result = builder.CreateCall(crc32_fn, llvm::ArrayRef<llvm::Value*>({result, d}));
-      llvm::Value* index[] = {GetI32Constant(4)};
+      llvm::Value* index[] = {GetIntConstant(TYPE_INT, 4)};
       data = builder.CreateInBoundsGEP(data, index);
       num_bytes -= 4;
     }
 
     if (num_bytes >= 2) {
       DCHECK_LT(num_bytes, 4);
-      llvm::Value* ptr = builder.CreateBitCast(data, i16_ptr_type());
+      llvm::Value* ptr = builder.CreateBitCast(data, GetPtrType(TYPE_SMALLINT));
       llvm::Value* d = builder.CreateLoad(ptr);
       result = builder.CreateCall(crc16_fn, llvm::ArrayRef<llvm::Value*>({result, d}));
-      llvm::Value* index[] = {GetI16Constant(2)};
+      llvm::Value* index[] = {GetIntConstant(TYPE_INT, 2)};
       data = builder.CreateInBoundsGEP(data, index);
       num_bytes -= 2;
     }
@@ -1595,7 +1614,7 @@ llvm::Function* LlvmCodeGen::GetHashFunction(int num_bytes) {
     }
     DCHECK_EQ(num_bytes, 0);
 
-    llvm::Value* shift_16 = GetI32Constant(16);
+    llvm::Value* shift_16 = GetIntConstant(TYPE_INT, 16);
     llvm::Value* upper_bits = builder.CreateShl(result, shift_16);
     llvm::Value* lower_bits = builder.CreateLShr(result, shift_16);
     result = builder.CreateOr(upper_bits, lower_bits);
@@ -1620,7 +1639,7 @@ static llvm::Function* GetLenOptimizedHashFn(
     // length with num_bytes.
     fn = codegen->CloneFunction(fn);
     llvm::Value* len_arg = codegen->GetArgument(fn, 1);
-    len_arg->replaceAllUsesWith(codegen->GetI32Constant(len));
+    len_arg->replaceAllUsesWith(codegen->GetIntConstant(TYPE_INT, len));
   }
   return codegen->FinalizeFunction(fn);
 }
@@ -1653,7 +1672,7 @@ llvm::Constant* LlvmCodeGen::ConstantToGVPtr(
   llvm::GlobalVariable* gv = new llvm::GlobalVariable(
       *module_, type, true, llvm::GlobalValue::PrivateLinkage, ir_constant, name);
   return llvm::ConstantExpr::getGetElementPtr(
-      NULL, gv, llvm::ArrayRef<llvm::Constant*>({GetI32Constant(0)}));
+      NULL, gv, llvm::ArrayRef<llvm::Constant*>({GetIntConstant(TYPE_INT, 0)}));
 }
 
 llvm::Constant* LlvmCodeGen::ConstantsToGVArrayPtr(llvm::Type* element_type,
