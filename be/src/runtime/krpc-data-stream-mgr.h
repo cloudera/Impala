@@ -241,12 +241,11 @@ class KrpcDataStreamMgr : public DataStreamMgrBase {
   /// single stream. 'parent_tracker' is the MemTracker of the exchange node which owns
   /// this receiver. It's the parent of the MemTracker of the newly created receiver.
   /// Ownership of the receiver is shared between this DataStream mgr instance and the
-  /// caller. 'client' is the BufferPool's client handle for allocating buffers.
-  /// It's owned by the parent exchange node.
+  /// caller.
   std::shared_ptr<DataStreamRecvrBase> CreateRecvr(const RowDescriptor* row_desc,
       const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id, int num_senders,
       int64_t buffer_size, bool is_merging, RuntimeProfile* profile,
-      MemTracker* parent_tracker, BufferPool::ClientHandle* client) override;
+      MemTracker* parent_tracker) override;
 
   /// Handler for TransmitData() RPC.
   ///

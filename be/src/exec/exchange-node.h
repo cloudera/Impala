@@ -22,8 +22,6 @@
 #include <boost/scoped_ptr.hpp>
 #include "exec/exec-node.h"
 
-#include "runtime/bufferpool/buffer-pool.h"
-
 namespace impala {
 
 class DataStreamRecvrBase;
@@ -90,10 +88,6 @@ class ExchangeNode : public ExecNode {
   /// is retrieved directly from the sender queue in the stream recvr, and rows from
   /// input_batch_ must be copied to the output batch in GetNext().
   int next_row_idx_;
-
-  /// The buffer pool client for allocating buffers for tuple pointers and
-  /// tuple data in row batches.
-  BufferPool::ClientHandle recvr_buffer_pool_client_;
 
   /// time spent reconstructing received rows
   RuntimeProfile::Counter* convert_row_batch_timer_;

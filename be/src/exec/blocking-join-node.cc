@@ -159,9 +159,6 @@ void BlockingJoinNode::ProcessBuildInputAsync(
   // probed. BlockingJoinNode::Open() will return failure as soon as child(0)->Open()
   // completes.
   if (CanCloseBuildEarly() || !status->ok()) {
-    // Release resources in 'build_batch_' and 'build_sink' before closing the children
-    // as some of the resources are still accounted towards the children node.
-    build_batch_.reset();
     if (!status->ok()) build_sink->Close(state);
     child(1)->Close(state);
   }
@@ -240,12 +237,7 @@ Status BlockingJoinNode::ProcessBuildInputAndOpenProbe(
     RETURN_IF_ERROR(child(1)->Open(state));
     RETURN_IF_ERROR(AcquireResourcesForBuild(state));
     RETURN_IF_ERROR(SendBuildInputToSink<false>(state, build_sink));
-    if (CanCloseBuildEarly()) {
-      // Release resources in 'build_batch_' before closing the children as some of the
-      // resources are still accounted towards the children node.
-      build_batch_.reset();
-      child(1)->Close(state);
-    }
+    if (CanCloseBuildEarly()) child(1)->Close(state);
     RETURN_IF_ERROR(child(0)->Open(state));
   }
   return Status::OK();

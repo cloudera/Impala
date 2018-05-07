@@ -100,15 +100,13 @@ inline uint32_t KrpcDataStreamMgr::GetHashValue(
 shared_ptr<DataStreamRecvrBase> KrpcDataStreamMgr::CreateRecvr(
     const RowDescriptor* row_desc, const TUniqueId& finst_id, PlanNodeId dest_node_id,
     int num_senders, int64_t buffer_size, bool is_merging, RuntimeProfile* profile,
-    MemTracker* parent_tracker, BufferPool::ClientHandle* client) {
+    MemTracker* parent_tracker) {
   DCHECK(profile != nullptr);
   DCHECK(parent_tracker != nullptr);
-  DCHECK(client != nullptr);
-  VLOG_FILE << "creating receiver for fragment_instance_id="<< PrintId(finst_id)
+  VLOG_FILE << "creating receiver for fragment="<< PrintId(finst_id)
             << ", node=" << dest_node_id;
-  shared_ptr<KrpcDataStreamRecvr> recvr(new KrpcDataStreamRecvr(
-      this, parent_tracker, row_desc, finst_id, dest_node_id, num_senders, is_merging,
-      buffer_size, profile, client));
+  shared_ptr<KrpcDataStreamRecvr> recvr(new KrpcDataStreamRecvr(this, parent_tracker,
+      row_desc, finst_id, dest_node_id, num_senders, is_merging, buffer_size, profile));
   uint32_t hash_value = GetHashValue(finst_id, dest_node_id);
   EarlySendersList early_senders_for_recvr;
   {
