@@ -26,7 +26,6 @@
 #include "kudu/util/monotime.h"
 #include "kudu/util/status.h"
 #include "rpc/auth-provider.h"
-#include "runtime/mem-tracker.h"
 #include "testutil/gtest-util.h"
 #include "testutil/mini-kdc-wrapper.h"
 #include "testutil/scoped-flag-setter.h"
@@ -112,8 +111,6 @@ template <class T> class RpcMgrTestBase : public T {
     request->set_sidecar_idx(idx);
   }
 
-  MemTracker* service_tracker() { return &service_tracker_; }
-
  protected:
   TNetworkAddress krpc_address_;
   RpcMgr rpc_mgr_;
@@ -131,7 +128,6 @@ template <class T> class RpcMgrTestBase : public T {
 
  private:
   int32_t payload_[PAYLOAD_SIZE];
-  MemTracker service_tracker_;
 };
 
 // For tests that do not require kerberized testing, we use RpcTest.
@@ -177,28 +173,25 @@ class PingServiceImpl : public PingServiceIf {
  public:
   // 'cb' is a callback used by tests to inject custom behaviour into the RPC handler.
   PingServiceImpl(const scoped_refptr<kudu::MetricEntity>& entity,
-      const scoped_refptr<kudu::rpc::ResultTracker> tracker, MemTracker* mem_tracker,
+      const scoped_refptr<kudu::rpc::ResultTracker> tracker,
       ServiceCB cb = [](RpcContext* ctx) { ctx->RespondSuccess(); })
-    : PingServiceIf(entity, tracker), mem_tracker_(mem_tracker), cb_(cb) {}
+    : PingServiceIf(entity, tracker), cb_(cb) {}
 
   virtual void Ping(
       const PingRequestPB* request, PingResponsePB* response, RpcContext* context) {
     response->set_int_response(42);
-    // Incoming requests will already be tracked and we need to release the memory.
-    mem_tracker_->Release(context->GetTransferSize());
     cb_(context);
   }
 
  private:
-  MemTracker* mem_tracker_;
   ServiceCB cb_;
 };
 
 class ScanMemServiceImpl : public ScanMemServiceIf {
  public:
   ScanMemServiceImpl(const scoped_refptr<kudu::MetricEntity>& entity,
-      const scoped_refptr<kudu::rpc::ResultTracker> tracker, MemTracker* mem_tracker)
-    : ScanMemServiceIf(entity, tracker), mem_tracker_(mem_tracker) {
+      const scoped_refptr<kudu::rpc::ResultTracker> tracker)
+    : ScanMemServiceIf(entity, tracker) {
   }
 
   // The request comes with an int 'pattern' and a payload of int array sent with
@@ -215,20 +208,13 @@ class ScanMemServiceImpl : public ScanMemServiceIf {
     for (int i = 0; i < payload.size() / sizeof(int32_t); ++i) {
       int32_t val = v[i];
       if (val != pattern) {
-        // Incoming requests will already be tracked and we need to release the memory.
-        mem_tracker_->Release(context->GetTransferSize());
         context->RespondFailure(kudu::Status::Corruption(
             Substitute("Expecting $1; Found $2", pattern, val)));
         return;
       }
     }
-    // Incoming requests will already be tracked and we need to release the memory.
-    mem_tracker_->Release(context->GetTransferSize());
     context->RespondSuccess();
   }
-
- private:
-  MemTracker* mem_tracker_;
 };
 
 // TODO: USE_KUDU_KERBEROS and USE_IMPALA_KERBEROS are disabled due to IMPALA-6448.
@@ -240,17 +226,16 @@ INSTANTIATE_TEST_CASE_P(KerberosOnAndOff,
 template <class T>
 Status RunMultipleServicesTestTemplate(RpcMgrTestBase<T>* test_base,
     RpcMgr* rpc_mgr, const TNetworkAddress& krpc_address) {
-  MemTracker* mem_tracker = test_base->service_tracker();
   // Test that a service can be started, and will respond to requests.
-  unique_ptr<ServiceIf> ping_impl(new PingServiceImpl(rpc_mgr->metric_entity(),
-      rpc_mgr->result_tracker(), mem_tracker));
-  RETURN_IF_ERROR(rpc_mgr->RegisterService(10, 10, move(ping_impl), mem_tracker));
+  unique_ptr<ServiceIf> ping_impl(
+      new PingServiceImpl(rpc_mgr->metric_entity(), rpc_mgr->result_tracker()));
+  RETURN_IF_ERROR(rpc_mgr->RegisterService(10, 10, move(ping_impl)));
 
   // Test that a second service, that verifies the RPC payload is not corrupted,
   // can be started.
-  unique_ptr<ServiceIf> scan_mem_impl(new ScanMemServiceImpl(rpc_mgr->metric_entity(),
-      rpc_mgr->result_tracker(), mem_tracker));
-  RETURN_IF_ERROR(rpc_mgr->RegisterService(10, 10, move(scan_mem_impl), mem_tracker));
+  unique_ptr<ServiceIf> scan_mem_impl(
+      new ScanMemServiceImpl(rpc_mgr->metric_entity(), rpc_mgr->result_tracker()));
+  RETURN_IF_ERROR(rpc_mgr->RegisterService(10, 10, move(scan_mem_impl)));
 
   FLAGS_num_acceptor_threads = 2;
   FLAGS_num_reactor_threads = 10;
@@ -468,6 +453,7 @@ TEST_F(RpcMgrTest, ValidMultiCiphersTls) {
 }
 
 TEST_F(RpcMgrTest, SlowCallback) {
+
   // Use a callback which is slow to respond.
   auto slow_cb = [](RpcContext* ctx) {
     SleepForMs(300);
@@ -477,12 +463,11 @@ TEST_F(RpcMgrTest, SlowCallback) {
   // Test a service which is slow to respond and has a short queue.
   // Set a timeout on the client side. Expect either a client timeout
   // or the service queue filling up.
-  unique_ptr<ServiceIf> impl(new PingServiceImpl(rpc_mgr_.metric_entity(),
-      rpc_mgr_.result_tracker(), service_tracker(), slow_cb));
+  unique_ptr<ServiceIf> impl(
+      new PingServiceImpl(rpc_mgr_.metric_entity(), rpc_mgr_.result_tracker(), slow_cb));
   const int num_service_threads = 1;
   const int queue_size = 3;
-  ASSERT_OK(rpc_mgr_.RegisterService(num_service_threads, queue_size, move(impl),
-      service_tracker()));
+  ASSERT_OK(rpc_mgr_.RegisterService(num_service_threads, queue_size, move(impl)));
 
   FLAGS_num_acceptor_threads = 2;
   FLAGS_num_reactor_threads = 10;
@@ -503,9 +488,9 @@ TEST_F(RpcMgrTest, SlowCallback) {
 }
 
 TEST_F(RpcMgrTest, AsyncCall) {
-  unique_ptr<ServiceIf> scan_mem_impl(new ScanMemServiceImpl(rpc_mgr_.metric_entity(),
-      rpc_mgr_.result_tracker(), service_tracker()));
-  ASSERT_OK(rpc_mgr_.RegisterService(10, 10, move(scan_mem_impl), service_tracker()));
+  unique_ptr<ServiceIf> scan_mem_impl(
+      new ScanMemServiceImpl(rpc_mgr_.metric_entity(), rpc_mgr_.result_tracker()));
+  ASSERT_OK(rpc_mgr_.RegisterService(10, 10, move(scan_mem_impl)));
 
   unique_ptr<ScanMemServiceProxy> scan_mem_proxy;
   ASSERT_OK(rpc_mgr_.GetProxy<ScanMemServiceProxy>(krpc_address_, &scan_mem_proxy));
