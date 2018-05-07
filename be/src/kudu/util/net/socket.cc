@@ -27,7 +27,6 @@
 
 #include <limits>
 #include <string>
-#include <type_traits>
 
 #include <glog/logging.h>
 
@@ -55,14 +54,6 @@ DEFINE_bool_hidden(socket_inject_short_recvs, false,
             "requested");
 TAG_FLAG(socket_inject_short_recvs, hidden);
 TAG_FLAG(socket_inject_short_recvs, unsafe);
-
-// TODO(todd) consolidate with other copies of this!
-// Retry on EINTR for functions like read() that return -1 on error.
-#define RETRY_ON_EINTR(err, expr) do { \
-  static_assert(std::is_signed<decltype(err)>::value == true, \
-                #err " must be a signed integer"); \
-  (err) = (expr); \
-} while ((err) == -1 && errno == EINTR)
 
 namespace kudu {
 
@@ -348,25 +339,20 @@ Status Socket::Accept(Socket *new_conn, Sockaddr *remote, int flags) {
   if (flags & FLAG_NONBLOCKING) {
     accept_flags |= SOCK_NONBLOCK;
   }
-  int fd = -1;
-  RETRY_ON_EINTR(fd, accept4(fd_, (struct sockaddr*)&addr,
-                             &olen, accept_flags));
-  if (fd < 0) {
+  new_conn->Reset(::accept4(fd_, (struct sockaddr*)&addr,
+                  &olen, accept_flags));
+  if (new_conn->GetFd() < 0) {
     int err = errno;
     return Status::NetworkError(std::string("accept4(2) error: ") +
                                 ErrnoToString(err), Slice(), err);
   }
-  new_conn->Reset(fd);
-
 #else
-  int fd = -1;
-  RETRY_ON_EINTR(fd, accept(fd_, (struct sockaddr*)&addr, &olen));
-  if (fd < 0) {
+  new_conn->Reset(::accept(fd_, (struct sockaddr*)&addr, &olen));
+  if (new_conn->GetFd() < 0) {
     int err = errno;
     return Status::NetworkError(std::string("accept(2) error: ") +
                                 ErrnoToString(err), Slice(), err);
   }
-  new_conn->Reset(fd);
   RETURN_NOT_OK(new_conn->SetNonBlocking(flags & FLAG_NONBLOCKING));
   RETURN_NOT_OK(new_conn->SetCloseOnExec());
 #endif // defined(__linux__)
@@ -523,8 +509,7 @@ Status Socket::Recv(uint8_t *buf, int32_t amt, int32_t *nread) {
   }
 
   DCHECK_GE(fd_, 0);
-  int res;
-  RETRY_ON_EINTR(res, recv(fd_, buf, amt, 0));
+  int res = ::recv(fd_, buf, amt, 0);
   if (res <= 0) {
     if (res == 0) {
       return Status::NetworkError("Recv() got EOF from remote", Slice(), ESHUTDOWN);

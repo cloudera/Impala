@@ -117,6 +117,7 @@ Status TlsHandshake::Continue(const string& recv, string* send) {
     DCHECK_GE(send->size(), 0);
     return Status::OK();
   }
+  DCHECK_GT(send->size(), 0);
   return Status::Incomplete("TLS Handshake incomplete");
 }
 
