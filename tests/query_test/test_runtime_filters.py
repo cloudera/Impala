@@ -22,11 +22,14 @@ import time
 
 from tests.common.environ import specific_build_type_timeout
 from tests.common.impala_test_suite import ImpalaTestSuite
-from tests.common.skip import SkipIfLocal
+from tests.common.skip import SkipIfLocal, SkipIfIsilon
 
 WAIT_TIME_MS = specific_build_type_timeout(60000, slow_build_timeout=100000)
 
+# Skipping Isilon due to IMPALA-6998. TODO: Remove when there's a holistic revamp of
+# what tests to run for non-HDFS platforms
 @SkipIfLocal.multiple_impalad
+@SkipIfIsilon.jira(reason="IMPALA-6998")
 class TestRuntimeFilters(ImpalaTestSuite):
   @classmethod
   def get_workload(cls):
