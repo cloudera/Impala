@@ -81,6 +81,10 @@ public class BackendConfig {
 
   public long getMinBufferSize() { return backendCfg_.min_buffer_size; }
 
+  public boolean disableCatalogDataOpsDebugOnly() {
+    return backendCfg_.disable_catalog_data_ops_debug_only;
+  }
+
   // Inits the auth_to_local configuration in the static KerberosName class.
   private static void initAuthToLocal() {
     // If auth_to_local is enabled, we read the configuration hadoop.security.auth_to_local
