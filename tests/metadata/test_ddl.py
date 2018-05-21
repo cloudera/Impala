@@ -194,6 +194,20 @@ class TestDdlStatements(TestDdlBase):
     self.run_test_case('QueryTest/create-database', vector, use_db=unique_database,
         multiple_impalad=self._use_multiple_impalad(vector))
 
+
+  def test_alter_database_set_owner(self, vector, unique_database):
+    self.client.execute("alter database {0} set owner user foo_user".format(
+      unique_database))
+    properties = self._get_db_owner_properties(unique_database)
+    assert len(properties) == 1
+    assert {'foo_user': 'USER'} == properties
+
+    self.client.execute("alter database {0} set owner role foo_role".format(
+      unique_database))
+    properties = self._get_db_owner_properties(unique_database)
+    assert len(properties) == 1
+    assert {'foo_role': 'ROLE'} == properties
+
   # There is a query in QueryTest/create-table that references nested types, which is not
   # supported if old joins and aggs are enabled. Since we do not get any meaningful
   # additional coverage by running a DDL test under the old aggs and joins, it can be

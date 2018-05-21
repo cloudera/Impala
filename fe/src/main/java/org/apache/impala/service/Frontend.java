@@ -35,6 +35,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.impala.analysis.AlterDbStmt;
 import org.apache.impala.analysis.AnalysisContext;
 import org.apache.impala.analysis.AnalysisContext.AnalysisResult;
 import org.apache.impala.analysis.CreateDataSrcStmt;
@@ -96,6 +97,7 @@ import org.apache.impala.planner.HdfsScanNode;
 import org.apache.impala.planner.PlanFragment;
 import org.apache.impala.planner.Planner;
 import org.apache.impala.planner.ScanNode;
+import org.apache.impala.thrift.TAlterDbParams;
 import org.apache.impala.thrift.TCatalogOpRequest;
 import org.apache.impala.thrift.TCatalogOpType;
 import org.apache.impala.thrift.TCatalogServiceRequestHeader;
@@ -103,6 +105,7 @@ import org.apache.impala.thrift.TColumn;
 import org.apache.impala.thrift.TColumnValue;
 import org.apache.impala.thrift.TCreateDropRoleParams;
 import org.apache.impala.thrift.TDdlExecRequest;
+import org.apache.impala.thrift.TDdlExecResponse;
 import org.apache.impala.thrift.TDdlType;
 import org.apache.impala.thrift.TDescribeOutputStyle;
 import org.apache.impala.thrift.TDescribeResult;
@@ -522,6 +525,14 @@ public class Frontend {
       ddl.op_type = TCatalogOpType.DDL;
       ddl.setDdl_params(req);
       metadata.setColumns(Collections.<TColumn>emptyList());
+    } else if (analysis.isAlterDbStmt()) {
+      AlterDbStmt alterDbStmt = analysis.getAlterDbStmt();
+      TAlterDbParams params = alterDbStmt.toThrift();
+      TDdlExecRequest req = new TDdlExecRequest();
+      req.setDdl_type(TDdlType.ALTER_DATABASE);
+      req.setAlter_db_params(params);
+      ddl.op_type = TCatalogOpType.DDL;
+      ddl.setDdl_params(req);
     } else {
       throw new IllegalStateException("Unexpected CatalogOp statement type.");
     }

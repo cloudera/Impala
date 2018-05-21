@@ -91,6 +91,8 @@ import org.apache.impala.common.Reference;
 import org.apache.impala.compat.MetastoreShim;
 import org.apache.impala.thrift.ImpalaInternalServiceConstants;
 import org.apache.impala.thrift.JniCatalogConstants;
+import org.apache.impala.thrift.TAlterDbParams;
+import org.apache.impala.thrift.TAlterDbSetOwnerParams;
 import org.apache.impala.thrift.TAlterTableAddDropRangePartitionParams;
 import org.apache.impala.thrift.TAlterTableAddPartitionParams;
 import org.apache.impala.thrift.TAlterTableAddReplaceColsParams;
@@ -326,6 +328,9 @@ public class CatalogOpExecutor {
       case REVOKE_PRIVILEGE:
         grantRevokeRolePrivilege(requestingUser,
             ddlRequest.getGrant_revoke_priv_params(), response);
+        break;
+      case ALTER_DATABASE:
+        alterDatabase(ddlRequest.getAlter_db_params(), response);
         break;
       default: throw new IllegalStateException("Unexpected DDL exec request type: " +
           ddlRequest.ddl_type);
@@ -3434,5 +3439,61 @@ public class CatalogOpExecutor {
     Preconditions.checkNotNull(tbl);
     Preconditions.checkState(tbl.isLoaded());
     return tbl;
+  }
+
+  private void alterDatabase(TAlterDbParams params, TDdlExecResponse response)
+      throws CatalogException, ImpalaRuntimeException {
+    switch (params.getAlter_type()) {
+      case SET_OWNER:
+        alterDatabaseSetOwner(params.getDb(), params.getSet_owner_params(), response);
+        break;
+      default:
+        throw new UnsupportedOperationException(
+            "Unknown ALTER DATABASE operation type: " + params.getAlter_type());
+    }
+  }
+
+  private void alterDatabaseSetOwner(String dbName, TAlterDbSetOwnerParams params,
+      TDdlExecResponse response) throws CatalogException, ImpalaRuntimeException {
+    Db db = catalog_.getDb(dbName);
+    if (db == null) {
+      throw new CatalogException("Database: " + db.getName() + " does not exist.");
+    }
+    Preconditions.checkNotNull(params.owner_name);
+    Preconditions.checkNotNull(params.owner_type);
+    synchronized (metastoreDdlLock_) {
+      Database msDb = db.getMetaStoreDb();
+      String originalOwnerName = msDb.getOwnerName();
+      PrincipalType originalOwnerType = msDb.getOwnerType();
+      msDb.setOwnerName(params.owner_name);
+      msDb.setOwnerType(PrincipalType.valueOf(params.owner_type.name()));
+      try {
+        applyAlterDatabase(db);
+      } catch (ImpalaRuntimeException e) {
+        msDb.setOwnerName(originalOwnerName);
+        msDb.setOwnerType(originalOwnerType);
+        throw e;
+      }
+    }
+    addDbToCatalogUpdate(db, response.result);
+    addSummary(response, "Updated database");
+  }
+
+  private void addDbToCatalogUpdate(Db db, TCatalogUpdateResult result) {
+    Preconditions.checkNotNull(db);
+    // Updating the new catalog version and setting it to the DB catalog version while
+    // holding the catalog version lock for an atomic operation. Most DB operations are
+    // short-lived. It is unnecessary to have a fine-grained DB lock.
+    catalog_.getLock().writeLock().lock();
+    try {
+      long newCatalogVersion = catalog_.incrementAndGetCatalogVersion();
+      db.setCatalogVersion(newCatalogVersion);
+      TCatalogObject updatedCatalogObject = db.toTCatalogObject();
+      updatedCatalogObject.setCatalog_version(newCatalogVersion);
+      result.addToUpdated_catalog_objects(updatedCatalogObject);
+      result.setVersion(updatedCatalogObject.getCatalog_version());
+    } finally {
+      catalog_.getLock().writeLock().unlock();
+    }
   }
 }
