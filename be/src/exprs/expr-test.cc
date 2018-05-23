@@ -6178,7 +6178,7 @@ TEST_F(ExprTest, TimestampFunctions) {
 
   // These return NULL because timezone conversion makes the value out
   // of range.
-  TestIsNull("to_utc_timestamp(CAST(\"1400-01-01 05:00:00\" as TIMESTAMP), \"AEST\")",
+  TestIsNull("to_utc_timestamp(CAST(\"1400-01-01 05:00:00\" as TIMESTAMP), \"AET\")",
       TYPE_TIMESTAMP);
   TestIsNull("from_utc_timestamp(CAST(\"1400-01-01 05:00:00\" as TIMESTAMP), \"PST\")",
       TYPE_TIMESTAMP);

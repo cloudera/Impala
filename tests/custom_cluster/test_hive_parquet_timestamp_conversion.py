@@ -61,11 +61,10 @@ class TestHiveParquetTimestampConversion(CustomClusterTestSuite):
   @pytest.mark.execute_serially
   @CustomClusterTestSuite.with_args("-convert_legacy_hive_parquet_utc_timestamps=true")
   def test_conversion(self, vector):
-    tz_name = time.tzname[time.localtime().tm_isdst]
+    tz_name = time.tzname[0]
     self.check_sanity(tz_name not in ("UTC", "GMT"))
     # The value read from the Hive table should be the same as reading a UTC converted
     # value from the Impala table.
-    tz_name = time.tzname[time.localtime().tm_isdst]
     data = self.execute_query_expect_success(self.client, """
         SELECT h.id, h.day, h.timestamp_col, i.timestamp_col
         FROM functional_parquet.alltypesagg_hive_13_1 h
@@ -84,7 +83,7 @@ class TestHiveParquetTimestampConversion(CustomClusterTestSuite):
   def test_no_conversion(self, vector):
     self.check_sanity(False)
     # Without conversion all the values will be different.
-    tz_name = time.tzname[time.localtime().tm_isdst]
+    tz_name = time.tzname[0]
     data = self.execute_query_expect_success(self.client, """
         SELECT h.id, h.day, h.timestamp_col, i.timestamp_col
         FROM functional_parquet.alltypesagg_hive_13_1 h
