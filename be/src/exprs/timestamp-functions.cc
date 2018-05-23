@@ -197,7 +197,7 @@ void TimestampFunctions::UnixAndFromUnixClose(FunctionContext* context,
 time_zone_ptr TimezoneDatabase::FindTimezone(
     const string& tz, const TimestampValue& tv, bool tv_in_utc) {
   // The backing database does not handle timezone rule changes.
-  if (iequals("Europe/Moscow", tz) || iequals("Moscow", tz) || iequals("MSK", tz)) {
+  if (iequals("Europe/Moscow", tz)) {
     if (tv.date().year() < 2011 || (tv.date().year() == 2011 && tv.date().month() < 4)) {
       // Between January 19, 1992 and March 27, 2011 Moscow time was UTC+3 with DST. On
       // March 27, 2011 Moscow time transitioned to UTC+4 with no DST. NOTE: We currently
@@ -226,20 +226,7 @@ time_zone_ptr TimezoneDatabase::FindTimezone(
     }
   }
 
-  // See if they specified a zone id
-  time_zone_ptr tzp = tz_database_.time_zone_from_region(tz);
-  if (tzp != NULL) return tzp;
-
-  for (vector<string>::const_iterator iter = tz_region_list_.begin();
-       iter != tz_region_list_.end(); ++iter) {
-    time_zone_ptr tzp = tz_database_.time_zone_from_region(*iter);
-    DCHECK(tzp != NULL);
-    if (tzp->dst_zone_abbrev() == tz) return tzp;
-    if (tzp->std_zone_abbrev() == tz) return tzp;
-    if (tzp->dst_zone_name() == tz) return tzp;
-    if (tzp->std_zone_name() == tz) return tzp;
-  }
-  return time_zone_ptr();
+  return tz_database_.time_zone_from_region(tz);
 }
 
 }
