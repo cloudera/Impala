@@ -340,7 +340,8 @@ def conn(request):
        - get_conn_timeout(): The timeout, in seconds, to use for this connection.
      The returned connection will have a 'db_name' property.
 
-     See the 'unique_database' fixture above if you want to use Impala's custom python
+     DEPRECATED:
+     See the 'unique_database' fixture above to use Impala's custom python
      API instead of DB-API.
   """
   db_name = __call_cls_method_if_exists(request.cls, "get_db_name")
@@ -376,6 +377,10 @@ def __unique_conn(db_name=None, timeout=DEFAULT_CONN_TIMEOUT):
      # The database no longer exists and the conn is closed.
 
      The returned connection will have a 'db_name' property.
+
+     DEPRECATED:
+     See the 'unique_database' fixture above to use Impala's custom python
+     API instead of DB-API.
   """
   if not db_name:
     db_name = choice(ascii_lowercase) + "".join(sample(ascii_lowercase + digits, 5))
@@ -403,6 +408,10 @@ def __auto_closed_conn(db_name=None, timeout=DEFAULT_CONN_TIMEOUT):
      The connection will be closed upon exiting the block.
 
      The returned connection will have a 'db_name' property.
+
+     DEPRECATED:
+     See the 'unique_database' fixture above to use Impala's custom python
+     API instead of DB-API.
   """
   default_impalad = pytest.config.option.impalad.split(',')[0]
   impalad_host = default_impalad.split(':')[0]
@@ -427,6 +436,10 @@ def cursor(conn):
 
      The returned cursor will have a 'conn' property. The 'conn' will have a 'db_name'
      property.
+
+     DEPRECATED:
+     See the 'unique_database' fixture above to use Impala's custom python
+     API instead of DB-API.
   """
   with __auto_closed_cursor(conn) as cur:
     yield cur
@@ -439,6 +452,10 @@ def cls_cursor(conn):
 
      The returned cursor will have a 'conn' property. The 'conn' will have a 'db_name'
      property.
+
+     DEPRECATED:
+     See the 'unique_database' fixture above to use Impala's custom python
+     API instead of DB-API.
   """
   with __auto_closed_cursor(conn) as cur:
     yield cur
@@ -452,6 +469,10 @@ def unique_cursor():
 
      The returned cursor will have a 'conn' property. The 'conn' will have a 'db_name'
      property.
+
+     DEPRECATED:
+     See the 'unique_database' fixture above to use Impala's custom python
+     API instead of DB-API.
   """
   with __unique_conn() as conn:
     with __auto_closed_cursor(conn) as cur:
