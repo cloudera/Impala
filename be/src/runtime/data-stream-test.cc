@@ -115,7 +115,8 @@ class DataStreamTest : public testing::Test {
     // Initialize MemTrackers and RuntimeState for use by the data stream receiver.
     ABORT_IF_ERROR(exec_env_.InitForFeTests());
     runtime_state_.reset(new RuntimeState(TQueryCtx(), &exec_env_));
-    mem_pool_.reset(new MemPool(&tracker_));
+    tracker_.reset(new MemTracker(-1, "", runtime_state_->instance_mem_tracker()));
+    mem_pool_.reset(new MemPool(tracker_.get()));
 
     // Stop tests that rely on mismatched sender / receiver pairs timing out from failing.
     FLAGS_datastream_sender_timeout_ms = 250;
@@ -196,7 +197,7 @@ class DataStreamTest : public testing::Test {
   }
 
   ObjectPool obj_pool_;
-  MemTracker tracker_;
+  scoped_ptr<MemTracker> tracker_;
   scoped_ptr<MemPool> mem_pool_;
   DescriptorTbl* desc_tbl_;
   const RowDescriptor* row_desc_;
@@ -313,7 +314,7 @@ class DataStreamTest : public testing::Test {
 
   // Create batch_, but don't fill it with data yet. Assumes we created row_desc_.
   RowBatch* CreateRowBatch() {
-    RowBatch* batch = new RowBatch(row_desc_, BATCH_CAPACITY, &tracker_);
+    RowBatch* batch = new RowBatch(row_desc_, BATCH_CAPACITY, tracker_.get());
     int64_t* tuple_mem = reinterpret_cast<int64_t*>(
         batch->tuple_data_pool()->Allocate(BATCH_CAPACITY * 8));
     bzero(tuple_mem, BATCH_CAPACITY * 8);
@@ -382,7 +383,7 @@ class DataStreamTest : public testing::Test {
   void ReadStreamMerging(ReceiverInfo* info, RuntimeProfile* profile) {
     info->status = info->stream_recvr->CreateMerger(*less_than_);
     if (info->status.IsCancelled()) return;
-    RowBatch batch(row_desc_, 1024, &tracker_);
+    RowBatch batch(row_desc_, 1024, tracker_.get());
     VLOG_QUERY << "start reading merging";
     bool eos;
     while (!(info->status = info->stream_recvr->GetNext(&batch, &eos)).IsCancelled()) {
@@ -503,7 +504,7 @@ class DataStreamTest : public testing::Test {
     output_exprs.nodes.push_back(expr_node);
     EXPECT_OK(sender.Init(vector<TExpr>({output_exprs}), sink, &state));
 
-    EXPECT_OK(sender.Prepare(&state, &tracker_));
+    EXPECT_OK(sender.Prepare(&state, tracker_.get()));
     EXPECT_OK(sender.Open(&state));
     scoped_ptr<RowBatch> batch(CreateRowBatch());
     SenderInfo& info = sender_info_[sender_num];

@@ -114,6 +114,7 @@ Status HdfsScanner::Open(ScannerContext* context) {
 Status HdfsScanner::ProcessSplit() {
   DCHECK(scan_node_->HasRowBatchQueue());
   HdfsScanNode* scan_node = static_cast<HdfsScanNode*>(scan_node_);
+  bool returned_rows = false;
   do {
     // IMPALA-3798, IMPALA-3804: For sequence-based files, the filters are only
     // applied in HdfsScanNode::ProcessSplit()
@@ -127,9 +128,12 @@ Status HdfsScanner::ProcessSplit() {
     unique_ptr<RowBatch> batch = std::make_unique<RowBatch>(scan_node_->row_desc(),
         state_->batch_size(), scan_node_->mem_tracker());
     Status status = GetNextInternal(batch.get());
-    // Always add batch to the queue because it may contain data referenced by previously
-    // appended batches.
-    scan_node->AddMaterializedRowBatch(move(batch));
+    if (batch->num_rows() > 0) returned_rows = true;
+    // Always add batch to the queue if any rows were returned because it may contain
+    // data referenced by previously appended batches.
+    if (returned_rows) {
+      scan_node->AddMaterializedRowBatch(move(batch));
+    }
     RETURN_IF_ERROR(status);
   } while (!eos_ && !scan_node_->ReachedLimit());
   return Status::OK();

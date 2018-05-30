@@ -98,6 +98,7 @@ Status HdfsScanNode::GetNext(RuntimeState* state, RowBatch* row_batch, bool* eos
     StopAndFinalizeCounters();
     row_batches_put_timer_->Set(materialized_row_batches_->total_put_wait_time());
     row_batches_get_timer_->Set(materialized_row_batches_->total_get_wait_time());
+    row_batches_peak_mem_consumption_->Set(row_batches_mem_tracker_->peak_consumption());
   }
   return status;
 }
@@ -198,8 +199,20 @@ Status HdfsScanNode::Prepare(RuntimeState* state) {
     }
   }
   scanner_thread_bytes_required_ += scanner_thread_mem_usage;
+
+  row_batches_mem_tracker_ = state->obj_pool()->Add(new MemTracker(
+        -1, "Queued Batches", mem_tracker(), false));
+
+  row_batches_enqueued_ =
+      ADD_COUNTER(runtime_profile(), "RowBatchesEnqueued", TUnit::UNIT);
+  row_batch_bytes_enqueued_ =
+      ADD_COUNTER(runtime_profile(), "RowBatchBytesEnqueued", TUnit::BYTES);
   row_batches_get_timer_ = ADD_TIMER(runtime_profile(), "RowBatchQueueGetWaitTime");
   row_batches_put_timer_ = ADD_TIMER(runtime_profile(), "RowBatchQueuePutWaitTime");
+  row_batches_max_capacity_ = runtime_profile()->AddHighWaterMarkCounter(
+      "RowBatchQueueCapacity", TUnit::UNIT);
+  row_batches_peak_mem_consumption_ =
+      ADD_COUNTER(runtime_profile(), "RowBatchQueuePeakMemoryUsage", TUnit::BYTES);
   return Status::OK();
 }
 
@@ -215,6 +228,10 @@ Status HdfsScanNode::Open(RuntimeState* state) {
   // We need at least one scanner thread to make progress. We need to make this
   // reservation before any ranges are issued.
   runtime_state_->resource_pool()->ReserveOptionalTokens(1);
+
+  average_scanner_thread_concurrency_ = runtime_profile()->AddSamplingCounter(
+      AVERAGE_SCANNER_THREAD_CONCURRENCY, &active_scanner_thread_counter_);
+
   if (runtime_state_->query_options().num_scanner_threads > 0) {
     max_num_scanner_threads_ = runtime_state_->query_options().num_scanner_threads;
   }
@@ -234,6 +251,8 @@ void HdfsScanNode::Close(RuntimeState* state) {
   }
   scanner_threads_.JoinAll();
   materialized_row_batches_->Cleanup();
+
+  if (row_batches_mem_tracker_ != nullptr) row_batches_mem_tracker_->Close();
   HdfsScanNodeBase::Close(state);
 }
 
@@ -250,6 +269,12 @@ void HdfsScanNode::TransferToScanNodePool(MemPool* pool) {
 
 void HdfsScanNode::AddMaterializedRowBatch(unique_ptr<RowBatch> row_batch) {
   InitNullCollectionValues(row_batch.get());
+  COUNTER_ADD(row_batches_enqueued_, 1);
+  // Only need to count tuple_data_pool() bytes since after IMPALA-5307, no buffers are
+  // returned from the scan node.
+  COUNTER_ADD(row_batch_bytes_enqueued_,
+      row_batch->tuple_data_pool()->total_reserved_bytes());
+  row_batch->SetMemTracker(row_batches_mem_tracker_);
   materialized_row_batches_->AddBatch(move(row_batch));
 }
 
