@@ -1,0 +1,61 @@
+From f9f068c28da2bb8dfbeba41ad387f7e9bb3ed987 Mon Sep 17 00:00:00 2001
+From: Peter Somogyi <psomogyi@cloudera.com>
+Date: Sun, 26 Nov 2017 12:35:57 +0100
+Subject: [PATCH 444/465] HBASE-19188 Build fails on branch-1 using
+ maven-3.5.2
+
+Changing tomcat:jasper-runtime scope to compile in
+hbase-server, hbase-rest and hbase-thrift
+
+Signed-off-by: Michael Stack <stack@apache.org>
+(cherry picked from commit 45e856bc878ae4491440250d56ab23659311a7d7)
+
+Change-Id: Ie1260de1f5298d6dc2d91c500778e4f6cc865e2e
+Author: Peter Somogyi
+Reason: Bug
+Ref: CDH-65324
+---
+ hbase-rest/pom.xml   |    1 +
+ hbase-server/pom.xml |    1 +
+ hbase-thrift/pom.xml |    1 +
+ 3 files changed, 3 insertions(+)
+
+diff --git a/hbase-rest/pom.xml b/hbase-rest/pom.xml
+index dcda403..f2b737b 100644
+--- a/hbase-rest/pom.xml
++++ b/hbase-rest/pom.xml
+@@ -243,6 +243,7 @@
+     <dependency>
+       <groupId>tomcat</groupId>
+       <artifactId>jasper-runtime</artifactId>
++      <scope>compile</scope>
+     </dependency>
+     <!-- REST dependencies -->
+     <dependency>
+diff --git a/hbase-server/pom.xml b/hbase-server/pom.xml
+index bbdebfe..af3c43f 100644
+--- a/hbase-server/pom.xml
++++ b/hbase-server/pom.xml
+@@ -541,6 +541,7 @@
+     <dependency>
+       <groupId>tomcat</groupId>
+       <artifactId>jasper-runtime</artifactId>
++      <scope>compile</scope>
+     </dependency>
+     <dependency>
+       <groupId>org.jamon</groupId>
+diff --git a/hbase-thrift/pom.xml b/hbase-thrift/pom.xml
+index 942044d..187a9f0 100644
+--- a/hbase-thrift/pom.xml
++++ b/hbase-thrift/pom.xml
+@@ -329,6 +329,7 @@
+     <dependency>
+       <groupId>tomcat</groupId>
+       <artifactId>jasper-runtime</artifactId>
++      <scope>compile</scope>
+     </dependency>
+   </dependencies>
+ 
+-- 
+1.7.9.5
+
