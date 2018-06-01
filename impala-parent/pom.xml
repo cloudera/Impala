@@ -19,6 +19,11 @@ under the License.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
   <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>com.cloudera.cdh</groupId>
+    <artifactId>cdh-root</artifactId>
+    <version>6.x-SNAPSHOT</version>
+  </parent>
   <groupId>org.apache.impala</groupId>
   <artifactId>impala-parent</artifactId>
   <version>0.1-SNAPSHOT</version>
@@ -35,26 +40,26 @@ under the License.
     <beeswax_port>21000</beeswax_port>
     <impalad>localhost</impalad>
     <testExecutionMode>reduced</testExecutionMode>
-    <hadoop.version>3.0.0-cdh6.x-SNAPSHOT</hadoop.version>
-    <hive.version>2.1.1-cdh6.x-SNAPSHOT</hive.version>
+    <hadoop.version>${cdh.hadoop.version}</hadoop.version>
+    <hive.version>${cdh.hive.version}</hive.version>
     <hive.major.version>2</hive.major.version>
-    <sentry.version>2.0.0-cdh6.x-SNAPSHOT</sentry.version>
-    <hbase.version>2.0.0-cdh6.x-SNAPSHOT</hbase.version>
-    <parquet.version>1.9.0-cdh6.x-SNAPSHOT</parquet.version>
-    <kite.version>1.0.0-cdh6.x-SNAPSHOT</kite.version>
-    <thrift.version>0.9.3</thrift.version>
+    <sentry.version>${cdh.sentry.version}</sentry.version>
+    <hbase.version>${cdh.hbase.version}</hbase.version>
+    <parquet.version>${cdh.apache-parquet.version}</parquet.version>
+    <kite.version>${cdh.kite.version}</kite.version>
+    <thrift.version>${cdh.thrift.version}</thrift.version>
     <impala.extdatasrc.api.version>1.0-SNAPSHOT</impala.extdatasrc.api.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <kudu.version>1.8.0-cdh6.x-SNAPSHOT</kudu.version>
-    <commons-io.version>2.6</commons-io.version>
-    <slf4j.version>1.7.25</slf4j.version>
+    <kudu.version>${cdh.kudu.version}</kudu.version>
+    <commons-io.version>${cdh.commons-io.version}</commons-io.version>
+    <slf4j.version>${cdh.slf4j.version}</slf4j.version>
     <junit.version>4.12</junit.version>
     <!-- Beware compatibility requirements with Thrift and
          KMS; see IMPALA-4210. -->
     <httpcomponents.core.version>4.4.9</httpcomponents.core.version>
     <yarn-extras.version>${project.version}</yarn-extras.version>
     <eclipse.output.directory>eclipse-classes</eclipse.output.directory>
-    <guava.version>11.0.2</guava.version>
+    <guava.version>${cdh.guava.version}</guava.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
 
