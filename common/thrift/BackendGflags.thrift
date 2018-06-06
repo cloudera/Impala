@@ -73,4 +73,10 @@ struct TBackendGflags {
   23: required double max_filter_error_rate
 
   24: required i64 min_buffer_size
+  
+  // 25: required bool enable_orc_scanner BACKPORT NOTE: not backported
+
+  // 26: required string authorized_proxy_group_config BACKPORT NOTE: not backported
+
+  27: required bool use_local_catalog
 }
