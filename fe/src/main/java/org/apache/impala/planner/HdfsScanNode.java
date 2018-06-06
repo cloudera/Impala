@@ -48,8 +48,11 @@ import org.apache.impala.analysis.TableSampleClause;
 import org.apache.impala.analysis.TupleDescriptor;
 import org.apache.impala.analysis.TupleId;
 import org.apache.impala.catalog.Column;
+import org.apache.impala.catalog.ColumnStats;
+import org.apache.impala.catalog.HdfsCompression;
+import org.apache.impala.catalog.FeFsPartition;
+import org.apache.impala.catalog.FeFsTable;
 import org.apache.impala.catalog.HdfsFileFormat;
-import org.apache.impala.catalog.HdfsPartition;
 import org.apache.impala.catalog.HdfsPartition.FileBlock;
 import org.apache.impala.catalog.HdfsPartition.FileDescriptor;
 import org.apache.impala.catalog.HdfsTable;
@@ -148,7 +151,7 @@ public class HdfsScanNode extends ScanNode {
   private final HdfsTable tbl_;
 
   // List of partitions to be scanned. Partitions have been pruned.
-  private final List<HdfsPartition> partitions_;
+  private final List<FeFsPartition> partitions_;
 
   // Parameters for table sampling. Null if not sampling.
   private final TableSampleClause sampleParams_;
@@ -247,9 +250,9 @@ public class HdfsScanNode extends ScanNode {
    * class comments above for details.
    */
   public HdfsScanNode(PlanNodeId id, TupleDescriptor desc, List<Expr> conjuncts,
-      List<HdfsPartition> partitions, TableRef hdfsTblRef, AggregateInfo aggInfo) {
+      List<FeFsPartition> partitions, TableRef hdfsTblRef, AggregateInfo aggInfo) {
     super(id, desc, "SCAN HDFS");
-    Preconditions.checkState(desc.getTable() instanceof HdfsTable);
+    Preconditions.checkState(desc.getTable() instanceof FeFsTable);
     tbl_ = (HdfsTable)desc.getTable();
     conjuncts_ = conjuncts;
     partitions_ = partitions;
@@ -270,7 +273,7 @@ public class HdfsScanNode extends ScanNode {
   @Override
   protected String debugString() {
     ToStringHelper helper = Objects.toStringHelper(this);
-    for (HdfsPartition partition: partitions_) {
+    for (FeFsPartition partition: partitions_) {
       helper.add("Partition " + partition.getId() + ":", partition.toString());
     }
     return helper.addValue(super.debugString()).toString();
@@ -391,7 +394,7 @@ public class HdfsScanNode extends ScanNode {
       }
     }
 
-    for (HdfsPartition part: partitions_) {
+    for (FeFsPartition part: partitions_) {
       HdfsFileFormat format = part.getInputFormatDescriptor().getFileFormat();
       if (format.isComplexTypesSupported()) continue;
       // If the file format allows querying just scalar typed columns and the query
@@ -725,7 +728,7 @@ public class HdfsScanNode extends ScanNode {
     totalFiles_ = 0;
     totalBytes_ = 0;
     Set<HdfsFileFormat> fileFormats = Sets.newHashSet();
-    for (HdfsPartition partition: partitions_) {
+    for (FeFsPartition partition: partitions_) {
       List<FileDescriptor> fileDescs = partition.getFileDescriptors();
       if (sampledFiles != null) {
         // If we are sampling, check whether this partition is included in the sample.
@@ -915,7 +918,7 @@ public class HdfsScanNode extends ScanNode {
     partitionNumRows_ = -1;
     hasCorruptTableStats_ = false;
     if (tbl_.getNumClusteringCols() > 0) {
-      for (HdfsPartition p: partitions_) {
+      for (FeFsPartition p: partitions_) {
         // Check for corrupt partition stats
         long partNumRows = p.getNumRows();
         if (partNumRows < -1  || (partNumRows == 0 && p.getSize() > 0))  {

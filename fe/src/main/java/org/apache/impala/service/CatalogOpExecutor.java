@@ -60,6 +60,9 @@ import org.apache.impala.catalog.Column;
 import org.apache.impala.catalog.ColumnNotFoundException;
 import org.apache.impala.catalog.DataSource;
 import org.apache.impala.catalog.Db;
+import org.apache.impala.catalog.FeFsPartition;
+import org.apache.impala.catalog.FeFsTable;
+import org.apache.impala.catalog.FeTable;
 import org.apache.impala.catalog.Function;
 import org.apache.impala.catalog.HdfsFileFormat;
 import org.apache.impala.catalog.HdfsPartition;
@@ -780,7 +783,9 @@ public class CatalogOpExecutor {
       HdfsTable table) throws ImpalaException {
     Preconditions.checkState(params.isSetPartition_stats());
     List<HdfsPartition> modifiedParts = Lists.newArrayList();
-    for (HdfsPartition partition: table.getPartitions()) {
+    for (FeFsPartition fePartition: table.getPartitions()) {
+      // TODO(todd): avoid downcast to implementation class
+      HdfsPartition partition = (HdfsPartition)fePartition;
       if (partition.isDefaultPartition()) continue;
 
       // NULL keys are returned as 'NULL' in the partition_stats map, so don't substitute
@@ -1209,7 +1214,9 @@ public class CatalogOpExecutor {
 
     // List of partitions that were modified as part of this operation.
     List<HdfsPartition> modifiedParts = Lists.newArrayList();
-    for (HdfsPartition part: hdfsTable.getPartitions()) {
+    for (FeFsPartition fePart: hdfsTable.getPartitions()) {
+      // TODO(todd): avoid downcast
+      HdfsPartition part = (HdfsPartition) fePart;
       boolean isModified = false;
       // The default partition is an Impala-internal abstraction and is not
       // represented in the Hive Metastore.
@@ -1406,9 +1413,9 @@ public class CatalogOpExecutor {
    * uncaching all table data, if applicable. Throws no exceptions, only logs errors.
    * Does not update the HMS.
    */
-  private static void uncacheTable(Table table) {
-    if (!(table instanceof HdfsTable)) return;
-    HdfsTable hdfsTable = (HdfsTable) table;
+  private static void uncacheTable(FeTable table) {
+    if (!(table instanceof FeFsTable)) return;
+    FeFsTable hdfsTable = (FeFsTable) table;
     if (hdfsTable.isMarkedCached()) {
       try {
         HdfsCachingUtil.removeTblCacheDirective(table.getMetaStoreTable());
@@ -1417,7 +1424,7 @@ public class CatalogOpExecutor {
       }
     }
     if (table.getNumClusteringCols() > 0) {
-      for (HdfsPartition part: hdfsTable.getPartitions()) {
+      for (FeFsPartition part: hdfsTable.getPartitions()) {
         if (part.isMarkedCached()) {
           try {
             HdfsCachingUtil.removePartitionCacheDirective(part);
@@ -1460,7 +1467,7 @@ public class CatalogOpExecutor {
       catalog_.getLock().writeLock().unlock();
       try {
         HdfsTable hdfsTable = (HdfsTable)table;
-        for (HdfsPartition part: hdfsTable.getPartitions()) {
+        for (FeFsPartition part: hdfsTable.getPartitions()) {
           if (part.isDefaultPartition()) continue;
           FileSystemUtil.deleteAllVisibleFiles(new Path(part.getLocation()));
         }
@@ -2482,7 +2489,9 @@ public class CatalogOpExecutor {
       if (tbl.getNumClusteringCols() > 0) {
         // If this is a partitioned table, submit cache directives for all uncached
         // partitions.
-        for (HdfsPartition partition: hdfsTable.getPartitions()) {
+        for (FeFsPartition fePartition: hdfsTable.getPartitions()) {
+          // TODO(todd): avoid downcast
+          HdfsPartition partition = (HdfsPartition) fePartition;
           // No need to cache the default partition because it contains no files and is
           // not referred to by scan nodes.
           if (partition.getId() == ImpalaInternalServiceConstants.DEFAULT_PARTITION_ID) {
@@ -2537,7 +2546,9 @@ public class CatalogOpExecutor {
       if (cacheDirId != null) HdfsCachingUtil.removeTblCacheDirective(msTbl);
       // Uncache all table partitions.
       if (tbl.getNumClusteringCols() > 0) {
-        for (HdfsPartition partition: hdfsTable.getPartitions()) {
+        for (FeFsPartition fePartition: hdfsTable.getPartitions()) {
+          // TODO(todd): avoid downcast
+          HdfsPartition partition = (HdfsPartition) fePartition;
           if (partition.getId() == ImpalaInternalServiceConstants.DEFAULT_PARTITION_ID) {
             continue;
           }
@@ -3229,7 +3240,7 @@ public class CatalogOpExecutor {
         HashSet<String> partsToCreate =
             Sets.newHashSet(update.getCreated_partitions());
         partsToLoadMetadata = Sets.newHashSet(partsToCreate);
-        for (HdfsPartition partition: ((HdfsTable) table).getPartitions()) {
+        for (FeFsPartition partition: ((HdfsTable) table).getPartitions()) {
           // Skip dummy default partition.
           long partitionId = partition.getId();
           if (partitionId == ImpalaInternalServiceConstants.DEFAULT_PARTITION_ID) {
