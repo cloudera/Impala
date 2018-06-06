@@ -1075,6 +1075,7 @@ public class CatalogOpExecutor {
 
   private void createDataSource(TCreateDataSourceParams params, TDdlExecResponse resp)
       throws ImpalaException {
+    // TODO(IMPALA-7131): support data sources with LocalCatalog.
     if (LOG.isTraceEnabled()) { LOG.trace("Adding DATA SOURCE: " + params.toString()); }
     DataSource dataSource = DataSource.fromThrift(params.getData_source());
     DataSource existingDataSource = catalog_.getDataSource(dataSource.getName());
@@ -1094,6 +1095,7 @@ public class CatalogOpExecutor {
 
   private void dropDataSource(TDropDataSourceParams params, TDdlExecResponse resp)
       throws ImpalaException {
+    // TODO(IMPALA-7131): support data sources with LocalCatalog.
     if (LOG.isTraceEnabled()) LOG.trace("Drop DATA SOURCE: " + params.toString());
     DataSource dataSource = catalog_.removeDataSource(params.getData_source());
     if (dataSource == null) {
