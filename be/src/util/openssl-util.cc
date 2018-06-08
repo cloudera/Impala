@@ -70,6 +70,21 @@ bool IsExternalTlsConfigured() {
   return !FLAGS_ssl_server_certificate.empty() && !FLAGS_ssl_private_key.empty();
 }
 
+/// Wrapper around EVP_CIPHER_CTX that automatically cleans up the context
+/// when it is destroyed. This helps avoid leaks like IMPALA-7145.
+struct ScopedEVPCipherCtx {
+  DISALLOW_COPY_AND_ASSIGN(ScopedEVPCipherCtx);
+
+  explicit ScopedEVPCipherCtx(int padding) {
+    EVP_CIPHER_CTX_init(&ctx);
+    EVP_CIPHER_CTX_set_padding(&ctx, padding);
+  }
+
+  ~ScopedEVPCipherCtx() { EVP_CIPHER_CTX_cleanup(&ctx); }
+
+  EVP_CIPHER_CTX ctx;
+};
+
 // Callback used by OpenSSLErr() - write the error given to us through buf to the
 // stringstream that's passed in through ctx.
 static int OpenSSLErrCallback(const char* buf, size_t len, void* ctx) {
@@ -123,9 +138,7 @@ Status EncryptionKey::EncryptInternal(
   DCHECK(initialized_);
   DCHECK_GE(len, 0);
   // Create and initialize the context for encryption
-  EVP_CIPHER_CTX ctx;
-  EVP_CIPHER_CTX_init(&ctx);
-  EVP_CIPHER_CTX_set_padding(&ctx, 0);
+  ScopedEVPCipherCtx ctx(0);
 
   // Start encryption/decryption.  We use a 256-bit AES key, and the cipher block mode
   // is either CTR or CFB(stream cipher), both of which support arbitrary length
@@ -133,9 +146,8 @@ Status EncryptionKey::EncryptInternal(
   // mode is well-optimized(instruction level parallelism) with hardware acceleration
   // on x86 and PowerPC
   const EVP_CIPHER* evpCipher = GetCipher();
-  int success = encrypt ? EVP_EncryptInit_ex(&ctx, evpCipher, NULL, key_, iv_) :
-                          EVP_DecryptInit_ex(&ctx, evpCipher, NULL, key_, iv_);
-
+  int success = encrypt ? EVP_EncryptInit_ex(&ctx.ctx, evpCipher, NULL, key_, iv_) :
+                          EVP_DecryptInit_ex(&ctx.ctx, evpCipher, NULL, key_, iv_);
   if (success != 1) {
     return OpenSSLErr(encrypt ? "EVP_EncryptInit_ex" : "EVP_DecryptInit_ex");
   }
@@ -147,8 +159,8 @@ Status EncryptionKey::EncryptInternal(
     int in_len = static_cast<int>(min<int64_t>(len - offset, numeric_limits<int>::max()));
     int out_len;
     success = encrypt ?
-        EVP_EncryptUpdate(&ctx, out + offset, &out_len, data + offset, in_len) :
-        EVP_DecryptUpdate(&ctx, out + offset, &out_len, data + offset, in_len);
+        EVP_EncryptUpdate(&ctx.ctx, out + offset, &out_len, data + offset, in_len) :
+        EVP_DecryptUpdate(&ctx.ctx, out + offset, &out_len, data + offset, in_len);
     if (success != 1) {
       return OpenSSLErr(encrypt ? "EVP_EncryptUpdate" : "EVP_DecryptUpdate");
     }
@@ -159,8 +171,8 @@ Status EncryptionKey::EncryptInternal(
 
   // Finalize encryption or decryption.
   int final_out_len;
-  success = encrypt ? EVP_EncryptFinal_ex(&ctx, out + offset, &final_out_len) :
-                      EVP_DecryptFinal_ex(&ctx, out + offset, &final_out_len);
+  success = encrypt ? EVP_EncryptFinal_ex(&ctx.ctx, out + offset, &final_out_len) :
+                      EVP_DecryptFinal_ex(&ctx.ctx, out + offset, &final_out_len);
   if (success != 1) {
     return OpenSSLErr(encrypt ? "EVP_EncryptFinal" : "EVP_DecryptFinal");
   }
