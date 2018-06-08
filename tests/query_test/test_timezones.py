@@ -41,18 +41,3 @@ class TestTimeZones(ImpalaTestSuite):
         from_utc_timestamp(utctime,timezone) as impalaresult from functional.alltimezones \
         where localtime != from_utc_timestamp(utctime,timezone)")
     assert(len(result.data) == 0)
-
-  def test_invalid_aliases(self, vector):
-    """ Test that conversions from/to invalid timezones return the timestamp
-        without change and add a warning.
-
-        IMPALA-7060 removed many abbreviations, aliases and some timezones,
-        because these timezone names are not supported by Hive and Spark.
-    """
-    timestamp = '2018-04-19 13:07:48.891829000'
-    for function in ['from_utc_timestamp', 'to_utc_timestamp']:
-      for timezone in ['invalid timezone', 'CEST', 'Mideast/Riyadh87']:
-        result = self.execute_query_expect_success(self.client,
-            "select {0}('{1}', '{2}');".format(function, timestamp, timezone))
-        assert "UDF WARNING: Unknown timezone '%s'" % timezone == result.log.strip()
-        assert timestamp == result.get_data()

@@ -347,6 +347,9 @@ const char* TimezoneDatabase::TIMEZONE_DATABASE_STR = "\"ID\",\"STD ABBR\",\"STD
 \"Asia/Qyzylorda\",\"QYZT\",\"Qyzylorda Time\",\"\",\"\",\"+06:00:00\",\"+00:00:00\",\"\",\"\",\"\",\"\"\n\
 \"Asia/Rangoon\",\"MMT\",\"Myanmar Time\",\"\",\"\",\"+06:30:00\",\"+00:00:00\",\"\",\"\",\"\",\"\"\n\
 \"Asia/Riyadh\",\"AST\",\"Arabia Standard Time\",\"\",\"\",\"+03:00:00\",\"+00:00:00\",\"\",\"\",\"\",\"\"\n\
+\"Asia/Riyadh87\",\"GMT+03:07\",\"GMT+03:07\",\"\",\"\",\"+03:07:04\",\"+00:00:00\",\"\",\"\",\"\",\"\"\n\
+\"Asia/Riyadh88\",\"GMT+03:07\",\"GMT+03:07\",\"\",\"\",\"+03:07:04\",\"+00:00:00\",\"\",\"\",\"\",\"\"\n\
+\"Asia/Riyadh89\",\"GMT+03:07\",\"GMT+03:07\",\"\",\"\",\"+03:07:04\",\"+00:00:00\",\"\",\"\",\"\",\"\"\n\
 \"Asia/Saigon\",\"ICT\",\"Indochina Time\",\"\",\"\",\"+07:00:00\",\"+00:00:00\",\"\",\"\",\"\",\"\"\n\
 \"Asia/Sakhalin\",\"SAKT\",\"Sakhalin Time\",\"\",\"\",\"+10:00:00\",\"+00:00:00\",\"\",\"\",\"\",\"\"\n\
 \"Asia/Samarkand\",\"UZT\",\"Uzbekistan Time\",\"\",\"\",\"+05:00:00\",\"+00:00:00\",\"\",\"\",\"\",\"\"\n\
@@ -421,6 +424,7 @@ const char* TimezoneDatabase::TIMEZONE_DATABASE_STR = "\"ID\",\"STD ABBR\",\"STD
 \"CTT\",\"CST\",\"China Standard Time\",\"\",\"\",\"+08:00:00\",\"+00:00:00\",\"\",\"\",\"\",\"\"\n\
 \"Canada/Atlantic\",\"AST\",\"Atlantic Standard Time\",\"ADT\",\"Atlantic Daylight Time\",\"-04:00:00\",\"+01:00:00\",\"2;0;3\",\"+02:00:00\",\"1;0;11\",\"+02:00:00\"\n\
 \"Canada/Central\",\"CST\",\"Central Standard Time\",\"CDT\",\"Central Daylight Time\",\"-06:00:00\",\"+01:00:00\",\"2;0;3\",\"+02:00:00\",\"1;0;11\",\"+02:00:00\"\n\
+\"Canada/East-Saskatchewan\",\"CST\",\"Central Standard Time\",\"\",\"\",\"-06:00:00\",\"+00:00:00\",\"\",\"\",\"\",\"\"\n\
 \"Canada/Eastern\",\"EST\",\"Eastern Standard Time\",\"EDT\",\"Eastern Daylight Time\",\"-05:00:00\",\"+01:00:00\",\"2;0;3\",\"+02:00:00\",\"1;0;11\",\"+02:00:00\"\n\
 \"Canada/Mountain\",\"MST\",\"Mountain Standard Time\",\"MDT\",\"Mountain Daylight Time\",\"-07:00:00\",\"+01:00:00\",\"2;0;3\",\"+02:00:00\",\"1;0;11\",\"+02:00:00\"\n\
 \"Canada/Newfoundland\",\"NST\",\"Newfoundland Standard Time\",\"NDT\",\"Newfoundland Daylight Time\",\"-03:30:00\",\"+01:00:00\",\"2;0;3\",\"+02:00:00\",\"1;0;11\",\"+02:00:00\"\n\
@@ -566,6 +570,9 @@ const char* TimezoneDatabase::TIMEZONE_DATABASE_STR = "\"ID\",\"STD ABBR\",\"STD
 \"Mexico/BajaNorte\",\"PST\",\"Pacific Standard Time\",\"PDT\",\"Pacific Daylight Time\",\"-08:00:00\",\"+01:00:00\",\"2;0;3\",\"+02:00:00\",\"1;0;11\",\"+02:00:00\"\n\
 \"Mexico/BajaSur\",\"MST\",\"Mountain Standard Time\",\"MDT\",\"Mountain Daylight Time\",\"-07:00:00\",\"+01:00:00\",\"1;0;4\",\"+02:00:00\",\"-1;0;10\",\"+02:00:00\"\n\
 \"Mexico/General\",\"CST\",\"Central Standard Time\",\"CDT\",\"Central Daylight Time\",\"-06:00:00\",\"+01:00:00\",\"1;0;4\",\"+02:00:00\",\"-1;0;10\",\"+02:00:00\"\n\
+\"Mideast/Riyadh87\",\"GMT+03:07\",\"GMT+03:07\",\"\",\"\",\"+03:07:04\",\"+00:00:00\",\"\",\"\",\"\",\"\"\n\
+\"Mideast/Riyadh88\",\"GMT+03:07\",\"GMT+03:07\",\"\",\"\",\"+03:07:04\",\"+00:00:00\",\"\",\"\",\"\",\"\"\n\
+\"Mideast/Riyadh89\",\"GMT+03:07\",\"GMT+03:07\",\"\",\"\",\"+03:07:04\",\"+00:00:00\",\"\",\"\",\"\",\"\"\n\
 \"NET\",\"AMT\",\"Armenia Time\",\"\",\"\",\"+04:00:00\",\"+00:00:00\",\"\",\"\",\"\",\"\"\n\
 \"NST\",\"NZST\",\"New Zealand Standard Time\",\"NZDT\",\"New Zealand Daylight Time\",\"+12:00:00\",\"+01:00:00\",\"-1;0;9\",\"+02:00:00\",\"1;0;4\",\"+02:00:00\"\n\
 \"NZ\",\"NZST\",\"New Zealand Standard Time\",\"NZDT\",\"New Zealand Daylight Time\",\"+12:00:00\",\"+01:00:00\",\"-1;0;9\",\"+02:00:00\",\"1;0;4\",\"+02:00:00\"\n\
@@ -625,6 +632,19 @@ const char* TimezoneDatabase::TIMEZONE_DATABASE_STR = "\"ID\",\"STD ABBR\",\"STD
 \"ROK\",\"KST\",\"Korea Standard Time\",\"\",\"\",\"+09:00:00\",\"+00:00:00\",\"\",\"\",\"\",\"\"\n\
 \"SST\",\"SBT\",\"Solomon Is. Time\",\"\",\"\",\"+11:00:00\",\"+00:00:00\",\"\",\"\",\"\",\"\"\n\
 \"Singapore\",\"SGT\",\"Singapore Time\",\"\",\"\",\"+08:00:00\",\"+00:00:00\",\"\",\"\",\"\",\"\"\n\
+\"SystemV/AST4\",\"AST\",\"Atlantic Standard Time\",\"\",\"\",\"-04:00:00\",\"+00:00:00\",\"\",\"\",\"\",\"\"\n\
+\"SystemV/AST4ADT\",\"AST\",\"Atlantic Standard Time\",\"ADT\",\"Atlantic Daylight Time\",\"-04:00:00\",\"+01:00:00\",\"-1;0;4\",\"+02:00:00\",\"-1;0;10\",\"+02:00:00\"\n\
+\"SystemV/CST6\",\"CST\",\"Central Standard Time\",\"\",\"\",\"-06:00:00\",\"+00:00:00\",\"\",\"\",\"\",\"\"\n\
+\"SystemV/CST6CDT\",\"CST\",\"Central Standard Time\",\"CDT\",\"Central Daylight Time\",\"-06:00:00\",\"+01:00:00\",\"-1;0;4\",\"+02:00:00\",\"-1;0;10\",\"+02:00:00\"\n\
+\"SystemV/EST5\",\"EST\",\"Eastern Standard Time\",\"\",\"\",\"-05:00:00\",\"+00:00:00\",\"\",\"\",\"\",\"\"\n\
+\"SystemV/EST5EDT\",\"EST\",\"Eastern Standard Time\",\"EDT\",\"Eastern Daylight Time\",\"-05:00:00\",\"+01:00:00\",\"-1;0;4\",\"+02:00:00\",\"-1;0;10\",\"+02:00:00\"\n\
+\"SystemV/HST10\",\"HST\",\"Hawaii Standard Time\",\"\",\"\",\"-10:00:00\",\"+00:00:00\",\"\",\"\",\"\",\"\"\n\
+\"SystemV/MST7\",\"MST\",\"Mountain Standard Time\",\"\",\"\",\"-07:00:00\",\"+00:00:00\",\"\",\"\",\"\",\"\"\n\
+\"SystemV/MST7MDT\",\"MST\",\"Mountain Standard Time\",\"MDT\",\"Mountain Daylight Time\",\"-07:00:00\",\"+01:00:00\",\"-1;0;4\",\"+02:00:00\",\"-1;0;10\",\"+02:00:00\"\n\
+\"SystemV/PST8\",\"PST\",\"Pacific Standard Time\",\"\",\"\",\"-08:00:00\",\"+00:00:00\",\"\",\"\",\"\",\"\"\n\
+\"SystemV/PST8PDT\",\"PST\",\"Pacific Standard Time\",\"PDT\",\"Pacific Daylight Time\",\"-08:00:00\",\"+01:00:00\",\"-1;0;4\",\"+02:00:00\",\"-1;0;10\",\"+02:00:00\"\n\
+\"SystemV/YST9\",\"AKST\",\"Alaska Standard Time\",\"\",\"\",\"-09:00:00\",\"+00:00:00\",\"\",\"\",\"\",\"\"\n\
+\"SystemV/YST9YDT\",\"AKST\",\"Alaska Standard Time\",\"AKDT\",\"Alaska Daylight Time\",\"-09:00:00\",\"+01:00:00\",\"-1;0;4\",\"+02:00:00\",\"-1;0;10\",\"+02:00:00\"\n\
 \"Turkey\",\"EET\",\"Eastern European Time\",\"EEST\",\"Eastern European Summer Time\",\"+02:00:00\",\"+01:00:00\",\"-1;0;3\",\"+01:00:00\",\"-1;0;10\",\"+01:00:00\"\n\
 \"UCT\",\"UTC\",\"Coordinated Universal Time\",\"\",\"\",\"+00:00:00\",\"+00:00:00\",\"\",\"\",\"\",\"\"\n\
 \"US/Alaska\",\"AKST\",\"Alaska Standard Time\",\"AKDT\",\"Alaska Daylight Time\",\"-09:00:00\",\"+01:00:00\",\"2;0;3\",\"+02:00:00\",\"1;0;11\",\"+02:00:00\"\n\
