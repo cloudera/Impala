@@ -107,6 +107,42 @@ std::string GetStackTrace();
 /// Returns the backend name in "host:port" form suitable for human consumption.
 std::string GetBackendString();
 
+/// Tokenize 'debug_actions' into a list of tokenized rows, where columns are separated
+/// by ':' and rows by '|'. i.e. if debug_actions="a:b:c|x:y", then the returned
+/// structure is {{"a", "b", "c"}, {"x", "y"}}
+typedef std::list<std::vector<string>> DebugActionTokens;
+DebugActionTokens TokenizeDebugActions(const string& debug_actions);
+
+/// Tokenize 'action' which has an optional parameter separated by '@'. i.e. "x@y"
+/// becomes {"x", "y"} and "x" becomes {"x"}.
+std::vector<std::string> TokenizeDebugActionParams(const string& action);
+
+/// Slow path implementing DebugAction() for the case where
+/// 'query_options.debug_action' is non-empty.
+Status DebugActionImpl(
+    const TQueryOptions& query_options, const char* label) WARN_UNUSED_RESULT;
+
+/// If debug_action query option has a "global action" (i.e. not exec-node specific)
+/// and matches the given 'label', apply the the action. See ImpalaService.thrift for
+/// details of the format and available global actions. For ExecNode code, use
+/// ExecNode::ExecDebugAction() instead.
+WARN_UNUSED_RESULT static inline Status DebugAction(
+    const TQueryOptions& query_options, const char* label) {
+  if (LIKELY(query_options.debug_action.empty())) return Status::OK();
+  return DebugActionImpl(query_options, label);
+}
+
+/// Like DebugAction() but for use in contexts that can't safely propagate an error
+/// status. Debug action FAIL should not be used in these contexts and will be logged
+/// and ignored.
+static inline void DebugActionNoFail(
+    const TQueryOptions& query_options, const char* label) {
+  Status status = DebugAction(query_options, label);
+  if (!status.ok()) {
+    LOG(ERROR) << "Ignoring debug action failure: " << status.GetDetail();
+  }
+}
+
 // FILE_CHECKs are conditions that we expect to be true but could fail due to a malformed
 // input file. They differentiate these cases from DCHECKs, which indicate conditions that
 // are true unless there's a bug in Impala. We would ideally always return a bad Status
