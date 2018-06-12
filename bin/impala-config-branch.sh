@@ -63,7 +63,8 @@ fi
 # and re-configure to use it.
 if [ "${IMPALA_MAVEN_OPTIONS_OVERRIDE:-}" ]; then
   export IMPALA_MAVEN_OPTIONS=${IMPALA_MAVEN_OPTIONS_OVERRIDE}
-else
+elif [ -z "$CAULDRON_DOCKER_PLATFORM" ]; then
+  # If we're not in a cauldron build, set up an m2-settings file
   MAVEN_CONFIG_FILE="${IMPALA_HOME}/toolchain/cdh_components/m2-settings.xml"
   if [ ! -e "${MAVEN_CONFIG_FILE}" ]; then
     mkdir -p "$(dirname ${MAVEN_CONFIG_FILE})"
