@@ -61,7 +61,7 @@ fi
 
 # Defer to IMPALA_MAVEN_OPTIONS_OVERRIDE. If not set, download an m2-settings.xml file
 # and re-configure to use it.
-if [ ${IMPALA_MAVEN_OPTIONS_OVERRIDE:-} ]; then
+if [ "${IMPALA_MAVEN_OPTIONS_OVERRIDE:-}" ]; then
   export IMPALA_MAVEN_OPTIONS=${IMPALA_MAVEN_OPTIONS_OVERRIDE}
 else
   MAVEN_CONFIG_FILE="${IMPALA_HOME}/toolchain/cdh_components/m2-settings.xml"
