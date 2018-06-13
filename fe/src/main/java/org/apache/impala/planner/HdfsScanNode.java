@@ -49,13 +49,13 @@ import org.apache.impala.analysis.TupleDescriptor;
 import org.apache.impala.analysis.TupleId;
 import org.apache.impala.catalog.Column;
 import org.apache.impala.catalog.ColumnStats;
+import org.apache.impala.catalog.FeCatalogUtils;
 import org.apache.impala.catalog.HdfsCompression;
 import org.apache.impala.catalog.FeFsPartition;
 import org.apache.impala.catalog.FeFsTable;
 import org.apache.impala.catalog.HdfsFileFormat;
 import org.apache.impala.catalog.HdfsPartition.FileBlock;
 import org.apache.impala.catalog.HdfsPartition.FileDescriptor;
-import org.apache.impala.catalog.HdfsTable;
 import org.apache.impala.catalog.Type;
 import org.apache.impala.common.FileSystemUtil;
 import org.apache.impala.common.ImpalaException;
@@ -148,7 +148,7 @@ public class HdfsScanNode extends ScanNode {
   // between 128kb and 1.1mb.
   private final static long MIN_MEMORY_ESTIMATE = 1 * 1024 * 1024;
 
-  private final HdfsTable tbl_;
+  private final FeFsTable tbl_;
 
   // List of partitions to be scanned. Partitions have been pruned.
   private final List<? extends FeFsPartition> partitions_;
@@ -253,13 +253,13 @@ public class HdfsScanNode extends ScanNode {
       List<? extends FeFsPartition> partitions, TableRef hdfsTblRef, AggregateInfo aggInfo) {
     super(id, desc, "SCAN HDFS");
     Preconditions.checkState(desc.getTable() instanceof FeFsTable);
-    tbl_ = (HdfsTable)desc.getTable();
+    tbl_ = (FeFsTable)desc.getTable();
     conjuncts_ = conjuncts;
     partitions_ = partitions;
     sampleParams_ = hdfsTblRef.getSampleParams();
     replicaPreference_ = hdfsTblRef.getReplicaPreference();
     randomReplica_ = hdfsTblRef.getRandomReplica();
-    HdfsTable hdfsTable = (HdfsTable)hdfsTblRef.getTable();
+    FeFsTable hdfsTable = (FeFsTable)hdfsTblRef.getTable();
     Preconditions.checkState(tbl_ == hdfsTable);
     StringBuilder error = new StringBuilder();
     aggInfo_ = aggInfo;
@@ -1045,7 +1045,7 @@ public class HdfsScanNode extends ScanNode {
   protected String getNodeExplainString(String prefix, String detailPrefix,
       TExplainLevel detailLevel) {
     StringBuilder output = new StringBuilder();
-    HdfsTable table = (HdfsTable) desc_.getTable();
+    FeFsTable table = (FeFsTable) desc_.getTable();
     output.append(String.format("%s%s [%s", prefix, getDisplayLabel(),
         getDisplayLabelDetail()));
     if (detailLevel.ordinal() >= TExplainLevel.EXTENDED.ordinal() &&
@@ -1191,8 +1191,8 @@ public class HdfsScanNode extends ScanNode {
     }
     Preconditions.checkState(0 < numNodes_ && numNodes_ <= scanRanges_.size());
     Preconditions.checkNotNull(desc_);
-    Preconditions.checkNotNull(desc_.getTable() instanceof HdfsTable);
-    HdfsTable table = (HdfsTable) desc_.getTable();
+    Preconditions.checkNotNull(desc_.getTable() instanceof FeFsTable);
+    FeFsTable table = (FeFsTable) desc_.getTable();
     int perHostScanRanges;
     if (table.getMajorityFormat() == HdfsFileFormat.PARQUET) {
       // For the purpose of this estimation, the number of per-host scan ranges for
