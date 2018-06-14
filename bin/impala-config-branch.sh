@@ -44,6 +44,8 @@ VERSION="6.0.x"
 BRANCH="cdh${VERSION}"
 CDH_GBN_CONFIG="${IMPALA_HOME}/toolchain/cdh_components/cdh-gbn.sh"
 WGET="wget --no-verbose -O -"
+# Defined in the context of a cauldron build
+CAULDRON_DOCKER_PLATFORM=${CAULDRON_DOCKER_PLATFORM:-}
 
 if [ ! "${CDH_GBN}" ]; then
   if [ -f "${CDH_GBN_CONFIG}" ]; then
