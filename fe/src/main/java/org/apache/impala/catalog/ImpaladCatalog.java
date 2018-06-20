@@ -99,6 +99,7 @@ public class ImpaladCatalog extends Catalog implements FeCatalog {
 
   public ImpaladCatalog(String defaultKuduMasterHosts) {
     super();
+    addDb(BuiltinsDb.getInstance());
     defaultKuduMasterHosts_ = defaultKuduMasterHosts;
     // Ensure the contents of the CatalogObjectVersionQueue instance are cleared when a
     // new instance of ImpaladCatalog is created (see IMPALA-6486).

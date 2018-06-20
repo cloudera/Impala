@@ -19,6 +19,7 @@ package org.apache.impala.analysis;
 
 import java.util.ArrayList;
 
+import org.apache.impala.catalog.BuiltinsDb;
 import org.apache.impala.catalog.Catalog;
 import org.apache.impala.catalog.Db;
 import org.apache.impala.common.AnalysisException;
@@ -101,11 +102,11 @@ public class FunctionName {
 
     // Resolve the database for this function.
     if (!isFullyQualified()) {
-      Db builtinDb = analyzer.getCatalog().getBuiltinsDb();
+      Db builtinDb = BuiltinsDb.getInstance();
       if (builtinDb.containsFunction(fn_)) {
         // If it isn't fully qualified and is the same name as a builtin, use
         // the builtin.
-        db_ = Catalog.BUILTINS_DB;
+        db_ = BuiltinsDb.NAME;
         isBuiltin_ = true;
       } else {
         db_ = analyzer.getDefaultDb();

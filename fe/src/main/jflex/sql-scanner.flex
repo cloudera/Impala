@@ -30,7 +30,6 @@ import java.util.HashSet;
 
 import org.apache.impala.analysis.SqlParserSymbols;
 import org.apache.impala.catalog.BuiltinsDb;
-import static org.apache.impala.catalog.Catalog.BUILTINS_DB;
 import org.apache.impala.service.BackendConfig;
 import org.apache.impala.thrift.TReservedWordsVersion;
 
@@ -349,7 +348,7 @@ import org.apache.impala.thrift.TReservedWordsVersion;
         "varying", "versioning", "whenever", "width_bucket", "window", "within",
         "without", "year"}));
     // Remove impala builtin function names
-    reservedWords.removeAll(new BuiltinsDb(BUILTINS_DB).getAllFunctions().keySet());
+    reservedWords.removeAll(BuiltinsDb.getInstance().getAllFunctions().keySet());
     // Remove whitelist words. These words might be heavily used in production, and
     // impala is unlikely to implement SQL features around these words in the near future.
     reservedWords.removeAll(Arrays.asList(new String[] {

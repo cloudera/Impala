@@ -21,6 +21,7 @@ import java.util.List;
 
 import org.apache.impala.authorization.Privilege;
 import org.apache.impala.catalog.AggregateFunction;
+import org.apache.impala.catalog.BuiltinsDb;
 import org.apache.impala.catalog.Catalog;
 import org.apache.impala.catalog.Db;
 import org.apache.impala.catalog.FeDb;
@@ -112,7 +113,7 @@ public class FunctionCallExpr extends Expr {
     return fnName.getFnNamePath().size() == 1
            && fnName.getFnNamePath().get(0).equalsIgnoreCase(name)
         || fnName.getFnNamePath().size() == 2
-           && fnName.getFnNamePath().get(0).equals(Catalog.BUILTINS_DB)
+           && fnName.getFnNamePath().get(0).equals(BuiltinsDb.NAME)
            && fnName.getFnNamePath().get(1).equalsIgnoreCase(name);
   }
 

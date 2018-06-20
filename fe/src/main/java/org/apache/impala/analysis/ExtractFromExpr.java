@@ -19,7 +19,7 @@ package org.apache.impala.analysis;
 
 import java.util.Set;
 
-import org.apache.impala.catalog.Catalog;
+import org.apache.impala.catalog.BuiltinsDb;
 import org.apache.impala.catalog.Type;
 import org.apache.impala.common.AnalysisException;
 import org.apache.impala.thrift.TExtractField;
@@ -73,7 +73,7 @@ public class ExtractFromExpr extends FunctionCallExpr {
           + " does not accept the keyword FROM.");
     }
     if ((getFnName().getDb() != null)
-        && !getFnName().getDb().equals(Catalog.BUILTINS_DB)) {
+        && !getFnName().getDb().equals(BuiltinsDb.NAME)) {
       throw new AnalysisException("Function " + getFnName().toString() + " conflicts " +
           "with the EXTRACT builtin.");
     }
