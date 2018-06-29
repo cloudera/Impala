@@ -107,6 +107,7 @@ import org.apache.impala.thrift.TExecRequest;
 import org.apache.impala.thrift.TExplainResult;
 import org.apache.impala.thrift.TFinalizeParams;
 import org.apache.impala.thrift.TFunctionCategory;
+import org.apache.impala.thrift.TGetCatalogMetricsResult;
 import org.apache.impala.thrift.TGrantRevokePrivParams;
 import org.apache.impala.thrift.TGrantRevokeRoleParams;
 import org.apache.impala.thrift.TLineageGraph;
@@ -601,6 +602,15 @@ public class Frontend {
     StringBuilder stringBuilder = new StringBuilder();
     createExecRequest(queryCtx, stringBuilder);
     return stringBuilder.toString();
+  }
+
+  public TGetCatalogMetricsResult getCatalogMetrics() throws ImpalaException {
+    TGetCatalogMetricsResult resp = new TGetCatalogMetricsResult();
+    for (Db db : getCatalog().getDbs(PatternMatcher.MATCHER_MATCH_ALL)) {
+      resp.num_dbs++;
+      resp.num_tables += db.getAllTableNames().size();
+    }
+    return resp;
   }
 
   /**
