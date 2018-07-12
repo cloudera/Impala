@@ -50,3 +50,21 @@ class TestCodegen(ImpalaTestSuite):
     # Make sure test fails if there are no exec options in the profile for the node
     assert len(exec_options) > 0
     assert_codegen_enabled(result.runtime_profile, [1])
+    
+  def test_codegen_failure_for_char_type(self, vector):
+    """IMPALA-7288: Regression tests for the codegen failure path when working with a
+    CHAR column type"""
+    # Test failure path in HashTableCtx::CodegenEquals().
+    result = self.execute_query("select 1 from functional.chars_tiny t1, "
+                                "functional.chars_tiny t2 "
+                                "where t1.cs = cast(t2.cs as string)");
+    assert "Codegen Disabled: Problem with HashTableCtx::CodegenEquals: ScalarFnCall" \
+           " Codegen not supported for CHAR" in str(result.runtime_profile)
+
+    # Test failure path in HashTableCtx::CodegenEvalRow().
+    result = self.execute_query("select 1 from functional.chars_tiny t1, "
+                                "functional.chars_tiny t2 where t1.cs = "
+                                "FROM_TIMESTAMP(cast(t2.cs as string), 'yyyyMMdd')");
+    assert "Codegen Disabled: Problem with HashTableCtx::CodegenEvalRow(): ScalarFnCall" \
+           " Codegen not supported for CHAR" in str(result.runtime_profile)
+
