@@ -140,6 +140,9 @@ class CustomClusterTestSuite(ImpalaTestSuite):
     if pytest.config.option.test_no_krpc:
       cmd.append("--disable_krpc")
 
+    if pytest.config.option.use_local_catalog:
+      cmd.append("--impalad_args=--use_local_catalog=1")
+
     try:
       check_call(cmd + options, close_fds=True)
     finally:

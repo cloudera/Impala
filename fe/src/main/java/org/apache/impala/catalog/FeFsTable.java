@@ -90,9 +90,10 @@ public interface FeFsTable extends FeTable {
   long getTotalHdfsBytes();
 
   /**
-   * @return true if this table is backed by the Avro file format
+   * @return true if this table's schema as stored in the HMS has been overridden
+   * by an Avro schema.
    */
-  boolean isAvroTable();
+  boolean usesAvroSchemaOverride();
 
   /**
    * @return the format that the majority of partitions in this table use
