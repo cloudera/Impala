@@ -1022,10 +1022,7 @@ llvm::Function* LlvmCodeGen::CloneFunction(llvm::Function* fn) {
 
 llvm::Function* LlvmCodeGen::FinalizeFunction(llvm::Function* function) {
   SetCPUAttrs(function);
-  if (!VerifyFunction(function)) {
-    function->eraseFromParent(); // deletes function
-    return NULL;
-  }
+  if (!VerifyFunction(function)) return nullptr;
   finalized_functions_.insert(function);
   if (FLAGS_dump_ir) function->dump();
   return function;
