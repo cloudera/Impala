@@ -143,6 +143,10 @@ class CustomClusterTestSuite(ImpalaTestSuite):
     if pytest.config.option.use_local_catalog:
       cmd.append("--impalad_args=--use_local_catalog=1")
 
+    if pytest.config.option.pull_incremental_statistics:
+      cmd.append("--impalad_args=%s --catalogd_args=%s" %
+                 ("--pull_incremental_statistcs", "--pull_incremental_statistics"))
+
     try:
       check_call(cmd + options, close_fds=True)
     finally:

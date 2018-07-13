@@ -47,7 +47,7 @@ public class CatalogServiceTestCatalog extends CatalogServiceCatalog {
   }
 
   /**
-   * Creates a catalog server that that reads authorization policy metadata from the
+   * Creates a catalog server that reads authorization policy metadata from the
    * Sentry Policy Service.
    */
   public static CatalogServiceCatalog createWithAuth(SentryConfig config) {
