@@ -170,8 +170,10 @@ public class ImpaladCatalog extends Catalog {
         LOG.info("Received large catalog object(>100mb): " + key + " is " + len +
             "bytes");
       }
-      LOG.info((update.first ? "Deleting: " : "Adding: ") + key + " version: "
-          + obj.catalog_version + " size: " + len);
+      if (LOG.isTraceEnabled()) {
+        LOG.trace((update.first ? "Deleting " : "Adding ") + "item: " + key + " version: "
+            + obj.catalog_version + " of size: " + len);
+      }
       // For statestore updates, the service ID and updated version is wrapped in a
       // CATALOG catalog object.
       if (obj.type == TCatalogObjectType.CATALOG) {
