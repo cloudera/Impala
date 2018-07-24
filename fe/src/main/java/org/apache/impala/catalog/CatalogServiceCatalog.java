@@ -64,6 +64,7 @@ import org.apache.impala.thrift.TCatalogUpdateResult;
 import org.apache.impala.thrift.TFunction;
 import org.apache.impala.thrift.TGetCatalogUsageResponse;
 import org.apache.impala.thrift.TPartitionKeyValue;
+import org.apache.impala.thrift.TPrincipalType;
 import org.apache.impala.thrift.TPrivilege;
 import org.apache.impala.thrift.TTable;
 import org.apache.impala.thrift.TTableName;
@@ -75,7 +76,6 @@ import org.apache.log4j.Logger;
 import org.apache.thrift.TException;
 import org.apache.thrift.TSerializer;
 import org.apache.thrift.protocol.TBinaryProtocol;
-import org.apache.thrift.protocol.TCompactProtocol;
 
 import com.codahale.metrics.Timer;
 import com.google.common.base.Joiner;
@@ -84,6 +84,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import org.apache.thrift.protocol.TCompactProtocol;
 
 /**
  * Specialized Catalog that implements the CatalogService specific Catalog
@@ -455,7 +456,10 @@ public class CatalogServiceCatalog extends Catalog {
       addHdfsCachePoolToCatalogDelta(cachePool, ctx);
     }
     for (Role role: getAllRoles()) {
-      addRoleToCatalogDelta(role, ctx);
+      addPrincipalToCatalogDelta(role, ctx);
+    }
+    for (User user: getAllUsers()) {
+      addPrincipalToCatalogDelta(user, ctx);
     }
     // Identify the catalog objects that were removed from the catalog for which their
     // versions are in range ('ctx.fromVersion', 'ctx.toVersion']. We need to make sure
@@ -544,6 +548,18 @@ public class CatalogServiceCatalog extends Catalog {
     versionLock_.readLock().lock();
     try {
       return ImmutableList.copyOf(authPolicy_.getAllRoles());
+    } finally {
+      versionLock_.readLock().unlock();
+    }
+  }
+
+  /**
+   * Get a snapshot view of all the users in the catalog.
+   */
+  private List<User> getAllUsers() {
+    versionLock_.readLock().lock();
+    try {
+      return ImmutableList.copyOf(authPolicy_.getAllUsers());
     } finally {
       versionLock_.readLock().unlock();
     }
@@ -713,42 +729,42 @@ public class CatalogServiceCatalog extends Catalog {
 
 
   /**
-   * Adds a role to the topic update if its version is in the range
+   * Adds a principal to the topic update if its version is in the range
    * ('ctx.fromVersion', 'ctx.toVersion']. It iterates through all the privileges of
-   * this role to determine if they can be inserted in the topic update.
+   * this principal to determine if they can be inserted in the topic update.
    */
-  private void addRoleToCatalogDelta(Role role, GetCatalogDeltaContext ctx)
-      throws TException  {
-    long roleVersion = role.getCatalogVersion();
-    if (roleVersion > ctx.fromVersion && roleVersion <= ctx.toVersion) {
-      TCatalogObject thriftRole =
-          new TCatalogObject(TCatalogObjectType.ROLE, roleVersion);
-      thriftRole.setRole(role.toThrift());
-      ctx.addCatalogObject(thriftRole, false);
+  private void addPrincipalToCatalogDelta(Principal principal, GetCatalogDeltaContext ctx)
+      throws TException {
+    long principalVersion = principal.getCatalogVersion();
+    if (principalVersion > ctx.fromVersion && principalVersion <= ctx.toVersion) {
+      TCatalogObject thriftPrincipal =
+          new TCatalogObject(TCatalogObjectType.PRINCIPAL, principalVersion);
+      thriftPrincipal.setPrincipal(principal.toThrift());
+      ctx.addCatalogObject(thriftPrincipal, false);
     }
-    for (RolePrivilege p: getAllPrivileges(role)) {
-      addRolePrivilegeToCatalogDelta(p, ctx);
+    for (PrincipalPrivilege p: getAllPrivileges(principal)) {
+      addPrincipalPrivilegeToCatalogDelta(p, ctx);
     }
   }
 
   /**
-   * Get a snapshot view of all the privileges in a role.
+   * Get a snapshot view of all the privileges in a principal.
    */
-  private List<RolePrivilege> getAllPrivileges(Role role) {
-    Preconditions.checkNotNull(role);
+  private List<PrincipalPrivilege> getAllPrivileges(Principal principal) {
+    Preconditions.checkNotNull(principal);
     versionLock_.readLock().lock();
     try {
-      return ImmutableList.copyOf(role.getPrivileges());
+      return ImmutableList.copyOf(principal.getPrivileges());
     } finally {
       versionLock_.readLock().unlock();
     }
   }
 
   /**
-   * Adds a role privilege to the topic update if its version is in the range
+   * Adds a principal privilege to the topic update if its version is in the range
    * ('ctx.fromVersion', 'ctx.toVersion'].
    */
-  private void addRolePrivilegeToCatalogDelta(RolePrivilege priv,
+  private void addPrincipalPrivilegeToCatalogDelta(PrincipalPrivilege priv,
       GetCatalogDeltaContext ctx) throws TException  {
     long privVersion = priv.getCatalogVersion();
     if (privVersion <= ctx.fromVersion || privVersion > ctx.toVersion) return;
@@ -1632,12 +1648,30 @@ public class CatalogServiceCatalog extends Catalog {
    * If a role with the same name already exists it will be overwritten.
    */
   public Role addRole(String roleName, Set<String> grantGroups) {
+    Principal role = addPrincipal(roleName, grantGroups, TPrincipalType.ROLE);
+    Preconditions.checkState(role instanceof Role);
+    return (Role) role;
+  }
+
+  /**
+   * Adds a new user with the given name to the AuthorizationPolicy.
+   * If a user with the same name already exists it will be overwritten.
+   */
+  public User addUser(String userName) {
+    Principal user = addPrincipal(userName, Sets.<String>newHashSet(),
+        TPrincipalType.USER);
+    Preconditions.checkState(user instanceof User);
+    return (User) user;
+  }
+
+  private Principal addPrincipal(String principalName, Set<String> grantGroups,
+      TPrincipalType type) {
     versionLock_.writeLock().lock();
     try {
-      Role role = new Role(roleName, grantGroups);
-      role.setCatalogVersion(incrementAndGetCatalogVersion());
-      authPolicy_.addRole(role);
-      return role;
+      Principal principal = Principal.newInstance(principalName, type, grantGroups);
+      principal.setCatalogVersion(incrementAndGetCatalogVersion());
+      authPolicy_.addPrincipal(principal);
+      return principal;
     } finally {
       versionLock_.writeLock().unlock();
     }
@@ -1649,17 +1683,36 @@ public class CatalogServiceCatalog extends Catalog {
    * exists.
    */
   public Role removeRole(String roleName) {
+    Principal role = removePrincipal(roleName, TPrincipalType.ROLE);
+    if (role == null) return null;
+    Preconditions.checkState(role instanceof Role);
+    return (Role) role;
+  }
+
+  /**
+   * Removes the user with the given name from the AuthorizationPolicy. Returns the
+   * removed user with an incremented catalog version, or null if no user with this name
+   * exists.
+   */
+  public User removeUser(String userName) {
+    Principal user = removePrincipal(userName, TPrincipalType.USER);
+    if (user == null) return null;
+    Preconditions.checkState(user instanceof User);
+    return (User) user;
+  }
+
+  private Principal removePrincipal(String principalName, TPrincipalType type) {
     versionLock_.writeLock().lock();
     try {
-      Role role = authPolicy_.removeRole(roleName);
-      if (role == null) return null;
-      for (RolePrivilege priv: role.getPrivileges()) {
+      Principal principal = authPolicy_.removePrincipal(principalName, type);
+      if (principal == null) return null;
+      for (PrincipalPrivilege priv: principal.getPrivileges()) {
         priv.setCatalogVersion(incrementAndGetCatalogVersion());
         deleteLog_.addRemovedObject(priv.toTCatalogObject());
       }
-      role.setCatalogVersion(incrementAndGetCatalogVersion());
-      deleteLog_.addRemovedObject(role.toTCatalogObject());
-      return role;
+      principal.setCatalogVersion(incrementAndGetCatalogVersion());
+      deleteLog_.addRemovedObject(principal.toTCatalogObject());
+      return principal;
     } finally {
       versionLock_.writeLock().unlock();
     }
@@ -1673,7 +1726,7 @@ public class CatalogServiceCatalog extends Catalog {
       throws CatalogException {
     versionLock_.writeLock().lock();
     try {
-      Role role = authPolicy_.addGrantGroup(roleName, groupName);
+      Role role = authPolicy_.addRoleGrantGroup(roleName, groupName);
       Preconditions.checkNotNull(role);
       role.setCatalogVersion(incrementAndGetCatalogVersion());
       return role;
@@ -1690,7 +1743,7 @@ public class CatalogServiceCatalog extends Catalog {
       throws CatalogException {
     versionLock_.writeLock().lock();
     try {
-      Role role = authPolicy_.removeGrantGroup(roleName, groupName);
+      Role role = authPolicy_.removeRoleGrantGroup(roleName, groupName);
       Preconditions.checkNotNull(role);
       role.setCatalogVersion(incrementAndGetCatalogVersion());
       return role;
@@ -1700,17 +1753,35 @@ public class CatalogServiceCatalog extends Catalog {
   }
 
   /**
-   * Adds a privilege to the given role name. Returns the new RolePrivilege and
+   * Adds a privilege to the given role name. Returns the new PrincipalPrivilege and
    * increments the catalog version. If the parent role does not exist a CatalogException
    * is thrown.
    */
-  public RolePrivilege addRolePrivilege(String roleName, TPrivilege thriftPriv)
+  public PrincipalPrivilege addRolePrivilege(String roleName, TPrivilege thriftPriv)
       throws CatalogException {
+    return addPrincipalPrivilege(roleName, thriftPriv, TPrincipalType.ROLE);
+  }
+
+  /**
+   * Adds a privilege to the given user name. Returns the new PrincipalPrivilege and
+   * increments the catalog version. If the user does not exist a CatalogException is
+   * thrown.
+   */
+  public PrincipalPrivilege addUserPrivilege(String userName, TPrivilege thriftPriv)
+      throws CatalogException {
+    return addPrincipalPrivilege(userName, thriftPriv, TPrincipalType.USER);
+  }
+
+  private PrincipalPrivilege addPrincipalPrivilege(String principalName,
+      TPrivilege thriftPriv, TPrincipalType type) throws CatalogException {
     versionLock_.writeLock().lock();
     try {
-      Role role = authPolicy_.getRole(roleName);
-      if (role == null) throw new CatalogException("Role does not exist: " + roleName);
-      RolePrivilege priv = RolePrivilege.fromThrift(thriftPriv);
+      Principal principal = authPolicy_.getPrincipal(principalName, type);
+      if (principal == null) {
+        throw new CatalogException(String.format("%s does not exist: %s",
+            Principal.toString(type), principalName));
+      }
+      PrincipalPrivilege priv = PrincipalPrivilege.fromThrift(thriftPriv);
       priv.setCatalogVersion(incrementAndGetCatalogVersion());
       authPolicy_.addPrivilege(priv);
       return priv;
@@ -1720,39 +1791,51 @@ public class CatalogServiceCatalog extends Catalog {
   }
 
   /**
-   * Removes a RolePrivilege from the given role name. Returns the removed
-   * RolePrivilege with an incremented catalog version or null if no matching privilege
-   * was found. Throws a CatalogException if no role exists with this name.
+   * Removes a PrincipalPrivilege from the given role name. Returns the removed
+   * PrincipalPrivilege with an incremented catalog version or null if no matching
+   * privilege was found. Throws a CatalogException if no role exists with this name.
    */
-  public RolePrivilege removeRolePrivilege(String roleName, TPrivilege thriftPriv)
+  public PrincipalPrivilege removeRolePrivilege(String roleName, TPrivilege thriftPriv)
       throws CatalogException {
+    return removePrincipalPrivilege(roleName, thriftPriv, TPrincipalType.ROLE);
+  }
+
+  private PrincipalPrivilege removePrincipalPrivilege(String principalName,
+      TPrivilege privilege, TPrincipalType type) throws CatalogException {
     versionLock_.writeLock().lock();
     try {
-      Role role = authPolicy_.getRole(roleName);
-      if (role == null) throw new CatalogException("Role does not exist: " + roleName);
-      RolePrivilege rolePrivilege =
-          role.removePrivilege(thriftPriv.getPrivilege_name());
-      if (rolePrivilege == null) return null;
-      rolePrivilege.setCatalogVersion(incrementAndGetCatalogVersion());
-      deleteLog_.addRemovedObject(rolePrivilege.toTCatalogObject());
-      return rolePrivilege;
+      Principal principal = authPolicy_.getPrincipal(principalName, type);
+      if (principal == null) {
+        throw new CatalogException(String.format("%s does not exist: %s",
+            Principal.toString(type), principalName));
+      }
+      PrincipalPrivilege principalPrivilege =
+          principal.removePrivilege(privilege.getPrivilege_name());
+      if (principalPrivilege == null) return null;
+      principalPrivilege.setCatalogVersion(incrementAndGetCatalogVersion());
+      deleteLog_.addRemovedObject(principalPrivilege.toTCatalogObject());
+      return principalPrivilege;
     } finally {
       versionLock_.writeLock().unlock();
     }
   }
 
   /**
-   * Gets a RolePrivilege from the given role name. Returns the privilege if it exists,
-   * or null if no privilege matching the privilege spec exist.
-   * Throws a CatalogException if the role does not exist.
+   * Gets a PrincipalPrivilege from the given principal name. Returns the privilege
+   * if it exists, or null if no privilege matching the privilege spec exist.
+   * Throws a CatalogException if the principal does not exist.
    */
-  public RolePrivilege getRolePrivilege(String roleName, TPrivilege privSpec)
-      throws CatalogException {
+  public PrincipalPrivilege getPrincipalPrivilege(String principalName,
+      TPrivilege privSpec) throws CatalogException {
     versionLock_.readLock().lock();
     try {
-      Role role = authPolicy_.getRole(roleName);
-      if (role == null) throw new CatalogException("Role does not exist: " + roleName);
-      return role.getPrivilege(privSpec.getPrivilege_name());
+      Principal principal = authPolicy_.getPrincipal(principalName,
+          privSpec.getPrincipal_type());
+      if (principal == null) {
+        throw new CatalogException(Principal.toString(privSpec.getPrincipal_type()) +
+            " does not exist: " + principalName);
+      }
+      return principal.getPrivilege(privSpec.getPrivilege_name());
     } finally {
       versionLock_.readLock().unlock();
     }

@@ -32,6 +32,7 @@ import org.apache.sentry.core.common.Subject;
 import org.apache.sentry.core.model.db.DBModelAuthorizable;
 import org.apache.sentry.policy.db.SimpleDBPolicyEngine;
 import org.apache.sentry.provider.cache.SimpleCacheProviderBackend;
+import org.apache.sentry.provider.cache.SimpleSentryCacheProviderBackend;
 import org.apache.sentry.provider.common.ProviderBackend;
 import org.apache.sentry.provider.common.ProviderBackendContext;
 import org.apache.sentry.provider.common.ResourceAuthorizationProvider;
@@ -79,8 +80,8 @@ public class AuthorizationChecker {
         // Note: The second parameter to the ProviderBackend is a "resourceFile" path
         // which is not used by Impala. We cannot pass 'null' so instead pass an empty
         // string.
-        providerBe = new SimpleCacheProviderBackend(config.getSentryConfig().getConfig(),
-            "");
+        providerBe = new SimpleSentryCacheProviderBackend(
+            config.getSentryConfig().getConfig(), "");
         Preconditions.checkNotNull(policy);
         ProviderBackendContext context = new ProviderBackendContext();
         context.setBindingHandle(policy);
