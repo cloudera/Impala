@@ -812,19 +812,6 @@ public class HdfsTable extends Table {
         // If the partition is null, its HDFS path does not exist, and it was not added
         // to this table's partition list. Skip the partition.
         if (partition == null) continue;
-        if (msPartition.getParameters() != null) {
-          partition.setNumRows(getRowCount(msPartition.getParameters()));
-        }
-        if (!TAccessLevelUtil.impliesWriteAccess(partition.getAccessLevel())) {
-          // TODO: READ_ONLY isn't exactly correct because the it's possible the
-          // partition does not have READ permissions either. When we start checking
-          // whether we can READ from a table, this should be updated to set the
-          // table's access level to the "lowest" effective level across all
-          // partitions. That is, if one partition has READ_ONLY and another has
-          // WRITE_ONLY the table's access level should be NONE.
-          accessLevel_ = TAccessLevel.READ_ONLY;
-        }
-
         Path partDir = FileSystemUtil.createFullyQualifiedPath(
             new Path(msPartition.getSd().getLocation()));
         List<HdfsPartition> parts = partsByPath.get(partDir);
@@ -1074,6 +1061,19 @@ public class HdfsTable extends Table {
           new HdfsPartition(this, msPartition, keyValues, fileFormatDescriptor,
           new ArrayList<FileDescriptor>(), getAvailableAccessLevel(fs, partDirPath));
       partition.checkWellFormed();
+      // Set the partition's #rows.
+      if (msPartition != null && msPartition.getParameters() != null) {
+         partition.setNumRows(getRowCount(msPartition.getParameters()));
+      }
+      if (!TAccessLevelUtil.impliesWriteAccess(partition.getAccessLevel())) {
+          // TODO: READ_ONLY isn't exactly correct because the it's possible the
+          // partition does not have READ permissions either. When we start checking
+          // whether we can READ from a table, this should be updated to set the
+          // table's access level to the "lowest" effective level across all
+          // partitions. That is, if one partition has READ_ONLY and another has
+          // WRITE_ONLY the table's access level should be NONE.
+          accessLevel_ = TAccessLevel.READ_ONLY;
+      }
       return partition;
     } catch (IOException e) {
       throw new CatalogException("Error initializing partition", e);
@@ -1634,18 +1634,6 @@ public class HdfsTable extends Table {
       // If the partition is null, its HDFS path does not exist, and it was not added to
       // this table's partition list. Skip the partition.
       if (partition == null) continue;
-      if (msPartition.getParameters() != null) {
-        partition.setNumRows(getRowCount(msPartition.getParameters()));
-      }
-      if (!TAccessLevelUtil.impliesWriteAccess(partition.getAccessLevel())) {
-        // TODO: READ_ONLY isn't exactly correct because the it's possible the
-        // partition does not have READ permissions either. When we start checking
-        // whether we can READ from a table, this should be updated to set the
-        // table's access level to the "lowest" effective level across all
-        // partitions. That is, if one partition has READ_ONLY and another has
-        // WRITE_ONLY the table's access level should be NONE.
-        accessLevel_ = TAccessLevel.READ_ONLY;
-      }
       refreshPartitionFileMetadata(partition);
     }
   }
