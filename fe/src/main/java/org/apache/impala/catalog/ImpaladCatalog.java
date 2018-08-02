@@ -101,9 +101,9 @@ public class ImpaladCatalog extends Catalog {
   public ImpaladCatalog(String defaultKuduMasterHosts) {
     super();
     defaultKuduMasterHosts_ = defaultKuduMasterHosts;
-    // Ensure the contents of the CatalogObjectVersionQueue instance are cleared when a
+    // Ensure the contents of the CatalogObjectVersionSet instance are cleared when a
     // new instance of ImpaladCatalog is created (see IMPALA-6486).
-    CatalogObjectVersionQueue.INSTANCE.clear();
+    CatalogObjectVersionSet.INSTANCE.clear();
   }
 
   /**
@@ -212,7 +212,7 @@ public class ImpaladCatalog extends Catalog {
       catalogUpdateEventNotifier_.notifyAll();
     }
     return new TUpdateCatalogCacheResponse(catalogServiceId_,
-        CatalogObjectVersionQueue.INSTANCE.getMinimumVersion(), newCatalogVersion);
+        CatalogObjectVersionSet.INSTANCE.getMinimumVersion(), newCatalogVersion);
   }
 
 
@@ -378,13 +378,13 @@ public class ImpaladCatalog extends Catalog {
       newDb.setCatalogVersion(catalogVersion);
       addDb(newDb);
       if (existingDb != null) {
-        CatalogObjectVersionQueue.INSTANCE.updateVersions(
+        CatalogObjectVersionSet.INSTANCE.updateVersions(
             existingDb.getCatalogVersion(), catalogVersion);
-        CatalogObjectVersionQueue.INSTANCE.removeAll(existingDb.getTables());
-        CatalogObjectVersionQueue.INSTANCE.removeAll(
+        CatalogObjectVersionSet.INSTANCE.removeAll(existingDb.getTables());
+        CatalogObjectVersionSet.INSTANCE.removeAll(
             existingDb.getFunctions(null, new PatternMatcher()));
       } else {
-        CatalogObjectVersionQueue.INSTANCE.addVersion(catalogVersion);
+        CatalogObjectVersionSet.INSTANCE.addVersion(catalogVersion);
       }
     }
   }
@@ -421,10 +421,10 @@ public class ImpaladCatalog extends Catalog {
         existingFn.getCatalogVersion() < catalogVersion) {
       db.addFunction(function);
       if (existingFn != null) {
-        CatalogObjectVersionQueue.INSTANCE.updateVersions(
+        CatalogObjectVersionSet.INSTANCE.updateVersions(
             existingFn.getCatalogVersion(), catalogVersion);
       } else {
-        CatalogObjectVersionQueue.INSTANCE.addVersion(catalogVersion);
+        CatalogObjectVersionSet.INSTANCE.addVersion(catalogVersion);
       }
     }
   }
@@ -448,10 +448,10 @@ public class ImpaladCatalog extends Catalog {
     Db db = getDb(thriftDb.getDb_name());
     if (db != null && db.getCatalogVersion() < dropCatalogVersion) {
       removeDb(db.getName());
-      CatalogObjectVersionQueue.INSTANCE.removeVersion(
+      CatalogObjectVersionSet.INSTANCE.removeVersion(
           db.getCatalogVersion());
-      CatalogObjectVersionQueue.INSTANCE.removeAll(db.getTables());
-      CatalogObjectVersionQueue.INSTANCE.removeAll(
+      CatalogObjectVersionSet.INSTANCE.removeAll(db.getTables());
+      CatalogObjectVersionSet.INSTANCE.removeAll(
           db.getFunctions(null, new PatternMatcher()));
     }
   }
@@ -478,7 +478,7 @@ public class ImpaladCatalog extends Catalog {
     if (fn != null && fn.getCatalogVersion() < dropCatalogVersion) {
       LibCacheRemoveEntry(fn.getLocation().getLocation());
       db.removeFunction(thriftFn.getSignature());
-      CatalogObjectVersionQueue.INSTANCE.removeVersion(
+      CatalogObjectVersionSet.INSTANCE.removeVersion(
           fn.getCatalogVersion());
     }
   }
@@ -488,7 +488,7 @@ public class ImpaladCatalog extends Catalog {
     // version of the drop, remove the function.
     if (existingRole != null && existingRole.getCatalogVersion() < dropCatalogVersion) {
       authPolicy_.removeRole(thriftRole.getRole_name());
-      CatalogObjectVersionQueue.INSTANCE.removeAll(existingRole.getPrivileges());
+      CatalogObjectVersionSet.INSTANCE.removeAll(existingRole.getPrivileges());
     }
   }
 
