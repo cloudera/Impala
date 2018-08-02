@@ -102,7 +102,7 @@ public class AuthorizationPolicy implements SentryPrivilegeCache {
     if (existingPrincipal != null) {
       // Remove the principal. This will also clean up the grantGroup mappings.
       removePrincipal(existingPrincipal.getName(), existingPrincipal.getPrincipalType());
-      CatalogObjectVersionQueue.INSTANCE.removeAll(existingPrincipal.getPrivileges());
+      CatalogObjectVersionSet.INSTANCE.removeAll(existingPrincipal.getPrivileges());
       if (existingPrincipal.getId() == principal.getId()) {
         // Copy the privileges from the existing principal.
         for (PrincipalPrivilege p: existingPrincipal.getPrivileges()) {
