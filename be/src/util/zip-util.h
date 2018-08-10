@@ -15,19 +15,30 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef IMPALA_SERVICE_FE_SUPPORT_H
-#define IMPALA_SERVICE_FE_SUPPORT_H
+#ifndef IMPALA_UTIL_ZIP_UTIL_H
+#define IMPALA_UTIL_ZIP_UTIL_H
+
+#include <string>
+
+#include <jni.h>
+
+#include "common/status.h"
 
 namespace impala {
 
-/// InitFeSupport registers native functions with JNI. When the java
-/// function FeSupport.EvalPredicate is called within Impalad, the native
-/// implementation FeSupport_EvalPredicateImpl already exists in Impalad binary.
-/// In order to expose JNI functions from Impalad binary, we need to "register
-/// native functions". See this link:
-///     http://java.sun.com/docs/books/jni/html/other.html#29535
-/// for details.
-void InitFeSupport(bool disable_codegen = true);
+class ZipUtil {
+ public:
+  /// Loads the JNI helper method to extract files from a Zip archive.
+  static void InitJvm();
+
+  /// Extract files from a zip archive to a destination directory in local filesystem.
+  static Status ExtractFiles(const std::string& archive_file,
+      const std::string& destination_dir) WARN_UNUSED_RESULT;
+
+ private:
+  static jclass zip_util_class_;
+  static jmethodID extract_files_method;
+};
 
 }
 #endif

@@ -267,8 +267,10 @@ Status JniUtil::InitJvmPauseMonitor() {
   jmethodID init_jvm_pm_method;
   JniMethodDescriptor init_jvm_pm_desc = {"initPauseMonitor", "()V", &init_jvm_pm_method};
   RETURN_IF_ERROR(JniUtil::LoadStaticJniMethod(env, jni_util_cl_, &init_jvm_pm_desc));
-  RETURN_IF_ERROR(JniUtil::CallJniMethod(jni_util_cl_, init_jvm_pm_method));
-  return Status::OK();
+  return JniCall::static_method(jni_util_cl_, init_jvm_pm_method)
+  // IMPALA-7483 not backported
+  //    .with_primitive_arg(FLAGS_jvm_deadlock_detector_interval_s)
+      .Call();
 }
 
 Status JniUtil::GetJniExceptionMsg(JNIEnv* env, bool log_stack, const string& prefix) {
@@ -308,16 +310,18 @@ Status JniUtil::GetJniExceptionMsg(JNIEnv* env, bool log_stack, const string& pr
 
 Status JniUtil::GetJvmMemoryMetrics(const TGetJvmMemoryMetricsRequest& request,
     TGetJvmMemoryMetricsResponse* result) {
-  return JniUtil::CallJniMethod(jni_util_class(), get_jvm_metrics_id_, request, result);
+  return JniCall::static_method(jni_util_class(), get_jvm_metrics_id_)
+      .with_thrift_arg(request).Call(result);
 }
 
 Status JniUtil::GetJvmThreadsInfo(const TGetJvmThreadsInfoRequest& request,
     TGetJvmThreadsInfoResponse* result) {
-  return JniUtil::CallJniMethod(jni_util_class(), get_jvm_threads_id_, request, result);
+  return JniCall::static_method(jni_util_class(), get_jvm_threads_id_)
+      .with_thrift_arg(request).Call(result);
 }
 
 Status JniUtil::GetJMXJson(TGetJMXJsonResponse* result) {
-  return JniUtil::CallJniMethod(jni_util_class(), get_jmx_json_, result);
+  return JniCall::static_method(jni_util_class(), get_jmx_json_).Call(result);
 }
 
 Status JniUtil::LoadJniMethod(JNIEnv* env, const jclass& jni_class,
