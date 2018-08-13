@@ -108,6 +108,11 @@ public abstract class Table extends CatalogObjectImpl implements FeTable {
   // True if this object is stored in an Impalad catalog cache.
   protected boolean storedInImpaladCatalogCache_ = false;
 
+  // Last used time of this table in nanoseconds as returned by
+  // CatalogdTableInvalidator.nanoTime(). This is only set in catalogd and not used by
+  // impalad.
+  protected long lastUsedTime_;
+
   // Table metrics. These metrics are applicable to all table types. Each subclass of
   // Table can define additional metrics specific to that table type.
   public static final String REFRESH_DURATION_METRIC = "refresh-duration";
@@ -163,6 +168,12 @@ public abstract class Table extends CatalogObjectImpl implements FeTable {
   // to a table stored in the catalog server.
   public boolean isStoredInImpaladCatalogCache() {
     return storedInImpaladCatalogCache_ || RuntimeEnv.INSTANCE.isTestEnv();
+  }
+
+  public long getLastUsedTime() {
+    Preconditions.checkState(lastUsedTime_ != 0 &&
+        !isStoredInImpaladCatalogCache());
+    return lastUsedTime_;
   }
 
   /**
@@ -571,5 +582,17 @@ public abstract class Table extends CatalogObjectImpl implements FeTable {
     if (obj == null) return false;
     if (!(obj instanceof Table)) return false;
     return getFullName().equals(((Table) obj).getFullName());
+  }
+
+  /**
+   *  Updates a table property with the current system time in seconds precision.
+   */
+  public static void updateTimestampProperty(
+      org.apache.hadoop.hive.metastore.api.Table msTbl, String propertyKey) {
+    msTbl.putToParameters(propertyKey, Long.toString(System.currentTimeMillis() / 1000));
+  }
+
+  public void refreshLastUsedTime() {
+    lastUsedTime_ = CatalogdTableInvalidator.nanoTime();
   }
 }
