@@ -422,7 +422,7 @@ if __name__ == "__main__":
   # their download starts as soon as possible.
   packages = map(Package, ["llvm", "kudu",
       "avro", "binutils", "boost", "breakpad", "bzip2", "cmake", "crcutil",
-      "flatbuffers", "gcc", "gflags", "glog", "gperftools", "gtest", "libev",
+      "flatbuffers", "gcc", "gdb", "gflags", "glog", "gperftools", "gtest", "libev",
       "lz4", "openldap", "openssl", "protobuf",
       "rapidjson", "re2", "snappy", "thrift", "tpc-h", "tpc-ds", "zlib"])
   packages.insert(0, Package("llvm", "3.9.1-asserts"))
