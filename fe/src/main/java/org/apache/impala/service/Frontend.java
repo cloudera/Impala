@@ -536,6 +536,7 @@ public class Frontend {
       req.setAlter_db_params(params);
       ddl.op_type = TCatalogOpType.DDL;
       ddl.setDdl_params(req);
+      metadata.setColumns(Collections.<TColumn>emptyList());
     } else {
       throw new IllegalStateException("Unexpected CatalogOp statement type.");
     }
@@ -623,7 +624,7 @@ public class Frontend {
 
   public TGetCatalogMetricsResult getCatalogMetrics() throws ImpalaException {
     TGetCatalogMetricsResult resp = new TGetCatalogMetricsResult();
-    for (Db db : getCatalog().getDbs(PatternMatcher.MATCHER_MATCH_ALL)) {
+    for (FeDb db : getCatalog().getDbs(PatternMatcher.MATCHER_MATCH_ALL)) {
       resp.num_dbs++;
       resp.num_tables += db.getAllTableNames().size();
     }

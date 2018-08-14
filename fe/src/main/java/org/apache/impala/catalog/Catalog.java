@@ -74,9 +74,6 @@ public abstract class Catalog {
       new AtomicReference<ConcurrentHashMap<String, Db>>(
           new ConcurrentHashMap<String, Db>());
 
-  // DB that contains all builtins
-  private static Db builtinsDb_;
-
   // Cache of data sources.
   protected final CatalogObjectCache<DataSource> dataSources_;
 
@@ -87,8 +84,6 @@ public abstract class Catalog {
 
   public Catalog() {
     dataSources_ = new CatalogObjectCache<DataSource>();
-    builtinsDb_ = new BuiltinsDb(BUILTINS_DB);
-    addDb(builtinsDb_);
   }
 
   /**
@@ -102,8 +97,6 @@ public abstract class Catalog {
     this();
     metaStoreClientPool_.initClients(numClients, initialCnxnTimeoutSec);
   }
-
-  public Db getBuiltinsDb() { return builtinsDb_; }
 
   /**
    * Adds a new database to the catalog, replacing any existing database with the same
@@ -285,10 +278,6 @@ public abstract class Catalog {
     Db db = getDb(desc.dbName());
     if (db == null) return null;
     return db.getFunction(desc, mode);
-  }
-
-  public static Function getBuiltin(Function desc, Function.CompareMode mode) {
-    return builtinsDb_.getFunction(desc, mode);
   }
 
   /**

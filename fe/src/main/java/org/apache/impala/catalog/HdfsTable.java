@@ -415,7 +415,8 @@ public class HdfsTable extends Table implements FeFsTable {
     if (fileStatusIter == null) return loadStats;
 
     List<FileDescriptor> newFileDescs = createFileDescriptors(
-        fs, fileStatusIter, hostIndex_, loadStats);
+        fs, fileStatusIter, hostIndex_, partitions.get(0).getFileFormat(),
+        loadStats);
     for (HdfsPartition partition: partitions) {
       partition.setFileDescriptors(newFileDescs);
     }
@@ -440,7 +441,7 @@ public class HdfsTable extends Table implements FeFsTable {
   public static List<FileDescriptor> createFileDescriptors(
       FileSystem fs,
       RemoteIterator<LocatedFileStatus> fileStatusIter,
-      ListMap<TNetworkAddress> hostIndex,
+      ListMap<TNetworkAddress> hostIndex, HdfsFileFormat fileFormat,
       FileMetadataLoadStats loadStats) throws IOException {
     boolean synthesizeFileMd = !FileSystemUtil.supportsStorageIds(fs);
     Reference<Long> numUnknownDiskIds = new Reference<Long>(Long.valueOf(0));
@@ -455,8 +456,8 @@ public class HdfsTable extends Table implements FeFsTable {
       // Block locations are manually synthesized if the underlying fs does not support
       // the block location API.
       if (synthesizeFileMd) {
-        fd = FileDescriptor.createWithSynthesizedBlockMd(fileStatus,
-            partitions.get(0).getFileFormat(), hostIndex);
+        fd = FileDescriptor.createWithSynthesizedBlockMd(fileStatus, fileFormat,
+            hostIndex);
       } else {
         fd = FileDescriptor.create(fileStatus,
             fileStatus.getBlockLocations(), fs, hostIndex, numUnknownDiskIds);

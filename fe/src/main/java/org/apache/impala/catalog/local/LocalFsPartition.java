@@ -242,9 +242,12 @@ public class LocalFsPartition implements FeFsPartition {
 
     try {
       FileSystem fs = partDir.getFileSystem(CONF);
+      // BACKPORT NOTE TODO(todd): should we use getFileFormat below?
+      // Lack of c84782e7466862e85e9ba534faa9f2baf85cc45e IMPALA-5931 is
+      // troublesome.
       fileDescriptors_ = ImmutableList.copyOf(
           HdfsTable.createFileDescriptors(fs, new FakeRemoteIterator<>(stats),
-              table_.getHostIndex(), loadStats));
+              table_.getHostIndex(), getFileFormat(), loadStats));
     } catch (IOException e) {
         throw new LocalCatalogException(String.format(
             "Could not convert files to descriptors for partition %s of table %s",

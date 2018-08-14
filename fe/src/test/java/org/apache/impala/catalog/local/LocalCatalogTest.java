@@ -38,7 +38,6 @@ import org.apache.impala.thrift.TCatalogObjectType;
 import org.apache.impala.thrift.TResultSet;
 import org.apache.impala.util.MetaStoreUtil;
 import org.apache.impala.util.PatternMatcher;
-import org.hamcrest.CoreMatchers;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -53,7 +52,7 @@ public class LocalCatalogTest {
 
   @Before
   public void setupCatalog() {
-    FeSupport.loadLibrary();
+    // FeSupport.loadLibrary(); BACKPORT NOTE: need 88fe1283f1499ad3ebc73a40189b2fe4b5e4a093
     catalog_ = LocalCatalog.create(/*defaultKuduMasterHosts=*/null);
   }
 
@@ -190,7 +189,7 @@ public class LocalCatalogTest {
     // Assert on the generated SQL for the table, but not the table properties, since
     // those might change based on whether this test runs before or after other
     // tests which compute stats, etc.
-    Assert.assertThat(ToSqlUtils.getCreateTableSql(t), CoreMatchers.startsWith(
+    Assert.assertTrue(ToSqlUtils.getCreateTableSql(t).startsWith(
         "CREATE TABLE functional_kudu.alltypes (\n" +
         "  id INT NOT NULL ENCODING AUTO_ENCODING COMPRESSION DEFAULT_COMPRESSION,\n" +
         "  bool_col BOOLEAN NULL ENCODING AUTO_ENCODING COMPRESSION DEFAULT_COMPRESSION,\n" +
@@ -216,7 +215,7 @@ public class LocalCatalogTest {
   public void testHbaseTable() throws Exception {
     LocalHbaseTable t = (LocalHbaseTable) catalog_.getTable("functional_hbase",
         "alltypes");
-    Assert.assertThat(ToSqlUtils.getCreateTableSql(t), CoreMatchers.startsWith(
+    Assert.assertTrue(ToSqlUtils.getCreateTableSql(t).startsWith(
         "CREATE EXTERNAL TABLE functional_hbase.alltypes (\n" +
         "  id INT COMMENT 'Add a comment',\n" +
         "  bigint_col BIGINT,\n" +

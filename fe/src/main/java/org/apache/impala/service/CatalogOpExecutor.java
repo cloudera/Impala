@@ -39,6 +39,7 @@ import org.apache.hadoop.hive.metastore.api.ColumnStatistics;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsData;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsDesc;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
+import org.apache.hadoop.hive.metastore.api.Database;
 import org.apache.hadoop.hive.metastore.api.DecimalColumnStatsData;
 import org.apache.hadoop.hive.metastore.api.DoubleColumnStatsData;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
@@ -536,7 +537,6 @@ public class CatalogOpExecutor {
         case SET_OWNER:
           Preconditions.checkState(params.isSetSet_owner_params());
           alterTableOrViewSetOwner(tbl, params.getSet_owner_params());
-          addSummary(response, "Updated table/view.");
           break;
         default:
           throw new UnsupportedOperationException(
@@ -2731,7 +2731,7 @@ public class CatalogOpExecutor {
     org.apache.hadoop.hive.metastore.api.Table msTbl = tbl.getMetaStoreTable().deepCopy();
     msTbl.setOwner(params.owner_name);
     msTbl.setOwnerType(PrincipalType.valueOf(params.owner_type.name()));
-    applyAlterTable(msTbl, true);
+    applyAlterTable(msTbl);
   }
 
   /**
@@ -3077,7 +3077,7 @@ public class CatalogOpExecutor {
    * Metastore. Otherwise, the caller is responsible for the final update.
    */
   private long updateLastDdlTime(org.apache.hadoop.hive.metastore.api.Table msTbl,
-      MetaStoreClient msClient) throws MetaException, NoSuchObjectException, TException {
+      MetaStoreClient msClient) throws TException {
     Preconditions.checkNotNull(msTbl);
     if (LOG.isTraceEnabled()) {
       LOG.trace("Updating lastDdlTime for table: " + msTbl.getTableName());
@@ -3483,7 +3483,6 @@ public class CatalogOpExecutor {
       }
     }
     addDbToCatalogUpdate(db, response.result);
-    addSummary(response, "Updated database.");
   }
 
   private void addDbToCatalogUpdate(Db db, TCatalogUpdateResult result) {
