@@ -59,7 +59,10 @@ under the License.
     <httpcomponents.core.version>4.4.9</httpcomponents.core.version>
     <yarn-extras.version>${project.version}</yarn-extras.version>
     <eclipse.output.directory>eclipse-classes</eclipse.output.directory>
-    <guava.version>${cdh.guava.version}</guava.version>
+    <!-- Note: we don't use cdh.guava.version because it's more important
+         to match hive-exec.jar, which currently uses a non-harmonized
+         version and leaks itself onto our classpath -->
+    <guava.version>14.0.1</guava.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
 
