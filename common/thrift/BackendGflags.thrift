@@ -79,4 +79,10 @@ struct TBackendGflags {
   // 26: required string authorized_proxy_group_config BACKPORT NOTE: not backported
 
   27: required bool use_local_catalog
+
+  // 28: required bool disable_catalog_data_ops_debug_only NOTE: not backported yet
+
+  29: required i32 local_catalog_cache_mb
+
+  30: required i32 local_catalog_cache_expiration_s
 }
