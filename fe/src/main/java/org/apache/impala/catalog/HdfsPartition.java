@@ -26,6 +26,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
+import javax.annotation.Nonnull;
+
 import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -54,6 +56,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Function;
 import com.google.common.base.Joiner;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
@@ -229,6 +232,35 @@ public class HdfsPartition implements FeFsPartition, PrunablePartition {
     public int compareTo(FileDescriptor otherFd) {
       return getFileName().compareTo(otherFd.getFileName());
     }
+
+    /**
+     * Function to convert from a byte[] flatbuffer to the wrapper class. Note that
+     * this returns a shallow copy which continues to reflect any changes to the
+     * passed byte[].
+     */
+    public static final Function<byte[], FileDescriptor> FROM_BYTES =
+        new Function<byte[], FileDescriptor>() {
+          @Override
+          public FileDescriptor apply(byte[] input) {
+            ByteBuffer bb = ByteBuffer.wrap(input);
+            return new FileDescriptor(FbFileDesc.getRootAsFbFileDesc(bb));
+          }
+        };
+
+    /**
+     * Function to convert from the wrapper class to a raw byte[]. Note that
+     * this returns a shallow copy and callers should not modify the returned array.
+     */
+    public static final Function<FileDescriptor, byte[]> TO_BYTES =
+        new Function<FileDescriptor, byte[]>() {
+          @Override
+          public byte[] apply(FileDescriptor fd) {
+            ByteBuffer bb = fd.fbFileDescriptor_.getByteBuffer();
+            byte[] arr = bb.array();
+            assert bb.arrayOffset() == 0 && bb.remaining() == arr.length;
+            return arr;
+          }
+        };
   }
 
   /**
@@ -443,7 +475,21 @@ public class HdfsPartition implements FeFsPartition, PrunablePartition {
    * It's easy to add per-file metadata to FileDescriptor if this changes.
    */
   private final HdfsStorageDescriptor fileFormatDescriptor_;
-  private List<FileDescriptor> fileDescriptors_;
+
+  /**
+   * The file descriptors of this partition, encoded as flatbuffers. Storing the raw
+   * byte arrays here instead of the FileDescriptor object saves 100 bytes per file
+   * given the following overhead:
+   * - FileDescriptor object:
+   *    - 16 byte object header
+   *    - 8 byte reference to FbFileDesc
+   * - FbFileDesc superclass:
+   *    - 16 byte object header
+   *    - 56-byte ByteBuffer
+   *    - 4-byte padding (objects are word-aligned)
+   */
+  @Nonnull
+  private ImmutableList<byte[]> encodedFileDescriptors_;
   private HdfsPartitionLocationCompressor.Location location_;
   private final static Logger LOG = LoggerFactory.getLogger(HdfsPartition.class);
   private boolean isDirty_ = false;
@@ -591,17 +637,21 @@ public class HdfsPartition implements FeFsPartition, PrunablePartition {
   public LiteralExpr getPartitionValue(int i) { return partitionKeyValues_.get(i); }
   @Override // FeFsPartition
   public List<HdfsPartition.FileDescriptor> getFileDescriptors() {
-    return fileDescriptors_;
+    // Return a lazily transformed list from our internal bytes storage.
+    return Lists.transform(encodedFileDescriptors_, FileDescriptor.FROM_BYTES);
   }
   public void setFileDescriptors(List<FileDescriptor> descriptors) {
-    fileDescriptors_ = descriptors;
+    // Store an eagerly transformed-and-copied list so that we drop the memory usage
+    // of the flatbuffer wrapper.
+    encodedFileDescriptors_ = ImmutableList.copyOf(Lists.transform(
+        descriptors, FileDescriptor.TO_BYTES));
   }
   @Override // FeFsPartition
   public int getNumFileDescriptors() {
-    return fileDescriptors_ == null ? 0 : fileDescriptors_.size();
+    return encodedFileDescriptors_.size();
   }
 
-  public boolean hasFileDescriptors() { return !fileDescriptors_.isEmpty(); }
+  public boolean hasFileDescriptors() { return !encodedFileDescriptors_.isEmpty(); }
 
   // Struct-style class for caching all the information we need to reconstruct an
   // HMS-compatible Partition object, for use in RPCs to the metastore. We do this rather
@@ -697,7 +747,7 @@ public class HdfsPartition implements FeFsPartition, PrunablePartition {
       org.apache.hadoop.hive.metastore.api.Partition msPartition,
       List<LiteralExpr> partitionKeyValues,
       HdfsStorageDescriptor fileFormatDescriptor,
-      Collection<HdfsPartition.FileDescriptor> fileDescriptors, long id,
+      List<HdfsPartition.FileDescriptor> fileDescriptors, long id,
       HdfsPartitionLocationCompressor.Location location, TAccessLevel accessLevel) {
     table_ = table;
     if (msPartition == null) {
@@ -707,7 +757,7 @@ public class HdfsPartition implements FeFsPartition, PrunablePartition {
     }
     location_ = location;
     partitionKeyValues_ = ImmutableList.copyOf(partitionKeyValues);
-    fileDescriptors_ = ImmutableList.copyOf(fileDescriptors);
+    setFileDescriptors(fileDescriptors);
     fileFormatDescriptor_ = fileFormatDescriptor;
     id_ = id;
     accessLevel_ = accessLevel;
@@ -722,7 +772,7 @@ public class HdfsPartition implements FeFsPartition, PrunablePartition {
     // TODO: instead of raising an exception, we should consider marking this partition
     // invalid and moving on, so that table loading won't fail and user can query other
     // partitions.
-    for (FileDescriptor fileDescriptor: fileDescriptors_) {
+    for (FileDescriptor fileDescriptor: fileDescriptors) {
       StringBuilder errorMsg = new StringBuilder();
       if (!getInputFormatDescriptor().getFileFormat().isFileCompressionTypeSupported(
           fileDescriptor.getFileName(), errorMsg)) {
@@ -735,7 +785,7 @@ public class HdfsPartition implements FeFsPartition, PrunablePartition {
       org.apache.hadoop.hive.metastore.api.Partition msPartition,
       List<LiteralExpr> partitionKeyValues,
       HdfsStorageDescriptor fileFormatDescriptor,
-      Collection<HdfsPartition.FileDescriptor> fileDescriptors,
+      List<HdfsPartition.FileDescriptor> fileDescriptors,
       TAccessLevel accessLevel) {
     this(table, msPartition, partitionKeyValues, fileFormatDescriptor, fileDescriptors,
         partitionIdCounter_.getAndIncrement(),
@@ -758,7 +808,7 @@ public class HdfsPartition implements FeFsPartition, PrunablePartition {
   @Override
   public long getSize() {
     long result = 0;
-    for (HdfsPartition.FileDescriptor fileDescriptor: fileDescriptors_) {
+    for (HdfsPartition.FileDescriptor fileDescriptor: getFileDescriptors()) {
       result += fileDescriptor.getFileLength();
     }
     return result;
@@ -767,7 +817,7 @@ public class HdfsPartition implements FeFsPartition, PrunablePartition {
   @Override
   public String toString() {
     return Objects.toStringHelper(this)
-      .add("fileDescriptors", fileDescriptors_)
+      .add("fileDescriptors", getFileDescriptors())
       .toString();
   }
 
