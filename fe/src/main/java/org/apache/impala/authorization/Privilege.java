@@ -57,7 +57,8 @@ public enum Privilege {
     CREATE("create"),
     ALTER("alter"),
     DROP("drop"),
-    ALL("*");
+    ALL("*"),
+    OWNER("owner");
 
     private final String value;
 
