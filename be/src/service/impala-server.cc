@@ -44,6 +44,7 @@
 #include "common/logging.h"
 #include "common/version.h"
 #include "exec/external-data-source-executor.h"
+#include "gen-cpp/CatalogService_constants.h"
 #include "rpc/authentication.h"
 #include "rpc/rpc-trace.h"
 #include "rpc/thrift-thread.h"
@@ -372,10 +373,16 @@ ImpalaServer::ImpalaServer(ExecEnv* exec_env)
           vector<TTopicDelta>* topic_updates) {
         this->CatalogUpdateCallback(state, topic_updates);
       };
+      // The 'local-catalog' implementation only needs minimal metadata to
+      // trigger cache invalidations.
+      // The legacy implementation needs full metadata objects.
+      string filter_prefix = FLAGS_use_local_catalog ?
+        g_CatalogService_constants.CATALOG_TOPIC_V2_PREFIX :
+        g_CatalogService_constants.CATALOG_TOPIC_V1_PREFIX;
       ABORT_IF_ERROR(exec_env->subscriber()->AddTopic(
           CatalogServer::IMPALA_CATALOG_TOPIC, /* is_transient=*/ true,
-          /* populate_min_subscriber_topic_version=*/ true, /* filter_prefix=*/ "",
-          catalog_cb));
+          /* populate_min_subscriber_topic_version=*/ true,
+          filter_prefix, catalog_cb));
     }
   }
 

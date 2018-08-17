@@ -646,6 +646,7 @@ public class CatalogOpExecutor {
   private static void addTableToCatalogUpdate(Table tbl, TCatalogUpdateResult result) {
     Preconditions.checkNotNull(tbl);
     TCatalogObject updatedCatalogObject = tbl.toTCatalogObject();
+    // TODO(todd): if client is a 'v2' impalad, only send back invalidation
     result.addToUpdated_catalog_objects(updatedCatalogObject);
     result.setVersion(updatedCatalogObject.getCatalog_version());
   }
@@ -914,6 +915,7 @@ public class CatalogOpExecutor {
             + "and IF NOT EXISTS was specified.");
       }
       Preconditions.checkNotNull(existingDb);
+      // TODO(todd): if client is a 'v2' impalad, only send back invalidation
       resp.getResult().addToUpdated_catalog_objects(existingDb.toTCatalogObject());
       resp.getResult().setVersion(existingDb.getCatalogVersion());
       return;
@@ -968,6 +970,7 @@ public class CatalogOpExecutor {
       }
 
       Preconditions.checkNotNull(newDb);
+      // TODO(todd): if client is a 'v2' impalad, only send back invalidation
       resp.result.addToUpdated_catalog_objects(newDb.toTCatalogObject());
     }
     resp.result.setVersion(newDb.getCatalogVersion());
@@ -2232,6 +2235,7 @@ public class CatalogOpExecutor {
           newTableName.toString()));
     }
 
+    // TODO(todd): if client is a 'v2' impalad, only send back invalidation
     response.result.addToRemoved_catalog_objects(result.first.toMinimalTCatalogObject());
     response.result.addToUpdated_catalog_objects(result.second.toTCatalogObject());
     response.result.setVersion(result.second.getCatalogVersion());
@@ -3455,6 +3459,7 @@ public class CatalogOpExecutor {
       db.setCatalogVersion(newCatalogVersion);
       TCatalogObject updatedCatalogObject = db.toTCatalogObject();
       updatedCatalogObject.setCatalog_version(newCatalogVersion);
+      // TODO(todd): if client is a 'v2' impalad, only send back invalidation
       result.addToUpdated_catalog_objects(updatedCatalogObject);
       result.setVersion(updatedCatalogObject.getCatalog_version());
     } finally {
