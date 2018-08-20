@@ -18,7 +18,6 @@
 package org.apache.impala.authorization;
 
 import java.util.EnumSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
@@ -130,20 +129,22 @@ public class AuthorizationChecker {
       Privilege privilege = privilegeRequest.getPrivilege();
       if (privilegeRequest.getAuthorizeable() instanceof AuthorizeableFn) {
         throw new AuthorizationException(String.format(
-            "User '%s' does not have privileges to %s functions in: %s",
-            user.getName(), privilege, privilegeRequest.getName()));
+            "User '%s' does not have privileges%s to %s functions in: %s",
+            user.getName(), grantOption(privilegeRequest.hasGrantOption()), privilege,
+            privilegeRequest.getName()));
       }
 
       if (EnumSet.of(Privilege.ANY, Privilege.ALL, Privilege.VIEW_METADATA)
           .contains(privilege)) {
         throw new AuthorizationException(String.format(
-            "User '%s' does not have privileges to access: %s",
-            user.getName(), privilegeRequest.getName()));
+            "User '%s' does not have privileges%s to access: %s",
+            user.getName(), grantOption(privilegeRequest.hasGrantOption()),
+            privilegeRequest.getName()));
       } else if (privilege == Privilege.REFRESH) {
         throw new AuthorizationException(String.format(
-            "User '%s' does not have privileges to execute " +
+            "User '%s' does not have privileges%s to execute " +
             "'INVALIDATE METADATA/REFRESH' on: %s", user.getName(),
-            privilegeRequest.getName()));
+            grantOption(privilegeRequest.hasGrantOption()), privilegeRequest.getName()));
       } else if (privilege == Privilege.CREATE &&
           privilegeRequest.getAuthorizeable() instanceof AuthorizeableTable) {
         // Creating a table requires CREATE on a database and we shouldn't
@@ -151,14 +152,20 @@ public class AuthorizationChecker {
         AuthorizeableTable authorizeableTable =
             (AuthorizeableTable) privilegeRequest.getAuthorizeable();
           throw new AuthorizationException(String.format(
-              "User '%s' does not have privileges to execute '%s' on: %s",
-              user.getName(), privilege, authorizeableTable.getDbName()));
+              "User '%s' does not have privileges%s to execute '%s' on: %s",
+              user.getName(), grantOption(privilegeRequest.hasGrantOption()), privilege,
+              authorizeableTable.getDbName()));
       } else {
         throw new AuthorizationException(String.format(
-            "User '%s' does not have privileges to execute '%s' on: %s",
-            user.getName(), privilege, privilegeRequest.getName()));
+            "User '%s' does not have privileges%s to execute '%s' on: %s",
+            user.getName(), grantOption(privilegeRequest.hasGrantOption()), privilege,
+            privilegeRequest.getName()));
       }
     }
+  }
+
+  private static String grantOption(boolean hasGrantOption) {
+    return hasGrantOption ? " with 'GRANT OPTION'" : "";
   }
 
   /*
@@ -206,6 +213,6 @@ public class AuthorizationChecker {
       authorizeables.remove(authorizeables.size() - 1);
     }
     return provider_.hasAccess(new Subject(user.getShortName()), authorizeables, actions,
-        ActiveRoleSet.ALL);
+        request.hasGrantOption(), ActiveRoleSet.ALL);
   }
 }
