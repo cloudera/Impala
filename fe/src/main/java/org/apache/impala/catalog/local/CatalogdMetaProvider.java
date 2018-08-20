@@ -420,6 +420,8 @@ public class CatalogdMetaProvider implements MetaProvider {
     req.table_info_selector.partition_ids = ids;
     req.table_info_selector.want_partition_metadata = true;
     req.table_info_selector.want_partition_files = true;
+    // TODO(todd): fetch incremental stats on-demand for compute-incremental-stats.
+    req.table_info_selector.want_partition_stats = true;
     TGetPartialCatalogObjectResponse resp = sendRequest(req);
     checkResponse(resp.table_info != null && resp.table_info.partitions != null,
         req, "missing partition list result");
@@ -455,7 +457,8 @@ public class CatalogdMetaProvider implements MetaProvider {
         fds.add(fd.cloneWithNewHostIndex(resp.table_info.network_addresses, hostIndex));
       }
       PartitionMetadataImpl metaImpl = new PartitionMetadataImpl(msPart,
-          ImmutableList.copyOf(fds));
+          ImmutableList.copyOf(fds), part.getPartition_stats(),
+          part.has_incremental_stats);
 
       checkResponse(partRef != null, req, "returned unexpected partition id %s", part.id);
 
@@ -574,11 +577,15 @@ public class CatalogdMetaProvider implements MetaProvider {
   public static class PartitionMetadataImpl implements PartitionMetadata {
     private final Partition msPartition_;
     private final ImmutableList<FileDescriptor> fds_;
+    private final byte[] partitionStats_;
+    private final boolean hasIncrementalStats_;
 
-    public PartitionMetadataImpl(Partition msPartition,
-        ImmutableList<FileDescriptor> fds) {
+    public PartitionMetadataImpl(Partition msPartition, ImmutableList<FileDescriptor> fds,
+        byte[] partitionStats, boolean hasIncrementalStats) {
       this.msPartition_ = Preconditions.checkNotNull(msPartition);
       this.fds_ = fds;
+      this.partitionStats_ = partitionStats;
+      this.hasIncrementalStats_ = hasIncrementalStats;
     }
 
     /**
@@ -592,7 +599,8 @@ public class CatalogdMetaProvider implements MetaProvider {
       for (FileDescriptor fd: fds_) {
         fds.add(fd.cloneWithNewHostIndex(origIndex.getList(), dstIndex));
       }
-      return new PartitionMetadataImpl(msPartition_, ImmutableList.copyOf(fds));
+      return new PartitionMetadataImpl(msPartition_, ImmutableList.copyOf(fds),
+          partitionStats_, hasIncrementalStats_);
     }
 
     @Override
@@ -604,6 +612,12 @@ public class CatalogdMetaProvider implements MetaProvider {
     public ImmutableList<FileDescriptor> getFileDescriptors() {
       return fds_;
     }
+
+    @Override
+    public byte[] getPartitionStats() { return partitionStats_; }
+
+    @Override
+    public boolean hasIncrementalStats() { return hasIncrementalStats_; }
   }
 
   /**
