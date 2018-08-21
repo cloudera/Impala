@@ -62,7 +62,7 @@ class TestTableSample(ImpalaTestSuite):
       rep_sql = ""
       if repeatable: rep_sql = " repeatable(1)"
       result = self.client.execute(
-        "select count(*) from alltypes tablesample system(%s)%s"
+        "select count(*) from alltypes tablesample system(%s)%s %s"
         % (perc, rep_sql, where_clause))
       count = int(result.data[0])
       if perc < 100:

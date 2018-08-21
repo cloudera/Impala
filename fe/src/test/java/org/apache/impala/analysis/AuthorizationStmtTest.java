@@ -1436,25 +1436,6 @@ public class AuthorizationStmtTest extends FrontendTestBase {
         .error(createError("functional"), onDatabase("functional", allExcept(
             TPrivilegeLevel.ALL, TPrivilegeLevel.CREATE)));
 
-    // IMPALA-6451: CTAS for Kudu tables on non-external tables and without
-    // TBLPROPERTIES ('kudu.master_addresses') should not require ALL privileges
-    // on SERVER.
-    // The statement below causes the SQL statement to be rewritten.
-    authorize("create table functional.kudu_tbl primary key (bigint_col) " +
-        "stored as kudu as " +
-        "select bigint_col, string_col, current_timestamp() as ins_date " +
-        "from functional.alltypes " +
-        "where exists (select 1 from functional.alltypes)")
-      .ok(onServer(TPrivilegeLevel.ALL))
-      .ok(onDatabase("functional", TPrivilegeLevel.CREATE, TPrivilegeLevel.INSERT,
-          TPrivilegeLevel.SELECT))
-      .error(createError("functional"))
-      .error(createError("functional"), onServer(allExcept(TPrivilegeLevel.ALL,
-          TPrivilegeLevel.CREATE, TPrivilegeLevel.INSERT, TPrivilegeLevel.SELECT)))
-      .error(createError("functional"), onDatabase("functional", allExcept(
-          TPrivilegeLevel.ALL, TPrivilegeLevel.CREATE, TPrivilegeLevel.INSERT,
-          TPrivilegeLevel.SELECT)));
-
     // Database does not exist.
     authorize("create table nodb.new_table(i int)")
         .error(createError("nodb"))
@@ -1468,8 +1449,6 @@ public class AuthorizationStmtTest extends FrontendTestBase {
   public void testCreateView() throws ImpalaException {
     for (AuthzTest test: new AuthzTest[]{
         authorize("create view functional.new_view as " +
-            "select int_col from functional.alltypes"),
-        authorize("create view functional.new_view(a) as " +
             "select int_col from functional.alltypes")}) {
       test.ok(onServer(TPrivilegeLevel.ALL))
           .ok(onServer(TPrivilegeLevel.CREATE, TPrivilegeLevel.SELECT))
@@ -1815,8 +1794,6 @@ public class AuthorizationStmtTest extends FrontendTestBase {
   public void testAlterView() throws ImpalaException {
     for (AuthzTest test: new AuthzTest[] {
         authorize("alter view functional.alltypes_view as " +
-            "select int_col from functional.alltypes"),
-        authorize("alter view functional.alltypes_view(a) as " +
             "select int_col from functional.alltypes")}) {
       test.ok(onServer(TPrivilegeLevel.ALL))
           .ok(onServer(TPrivilegeLevel.ALTER), onTable("functional", "alltypes",
@@ -2024,53 +2001,6 @@ public class AuthorizationStmtTest extends FrontendTestBase {
             TPrivilegeLevel.ALL, TPrivilegeLevel.SELECT)))
         .error(selectError("functional_kudu.notbl"), onDatabase("functional_kudu",
             allExcept(TPrivilegeLevel.ALL, TPrivilegeLevel.SELECT)));
-  }
-
-  @Test
-  public void testCommentOn() throws ImpalaException {
-    // Comment on database.
-    authorize("comment on database functional is 'comment'")
-        .ok(onServer(TPrivilegeLevel.ALL))
-        .ok(onServer(TPrivilegeLevel.ALTER))
-        .ok(onDatabase("functional", TPrivilegeLevel.ALL))
-        .ok(onDatabase("functional", TPrivilegeLevel.ALTER))
-        .error(alterError("functional"))
-        .error(alterError("functional"), onServer(allExcept(
-            TPrivilegeLevel.ALL, TPrivilegeLevel.ALTER)))
-        .error(alterError("functional"), onDatabase("functional", allExcept(
-            TPrivilegeLevel.ALL, TPrivilegeLevel.ALTER)));
-
-    // Comment on table.
-    authorize("comment on table functional.alltypes is 'comment'")
-        .ok(onServer(TPrivilegeLevel.ALL))
-        .ok(onServer(TPrivilegeLevel.ALTER))
-        .ok(onDatabase("functional", TPrivilegeLevel.ALL))
-        .ok(onDatabase("functional", TPrivilegeLevel.ALTER))
-        .ok(onTable("functional", "alltypes", TPrivilegeLevel.ALL))
-        .ok(onTable("functional", "alltypes", TPrivilegeLevel.ALTER))
-        .error(alterError("functional.alltypes"))
-        .error(alterError("functional.alltypes"), onServer(allExcept(
-            TPrivilegeLevel.ALL, TPrivilegeLevel.ALTER)))
-        .error(alterError("functional.alltypes"), onDatabase("functional", allExcept(
-            TPrivilegeLevel.ALL, TPrivilegeLevel.ALTER)))
-        .error(alterError("functional.alltypes"), onTable("functional", "alltypes",
-            allExcept(TPrivilegeLevel.ALL, TPrivilegeLevel.ALTER)));
-
-    // Comment on view.
-    authorize("comment on view functional.alltypes_view is 'comment'")
-        .ok(onServer(TPrivilegeLevel.ALL))
-        .ok(onServer(TPrivilegeLevel.ALTER))
-        .ok(onDatabase("functional", TPrivilegeLevel.ALL))
-        .ok(onDatabase("functional", TPrivilegeLevel.ALTER))
-        .ok(onTable("functional", "alltypes_view", TPrivilegeLevel.ALL))
-        .ok(onTable("functional", "alltypes_view", TPrivilegeLevel.ALTER))
-        .error(alterError("functional.alltypes_view"))
-        .error(alterError("functional.alltypes_view"), onServer(allExcept(
-            TPrivilegeLevel.ALL, TPrivilegeLevel.ALTER)))
-        .error(alterError("functional.alltypes_view"), onDatabase("functional", allExcept(
-            TPrivilegeLevel.ALL, TPrivilegeLevel.ALTER)))
-        .error(alterError("functional.alltypes_view"), onTable("functional",
-            "alltypes_view", allExcept(TPrivilegeLevel.ALL, TPrivilegeLevel.ALTER)));
   }
 
   @Test

@@ -15,9 +15,11 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import pytest
 from tests.common.impala_test_suite import ImpalaTestSuite
 from tests.common.skip import SkipIfS3, SkipIfADLS, SkipIfIsilon, SkipIfLocal
-from tests.common.test_dimensions import create_single_exec_option_dimension
+from tests.common.test_dimensions import (create_single_exec_option_dimension,
+    create_uncompressed_text_dimension)
 from tests.util.filesystem_utils import WAREHOUSE
 
 # Map from the test dimension file_format string to the SQL "STORED AS"
