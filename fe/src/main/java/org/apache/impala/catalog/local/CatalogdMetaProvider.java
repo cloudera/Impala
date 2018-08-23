@@ -151,7 +151,6 @@ public class CatalogdMetaProvider implements MetaProvider {
         .maximumWeight(cacheSizeBytes)
         .expireAfterAccess(expirationSecs, TimeUnit.SECONDS)
         .weigher(new SizeOfWeigher())
-        .recordStats()
         .build();
   }
 
