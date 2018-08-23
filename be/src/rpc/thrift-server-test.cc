@@ -40,6 +40,7 @@ DECLARE_bool(use_krpc);
 
 DECLARE_string(principal);
 DECLARE_string(be_principal);
+DECLARE_string(keytab_file);
 DECLARE_string(ssl_client_ca_certificate);
 DECLARE_string(ssl_cipher_list);
 DECLARE_string(ssl_minimum_version);
@@ -62,8 +63,9 @@ static const string& PASSWORD_PROTECTED_PRIVATE_KEY =
     Substitute("$0/be/src/testutil/server-key-password.pem", IMPALA_HOME);
 
 // The principal name and the realm used for creating the mini-KDC.
-static const string kdc_principal = "impala/localhost";
-static const string kdc_realm = "KRBTEST.COM";
+static const string principal = "impala/localhost";
+static const string realm = "KRBTEST.COM";
+static string principal_kt_path;
 
 // Only use TLSv1.0 compatible ciphers, as tests might run on machines with only TLSv1.0
 // support.
@@ -109,10 +111,12 @@ class ThriftKerberizedParamsTest :
     if (k == KERBEROS_OFF) {
       FLAGS_principal.clear();
       FLAGS_be_principal.clear();
+      FLAGS_keytab_file.clear();
     } else {
       FLAGS_use_kudu_kinit = k == USE_THRIFT_KUDU_KERBEROS;
       FLAGS_principal = "dummy-service/host@realm";
-      FLAGS_be_principal = strings::Substitute("$0@$1", kdc_principal, kdc_realm);
+      FLAGS_be_principal = strings::Substitute("$0@$1", principal, realm);
+      FLAGS_keytab_file = principal_kt_path;
     }
     ASSERT_OK(InitAuth(CURRENT_EXECUTABLE_PATH));
     ThriftTestBase::SetUp();
@@ -121,6 +125,7 @@ class ThriftKerberizedParamsTest :
   virtual void TearDown() override {
     FLAGS_principal.clear();
     FLAGS_be_principal.clear();
+    FLAGS_keytab_file.clear();
   }
 };
 
@@ -568,8 +573,12 @@ int main(int argc, char** argv) {
 
   int port = impala::FindUnusedEphemeralPort(nullptr);
   std::unique_ptr<impala::MiniKdcWrapper> kdc;
-  Status status = impala::MiniKdcWrapper::SetupAndStartMiniKDC(
-      kdc_principal, kdc_realm, "24h", "7d", port, &kdc);
+  Status status =
+      impala::MiniKdcWrapper::SetupAndStartMiniKDC(realm, "24h", "7d", port, &kdc);
+  DCHECK(status.ok());
+
+  // Create the service principal and keytab used for this test.
+  status = kdc->CreateServiceKeytab(principal, &principal_kt_path);
   DCHECK(status.ok());
 
   // Fill in the path of the current binary for use by the tests.
