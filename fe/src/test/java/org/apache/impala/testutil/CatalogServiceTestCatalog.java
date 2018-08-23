@@ -19,8 +19,8 @@ package org.apache.impala.testutil;
 
 import org.apache.impala.authorization.SentryConfig;
 import org.apache.impala.catalog.AuthorizationPolicy;
-import org.apache.impala.catalog.CatalogException;
 import org.apache.impala.catalog.CatalogServiceCatalog;
+import org.apache.impala.common.ImpalaException;
 import org.apache.impala.thrift.TUniqueId;
 
 /**
@@ -31,7 +31,7 @@ public class CatalogServiceTestCatalog extends CatalogServiceCatalog {
 
   public CatalogServiceTestCatalog(boolean loadInBackground, int numLoadingThreads,
       int initialHmsCnxnTimeoutSec, SentryConfig sentryConfig,
-      TUniqueId catalogServiceId) {
+      TUniqueId catalogServiceId) throws ImpalaException {
     super(loadInBackground, numLoadingThreads, initialHmsCnxnTimeoutSec, sentryConfig,
         catalogServiceId, null, System.getProperty("java.io.tmpdir"));
 
@@ -51,11 +51,11 @@ public class CatalogServiceTestCatalog extends CatalogServiceCatalog {
    * Sentry Policy Service.
    */
   public static CatalogServiceCatalog createWithAuth(SentryConfig config) {
-    CatalogServiceCatalog cs =
-        new CatalogServiceTestCatalog(false, 16, 0, config, new TUniqueId());
+    CatalogServiceCatalog cs;
     try {
+      cs = new CatalogServiceTestCatalog(false, 16, 0, config, new TUniqueId());
       cs.reset();
-    } catch (CatalogException e) {
+    } catch (ImpalaException e) {
       throw new IllegalStateException(e.getMessage(), e);
     }
     return cs;

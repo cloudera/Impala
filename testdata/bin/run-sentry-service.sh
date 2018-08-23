@@ -22,7 +22,16 @@ trap 'echo Error in $0 at line $LINENO: $(cd "'$PWD'" && awk "NR == $LINENO" $0)
 
 . ${IMPALA_HOME}/bin/set-classpath.sh
 
-SENTRY_SERVICE_CONFIG=${SENTRY_CONF_DIR}/sentry-site.xml
+SENTRY_SERVICE_CONFIG=${SENTRY_SERVICE_CONFIG:-}
+
+if [ -z ${SENTRY_SERVICE_CONFIG} ]
+then
+  SENTRY_SERVICE_CONFIG=${SENTRY_CONF_DIR}/sentry-site.xml
+fi
+
+LOGDIR="${IMPALA_CLUSTER_LOGS_DIR}"/sentry
+
+mkdir -p "${LOGDIR}" || true
 
 # First kill any running instances of the service.
 $IMPALA_HOME/testdata/bin/kill-sentry-service.sh
