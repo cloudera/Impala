@@ -26,6 +26,10 @@
 
 #include "common/names.h"
 
+DEFINE_int64(jvm_deadlock_detector_interval_s, 60,
+    "(Advanced) Interval between JVM deadlock checks. If set to 0 or a negative value, "
+    "deadlock checks are disabled.");
+
 namespace impala {
 
 Status JniUtfCharGuard::create(JNIEnv* env, jstring jstr, JniUtfCharGuard* out) {
@@ -265,11 +269,11 @@ Status JniUtil::InitJvmPauseMonitor() {
   if (!env) return Status("Failed to get/create JVM.");
   if (!jni_util_cl_) return Status("JniUtil::Init() not called.");
   jmethodID init_jvm_pm_method;
-  JniMethodDescriptor init_jvm_pm_desc = {"initPauseMonitor", "()V", &init_jvm_pm_method};
+  JniMethodDescriptor init_jvm_pm_desc = {
+      "initPauseMonitor", "(J)V", &init_jvm_pm_method};
   RETURN_IF_ERROR(JniUtil::LoadStaticJniMethod(env, jni_util_cl_, &init_jvm_pm_desc));
   return JniCall::static_method(jni_util_cl_, init_jvm_pm_method)
-  // IMPALA-7483 not backported
-  //    .with_primitive_arg(FLAGS_jvm_deadlock_detector_interval_s)
+      .with_primitive_arg(FLAGS_jvm_deadlock_detector_interval_s)
       .Call();
 }
 
