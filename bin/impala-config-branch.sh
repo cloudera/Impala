@@ -84,7 +84,7 @@ BUILD_REPO_BASE="http://cloudera-build-us-west-1.vpc.cloudera.com/s3/build/${CDH
 # include a -SNAPSHOT (as appropriate).
 export IMPALA_HADOOP_VERSION=3.0.0-${BRANCH}-${CDH_GBN}
 export IMPALA_HADOOP_URL=${BUILD_REPO_BASE}/hadoop-${IMPALA_HADOOP_VERSION}.tar.gz
-export IMPALA_HBASE_VERSION=2.0.0-${BRANCH}-${CDH_GBN}
+export IMPALA_HBASE_VERSION=2.1.0-${BRANCH}-${CDH_GBN}
 export IMPALA_HBASE_URL=${BUILD_REPO_BASE}/hbase-${IMPALA_HBASE_VERSION}.tar.gz
 export IMPALA_HIVE_VERSION=2.1.1-${BRANCH}-${CDH_GBN}
 export IMPALA_HIVE_URL=${BUILD_REPO_BASE}/hive-${IMPALA_HIVE_VERSION}.tar.gz
