@@ -49,8 +49,7 @@ public class JMXJsonUtilTest {
     Preconditions.checkNotNull(rootNode);
     assertTrue("Invalid JSON: "  + jmxJson, rootNode.hasNonNull("beans"));
     List<String> values = rootNode.get("beans").findValuesAsText("name");
-    assertTrue("Invalid JSON: "  + jmxJson,
-        values.contains("java.lang:type=MemoryPool,name=Metaspace"));
+    assertTrue("Invalid JSON: "  + jmxJson, values.contains("java.lang:type=Memory"));
     assertTrue("Invalid JSON: "  + jmxJson, values.contains("java.lang:type=Runtime"));
   }
 }
