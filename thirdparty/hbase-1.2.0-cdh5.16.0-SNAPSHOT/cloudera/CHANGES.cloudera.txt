@@ -1,3 +1,29 @@
+commit d789212ff1e530d853b794ce565de1c053ebf4db
+Author: Mike Drob <mdrob@apache.org>
+Date:   Fri Aug 10 09:40:09 2018 -0500
+
+    CDH-67051 Upgrade c5 jackson version
+    
+    ==C5_APPROVED_BUGFIX== by myoder@cloudera.com
+    
+    Change-Id: I02d4deea6f3d29900dfd984e69c168ec94035f4e
+
+commit 99629ed37b9225be901391efd8d7a914754f46a6
+Author: Huaxiang Sun <huaxiangsun@apache.org>
+Date:   Mon Aug 6 11:17:58 2018 -0700
+
+    HBASE-20997 rebuildUserRegions() does not build ReplicaMapping during master switchover
+    
+    Signed-off-by: tedyu <yuzhihong@gmail.com>
+    Signed-off-by: Pankaj Kumar <Username: pankaj2461t>
+    
+    ==C5_APPROVED_BUGFIX==
+    
+    Change-Id: I3ffa0f95c2e4663f8fc3d3ddf3ae12043ec810c9
+    Reason: Bug
+    Author: Huaxiang Sun
+    Ref: CDH-71609
+
 commit 3d6dcdc5396ad83fe6fd7c2f87bf4290ee65c016
 Author: Sakthi <jatsakthi@cloudera.com>
 Date:   Mon Jul 30 14:30:48 2018 -0700

@@ -1864,10 +1864,16 @@ public class ObjectStore implements RawStore, Configurable {
   @Override
   public void dropPartitions(String dbName, String tblName, final List<String> partNames)
       throws MetaException, NoSuchObjectException {
+    dropPartitionsInternal(dbName, tblName, partNames, true, true);
+  }
+
+  @VisibleForTesting
+  void dropPartitionsInternal(String dbName, String tblName, final List<String> partNames,
+      boolean allowSql, boolean allowJdo) throws MetaException, NoSuchObjectException {
     if (CollectionUtils.isEmpty(partNames)) {
       return;
     }
-    new GetListHelper<Void>(dbName, tblName, true, true) {
+    new GetListHelper<Void>(dbName, tblName, allowSql, allowJdo) {
       @Override
       protected List<Void> getSqlResult(GetHelper<List<Void>> ctx) throws MetaException {
         directSql.dropPartitionsViaSqlFilter(dbName, tblName, partNames);
@@ -6866,7 +6872,12 @@ public class ObjectStore implements RawStore, Configurable {
     try {
       openTransaction();
       // We are not going to verify SD for each partition. Just verify for the table.
-      validateTableCols(table, colNames);
+      // ToDo: we need verify the partition column instead
+      try {
+        validateTableCols(table, colNames);
+      } catch (MetaException me) {
+        LOG.warn("The table does not have the same column definition as its partition.");
+      }
       Query query = queryWrapper.query = pm.newQuery(MPartitionColumnStatistics.class);
       String paramStr = "java.lang.String t1, java.lang.String t2";
       String filter = "tableName == t1 && dbName == t2 && (";

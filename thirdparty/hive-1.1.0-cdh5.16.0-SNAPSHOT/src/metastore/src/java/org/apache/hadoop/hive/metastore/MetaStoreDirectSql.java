@@ -64,7 +64,9 @@ import org.apache.hadoop.hive.metastore.api.SkewedInfo;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hadoop.hive.metastore.model.MDatabase;
+import org.apache.hadoop.hive.metastore.model.MPartitionColumnPrivilege;
 import org.apache.hadoop.hive.metastore.model.MPartitionColumnStatistics;
+import org.apache.hadoop.hive.metastore.model.MPartitionPrivilege;
 import org.apache.hadoop.hive.metastore.model.MTableColumnStatistics;
 import org.apache.hadoop.hive.metastore.parser.ExpressionTree;
 import org.apache.hadoop.hive.metastore.parser.ExpressionTree.FilterBuilder;
@@ -182,6 +184,7 @@ class MetaStoreDirectSql {
       doCommit = true;
     }
     Query dbQuery = null, tblColumnQuery = null, partColumnQuery = null;
+    Query partPrivQuery = null, partColumnPrivQuery = null;
 
     try {
       // Force the underlying db to initialize.
@@ -193,6 +196,12 @@ class MetaStoreDirectSql {
 
       partColumnQuery = pm.newQuery(MPartitionColumnStatistics.class, "dbName == ''");
       partColumnQuery.execute();
+
+      partPrivQuery = pm.newQuery(MPartitionPrivilege.class, "principalName == ''");
+      partPrivQuery.execute();
+
+      partColumnPrivQuery = pm.newQuery(MPartitionColumnPrivilege.class, "principalName == ''");
+      partColumnPrivQuery.execute();
 
       return true;
     } catch (Exception ex) {
