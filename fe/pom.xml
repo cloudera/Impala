@@ -422,7 +422,7 @@ under the License.
         <configuration>
           <reportsDirectory>${surefire.reports.dir}</reportsDirectory>
           <redirectTestOutputToFile>true</redirectTestOutputToFile>
-          <argLine>-Djava.library.path=${java.library.path}:${backend.library.path} ${surefireJacocoArg}</argLine>
+          <argLine>-XX:MaxPermSize=128m -Djava.library.path=${java.library.path}:${backend.library.path} ${surefireJacocoArg}</argLine>
           <systemProperties>
             <property>
               <name>testExecutionMode</name>
