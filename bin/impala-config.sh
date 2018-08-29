@@ -537,11 +537,6 @@ export USER="${USER-`id -un`}"
 export LIBHDFS_OPTS="${LIBHDFS_OPTS:-} -Djava.library.path=${HADOOP_LIB_DIR}/native/"
 LIBHDFS_OPTS+=" -XX:ErrorFile=${IMPALA_LOGS_DIR}/hs_err_pid%p.log"
 
-
-# IMPALA-5080: Our use of PermGen space sometimes exceeds the default maximum while
-# running tests that load UDF jars.
-LIBHDFS_OPTS="${LIBHDFS_OPTS} -XX:MaxPermSize=128m"
-
 export IMPALA_SNAPPY_PATH="${IMPALA_TOOLCHAIN}/snappy-${IMPALA_SNAPPY_VERSION}/lib"
 
 export JAVA_LIBRARY_PATH="${IMPALA_SNAPPY_PATH}"

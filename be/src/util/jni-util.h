@@ -26,6 +26,11 @@
 #include "common/status.h"
 #include "gen-cpp/Frontend_types.h"
 
+// May not be defined when compiled against an older Java version.
+#ifndef JNI_VERSION_1_8
+#define JNI_VERSION_1_8 0x00010008
+#endif
+
 #define THROW_IF_ERROR_WITH_LOGGING(stmt, env, adaptor) \
   do { \
     Status status = (stmt); \
@@ -376,6 +381,12 @@ class JniUtil {
   }
 
  private:
+
+  /// Set minimum MaxPermSize if not already set in JAVA_TOOL_OPTIONS. This is skipped for
+  /// Java versions 1.8 or later since they do not support this option. This is done to
+  /// prevent perm-gen OOMs in the JVMs.
+  static Status CheckAndSetMaxPermSize() WARN_UNUSED_RESULT;
+
   // Set in Init() once the JVM is initialized.
   static bool jvm_inited_;
   static jclass jni_util_cl_;

@@ -22,6 +22,7 @@
 
 #include "common/status.h"
 #include "rpc/jni-thrift-util.h"
+#include "util/test-info.h"
 
 #include "common/names.h"
 
@@ -122,7 +123,58 @@ Status JniUtil::LocalToGlobalRef(JNIEnv* env, jobject local_ref, jobject* global
   return Status::OK();
 }
 
+Status JniUtil::CheckAndSetMaxPermSize() {
+  // Frontend tests have it set via maven configuration.
+  if (TestInfo::is_fe_test()) return Status::OK();
+  // Validate the Java version in use based on the supported JNI version. This is not
+  // totally accurate since Java 6 and Java 7 use the same JNI spec. However
+  // we just need to know whether we are on Java 8 or later so that we can skip
+  // setting -XX::MaxPermSize.
+  JavaVMInitArgs vm_args;
+  vm_args.version = JNI_VERSION_1_8;
+  // JNI_GetDefaultJavaVMInitArgs() checks if the linked JVM supports a given
+  // JNI version. We noticed that it does not update the input vm_args on return
+  // as advertised in the documentation.
+  if (JNI_GetDefaultJavaVMInitArgs(&vm_args) == JNI_OK) {
+    // Java 8 does not use perm-gen space. Nothing to do.
+    return Status::OK();
+  }
+
+  // Make sure that the JVM has not already been spawned.
+  const jsize vm_buf_len = 1;
+  JavaVM* vm_buf[vm_buf_len];
+  jint num_vms = 0;
+  if (JNI_GetCreatedJavaVMs(&vm_buf[0], vm_buf_len, &num_vms) != JNI_OK) {
+    return Status("JNI_GetCreatedJavaVMs() failed.");
+  }
+  if (num_vms) {
+    return Status("JVM has already been spawned. Aborting CheckAndSetMaxPermSize().");
+  }
+  // We only check for JAVA_TOOL_OPTIONS that the end users are expected to
+  // override. Ideally one can also add the VM options to LIBHDFS_OPTS that
+  // the libhdfs wrapper accepts but that is only used by the test infrastructure.
+  const char* env_var = "JAVA_TOOL_OPTIONS";
+  string opts_to_set;
+  const char* get_env_result;
+  if ((get_env_result = getenv(env_var)) != nullptr) {
+    opts_to_set = get_env_result;
+  }
+  if (opts_to_set.find("-XX:MaxPermSize") == string::npos) {
+    // Not set, append to the VM options.
+    opts_to_set += " -XX:MaxPermSize=128m";
+  } else {
+    // Already set, return.
+    return Status::OK();
+  }
+  if (setenv(env_var, opts_to_set.c_str(), 1) < 0) {
+    return Status("Error setting -XX:MaxPermSize in JAVA_TOOL_OPTS");
+  }
+  VLOG(1) << "Using JAVA_TOOL_OPTIONS: " << opts_to_set;
+  return Status::OK();
+}
+
 Status JniUtil::Init() {
+  RETURN_IF_ERROR(CheckAndSetMaxPermSize());
   // Get the JNIEnv* corresponding to current thread.
   JNIEnv* env = getJNIEnv();
   if (env == NULL) return Status("Failed to get/create JVM");
