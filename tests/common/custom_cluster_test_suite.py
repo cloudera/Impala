@@ -18,8 +18,10 @@
 # Superclass for all tests that need a custom cluster.
 # TODO: Configure cluster size and other parameters.
 
+import logging
 import os
 import os.path
+import pipes
 import pytest
 import re
 from subprocess import check_call
@@ -148,6 +150,8 @@ class CustomClusterTestSuite(ImpalaTestSuite):
       cmd.append("--impalad_args=%s --catalogd_args=%s" %
                  ("--pull_incremental_statistcs", "--pull_incremental_statistics"))
 
+    logging.info("Starting cluster with command: %s" %
+                 " ".join(pipes.quote(arg) for arg in cmd + options))
     try:
       check_call(cmd + options, close_fds=True)
     finally:
