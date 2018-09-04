@@ -1,7 +1,7 @@
 From 3d6dcdc5396ad83fe6fd7c2f87bf4290ee65c016 Mon Sep 17 00:00:00 2001
 From: Sakthi <jatsakthi@cloudera.com>
 Date: Mon, 30 Jul 2018 14:30:48 -0700
-Subject: [PATCH 471/473] CDH-69839: HBASE-20723 Custom hbase.wal.dir results
+Subject: [PATCH 471/474] CDH-69839: HBASE-20723 Custom hbase.wal.dir results
  in data loss because we write recovered edits into
  a different place than where the recovering region
  server looks for them ==C5_APPROVED_BUGFIX==

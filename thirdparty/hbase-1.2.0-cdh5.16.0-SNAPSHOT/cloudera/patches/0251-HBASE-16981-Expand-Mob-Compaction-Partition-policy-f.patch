@@ -1,7 +1,7 @@
 From e546cda1abded40c17d65f9b949944b940177c57 Mon Sep 17 00:00:00 2001
 From: Huaxiang Sun <hsun@cloudera.com>
 Date: Wed, 15 Feb 2017 17:58:25 -0800
-Subject: [PATCH 251/473] HBASE-16981 Expand Mob Compaction Partition policy
+Subject: [PATCH 251/474] HBASE-16981 Expand Mob Compaction Partition policy
  from daily to weekly, monthly
 
 Support weekly and monthly mob compact partition policies in addition to the existing

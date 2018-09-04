@@ -1,7 +1,7 @@
 From e19c09f6a1c93b57f905bffb5ae8e98d0ebd54c0 Mon Sep 17 00:00:00 2001
 From: Michael Stack <stack@apache.org>
 Date: Thu, 15 Jun 2017 22:03:34 -0700
-Subject: [PATCH 363/473] CDH-55446 Investigate deadlock in HBase 5.12 Fix a
+Subject: [PATCH 363/474] CDH-55446 Investigate deadlock in HBase 5.12 Fix a
  bad backport identified by Huaxiang Sun
 
 Change-Id: Id3d2dce7402e4475887f752c62848d080ed0f3bd

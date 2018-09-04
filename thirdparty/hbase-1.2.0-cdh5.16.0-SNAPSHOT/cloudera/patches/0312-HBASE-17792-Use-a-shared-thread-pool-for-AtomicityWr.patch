@@ -1,7 +1,7 @@
 From 48c5dbb69ae954387346f1d887f16eb7839c36b8 Mon Sep 17 00:00:00 2001
 From: Michael Stack <stack@apache.org>
 Date: Thu, 16 Mar 2017 15:15:28 -0700
-Subject: [PATCH 312/473] HBASE-17792 Use a shared thread pool for
+Subject: [PATCH 312/474] HBASE-17792 Use a shared thread pool for
  AtomicityWriter, AtomicGetReader,
  AtomicScanReader's connections in
  TestAcidGuarantees

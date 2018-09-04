@@ -1,7 +1,7 @@
 From 82207266c9d8177797770f7dc3b9b0bfca04e035 Mon Sep 17 00:00:00 2001
 From: Michael Stack <stack@apache.org>
 Date: Fri, 10 Mar 2017 19:50:53 -0800
-Subject: [PATCH 317/473] HBASE-17772 IntegrationTestRSGroup won't run
+Subject: [PATCH 317/474] HBASE-17772 IntegrationTestRSGroup won't run
 
 Reason: Bug
 Author: Stack

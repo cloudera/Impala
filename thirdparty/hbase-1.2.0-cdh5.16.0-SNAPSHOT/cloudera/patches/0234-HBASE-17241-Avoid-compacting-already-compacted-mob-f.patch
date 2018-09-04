@@ -1,7 +1,7 @@
 From eaef77df9382c492832bc9fd16ece114b03c8d41 Mon Sep 17 00:00:00 2001
 From: Huaxiang Sun <hsun@cloudera.com>
 Date: Wed, 7 Dec 2016 14:14:19 -0800
-Subject: [PATCH 234/473] HBASE-17241 Avoid compacting already compacted mob
+Subject: [PATCH 234/474] HBASE-17241 Avoid compacting already compacted mob
  files with _del files (huaxiang sun)
 
 Author: Huaxiang Sun

@@ -1,7 +1,7 @@
 From 46a0afed522cb5fda84dc6ab97ce41d3840808f7 Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@cloudera.com>
 Date: Thu, 9 Feb 2017 18:29:32 -0800
-Subject: [PATCH 247/473] HBASE-17558 ZK dumping jsp should escape HTML.
+Subject: [PATCH 247/474] HBASE-17558 ZK dumping jsp should escape HTML.
 
 Signed-off-by: Enis Soztutar <enis@apache.org>
 (cherry picked from commit c74bf5a324ce51a139cbd4d1548c8207480ef0cf)

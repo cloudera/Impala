@@ -1,7 +1,7 @@
 From fe19fee0cf077b87cba5b678f0a897fa721f1714 Mon Sep 17 00:00:00 2001
 From: Jerry He <jerryjch@apache.org>
 Date: Wed, 21 Sep 2016 13:31:18 -0700
-Subject: [PATCH 294/473] HBASE-12949 Scanner can be stuck in infinite loop if
+Subject: [PATCH 294/474] HBASE-12949 Scanner can be stuck in infinite loop if
  the HFile is corrupted
 
 (cherry picked from commit c80d671a062737c806d4e20a992443e9b6b86b02)

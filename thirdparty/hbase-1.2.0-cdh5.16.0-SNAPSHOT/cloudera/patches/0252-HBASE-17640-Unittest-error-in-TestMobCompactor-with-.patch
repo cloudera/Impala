@@ -1,7 +1,7 @@
 From c8537d37885cc6d938c7ab6e98393a018717e372 Mon Sep 17 00:00:00 2001
 From: Huaxiang Sun <hsun@cloudera.com>
 Date: Wed, 15 Feb 2017 11:23:04 +0800
-Subject: [PATCH 252/473] HBASE-17640 Unittest error in TestMobCompactor with
+Subject: [PATCH 252/474] HBASE-17640 Unittest error in TestMobCompactor with
  different timezone (Huaxiang Sun)
 
 Signed-off-by: Jingcheng Du <jingchengdu@apache.org>

@@ -1,7 +1,7 @@
 From 7d9205d02db4275a0f869d8465b3f261b778017f Mon Sep 17 00:00:00 2001
 From: huaxiangsun <huaxiangsun@apache.org>
 Date: Fri, 19 Jan 2018 11:22:00 -0800
-Subject: [PATCH 447/473] HBASE-19163 "Maximum lock count exceeded" from
+Subject: [PATCH 447/474] HBASE-19163 "Maximum lock count exceeded" from
  region server's batch processing
 
 Signed-off-by: Umesh Agashe <uagashe@cloudera.com>

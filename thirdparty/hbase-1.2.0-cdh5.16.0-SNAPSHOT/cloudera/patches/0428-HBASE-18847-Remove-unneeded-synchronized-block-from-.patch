@@ -1,7 +1,7 @@
 From f0dc34c162e606f42167522710bfb14115a8ba29 Mon Sep 17 00:00:00 2001
 From: Rich Howarth <rich@rhowarth.org>
 Date: Thu, 21 Sep 2017 17:31:32 -0400
-Subject: [PATCH 428/473] HBASE-18847 Remove unneeded synchronized block from
+Subject: [PATCH 428/474] HBASE-18847 Remove unneeded synchronized block from
  HFileWriterV2 warning in branch-1.2
 
 Signed-off-by: Chia-Ping Tsai <chia7712@gmail.com>

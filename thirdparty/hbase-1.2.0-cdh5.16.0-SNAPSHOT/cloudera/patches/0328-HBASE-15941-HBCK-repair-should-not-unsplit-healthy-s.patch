@@ -1,7 +1,7 @@
 From 908c41517e34c21b546ec57d08b09d05847a5080 Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@apache.org>
 Date: Tue, 7 Mar 2017 01:00:48 -0800
-Subject: [PATCH 328/473] HBASE-15941 HBCK repair should not unsplit healthy
+Subject: [PATCH 328/474] HBASE-15941 HBCK repair should not unsplit healthy
  splitted region
 
 Signed-off-by: Michael Stack <stack@apache.org>

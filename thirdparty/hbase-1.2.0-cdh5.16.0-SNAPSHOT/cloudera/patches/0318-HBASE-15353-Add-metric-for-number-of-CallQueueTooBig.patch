@@ -1,7 +1,7 @@
 From a8b6fc647f41543f83ba24867d5e9142bc06f880 Mon Sep 17 00:00:00 2001
 From: Jingcheng Du <jingcheng.du@intel.com>
 Date: Fri, 24 Jun 2016 14:39:53 +0800
-Subject: [PATCH 318/473] HBASE-15353 Add metric for number of
+Subject: [PATCH 318/474] HBASE-15353 Add metric for number of
  CallQueueTooBigException's
 
 (cherry picked from commit 687c70c96339fccace6db1e0f327d11fe9f0c2a4)

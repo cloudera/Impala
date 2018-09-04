@@ -1193,9 +1193,9 @@ public class HiveMetaStore extends ThriftHiveMetastore {
               // Drop the table but not its data
               drop_table(name, table.getTableName(), false);
             }
-
-            startIndex = endIndex;
           }
+
+          startIndex = endIndex;
         }
 
         if (ms.dropDatabase(name)) {

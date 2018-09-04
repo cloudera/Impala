@@ -1,7 +1,7 @@
 From fe050ceef27f7020b29dfd016fd967ae7c957405 Mon Sep 17 00:00:00 2001
 From: Yu Li <liyu@apache.org>
 Date: Thu, 18 Aug 2016 09:59:36 +0800
-Subject: [PATCH 286/473] HBASE-16429 FSHLog: deadlock if rollWriter called
+Subject: [PATCH 286/474] HBASE-16429 FSHLog: deadlock if rollWriter called
  when ring buffer filled with appends
 
 Change-Id: Ifd8e0cd318a16c6d0343f03ef6217cecb74f5658

@@ -1,7 +1,7 @@
 From f8b8c7fda4f0bae6ad328491cc86df58e16ca989 Mon Sep 17 00:00:00 2001
 From: Junegunn Choi <junegunn.c@gmail.com>
 Date: Wed, 21 Dec 2016 12:37:20 +0900
-Subject: [PATCH 392/473] HBASE-17352 Fix hbase-assembly build with bash 4
+Subject: [PATCH 392/474] HBASE-17352 Fix hbase-assembly build with bash 4
 
 Signed-off-by: tedyu <yuzhihong@gmail.com>
 

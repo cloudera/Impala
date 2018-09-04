@@ -1,7 +1,7 @@
 From e12ff11a7c2302858d3d42893273fa8d2dd298d0 Mon Sep 17 00:00:00 2001
 From: Josh Elser <elserj@apache.org>
 Date: Thu, 31 May 2018 13:02:53 -0400
-Subject: [PATCH 468/473] HBASE-20664 Reduce the broad scope of outToken in
+Subject: [PATCH 468/474] HBASE-20664 Reduce the broad scope of outToken in
  ThriftHttpServlet
 
 Signed-off-by: Andrew Purtell <apurtell@apache.org>

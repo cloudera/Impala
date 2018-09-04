@@ -1,7 +1,7 @@
 From 11dd94b0f3ca3824aa2c77b87398d638368c9812 Mon Sep 17 00:00:00 2001
 From: Phil Yang <ud1937@gmail.com>
 Date: Fri, 22 Jul 2016 11:58:48 +0800
-Subject: [PATCH 291/473] HBASE-16266 Do not throw ScannerTimeoutException
+Subject: [PATCH 291/474] HBASE-16266 Do not throw ScannerTimeoutException
  when catch UnknownScannerException
 
 Reason: Improvement

@@ -1,3 +1,17 @@
+commit 39de958b3a3fce347614273f81e7b3602ef9ddae
+Author: Andrew Purtell <apurtell@apache.org>
+Date:   Thu Apr 26 15:38:40 2018 -0700
+
+    HBASE-20493 Port HBASE-19994 (Create a new class for RPC throttling exception, make it retryable) to branch-1
+    
+    Reason: Feature
+    Author: Andrew Purtell
+    Ref: CDH-67775
+    
+    ==C5_APPROVED_BUGFIX==
+    
+    Change-Id: Ifdcea577fb65a16ff2739c5d03a628e7d8d09948
+
 commit d789212ff1e530d853b794ce565de1c053ebf4db
 Author: Mike Drob <mdrob@apache.org>
 Date:   Fri Aug 10 09:40:09 2018 -0500

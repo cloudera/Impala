@@ -1,7 +1,7 @@
 From 89812888f6fd310940771d323a5c4358726391d9 Mon Sep 17 00:00:00 2001
 From: Matteo Bertozzi <matteo.bertozzi@cloudera.com>
 Date: Mon, 26 Sep 2016 12:58:04 -0700
-Subject: [PATCH 268/473] HBASE-16649 Truncate table with splits preserved can
+Subject: [PATCH 268/474] HBASE-16649 Truncate table with splits preserved can
  cause both data loss and truncated data appeared
  again
 

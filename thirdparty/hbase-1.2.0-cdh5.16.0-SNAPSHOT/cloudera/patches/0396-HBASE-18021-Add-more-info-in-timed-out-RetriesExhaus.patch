@@ -1,7 +1,7 @@
 From b03254a5ab93af721baf1b72c31d28d1bd5cf2f0 Mon Sep 17 00:00:00 2001
 From: Michael Stack <stack@apache.org>
 Date: Thu, 11 May 2017 17:23:43 -0700
-Subject: [PATCH 396/473] HBASE-18021 Add more info in timed out
+Subject: [PATCH 396/474] HBASE-18021 Add more info in timed out
  RetriesExhaustedException for read replica client
  get processing (Huaxiang Sun)
 

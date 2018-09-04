@@ -1,7 +1,7 @@
 From 05845bffc18d7f3acae8f31736f0d19558c44763 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Wed, 9 Mar 2016 09:28:54 -0800
-Subject: [PATCH 245/473] HBASE-15378 Scanner cannot handle heartbeat message
+Subject: [PATCH 245/474] HBASE-15378 Scanner cannot handle heartbeat message
  with no results (Phil Yang)
 
 Author: Phil Yang

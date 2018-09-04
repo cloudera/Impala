@@ -1,7 +1,7 @@
 From 7103e79fe7ff0d2a6cfb5fb606d08f0acb6f12c7 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Mon, 28 Mar 2016 16:53:27 -0700
-Subject: [PATCH 377/473] HBASE-15548 SyncTable: sourceHashDir is supposed to
+Subject: [PATCH 377/474] HBASE-15548 SyncTable: sourceHashDir is supposed to
  be optional but won't work without (Dave Latham)
 
 (cherry picked from commit 78d7efe68e3f427fd3a668307dd11c9a82522640)

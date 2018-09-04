@@ -1,7 +1,7 @@
 From 388b482e9af5d197121757a037803e1e023986d2 Mon Sep 17 00:00:00 2001
 From: Apekshit Sharma <appy@apache.org>
 Date: Thu, 16 Feb 2017 02:00:37 -0800
-Subject: [PATCH 280/473] HBASE-17654 RSGroup refactoring.
+Subject: [PATCH 280/474] HBASE-17654 RSGroup refactoring.
 
 Changes contain:
 - Making rsGroupInfoManager non-static in RSGroupAdminEndpoint

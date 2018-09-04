@@ -1,7 +1,7 @@
 From 43c9c1d3ee397951ed8b004010747dda64e27d4f Mon Sep 17 00:00:00 2001
 From: Pankaj Kumar <pankaj.kr@huawei.com>
 Date: Sat, 8 Oct 2016 12:29:06 +0800
-Subject: [PATCH 301/473] HBASE-16663 JMX ConnectorServer stopped when
+Subject: [PATCH 301/474] HBASE-16663 JMX ConnectorServer stopped when
  unauthorized user try to stop HM/RS/cluster
 
 Signed-off-by: Andrew Purtell <apurtell@apache.org>

@@ -1,7 +1,7 @@
 From 859e43dd2f8ee6a8d5043f45a6bab52866a73f03 Mon Sep 17 00:00:00 2001
 From: zhangduo <zhangduo@apache.org>
 Date: Sun, 18 Sep 2016 10:05:27 +0800
-Subject: [PATCH 264/473] HBASE-16165 Decrease RpcServer.callQueueSize before
+Subject: [PATCH 264/474] HBASE-16165 Decrease RpcServer.callQueueSize before
  writeResponse causes OOM (Guanghao Zhang)
 
 Change-Id: Ibb4f72de499063e2aa0319af5989c43a5ef718d2

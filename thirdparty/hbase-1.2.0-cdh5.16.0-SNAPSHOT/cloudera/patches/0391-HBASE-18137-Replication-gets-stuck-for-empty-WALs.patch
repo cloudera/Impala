@@ -1,7 +1,7 @@
 From 679e9a50f3f85fbff6ca8e4d82c26370d5bdaf2e Mon Sep 17 00:00:00 2001
 From: Vincent <vincentpoon@gmail.com>
 Date: Wed, 7 Jun 2017 14:48:45 -0700
-Subject: [PATCH 391/473] HBASE-18137 Replication gets stuck for empty WALs
+Subject: [PATCH 391/474] HBASE-18137 Replication gets stuck for empty WALs
 
 Signed-off-by: Andrew Purtell <apurtell@apache.org>
 

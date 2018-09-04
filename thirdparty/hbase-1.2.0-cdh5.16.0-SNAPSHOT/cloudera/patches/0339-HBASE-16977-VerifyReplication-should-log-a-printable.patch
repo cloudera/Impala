@@ -1,7 +1,7 @@
 From 333c5a5a48b5b6cd36258079bc171176ef6b6ad0 Mon Sep 17 00:00:00 2001
 From: Ashu Pachauri <ashu210890@gmail.com>
 Date: Thu, 9 Mar 2017 12:28:32 -0800
-Subject: [PATCH 339/473] HBASE-16977 VerifyReplication should log a printable
+Subject: [PATCH 339/474] HBASE-16977 VerifyReplication should log a printable
  representation of the row keys
 
 Signed-off-by: Gary Helmling <garyh@apache.org>

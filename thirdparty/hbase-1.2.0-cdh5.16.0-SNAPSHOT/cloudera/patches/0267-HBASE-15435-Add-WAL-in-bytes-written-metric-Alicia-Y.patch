@@ -1,7 +1,7 @@
 From 0584960403535b155bc8cea398836de48f6b46f0 Mon Sep 17 00:00:00 2001
 From: Enis Soztutar <enis@apache.org>
 Date: Thu, 10 Mar 2016 19:30:31 -0800
-Subject: [PATCH 267/473] HBASE-15435 Add WAL (in bytes) written metric
+Subject: [PATCH 267/474] HBASE-15435 Add WAL (in bytes) written metric
  (Alicia Ying Shu)
 
 Change-Id: If2c707332060398745962a4ffc1f14a518286c9f

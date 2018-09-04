@@ -1,7 +1,7 @@
 From c3a9fa401dd39e846479c9e3ca4f2d19634e0ff0 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Sun, 21 May 2017 06:39:33 -0700
-Subject: [PATCH 376/473] HBASE-18035 Meta replica does not give any
+Subject: [PATCH 376/474] HBASE-18035 Meta replica does not give any
  primaryOperationTimeout to primary meta region
  (huaxiang sun)
 

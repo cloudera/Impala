@@ -1,7 +1,7 @@
 From dde9d30be04244b6a17d7140eb168955610ea55a Mon Sep 17 00:00:00 2001
 From: Stephen Yuan Jiang <syuanjiangdev@gmail.com>
 Date: Sat, 23 Jul 2016 20:21:32 -0700
-Subject: [PATCH 460/473] HBASE-16008 A robust way deal with early termination
+Subject: [PATCH 460/474] HBASE-16008 A robust way deal with early termination
  of HBCK (Stephen Yuan Jiang)
 
 (cherry picked from commit a8dd359d7e2c1f6c92eaed3fdcb6d7455aae4ef8)

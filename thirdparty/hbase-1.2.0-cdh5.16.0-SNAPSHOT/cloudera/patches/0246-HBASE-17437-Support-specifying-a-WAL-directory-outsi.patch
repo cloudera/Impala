@@ -1,7 +1,7 @@
 From be7f848a31aa324e70bd5b0a681c173021c08b5c Mon Sep 17 00:00:00 2001
 From: Zach York <zyork@amazon.com>
 Date: Wed, 11 Jan 2017 12:49:20 -0800
-Subject: [PATCH 246/473] HBASE-17437 Support specifying a WAL directory
+Subject: [PATCH 246/474] HBASE-17437 Support specifying a WAL directory
  outside of the root directory (Yishan Yang and Zach
  York) HBASE-17588 Remove unused imports brought in
  by HBASE-17437 (Zach York)

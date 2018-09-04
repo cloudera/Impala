@@ -1,7 +1,7 @@
 From 2119ff9f618d3e3499068977b9dec7defff93897 Mon Sep 17 00:00:00 2001
 From: Enis Soztutar <enis@apache.org>
 Date: Tue, 15 Mar 2016 11:22:18 -0700
-Subject: [PATCH 324/473] HBASE-15377 Per-RS Get metric is time based,
+Subject: [PATCH 324/474] HBASE-15377 Per-RS Get metric is time based,
  per-region metric is size-based (Heng Chen)
 
 This patch set does not follow exactly the upstream commit to maintain the

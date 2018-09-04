@@ -1,7 +1,7 @@
 From f99ede6fb6996e0023792ae267e1eb65445898e4 Mon Sep 17 00:00:00 2001
 From: Yu Li <liyu@apache.org>
 Date: Thu, 2 Jun 2016 12:00:42 +0800
-Subject: [PATCH 288/473] HBASE-15931 Add log for long-running tasks in
+Subject: [PATCH 288/474] HBASE-15931 Add log for long-running tasks in
  AsyncProcess HBASE-16289 AsyncProcess stuck
  messages need to print region/server
 

@@ -1,7 +1,7 @@
 From 11dbfd74ea762428ea087e41ef8dd6f41da2007c Mon Sep 17 00:00:00 2001
 From: Alex Leblang <alex.leblang@cloudera.com>
 Date: Thu, 30 Mar 2017 14:29:32 -0700
-Subject: [PATCH 362/473] [CLOUDERA-BUILD] CDH-51748 Fix JavaACC Checker
+Subject: [PATCH 362/474] [CLOUDERA-BUILD] CDH-51748 Fix JavaACC Checker
 
 While the old behavior of our Java ACC checker was to
 always fail when any issue was found. This patch allows

@@ -1,7 +1,7 @@
 From 0c7fd63349788743332d7b72e8ec962b7e3b9bf4 Mon Sep 17 00:00:00 2001
 From: Tim Brown <tim@siftscience.com>
 Date: Thu, 19 Jan 2017 14:21:24 -0800
-Subject: [PATCH 409/473] HBASE-17658 Fix bookkeeping error with max regions
+Subject: [PATCH 409/474] HBASE-17658 Fix bookkeeping error with max regions
  for a table
 
 Signed-off-by: tedyu <yuzhihong@gmail.com>

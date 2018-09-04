@@ -1,7 +1,7 @@
 From 310c10a5c47bd555cb49716335e1c8899152d38c Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@cloudera.com>
 Date: Thu, 23 Feb 2017 07:45:36 -0600
-Subject: [PATCH 272/473] ADDENDUM CDH-48443 including missing parts of
+Subject: [PATCH 272/474] ADDENDUM CDH-48443 including missing parts of
  TestWALObserver changes from HBASE-17624.
 
 Change-Id: Id8d62d52647eead4795fc598e740db0e82e056b3

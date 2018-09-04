@@ -1,7 +1,7 @@
 From 36e220b3a6e2ea63a618f06fb822db4435db8a24 Mon Sep 17 00:00:00 2001
 From: Peter Somogyi <psomogyi@cloudera.com>
 Date: Sun, 26 Nov 2017 12:35:57 +0100
-Subject: [PATCH 445/473] HBASE-19188 Build fails on branch-1 using
+Subject: [PATCH 445/474] HBASE-19188 Build fails on branch-1 using
  maven-3.5.2
 
 Changing tomcat:jasper-runtime scope to compile in

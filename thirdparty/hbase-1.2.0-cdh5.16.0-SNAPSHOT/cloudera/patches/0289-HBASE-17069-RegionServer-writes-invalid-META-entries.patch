@@ -1,7 +1,7 @@
 From 0f1dc9240542b5c6dbc2b04c4e920fc06bd3bd90 Mon Sep 17 00:00:00 2001
 From: Abhishek Singh Chouhan <abhishekchouhan121@gmail.com>
 Date: Thu, 16 Feb 2017 00:20:08 +0530
-Subject: [PATCH 289/473] HBASE-17069 RegionServer writes invalid META entries
+Subject: [PATCH 289/474] HBASE-17069 RegionServer writes invalid META entries
  for split daughters in some circumstances
 
 Signed-off-by: zhangduo <zhangduo@apache.org>

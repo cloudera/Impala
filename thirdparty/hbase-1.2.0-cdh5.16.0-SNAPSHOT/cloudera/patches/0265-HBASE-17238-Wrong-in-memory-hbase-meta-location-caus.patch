@@ -1,7 +1,7 @@
 From 9f12a458b0582a39d4c9f10d7537d1be1feccf63 Mon Sep 17 00:00:00 2001
 From: Stephen Yuan Jiang <syuanjiangdev@gmail.com>
 Date: Wed, 28 Dec 2016 13:53:22 -0800
-Subject: [PATCH 265/473] HBASE-17238 Wrong in-memory hbase:meta location
+Subject: [PATCH 265/474] HBASE-17238 Wrong in-memory hbase:meta location
  causing SSH failure (Stephen Yuan jiang)
 
 Change-Id: Iaefb6991cfdaa259c839cc7afbe78dc5926e0814

@@ -1,7 +1,7 @@
 From 6518dcb7bc3ba2be1578c898752823ba985e5bdb Mon Sep 17 00:00:00 2001
 From: Peter Somogyi <psomogyi@cloudera.com>
 Date: Wed, 6 Sep 2017 19:21:55 +0200
-Subject: [PATCH 413/473] JENKINS-1063 Increase resources for HBase unit tests
+Subject: [PATCH 413/474] JENKINS-1063 Increase resources for HBase unit tests
 
 The tests occasionally timed out or failed do to overloading.
 Reducing surefire secondPartForkCount to 1.

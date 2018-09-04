@@ -1,7 +1,7 @@
 From 055bf01c61a70c589ac35162747617bc08642cf8 Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@apache.org>
 Date: Thu, 9 Feb 2017 20:36:58 -0800
-Subject: [PATCH 258/473] HBASE-17561 table status page should escape values
+Subject: [PATCH 258/474] HBASE-17561 table status page should escape values
  that may contain arbitrary characters.
 
 Signed-off-by: Esteban Gutierrez <esteban@apache.org>

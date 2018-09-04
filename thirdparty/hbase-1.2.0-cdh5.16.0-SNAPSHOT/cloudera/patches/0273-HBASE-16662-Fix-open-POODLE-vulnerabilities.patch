@@ -1,7 +1,7 @@
 From f63ebb508db9b5d4f980368c1a200505cec8161c Mon Sep 17 00:00:00 2001
 From: Ben Lau <benlau@yahoo-inc.com>
 Date: Thu, 22 Sep 2016 19:16:51 +0000
-Subject: [PATCH 273/473] HBASE-16662 Fix open POODLE vulnerabilities
+Subject: [PATCH 273/474] HBASE-16662 Fix open POODLE vulnerabilities
 
 Signed-off-by: Andrew Purtell <apurtell@apache.org>
 (cherry picked from commit e382b2c9f48cd896d525025c3965fa252f344e08)

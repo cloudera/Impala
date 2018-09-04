@@ -1,7 +1,7 @@
 From 0fef48d0f7a48562258cdf942b13d73666430973 Mon Sep 17 00:00:00 2001
 From: Vikas Vishwakarma <vik.karma@gmail.com>
 Date: Thu, 27 Apr 2017 13:27:34 -0700
-Subject: [PATCH 334/473] HBASE-17877 Improve HBase's byte[] comparator.
+Subject: [PATCH 334/474] HBASE-17877 Improve HBase's byte[] comparator.
 
 Signed-off-by: Lars Hofhansl <larsh@apache.org>
 

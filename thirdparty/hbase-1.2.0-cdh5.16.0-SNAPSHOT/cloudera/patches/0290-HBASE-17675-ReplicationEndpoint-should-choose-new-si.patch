@@ -1,7 +1,7 @@
 From 3809c06183b0932e802db599dc652d9f7fcd6442 Mon Sep 17 00:00:00 2001
 From: rgidwani <rgidwani@salesforce.com>
 Date: Tue, 21 Feb 2017 15:17:21 -0800
-Subject: [PATCH 290/473] HBASE-17675 ReplicationEndpoint should choose new
+Subject: [PATCH 290/474] HBASE-17675 ReplicationEndpoint should choose new
  sinks if a SaslException occurs
 
 Signed-off-by: Andrew Purtell <apurtell@apache.org>

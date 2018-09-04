@@ -1,7 +1,7 @@
 From 8216669f8ffa6d3680f5db0ab79ddc3ad7d63cec Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Tue, 14 Mar 2017 12:34:04 -0700
-Subject: [PATCH 322/473] HBASE-17779 disable_table_replication returns
+Subject: [PATCH 322/474] HBASE-17779 disable_table_replication returns
  misleading message and does not turn off
  replication (Janos Gub)
 

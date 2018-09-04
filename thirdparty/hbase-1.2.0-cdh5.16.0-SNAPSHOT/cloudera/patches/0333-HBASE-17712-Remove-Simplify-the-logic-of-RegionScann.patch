@@ -1,7 +1,7 @@
 From 280adc95f6873470f70ee189e2d7af48b4c6a47f Mon Sep 17 00:00:00 2001
 From: Balazs Meszaros <balazs.meszaros@cloudera.com>
 Date: Tue, 9 May 2017 17:41:22 +0200
-Subject: [PATCH 333/473] HBASE-17712 Remove/Simplify the logic of
+Subject: [PATCH 333/474] HBASE-17712 Remove/Simplify the logic of
  RegionScannerImpl.handleFileNotFound
 
 (cherry picked from commit dcaa9bd7155ef6f2003bdb780239499fc450fc1e)

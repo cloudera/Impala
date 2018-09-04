@@ -1,7 +1,7 @@
 From b3da8d38b245262c92c36115b554ccaf1b9bac0d Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Wed, 24 Aug 2016 11:28:59 -0700
-Subject: [PATCH 285/473] HBASE-16304
+Subject: [PATCH 285/474] HBASE-16304
  HRegion#RegionScannerImpl#handleFileNotFoundException
  may lead to deadlock when trying to obtain write
  lock on updatesLock

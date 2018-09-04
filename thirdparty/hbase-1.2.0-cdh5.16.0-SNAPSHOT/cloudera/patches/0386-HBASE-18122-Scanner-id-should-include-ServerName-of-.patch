@@ -1,7 +1,7 @@
 From fdd569608283a48a9ff64b76fe6589ebb1c51293 Mon Sep 17 00:00:00 2001
 From: Phil Yang <yangzhe1991@apache.org>
 Date: Wed, 31 May 2017 14:17:20 +0800
-Subject: [PATCH 386/473] HBASE-18122 Scanner id should include ServerName of
+Subject: [PATCH 386/474] HBASE-18122 Scanner id should include ServerName of
  region server
 
 (cherry picked from commit afbbfb4474bd54cde085f71bdb0f13dfae65a2a6)

@@ -1,7 +1,7 @@
 From a87ff6ec377aa4756b63ddff06abb1ace274fefb Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Fri, 13 Oct 2017 08:46:07 -0700
-Subject: [PATCH 435/473] HBASE-18998 processor.getRowsToLock() always assumes
+Subject: [PATCH 435/474] HBASE-18998 processor.getRowsToLock() always assumes
  there is some row being locked
 
 (cherry picked from commit a68465fba79bfe7fae9fdd72e0b8d07fccefca0e)

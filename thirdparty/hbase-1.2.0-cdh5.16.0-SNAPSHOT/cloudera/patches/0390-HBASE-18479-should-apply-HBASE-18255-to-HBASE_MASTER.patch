@@ -1,7 +1,7 @@
 From 4d584cb436d52b1164d553cd3abf279e9adb1643 Mon Sep 17 00:00:00 2001
 From: chenyechao <chenyechao@cmss.chinamobile.com>
 Date: Sun, 30 Jul 2017 14:07:38 +0800
-Subject: [PATCH 390/473] HBASE-18479 should apply HBASE-18255 to
+Subject: [PATCH 390/474] HBASE-18479 should apply HBASE-18255 to
  HBASE_MASTER_OPTS too
 
 Signed-off-by: tedyu <yuzhihong@gmail.com>

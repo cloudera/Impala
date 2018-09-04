@@ -1,7 +1,7 @@
 From 73b756eab288e947c6a789e6d6e68f954016b9bf Mon Sep 17 00:00:00 2001
 From: Andrew Purtell <apurtell@apache.org>
 Date: Mon, 8 May 2017 16:23:13 -0700
-Subject: [PATCH 444/473] HBASE-17924 Consider sorting the row order when
+Subject: [PATCH 444/474] HBASE-17924 Consider sorting the row order when
  processing multi() ops before taking rowlocks
  (Allan Yang)
 

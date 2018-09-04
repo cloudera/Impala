@@ -1,7 +1,7 @@
 From 02f8b7ee5552a8a8f00b8aeb00f4a0bc91f6663e Mon Sep 17 00:00:00 2001
 From: Michael Stack <stack@apache.org>
 Date: Fri, 1 Dec 2017 13:43:22 -0800
-Subject: [PATCH 439/473] CDH-61751 Backport 'HBASE-18233 We shouldn't wait
+Subject: [PATCH 439/474] CDH-61751 Backport 'HBASE-18233 We shouldn't wait
  for readlock in doMiniBatchMutation in case of
  deadlock'
 

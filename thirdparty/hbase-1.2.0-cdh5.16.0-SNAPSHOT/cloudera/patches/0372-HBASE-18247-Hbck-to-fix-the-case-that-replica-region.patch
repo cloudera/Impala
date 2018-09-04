@@ -1,7 +1,7 @@
 From f2ae67dd7ba177ddae830de42dde26f147db5df6 Mon Sep 17 00:00:00 2001
 From: huaxiang sun <hsun@cloudera.com>
 Date: Tue, 25 Jul 2017 17:08:04 -0700
-Subject: [PATCH 372/473] HBASE-18247 Hbck to fix the case that replica region
+Subject: [PATCH 372/474] HBASE-18247 Hbck to fix the case that replica region
  shows as key in the meta table
 
 (cherry picked from commit 30d58a14212fdfeefe70152d76189ca349fe3dd9)

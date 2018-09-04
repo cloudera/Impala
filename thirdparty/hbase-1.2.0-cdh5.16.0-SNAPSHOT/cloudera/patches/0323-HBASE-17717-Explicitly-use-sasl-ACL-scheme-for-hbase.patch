@@ -1,7 +1,7 @@
 From 80576eda237846c70376303c329ad5b19e17ccd0 Mon Sep 17 00:00:00 2001
 From: Josh Elser <elserj@apache.org>
 Date: Wed, 1 Mar 2017 18:41:05 -0500
-Subject: [PATCH 323/473] HBASE-17717 Explicitly use "sasl" ACL scheme for
+Subject: [PATCH 323/474] HBASE-17717 Explicitly use "sasl" ACL scheme for
  hbase superuser
 
 The special "auth" ZK ACL scheme will always set the ACL's id (the

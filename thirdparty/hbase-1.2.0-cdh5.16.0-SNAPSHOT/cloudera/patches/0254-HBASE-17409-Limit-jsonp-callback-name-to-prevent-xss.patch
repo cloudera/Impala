@@ -1,7 +1,7 @@
 From 2791b04247ed6f807875dff3a03dea8f9610f6e0 Mon Sep 17 00:00:00 2001
 From: Josh Elser <elserj@apache.org>
 Date: Tue, 3 Jan 2017 17:46:45 -0500
-Subject: [PATCH 254/473] HBASE-17409 Limit jsonp callback name to prevent xss
+Subject: [PATCH 254/474] HBASE-17409 Limit jsonp callback name to prevent xss
 
 (cherry picked from commit 601518abbf6623bcc6ba28e41b8936372bd6afaa)
 

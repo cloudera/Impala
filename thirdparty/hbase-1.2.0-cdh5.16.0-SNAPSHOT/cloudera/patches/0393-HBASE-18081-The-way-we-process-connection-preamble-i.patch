@@ -1,7 +1,7 @@
 From a9ba059f2c5e72b4603649130b7eb1300932b768 Mon Sep 17 00:00:00 2001
 From: zhangduo <zhangduo@apache.org>
 Date: Sat, 20 May 2017 21:58:45 +0800
-Subject: [PATCH 393/473] HBASE-18081 The way we process connection preamble
+Subject: [PATCH 393/474] HBASE-18081 The way we process connection preamble
  in SimpleRpcServer is broken
 
 (cherry picked from commit 71bf5afa37343245017ab755a59d9fc3fe3aa6ce)

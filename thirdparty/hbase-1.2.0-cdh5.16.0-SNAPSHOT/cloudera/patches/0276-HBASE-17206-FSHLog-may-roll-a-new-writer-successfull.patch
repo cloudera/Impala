@@ -1,7 +1,7 @@
 From a41f84fefad384d638a5f2c067a21d7aa8771075 Mon Sep 17 00:00:00 2001
 From: zhangduo <zhangduo@apache.org>
 Date: Wed, 30 Nov 2016 21:41:29 +0800
-Subject: [PATCH 276/473] HBASE-17206 FSHLog may roll a new writer
+Subject: [PATCH 276/474] HBASE-17206 FSHLog may roll a new writer
  successfully with unflushed entries
 
 (cherry picked from commit bd490eeb71fc6b7f2b5fc914281c407199453ab4)

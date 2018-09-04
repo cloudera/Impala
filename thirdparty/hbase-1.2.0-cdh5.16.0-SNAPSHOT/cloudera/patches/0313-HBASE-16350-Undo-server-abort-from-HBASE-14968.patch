@@ -1,7 +1,7 @@
 From a1c1f0185752e39077042a0ad0564c4cd1aaa4e8 Mon Sep 17 00:00:00 2001
 From: Enis Soztutar <enis@apache.org>
 Date: Wed, 3 Aug 2016 19:37:58 -0700
-Subject: [PATCH 313/473] HBASE-16350 Undo server abort from HBASE-14968
+Subject: [PATCH 313/474] HBASE-16350 Undo server abort from HBASE-14968
 
 Change-Id: I31d85edebd43d0efc8d3ae324046117ea3b6a910
 Author: Enis Soztutar

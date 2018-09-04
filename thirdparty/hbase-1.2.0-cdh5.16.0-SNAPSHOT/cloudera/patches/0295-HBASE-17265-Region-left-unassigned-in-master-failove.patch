@@ -1,7 +1,7 @@
 From 738022a3f28e50c6f6b77643d827483940c332ef Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Thu, 9 Feb 2017 12:43:37 -0800
-Subject: [PATCH 295/473] HBASE-17265 Region left unassigned in master
+Subject: [PATCH 295/474] HBASE-17265 Region left unassigned in master
  failover when region failed to open (Allan Yang)
 
 (cherry picked from commit 77d604951d43d8e6994d5a66d9a4d8a77835e80d)

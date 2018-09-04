@@ -1,7 +1,7 @@
 From 7540320b20cdc2eb277cdf1bfac11cc51b1c1f72 Mon Sep 17 00:00:00 2001
 From: Chia-Ping Tsai <chia7712@gmail.com>
 Date: Sun, 19 Mar 2017 19:10:24 +0800
-Subject: [PATCH 340/473] HBASE-17803 PE always re-creates table when we
+Subject: [PATCH 340/474] HBASE-17803 PE always re-creates table when we
  specify the split policy
 
 (cherry picked from commit 02d9bf0c57b447ab0f4fa93a3858bd27c43e0cf9)

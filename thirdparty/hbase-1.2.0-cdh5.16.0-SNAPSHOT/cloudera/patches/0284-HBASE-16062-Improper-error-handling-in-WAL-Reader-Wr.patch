@@ -1,7 +1,7 @@
 From 39502d0141487661f6bfd194b1129fe5b62ab62d Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Tue, 21 Jun 2016 21:12:53 -0700
-Subject: [PATCH 284/473] HBASE-16062 Improper error handling in WAL
+Subject: [PATCH 284/474] HBASE-16062 Improper error handling in WAL
  Reader/Writer creation (Vladimir Rodionov)
 
 (cherry picked from commit 76db401058f312e0258273c73261e0496b265f1a)

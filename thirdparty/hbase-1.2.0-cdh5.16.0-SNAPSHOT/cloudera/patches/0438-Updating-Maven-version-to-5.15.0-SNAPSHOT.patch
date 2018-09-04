@@ -1,7 +1,7 @@
 From 90ed9880e9d3de2617b37fc0f09580b3a03cec84 Mon Sep 17 00:00:00 2001
 From: Jenkins <dev-kitchen@cloudera.com>
 Date: Tue, 28 Nov 2017 07:42:39 -0800
-Subject: [PATCH 438/473] Updating Maven version to 5.15.0-SNAPSHOT
+Subject: [PATCH 438/474] Updating Maven version to 5.15.0-SNAPSHOT
 
 ---
  hbase-annotations/pom.xml                          |    2 +-

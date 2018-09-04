@@ -1,7 +1,7 @@
 From 64f08bba91ebddf9066e4de45c968344ad498e5c Mon Sep 17 00:00:00 2001
 From: Michael Stack <stack@apache.org>
 Date: Wed, 15 Feb 2017 23:15:14 -0800
-Subject: [PATCH 248/473] HBASE-6721 RegionServer Group based Assignment
+Subject: [PATCH 248/474] HBASE-6721 RegionServer Group based Assignment
  (Francis Liu) Adds new rsgroups feature which
  allows isol
 

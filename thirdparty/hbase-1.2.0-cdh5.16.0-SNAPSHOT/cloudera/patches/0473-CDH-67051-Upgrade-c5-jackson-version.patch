@@ -1,7 +1,7 @@
 From d789212ff1e530d853b794ce565de1c053ebf4db Mon Sep 17 00:00:00 2001
 From: Mike Drob <mdrob@apache.org>
 Date: Fri, 10 Aug 2018 09:40:09 -0500
-Subject: [PATCH 473/473] CDH-67051 Upgrade c5 jackson version
+Subject: [PATCH 473/474] CDH-67051 Upgrade c5 jackson version
 
 ==C5_APPROVED_BUGFIX== by myoder@cloudera.com
 

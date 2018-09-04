@@ -1,7 +1,7 @@
 From a8a4691e83bb46397c858adc62c65970b5b8c9ff Mon Sep 17 00:00:00 2001
 From: Stephen Yuan Jiang <syuanjiangdev@gmail.com>
 Date: Sat, 10 Dec 2016 15:05:00 -0800
-Subject: [PATCH 283/473] HBASE-17023 Region left unassigned due to AM and SSH
+Subject: [PATCH 283/474] HBASE-17023 Region left unassigned due to AM and SSH
  each thinking others would do the assignment work
  (Stephen Yuan Jiang)
 

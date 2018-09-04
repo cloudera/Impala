@@ -1,7 +1,7 @@
 From e6655385f20eb2620b0a71dce1805029d68aed2f Mon Sep 17 00:00:00 2001
 From: Josh Elser <elserj@apache.org>
 Date: Wed, 5 Jul 2017 16:53:00 -0400
-Subject: [PATCH 389/473] HBASE-18255 Set JVM code cache size in provided
+Subject: [PATCH 389/474] HBASE-18255 Set JVM code cache size in provided
  configuration (Vladimir Rodionov)
 
 Java7 defaults to 50MB (which is likely too small) and 256MB in Java8/9.

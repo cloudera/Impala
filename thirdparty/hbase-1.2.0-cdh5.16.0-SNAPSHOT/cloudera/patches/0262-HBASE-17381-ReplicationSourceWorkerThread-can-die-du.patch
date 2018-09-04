@@ -1,7 +1,7 @@
 From e3cb93f6e466605d3f6d6e5baac447784eb6c65e Mon Sep 17 00:00:00 2001
 From: huzheng <openinx@gmail.com>
 Date: Mon, 6 Feb 2017 11:20:11 +0800
-Subject: [PATCH 262/473] HBASE-17381 ReplicationSourceWorkerThread can die
+Subject: [PATCH 262/474] HBASE-17381 ReplicationSourceWorkerThread can die
  due to unhandled exceptions (huzheng)
 
 Signed-off-by: Gary Helmling <garyh@apache.org>

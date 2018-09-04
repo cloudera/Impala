@@ -1,7 +1,7 @@
 From 51e2c8e025fca189847812eb458a626dea30cd8b Mon Sep 17 00:00:00 2001
 From: binlijin <binlijin@gmail.com>
 Date: Wed, 31 Jan 2018 17:01:58 +0800
-Subject: [PATCH 448/473] HBASE-19728 Add lock to filesCompacting in all
+Subject: [PATCH 448/474] HBASE-19728 Add lock to filesCompacting in all
  place.
 
 Signed-off-by: Sean Busbey <busbey@apache.org>

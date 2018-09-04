@@ -1,7 +1,7 @@
 From ab3c42db65725c16efd4c7bfc5ca629388d444ea Mon Sep 17 00:00:00 2001
 From: Michael Stack <stack@apache.org>
 Date: Thu, 16 Mar 2017 14:59:17 -0700
-Subject: [PATCH 351/473] HBASE-17501 guard against NPE while reading
+Subject: [PATCH 351/474] HBASE-17501 guard against NPE while reading
  FileTrailer and HFileBlock
 
 This reverts commit 31d37fb904c4fcd77e79f9df8db155c5a3d1d8ed.

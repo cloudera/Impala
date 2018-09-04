@@ -1,7 +1,7 @@
 From ba249d6b5b55ca5c131a4633d4bd51e8ee32cce4 Mon Sep 17 00:00:00 2001
 From: Enis Soztutar <enis@apache.org>
 Date: Mon, 21 Mar 2016 17:50:02 -0700
-Subject: [PATCH 325/473] HBASE-15464 Flush / Compaction metrics revisited
+Subject: [PATCH 325/474] HBASE-15464 Flush / Compaction metrics revisited
 
 Conflicts:
 	hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegion.java

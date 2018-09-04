@@ -1,7 +1,7 @@
 From c73b5aa8631338dc3b168ee2be6c9503591ea59f Mon Sep 17 00:00:00 2001
 From: Alex Leblang <alex.leblang@cloudera.com>
 Date: Thu, 15 Jun 2017 13:51:12 -0700
-Subject: [PATCH 364/473] CDH-55428 Fix Unicode Error in JACC
+Subject: [PATCH 364/474] CDH-55428 Fix Unicode Error in JACC
 
 This script has a bug in some versions of python where the json
 dictionary is read in as unicode, which causes the string valye key

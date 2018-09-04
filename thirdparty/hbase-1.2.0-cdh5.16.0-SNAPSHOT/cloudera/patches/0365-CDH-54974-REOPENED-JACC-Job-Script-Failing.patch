@@ -1,7 +1,7 @@
 From 6d611adc12ff6e24c6349142f35bc7a5fd427e5d Mon Sep 17 00:00:00 2001
 From: Alex Leblang <alex.leblang@cloudera.com>
 Date: Fri, 16 Jun 2017 14:02:33 -0700
-Subject: [PATCH 365/473] CDH-54974 (REOPENED) JACC Job Script Failing
+Subject: [PATCH 365/474] CDH-54974 (REOPENED) JACC Job Script Failing
 
 The previous fix for this error had a typo where an assignment
 was not being properly set. This patch resolves that issue.

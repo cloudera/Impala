@@ -1,7 +1,7 @@
 From 0ed4e7235cb678ace70677320cb01f5a77152e0f Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Wed, 8 Mar 2017 01:27:35 -0800
-Subject: [PATCH 321/473] HBASE-17460 enable_table_replication can not perform
+Subject: [PATCH 321/474] HBASE-17460 enable_table_replication can not perform
  cyclic replication of a table (Janos Gub)
 
 (cherry picked from commit f34709e1b77c30d938d2c3a73375f2106378a1a6)

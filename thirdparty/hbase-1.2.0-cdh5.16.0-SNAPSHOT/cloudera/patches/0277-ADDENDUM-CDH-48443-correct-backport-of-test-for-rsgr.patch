@@ -1,7 +1,7 @@
 From 8defebc2ac51c5f595db0f9ae8c25ff90d7bcb94 Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@cloudera.com>
 Date: Fri, 24 Feb 2017 16:15:45 -0600
-Subject: [PATCH 277/473] ADDENDUM CDH-48443 correct backport of test for
+Subject: [PATCH 277/474] ADDENDUM CDH-48443 correct backport of test for
  rsgroup admin shell commands.
 
 Change-Id: I2985edd77c4ff769d0ac6a2965515787c756f675

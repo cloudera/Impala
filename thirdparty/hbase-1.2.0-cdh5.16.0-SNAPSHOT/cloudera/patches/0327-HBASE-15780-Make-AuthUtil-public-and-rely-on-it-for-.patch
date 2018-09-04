@@ -1,7 +1,7 @@
 From 6880e06bf0146a7a41d6134c8b0c2f997d9f5050 Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@apache.org>
 Date: Fri, 13 May 2016 08:48:45 -0700
-Subject: [PATCH 327/473] HBASE-15780 Make AuthUtil public and rely on it for
+Subject: [PATCH 327/474] HBASE-15780 Make AuthUtil public and rely on it for
  talking to secure HBase.
 
 Signed-off-by: Gary Helmling <garyh@apache.org>

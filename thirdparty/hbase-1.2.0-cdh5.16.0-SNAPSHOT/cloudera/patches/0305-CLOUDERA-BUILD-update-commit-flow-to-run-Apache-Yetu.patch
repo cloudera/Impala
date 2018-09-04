@@ -1,7 +1,7 @@
 From f065b21729dbeff7e25cbb708dc953173f9400ed Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@cloudera.com>
 Date: Wed, 8 Mar 2017 16:56:24 -0600
-Subject: [PATCH 305/473] CLOUDERA-BUILD update commit-flow to run Apache
+Subject: [PATCH 305/474] CLOUDERA-BUILD update commit-flow to run Apache
  Yetus on gerrit submissions.
 
 Change-Id: I2e34ea04872aed9c4445e5b3aee4a1d510d3a1fa

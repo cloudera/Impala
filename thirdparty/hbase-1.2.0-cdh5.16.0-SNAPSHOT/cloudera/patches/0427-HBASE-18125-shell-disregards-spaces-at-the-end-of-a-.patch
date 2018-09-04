@@ -1,7 +1,7 @@
 From 8c14393f11081f2c13bbbf495e7a4e3ba192d64c Mon Sep 17 00:00:00 2001
 From: Chenxi Tong <fchenxi@126.com>
 Date: Wed, 9 Aug 2017 12:00:53 +0800
-Subject: [PATCH 427/473] HBASE-18125 shell disregards spaces at the end of a
+Subject: [PATCH 427/474] HBASE-18125 shell disregards spaces at the end of a
  split key in a split file
 
 Signed-off-by: fchenxi <fchenxi@126.com>

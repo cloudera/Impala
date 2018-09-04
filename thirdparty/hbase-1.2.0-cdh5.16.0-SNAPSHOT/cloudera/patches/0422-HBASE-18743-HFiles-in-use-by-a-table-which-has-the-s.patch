@@ -1,7 +1,7 @@
 From 86fbd043d636bd3441b2e737bb73f55d27bd4908 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Mon, 4 Sep 2017 07:56:47 -0700
-Subject: [PATCH 422/473] HBASE-18743 HFiles in use by a table which has the
+Subject: [PATCH 422/474] HBASE-18743 HFiles in use by a table which has the
  same name and namespace with a default table cloned
  from snapshot may be deleted when that snapshot and
  default table are deleted (wenbang)

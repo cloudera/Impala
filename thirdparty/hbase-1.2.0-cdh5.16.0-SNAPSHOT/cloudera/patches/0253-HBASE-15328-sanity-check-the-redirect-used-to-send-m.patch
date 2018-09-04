@@ -1,7 +1,7 @@
 From 740bb67c6a24b560be77c92865810838c5319d2d Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@apache.org>
 Date: Wed, 15 Feb 2017 16:48:58 -0500
-Subject: [PATCH 253/473] HBASE-15328 sanity check the redirect used to send
+Subject: [PATCH 253/474] HBASE-15328 sanity check the redirect used to send
  master info requests to the embedded regionserver.
 
 Signed-off-by: Esteban Gutierrez <esteban@apache.org>

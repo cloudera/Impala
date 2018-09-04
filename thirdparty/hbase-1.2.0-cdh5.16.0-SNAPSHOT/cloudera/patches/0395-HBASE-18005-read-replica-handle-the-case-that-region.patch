@@ -1,7 +1,7 @@
 From 604ee17436f9c85f458d1527f7612f1e655a61e8 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Fri, 2 Jun 2017 09:29:51 -0700
-Subject: [PATCH 395/473] HBASE-18005 read replica: handle the case that
+Subject: [PATCH 395/474] HBASE-18005 read replica: handle the case that
  region server hosting both primary replica and meta
  region is down (huaxiang sun)
 

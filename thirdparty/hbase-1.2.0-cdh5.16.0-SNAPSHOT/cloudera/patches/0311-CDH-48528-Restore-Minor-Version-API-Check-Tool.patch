@@ -1,7 +1,7 @@
 From a97c1cf76e6bff0fc4bdaaf05a53a9f540fbeb0c Mon Sep 17 00:00:00 2001
 From: Alex Leblang <alex.leblang@cloudera.com>
 Date: Tue, 7 Mar 2017 14:43:33 -0800
-Subject: [PATCH 311/473] CDH-48528 Restore Minor Version API Check Tool
+Subject: [PATCH 311/474] CDH-48528 Restore Minor Version API Check Tool
 
 This patch adopts the Hadoop python version of the Java ACC tool
 (h/t umbrant). We've kept the bash version but will deprecate it

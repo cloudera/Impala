@@ -1,7 +1,7 @@
 From 8ebf5156572292862fa4310f15e2d72f52e2e724 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Fri, 23 Sep 2016 05:08:19 -0700
-Subject: [PATCH 357/473] HBASE-16423 Add re-compare option to
+Subject: [PATCH 357/474] HBASE-16423 Add re-compare option to
  VerifyReplication to avoid occasional inconsistent
  rows (Jianwei Cui)
 

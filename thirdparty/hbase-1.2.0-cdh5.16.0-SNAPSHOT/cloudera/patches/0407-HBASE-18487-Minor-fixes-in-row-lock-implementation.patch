@@ -1,7 +1,7 @@
 From 16462b2588d5c381d3369b57867d2a86bb396292 Mon Sep 17 00:00:00 2001
 From: James Taylor <jamestaylor@apache.org>
 Date: Mon, 31 Jul 2017 11:42:48 -0700
-Subject: [PATCH 407/473] HBASE-18487 Minor fixes in row lock implementation
+Subject: [PATCH 407/474] HBASE-18487 Minor fixes in row lock implementation
 
 Signed-off-by: Andrew Purtell <apurtell@apache.org>
 

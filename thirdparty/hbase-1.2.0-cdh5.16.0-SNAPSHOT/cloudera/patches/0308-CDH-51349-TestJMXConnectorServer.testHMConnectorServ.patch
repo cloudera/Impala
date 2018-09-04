@@ -1,7 +1,7 @@
 From 343ddcd517a533c154cfb521335db8eee4c6fc6a Mon Sep 17 00:00:00 2001
 From: Michael Stack <stack@apache.org>
 Date: Wed, 8 Mar 2017 15:18:32 -0800
-Subject: [PATCH 308/473] CDH-51349
+Subject: [PATCH 308/474] CDH-51349
  TestJMXConnectorServer.testHMConnectorServerWhenShutdownCluster
  fails
 

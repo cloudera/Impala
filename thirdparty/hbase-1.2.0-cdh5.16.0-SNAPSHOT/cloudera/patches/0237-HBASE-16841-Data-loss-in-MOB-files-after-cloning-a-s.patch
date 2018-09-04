@@ -1,7 +1,7 @@
 From d67832ae83710bb898c339f3b198cb788c77959e Mon Sep 17 00:00:00 2001
 From: Huaxiang Sun <hsun@cloudera.com>
 Date: Tue, 6 Dec 2016 17:52:49 -0800
-Subject: [PATCH 237/473] HBASE-16841 Data loss in MOB files after cloning a
+Subject: [PATCH 237/474] HBASE-16841 Data loss in MOB files after cloning a
  snapshot and deleting that snapshot
 
 Change-Id: Ibddddf5018eeffbfaa0cc9b4240cd01a7010fb3f

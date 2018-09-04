@@ -1,7 +1,7 @@
 From fbe81c14ffabee5ab15f9774cf920d6385e47e62 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Tue, 7 Feb 2017 12:59:01 -0800
-Subject: [PATCH 263/473] HBASE-17275 Assign timeout may cause region to be
+Subject: [PATCH 263/474] HBASE-17275 Assign timeout may cause region to be
  unassigned forever (Allan yang)
 
 (cherry picked from commit 2aaf7851a4de28e40b1a0d641d8fc98e54f5342d)

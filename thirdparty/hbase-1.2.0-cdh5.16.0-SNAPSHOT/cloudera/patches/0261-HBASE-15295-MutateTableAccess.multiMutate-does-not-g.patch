@@ -1,7 +1,7 @@
 From 1a69ce61f816a431132c153e64f016baae317f5b Mon Sep 17 00:00:00 2001
 From: Enis Soztutar <enis@apache.org>
 Date: Tue, 29 Mar 2016 15:02:18 -0700
-Subject: [PATCH 261/473] HBASE-15295 MutateTableAccess.multiMutate() does not
+Subject: [PATCH 261/474] HBASE-15295 MutateTableAccess.multiMutate() does not
  get high priority causing a deadlock
 
 Conflicts:

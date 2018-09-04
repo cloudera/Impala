@@ -1,7 +1,7 @@
 From 49a4dae5ca98096ba37ec43aa8c52952cb8a1ebc Mon Sep 17 00:00:00 2001
 From: Yu Li <liyu@apache.org>
 Date: Fri, 17 Jun 2016 18:00:16 +0800
-Subject: [PATCH 297/473] HBASE-16032 Possible memory leak in StoreScanner
+Subject: [PATCH 297/474] HBASE-16032 Possible memory leak in StoreScanner
 
 (cherry picked from commit f8762efc0e041ba63c745bfa3ccb9f06d2010699)
 

@@ -1,7 +1,7 @@
 From e789373166f3be138b9509bec9cc225313448397 Mon Sep 17 00:00:00 2001
 From: chenheng <chenheng@apache.org>
 Date: Mon, 7 Mar 2016 17:36:40 +0800
-Subject: [PATCH 315/473] HBASE-15376 ScanNext metric is size-based while
+Subject: [PATCH 315/474] HBASE-15376 ScanNext metric is size-based while
  every other per-operation metric is time based
 
 Conflicts:

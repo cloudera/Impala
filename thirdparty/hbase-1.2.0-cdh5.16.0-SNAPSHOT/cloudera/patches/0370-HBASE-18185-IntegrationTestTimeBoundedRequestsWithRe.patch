@@ -1,7 +1,7 @@
 From 50116d75f4f862547904d160ea8e20cb44d9bb84 Mon Sep 17 00:00:00 2001
 From: Balazs Meszaros <balazs.meszaros@cloudera.com>
 Date: Wed, 28 Jun 2017 11:17:12 +0200
-Subject: [PATCH 370/473] HBASE-18185
+Subject: [PATCH 370/474] HBASE-18185
  IntegrationTestTimeBoundedRequestsWithRegionReplicas
  unbalanced tests fails with AssertionError
 

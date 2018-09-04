@@ -1,7 +1,7 @@
 From 58775e1acc32d6f5fbecd1055d6b7ec590337364 Mon Sep 17 00:00:00 2001
 From: Umesh Agashe <uagashe@cloudera.com>
 Date: Wed, 8 Mar 2017 13:25:28 -0800
-Subject: [PATCH 309/473] HBASE-17761: Test
+Subject: [PATCH 309/474] HBASE-17761: Test
  TestRemoveRegionMetrics.testMoveRegion fails
  intermittently because of race condition
 

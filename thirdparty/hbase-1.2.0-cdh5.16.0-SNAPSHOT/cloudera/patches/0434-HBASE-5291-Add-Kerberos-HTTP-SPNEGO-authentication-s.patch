@@ -1,7 +1,7 @@
 From 8b70e3c783c2a7e9d428376092619f27da73dd1e Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Wed, 15 Jun 2016 10:26:18 -0700
-Subject: [PATCH 434/473] HBASE-5291 Add Kerberos HTTP SPNEGO authentication
+Subject: [PATCH 434/474] HBASE-5291 Add Kerberos HTTP SPNEGO authentication
  support to HBase web consoles (Josh Elser)
 
 Includes 2 addendums

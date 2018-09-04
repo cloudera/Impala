@@ -1,7 +1,7 @@
 From 2e032f0eee854359ffee1c4343fdc78a194cae0f Mon Sep 17 00:00:00 2001
 From: binlijin <binlijin@gmail.com>
 Date: Fri, 4 Nov 2016 19:17:54 +0800
-Subject: [PATCH 302/473] HBASE-16960 RegionServer hang when aborting
+Subject: [PATCH 302/474] HBASE-16960 RegionServer hang when aborting
 
 Signed-off-by: Yu Li <liyu@apache.org>
 

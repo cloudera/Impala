@@ -1,7 +1,7 @@
 From 87282a803566b57a1d19c8882091facfa5641cf0 Mon Sep 17 00:00:00 2001
 From: Chun-Hao Tang <tang7526@gmail.com>
 Date: Mon, 18 Sep 2017 16:06:00 +0800
-Subject: [PATCH 423/473] HBASE-18142 Deletion of a cell deletes the previous
+Subject: [PATCH 423/474] HBASE-18142 Deletion of a cell deletes the previous
  versions too
 
 Signed-off-by: Chia-Ping Tsai <chia7712@gmail.com>

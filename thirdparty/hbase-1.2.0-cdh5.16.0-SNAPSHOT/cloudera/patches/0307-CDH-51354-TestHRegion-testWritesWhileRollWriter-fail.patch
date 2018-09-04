@@ -1,7 +1,7 @@
 From 9278410f44b4fad6efd2b5d74527394c587eb74e Mon Sep 17 00:00:00 2001
 From: Jonathan M Hsieh <jon@cloudera.com>
 Date: Wed, 8 Mar 2017 15:51:48 -0800
-Subject: [PATCH 307/473] CDH-51354 TestHRegion#testWritesWhileRollWriter
+Subject: [PATCH 307/474] CDH-51354 TestHRegion#testWritesWhileRollWriter
  fails consistently
 
 Revert "HBASE-16429 FSHLog: deadlock if rollWriter called when ring buffer filled with appends"

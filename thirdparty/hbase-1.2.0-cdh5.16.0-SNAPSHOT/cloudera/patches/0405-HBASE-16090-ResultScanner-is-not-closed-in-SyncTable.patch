@@ -1,7 +1,7 @@
 From 9d347e4d6bd40ceddf2559bafe91fe2a4d7cb6a9 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Thu, 23 Jun 2016 07:29:34 -0700
-Subject: [PATCH 405/473] HBASE-16090 ResultScanner is not closed in
+Subject: [PATCH 405/474] HBASE-16090 ResultScanner is not closed in
  SyncTable#finishRemainingHashRanges()
 
 (cherry picked from commit cb02b7264a4445072339149e5faf0f631f8ac20b)

@@ -1,7 +1,7 @@
 From 035ea4c748043aa5444623e2f6cedca2c663c52f Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Mon, 3 Oct 2016 06:44:58 -0700
-Subject: [PATCH 361/473] HBASE-16739 Timed out exception message should
+Subject: [PATCH 361/474] HBASE-16739 Timed out exception message should
  include encoded region name
 
 (cherry picked from commit 252d7fae0ac43dae04d2c9708374593a6ae87a89)

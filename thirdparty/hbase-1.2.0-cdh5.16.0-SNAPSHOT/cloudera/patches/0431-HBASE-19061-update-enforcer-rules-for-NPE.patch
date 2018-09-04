@@ -1,7 +1,7 @@
 From a742aef3ad7adcf9bf241396b5afdfb72968dd16 Mon Sep 17 00:00:00 2001
 From: Mike Drob <mdrob@apache.org>
 Date: Fri, 20 Oct 2017 16:04:16 -0500
-Subject: [PATCH 431/473] HBASE-19061 update enforcer rules for NPE
+Subject: [PATCH 431/474] HBASE-19061 update enforcer rules for NPE
 
 (cherry picked from commit e8124ab8c4181d2cedff02078f7c76d3e44c219f)
 

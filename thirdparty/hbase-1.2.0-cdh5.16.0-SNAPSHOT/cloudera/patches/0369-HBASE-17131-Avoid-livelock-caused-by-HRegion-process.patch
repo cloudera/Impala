@@ -1,7 +1,7 @@
 From eb0c6794877cbe27f6bd66c5385bad94f0dcc041 Mon Sep 17 00:00:00 2001
 From: Chia-Ping Tsai <chia7712@gmail.com>
 Date: Fri, 28 Jul 2017 14:07:53 +0800
-Subject: [PATCH 369/473] HBASE-17131 Avoid livelock caused by
+Subject: [PATCH 369/474] HBASE-17131 Avoid livelock caused by
  HRegion#processRowsWithLocks
 
 (cherry picked from commit 670e9431d40d35df4802bc0445012271ee904efc)

@@ -1,7 +1,7 @@
 From ca56ca9175e48b313a59f40caca07847f1547c87 Mon Sep 17 00:00:00 2001
 From: Ashish Singhi <ashishsinghi@apache.org>
 Date: Fri, 16 Jun 2017 10:43:56 +0530
-Subject: [PATCH 414/473] HBASE-18212 reduce log level for unbuffer warning.
+Subject: [PATCH 414/474] HBASE-18212 reduce log level for unbuffer warning.
 
 In Standalone mode with local filesystem HBase logs Warning message:Failed to invoke 'unbuffer' method in class org.apache.hadoop.fs.FSDataInputStream
 

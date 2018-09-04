@@ -1,7 +1,7 @@
 From 3714670db63b7933465c093d1c3d0e69bb27ce83 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Fri, 13 Jan 2017 07:59:31 -0800
-Subject: [PATCH 239/473] HBASE-17452 Failed taking snapshot - region Manifest
+Subject: [PATCH 239/474] HBASE-17452 Failed taking snapshot - region Manifest
  proto-message too large (huaxiang sun)
 
 Author: Huaxiang Sun

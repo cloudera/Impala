@@ -1,7 +1,7 @@
 From 2f83349336bc647039ddc1c6c4606edf29be81c7 Mon Sep 17 00:00:00 2001
 From: Yu Li <liyu@apache.org>
 Date: Sat, 9 Jul 2016 01:05:10 +0800
-Subject: [PATCH 463/473] HBASE-16201 fix a NPE issue in RpcServer
+Subject: [PATCH 463/474] HBASE-16201 fix a NPE issue in RpcServer
 
 (cherry picked from commit b99efe65e900299271b1e2a0c5feabd23930eb70)
 

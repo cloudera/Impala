@@ -1,7 +1,7 @@
 From fc9a93fe58b8fa3c7dfdafb605f9c9c9bccbcf04 Mon Sep 17 00:00:00 2001
 From: Toshihiro Suzuki <brfrn169@gmail.com>
 Date: Tue, 6 Feb 2018 14:51:14 +0900
-Subject: [PATCH 452/473] HBASE-19934 HBaseSnapshotException when read
+Subject: [PATCH 452/474] HBASE-19934 HBaseSnapshotException when read
  replicas is enabled and online snapshot is taken
  after region splitting
 

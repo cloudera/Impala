@@ -1,7 +1,7 @@
 From 2873f6b05562e167b5c15714d2ce628ff1b5e8af Mon Sep 17 00:00:00 2001
 From: Abhishek Singh Chouhan <abhishekchouhan121@gmail.com>
 Date: Thu, 23 Feb 2017 18:13:06 +0530
-Subject: [PATCH 346/473] HBASE-17682 Region stuck in merging_new state
+Subject: [PATCH 346/474] HBASE-17682 Region stuck in merging_new state
  indefinitely
 
 Signed-off-by: Andrew Purtell <apurtell@apache.org>

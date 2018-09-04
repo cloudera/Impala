@@ -1,7 +1,7 @@
 From 7c8465bfc88033cf89ffb9101a1d19aa3b79fd3e Mon Sep 17 00:00:00 2001
 From: Stephen Yuan Jiang <syuanjiangdev@gmail.com>
 Date: Wed, 21 Jun 2017 15:23:59 -0700
-Subject: [PATCH 380/473] HBASE-15691 ConcurrentModificationException in
+Subject: [PATCH 380/474] HBASE-15691 ConcurrentModificationException in
  BucketAllocator
 
 (cherry picked from commit 1b15b7825bb390a59dd57527efd4d013c753de5a)

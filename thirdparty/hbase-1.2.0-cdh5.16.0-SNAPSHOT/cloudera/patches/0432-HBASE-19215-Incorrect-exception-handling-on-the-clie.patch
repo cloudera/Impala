@@ -1,7 +1,7 @@
 From ee90470e0e6043462b1fa6a52e6de50558644ace Mon Sep 17 00:00:00 2001
 From: Abhishek Singh Chouhan <achouhan@apache.org>
 Date: Mon, 13 Nov 2017 17:16:31 +0530
-Subject: [PATCH 432/473] HBASE-19215 Incorrect exception handling on the
+Subject: [PATCH 432/474] HBASE-19215 Incorrect exception handling on the
  client causes incorrect call timeouts and byte
  buffer allocations on the server
 

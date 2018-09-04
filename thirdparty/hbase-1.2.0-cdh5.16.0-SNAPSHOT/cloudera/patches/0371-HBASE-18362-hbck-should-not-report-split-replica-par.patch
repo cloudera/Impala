@@ -1,7 +1,7 @@
 From 13873c58ab43502305a534a1a1b4ee7ab47474d7 Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@apache.org>
 Date: Thu, 27 Jul 2017 15:59:07 -0500
-Subject: [PATCH 371/473] HBASE-18362 hbck should not report split replica
+Subject: [PATCH 371/474] HBASE-18362 hbck should not report split replica
  parent region from meta as errors (Huaxiang Sun)
 
 Signed-off-by: Esteban Gutierrez <esteban@apache.org>

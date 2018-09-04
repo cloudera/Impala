@@ -1,7 +1,7 @@
 From 0ed25e4971124b12d3f4e7651074b2212273f17e Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Mon, 27 Jun 2016 20:16:34 -0700
-Subject: [PATCH 326/473] HBASE-16052 Improve HBaseFsck Scalability (Ben Lau)
+Subject: [PATCH 326/474] HBASE-16052 Improve HBaseFsck Scalability (Ben Lau)
 
 (cherry picked from commit 1a88673f33ac642d6e8d7758bcc39dc15a1397e5)
 

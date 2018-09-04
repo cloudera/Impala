@@ -1,7 +1,7 @@
 From 04d9c63b75b9617e8ac354fa62bdac47aba6e181 Mon Sep 17 00:00:00 2001
 From: Chia-Ping Tsai <chia7712@gmail.com>
 Date: Sat, 19 Aug 2017 02:13:34 +0800
-Subject: [PATCH 425/473] HBASE-18471 The DeleteFamily cell is skipped when
+Subject: [PATCH 425/474] HBASE-18471 The DeleteFamily cell is skipped when
  StoreScanner seeks to next column
 
 (cherry picked from commit 658b01e26e08bb80a130671e6aaad58de258b376)

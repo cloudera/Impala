@@ -1,7 +1,7 @@
 From aa21de388443f1cde820d9e2f4f7dfe2e18d3dfa Mon Sep 17 00:00:00 2001
 From: huaxiang sun <hsun@cloudera.com>
 Date: Fri, 28 Apr 2017 06:53:37 +0800
-Subject: [PATCH 387/473] HBASE-17904 Get runs into NoSuchElementException
+Subject: [PATCH 387/474] HBASE-17904 Get runs into NoSuchElementException
  when using Read Replica, with hbase.
  ipc.client.specificThreadForWriting to be true and
  hbase.rpc.client.impl to be

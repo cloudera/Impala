@@ -1,7 +1,7 @@
 From f6b0f8648f2dd3386fd16b9516a47088e501eb13 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Fri, 9 Jun 2017 20:03:20 -0700
-Subject: [PATCH 385/473] HBASE-18192: Replication drops recovered queues on
+Subject: [PATCH 385/474] HBASE-18192: Replication drops recovered queues on
  region server shutdown (Ashu Pachauri)
 
 (cherry picked from commit 96e48c3df597fc1450546818e2bd34cfc1fd5c10)

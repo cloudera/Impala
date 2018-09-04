@@ -1,7 +1,7 @@
 From 93607bb6ed61f92936f8cfce3fd9f035046d9a7f Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Thu, 2 Mar 2017 11:33:36 -0800
-Subject: [PATCH 337/473] HBASE-17710 HBase in standalone mode creates
+Subject: [PATCH 337/474] HBASE-17710 HBase in standalone mode creates
  directories with 777 permission
 
 (cherry picked from commit 88f909cf1f9300c2e2b5d99b7300d74c0b0d7916)

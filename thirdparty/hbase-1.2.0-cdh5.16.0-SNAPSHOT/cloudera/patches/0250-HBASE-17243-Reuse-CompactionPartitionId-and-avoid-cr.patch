@@ -1,7 +1,7 @@
 From cd4f24ba2674fdda24bf791f707446ef0dc52e0a Mon Sep 17 00:00:00 2001
 From: Huaxiang Sun <hsun@cloudera.com>
 Date: Sat, 3 Dec 2016 07:18:36 -0800
-Subject: [PATCH 250/473] HBASE-17243 Reuse CompactionPartitionId and avoid
+Subject: [PATCH 250/474] HBASE-17243 Reuse CompactionPartitionId and avoid
  creating MobFileName in PartitionedMobCompactor to
  avoid unnecessary new objects (addendum)
 

@@ -1,7 +1,7 @@
 From a3792a5f3159fab0aa4dc2f8d7eb6fd01a0b7980 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Tue, 21 Mar 2017 08:06:56 -0700
-Subject: [PATCH 344/473] HBASE-17798 RpcServer.Listener.Reader can abort due
+Subject: [PATCH 344/474] HBASE-17798 RpcServer.Listener.Reader can abort due
  to CancelledKeyException (Guangxu Cheng)
 
 (cherry picked from commit 9726c71681c0b8b22e83b056102803646b8d50c2)

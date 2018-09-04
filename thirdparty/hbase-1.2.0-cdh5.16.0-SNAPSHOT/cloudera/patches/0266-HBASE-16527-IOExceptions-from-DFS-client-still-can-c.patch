@@ -1,7 +1,7 @@
 From 47ba3b78fcf5baf4742a4a1619c0a7744e4a2daf Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Thu, 1 Sep 2016 12:39:08 -0700
-Subject: [PATCH 266/473] HBASE-16527 IOExceptions from DFS client still can
+Subject: [PATCH 266/474] HBASE-16527 IOExceptions from DFS client still can
  cause CatalogJanitor to delete referenced files
  (Vladimir Rodionov)
 

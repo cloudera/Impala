@@ -1,7 +1,7 @@
 From d7661505edf52c08b61ad00111ef6aa27c124d48 Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@apache.org>
 Date: Fri, 11 Aug 2017 12:56:20 -0500
-Subject: [PATCH 394/473] HBASE-18025 CatalogJanitor should collect outdated
+Subject: [PATCH 394/474] HBASE-18025 CatalogJanitor should collect outdated
  RegionStates from the AM
 
 (cherry picked from commit aaece0ba5e399f248c8255fe509cdb1a862bf299)

@@ -1,7 +1,7 @@
 From c537c3c9892e2f923a70b9ffe9d514fc61d693d0 Mon Sep 17 00:00:00 2001
 From: Chia-Ping Tsai <chia7712@gmail.com>
 Date: Wed, 2 Aug 2017 08:30:29 +0800
-Subject: [PATCH 410/473] HBASE-18480 The cost of BaseLoadBalancer.cluster is
+Subject: [PATCH 410/474] HBASE-18480 The cost of BaseLoadBalancer.cluster is
  changed even if the rollback is done
 
 (cherry picked from commit 5f6cca9967f5d77b46d1dda493b290e2935933c9)

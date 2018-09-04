@@ -1,7 +1,7 @@
 From 85e3472367a4021ebff8ecf778486b8eed3b7a4b Mon Sep 17 00:00:00 2001
 From: Mike Drob <mdrob@apache.org>
 Date: Fri, 16 Jun 2017 21:53:13 -0500
-Subject: [PATCH 398/473] HBASE-16351 Improve error reporting for license
+Subject: [PATCH 398/474] HBASE-16351 Improve error reporting for license
  failures
 
 Signed-off-by: Sean Busbey <busbey@apache.org>

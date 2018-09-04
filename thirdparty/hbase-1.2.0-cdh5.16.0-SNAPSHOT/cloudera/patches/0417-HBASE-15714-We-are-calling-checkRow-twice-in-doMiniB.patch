@@ -1,7 +1,7 @@
 From acb51915b648ffb26a720fcbeeee78eb0a6089b7 Mon Sep 17 00:00:00 2001
 From: chenheng <chenheng@apache.org>
 Date: Tue, 3 May 2016 12:45:18 +1000
-Subject: [PATCH 417/473] HBASE-15714 We are calling checkRow() twice in
+Subject: [PATCH 417/474] HBASE-15714 We are calling checkRow() twice in
  doMiniBatchMutation()
 
 (cherry picked from commit 0ee3ca2a781f60cdaa9433a0a4f20bf3a146e4e6)

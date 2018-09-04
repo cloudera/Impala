@@ -1,7 +1,7 @@
 From 7c2785ff1734e0a5b03b93dbc50113481ea8c161 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Thu, 6 Oct 2016 11:19:58 -0700
-Subject: [PATCH 358/473] HBASE-16772 Add verbose option to VerifyReplication
+Subject: [PATCH 358/474] HBASE-16772 Add verbose option to VerifyReplication
  for logging good rows
 
 (cherry picked from commit a8fe9ed64f88c19b65eda9826408f05c09c33e63)

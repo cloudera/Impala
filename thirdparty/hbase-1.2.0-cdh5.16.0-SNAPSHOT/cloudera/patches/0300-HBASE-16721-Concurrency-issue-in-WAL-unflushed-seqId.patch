@@ -1,7 +1,7 @@
 From d645db7dd1e0067d245f094f29bdfad6f6729d32 Mon Sep 17 00:00:00 2001
 From: Enis Soztutar <enis@apache.org>
 Date: Thu, 29 Sep 2016 13:50:58 -0700
-Subject: [PATCH 300/473] HBASE-16721 Concurrency issue in WAL unflushed seqId
+Subject: [PATCH 300/474] HBASE-16721 Concurrency issue in WAL unflushed seqId
  tracking
 
 Also contains:

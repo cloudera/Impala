@@ -1,7 +1,7 @@
 From be051e4e0ee92e75460727f50a7c56b0081b745f Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@apache.org>
 Date: Thu, 10 Aug 2017 16:16:20 -0500
-Subject: [PATCH 415/473] HBASE-18577 test well-formed-ness of our client
+Subject: [PATCH 415/474] HBASE-18577 test well-formed-ness of our client
  jars.
 
 Author: Sean Busbey

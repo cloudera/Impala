@@ -1,7 +1,7 @@
 From 90874d7039a2023abe583e7085b4e15a9049386d Mon Sep 17 00:00:00 2001
 From: Umesh Agashe <uagashe@cloudera.com>
 Date: Wed, 22 Feb 2017 14:16:33 -0800
-Subject: [PATCH 269/473] HBASE-15322 Operations using Unsafe path broken for
+Subject: [PATCH 269/474] HBASE-15322 Operations using Unsafe path broken for
  platforms not having sun.misc.Unsafe.
 
   (from commits 149dc79d855e520a23f554ed177163eaaa113e44 & 193b77202fa85fad8be04b21c9c1f2769b7372d8)

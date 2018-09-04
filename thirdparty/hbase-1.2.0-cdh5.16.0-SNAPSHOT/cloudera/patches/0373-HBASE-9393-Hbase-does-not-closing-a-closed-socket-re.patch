@@ -1,7 +1,7 @@
 From 2c70c45490cfaf96e84f7cffb4d4082c76137fd9 Mon Sep 17 00:00:00 2001
 From: Ashish Singhi <ashishsinghi@apache.org>
 Date: Tue, 6 Jun 2017 17:49:08 +0530
-Subject: [PATCH 373/473] HBASE-9393 Hbase does not closing a closed socket
+Subject: [PATCH 373/474] HBASE-9393 Hbase does not closing a closed socket
  resulting in many CLOSE_WAIT
 
 Signed-off-by: Andrew Purtell <apurtell@apache.org>

@@ -1,7 +1,7 @@
 From 16e6ec9d1e977535c82572a635fbe2e6a08e042f Mon Sep 17 00:00:00 2001
 From: Elliott Clark <eclark@apache.org>
 Date: Tue, 1 Mar 2016 15:34:02 -0800
-Subject: [PATCH 271/473] HBASE-15315 Remove always set super user call as
+Subject: [PATCH 271/474] HBASE-15315 Remove always set super user call as
  high priority (Yong Zhang)
 
 (cherry picked from commit 32a7f2c4b80b4d5f05889f1669aa1538450b6d7a)

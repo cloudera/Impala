@@ -1,7 +1,7 @@
 From 3e635ad892018171b99259997e0caff320a0838f Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Fri, 13 May 2016 15:24:57 -0700
-Subject: [PATCH 298/473] Backport HBASE-15125 HBaseFsck's adoptHdfsOrphan
+Subject: [PATCH 298/474] Backport HBASE-15125 HBaseFsck's adoptHdfsOrphan
  function creates region with wrong end key boundary
 
 (cherry picked from commit f778736b658b28b24ce7bb7428ab3b268d742765)

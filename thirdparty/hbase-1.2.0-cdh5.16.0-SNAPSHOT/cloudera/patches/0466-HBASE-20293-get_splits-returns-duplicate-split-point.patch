@@ -1,7 +1,7 @@
 From a7dd287cfa8dfd6e943d379728accc77414ac890 Mon Sep 17 00:00:00 2001
 From: Toshihiro Suzuki <brfrn169@gmail.com>
 Date: Wed, 18 Apr 2018 14:47:04 +0900
-Subject: [PATCH 466/473] HBASE-20293 get_splits returns duplicate split
+Subject: [PATCH 466/474] HBASE-20293 get_splits returns duplicate split
  points when region replication is on
 
 Author: Toshihiro Suzuki

@@ -1,7 +1,7 @@
 From 41e397ea6892a5f701415c565c688e73f673fcd5 Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@apache.org>
 Date: Fri, 21 Jul 2017 13:13:00 -0500
-Subject: [PATCH 401/473] HBASE-18024 HRegion#initializeRegionInternals should
+Subject: [PATCH 401/474] HBASE-18024 HRegion#initializeRegionInternals should
  not re-create .hregioninfo file when the region
  directory no longer exists
 

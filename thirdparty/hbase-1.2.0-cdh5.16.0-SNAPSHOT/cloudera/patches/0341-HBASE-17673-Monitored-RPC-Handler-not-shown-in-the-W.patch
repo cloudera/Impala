@@ -1,7 +1,7 @@
 From d2892958982efeab77b41fab99da0da89945a932 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Tue, 28 Feb 2017 07:44:35 -0800
-Subject: [PATCH 341/473] HBASE-17673 Monitored RPC Handler not shown in the
+Subject: [PATCH 341/474] HBASE-17673 Monitored RPC Handler not shown in the
  WebUI (Allan Yang)
 
 (cherry picked from commit 7d38e6126af747fd29863c1c1439c90481efec3c)

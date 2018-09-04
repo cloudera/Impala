@@ -1,7 +1,7 @@
 From b79e1998cb82d150433c296243fb6dad6bdbbd42 Mon Sep 17 00:00:00 2001
 From: Pankaj Kumar <pankaj.kr@huawei.com>
 Date: Thu, 25 Jan 2018 13:25:22 +0800
-Subject: [PATCH 455/473] HBASE-19553, Old replica regions should be cleared
+Subject: [PATCH 455/474] HBASE-19553, Old replica regions should be cleared
  from AM memory after primary region split or merge
 
 Signed-off-by: Ted Yu <tedyu@apache.org>

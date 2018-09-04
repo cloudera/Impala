@@ -1,7 +1,7 @@
 From 65a31ac2063acbcc65b3b6da291e7bc85b810675 Mon Sep 17 00:00:00 2001
 From: Andrew Purtell <apurtell@apache.org>
 Date: Wed, 8 Mar 2017 10:05:05 -0800
-Subject: [PATCH 335/473] HBASE-17729 Missing shortcuts for some useful HCD
+Subject: [PATCH 335/474] HBASE-17729 Missing shortcuts for some useful HCD
  options
 
 (cherry picked from commit ba292ccbf4a94df3f2bc8772d709c5093cfd374a)

@@ -1,7 +1,7 @@
 From 0035ce09d999393a87d0737e177085b91b54320f Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Mon, 18 Jul 2016 10:16:48 -0700
-Subject: [PATCH 256/473] HBASE-16237 Blocks for hbase:meta table are not
+Subject: [PATCH 256/474] HBASE-16237 Blocks for hbase:meta table are not
  cached in L1 cache (Lars George and Ted Yu)
 
 Change-Id: I8711a6fb17b6e30a989b66028923cb77958cf1d9

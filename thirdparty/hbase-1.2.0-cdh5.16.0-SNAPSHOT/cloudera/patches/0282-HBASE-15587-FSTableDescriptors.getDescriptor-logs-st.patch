@@ -1,7 +1,7 @@
 From f2a441c5a817285ca710e9c6524e830dccc3b154 Mon Sep 17 00:00:00 2001
 From: Enis Soztutar <enis@apache.org>
 Date: Tue, 5 Apr 2016 18:13:40 -0700
-Subject: [PATCH 282/473] HBASE-15587 FSTableDescriptors.getDescriptor() logs
+Subject: [PATCH 282/474] HBASE-15587 FSTableDescriptors.getDescriptor() logs
  stack trace erronously
 
 (cherry picked from commit fcfda192f7a9ab4a7950b2dc21cd861abedf49df)

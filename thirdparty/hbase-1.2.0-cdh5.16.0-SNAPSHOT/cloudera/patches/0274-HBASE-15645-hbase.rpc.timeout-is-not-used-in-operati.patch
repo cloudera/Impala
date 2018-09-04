@@ -1,7 +1,7 @@
 From 9ad0e26344ff6cdcf040979d3abe9bd299b9e93e Mon Sep 17 00:00:00 2001
 From: Umesh Agashe <uagashe@cloudera.com>
 Date: Thu, 23 Feb 2017 11:38:52 -0800
-Subject: [PATCH 274/473] HBASE-15645 hbase.rpc.timeout is not used in
+Subject: [PATCH 274/474] HBASE-15645 hbase.rpc.timeout is not used in
  operations of HTable
 
   (from commits 15ee4040aa3f2b7a65209eae3b47e2d6c82891e8 and 03167638b3446750f49aed8600bccc4412eb16d9)

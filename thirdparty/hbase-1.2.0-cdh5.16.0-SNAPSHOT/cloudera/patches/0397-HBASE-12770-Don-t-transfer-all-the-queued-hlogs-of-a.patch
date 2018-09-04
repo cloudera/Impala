@@ -1,7 +1,7 @@
 From 0ec0da390b7ea198070d1ee1a0349853c61b9afb Mon Sep 17 00:00:00 2001
 From: Phil Yang <ud1937@gmail.com>
 Date: Thu, 4 Aug 2016 19:33:01 +0800
-Subject: [PATCH 397/473] HBASE-12770 Don't transfer all the queued hlogs of a
+Subject: [PATCH 397/474] HBASE-12770 Don't transfer all the queued hlogs of a
  dead server to the same alive server
 
 Signed-off-by: zhangduo <zhangduo@apache.org>

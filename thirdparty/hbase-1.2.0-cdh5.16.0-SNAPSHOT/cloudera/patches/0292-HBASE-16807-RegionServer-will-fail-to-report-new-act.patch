@@ -1,7 +1,7 @@
 From 32484ad6693c68a480fa366be13429948284c67a Mon Sep 17 00:00:00 2001
 From: Pankaj Kumar <pankaj.kr@huawei.com>
 Date: Thu, 13 Oct 2016 22:26:42 +0800
-Subject: [PATCH 292/473] HBASE-16807, RegionServer will fail to report new
+Subject: [PATCH 292/474] HBASE-16807, RegionServer will fail to report new
  active Hmaster until HMaster/RegionServer failover.
 
 Reason: Bug

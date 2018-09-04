@@ -1,7 +1,7 @@
 From 471974e864ba4886bd1b4d37a1e76802cd11146e Mon Sep 17 00:00:00 2001
 From: Chia-Ping Tsai <chia7712@gmail.com>
 Date: Sat, 19 Aug 2017 01:57:08 +0800
-Subject: [PATCH 424/473] HBASE-18572 Delete can't remove the cells which have
+Subject: [PATCH 424/474] HBASE-18572 Delete can't remove the cells which have
  no visibility label
 
 (cherry picked from commit d810b8eb5e0bad174e80f861547066132058d521)

@@ -1,7 +1,7 @@
 From e0991c4e6db23bbc8989fd0f422e986ec589a3cf Mon Sep 17 00:00:00 2001
 From: Michael Stack <stack@apache.org>
 Date: Mon, 20 Nov 2017 12:31:07 -0800
-Subject: [PATCH 443/473] CDH-62141 Backport CDH5.7 MultiTableInputFormatBase
+Subject: [PATCH 443/474] CDH-62141 Backport CDH5.7 MultiTableInputFormatBase
  Connection handling and HBASE-19299 for Cerner
 
 Backports hbase-1.2 (CDH5.7+) Connection handling in MultiTableInputFormatBase#getSplits

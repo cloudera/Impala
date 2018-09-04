@@ -1,7 +1,7 @@
 From e799cd1d9928534d81d1d95342e827a710592733 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Tue, 22 Mar 2016 05:14:07 -0700
-Subject: [PATCH 275/473] HBASE-15325 ResultScanner allowing partial result
+Subject: [PATCH 275/474] HBASE-15325 ResultScanner allowing partial result
  will miss the rest of the row if the region is
  moved between two rpc requests (Phil Yang)
 

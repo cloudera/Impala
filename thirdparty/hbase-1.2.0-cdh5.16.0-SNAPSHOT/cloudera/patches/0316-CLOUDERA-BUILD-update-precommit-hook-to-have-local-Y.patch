@@ -1,7 +1,7 @@
 From 1317cbf63c880805e6555ebe86d6be633b94858a Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@cloudera.com>
 Date: Mon, 27 Mar 2017 17:44:19 -0500
-Subject: [PATCH 316/473] CLOUDERA-BUILD update precommit hook to have local
+Subject: [PATCH 316/474] CLOUDERA-BUILD update precommit hook to have local
  Yetus personality; exclude flaky tests.
 
 Change-Id: Id23317f53af30e5a088adaf8728af4cd0f289a96

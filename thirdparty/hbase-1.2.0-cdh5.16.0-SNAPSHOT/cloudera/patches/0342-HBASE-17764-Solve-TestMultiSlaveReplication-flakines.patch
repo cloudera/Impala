@@ -1,7 +1,7 @@
 From 58c392c78d49815adfea738fe611db7bac65de75 Mon Sep 17 00:00:00 2001
 From: Stephen Yuan Jiang <syuanjiangdev@gmail.com>
 Date: Thu, 9 Mar 2017 18:38:57 -0800
-Subject: [PATCH 342/473] HBASE-17764 Solve TestMultiSlaveReplication
+Subject: [PATCH 342/474] HBASE-17764 Solve TestMultiSlaveReplication
  flakiness (Stephen Yuan Jiang)
 
 (cherry picked from commit 7dfb3b3194b9096104020f4c87401813c4716dbe)

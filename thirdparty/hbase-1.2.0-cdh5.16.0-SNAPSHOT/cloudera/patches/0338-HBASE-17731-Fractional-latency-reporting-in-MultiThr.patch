@@ -1,7 +1,7 @@
 From 04be00943d871a77e70ab4967c7a915bd8d0b2c1 Mon Sep 17 00:00:00 2001
 From: Andrew Purtell <apurtell@apache.org>
 Date: Thu, 9 Mar 2017 16:54:23 -0800
-Subject: [PATCH 338/473] HBASE-17731 Fractional latency reporting in
+Subject: [PATCH 338/474] HBASE-17731 Fractional latency reporting in
  MultiThreadedAction
 
 (cherry picked from commit 0bc9ad0628ed96400ae9d0196b3453bfdc48c5b8)

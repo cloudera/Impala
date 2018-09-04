@@ -1,7 +1,7 @@
 From 9ad43d60aa6d05049357cea34da87e4791eba4b3 Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@apache.org>
 Date: Wed, 25 Jan 2017 15:30:56 -0600
-Subject: [PATCH 240/473] HBASE-17522 Handle JVM throwing runtime exceptions
+Subject: [PATCH 240/474] HBASE-17522 Handle JVM throwing runtime exceptions
  when we ask for details on heap usage the same as a
  correctly returned 'undefined'.
 

@@ -1,7 +1,7 @@
 From cad165a329a79776a921ba04f7f4bdb2b54d0ff3 Mon Sep 17 00:00:00 2001
 From: zhangduo <zhangduo@apache.org>
 Date: Fri, 28 Apr 2017 13:41:58 +0800
-Subject: [PATCH 349/473] HBASE-17970 Set yarn.app.mapreduce.am.staging-dir
+Subject: [PATCH 349/474] HBASE-17970 Set yarn.app.mapreduce.am.staging-dir
  when starting MiniMRCluster
 
 Change-Id: I256564699b3ab20fda7637cacf9d6f7edba4a9cb

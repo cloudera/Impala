@@ -1,7 +1,7 @@
 From e21c05b0462f31500c3c7e86a5d72246343bb145 Mon Sep 17 00:00:00 2001
 From: Enis Soztutar <enis@apache.org>
 Date: Wed, 25 May 2016 17:04:50 -0700
-Subject: [PATCH 345/473] HBASE-15837 Memstore size accounting is wrong if
+Subject: [PATCH 345/474] HBASE-15837 Memstore size accounting is wrong if
  postBatchMutate() throws exception
 
 Conflicts:

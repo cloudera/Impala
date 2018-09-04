@@ -1,7 +1,7 @@
 From c95ebeadd0f9e50581089a08f69f18729ecfbe3a Mon Sep 17 00:00:00 2001
 From: Yu Sun <sunyu1949@sina.com>
 Date: Fri, 11 Nov 2016 08:00:06 +0800
-Subject: [PATCH 257/473] HBASE-17020 keylen in midkey() dont computed
+Subject: [PATCH 257/474] HBASE-17020 keylen in midkey() dont computed
  correctly
 
 Signed-off-by: Yu Li <liyu@apache.org>

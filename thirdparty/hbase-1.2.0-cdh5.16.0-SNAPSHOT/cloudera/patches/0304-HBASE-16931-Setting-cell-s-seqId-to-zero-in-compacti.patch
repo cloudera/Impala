@@ -1,7 +1,7 @@
 From ebab2aedbfad1eae9cd9519b581a682fc638c189 Mon Sep 17 00:00:00 2001
 From: binlijin <binlijin@gmail.com>
 Date: Mon, 24 Oct 2016 18:08:23 +0800
-Subject: [PATCH 304/473] HBASE-16931 Setting cell's seqId to zero in
+Subject: [PATCH 304/474] HBASE-16931 Setting cell's seqId to zero in
  compaction flow might cause RS down.
 
 Change-Id: I247a251de0fe4dba170c6271d8a0bc11917ab987

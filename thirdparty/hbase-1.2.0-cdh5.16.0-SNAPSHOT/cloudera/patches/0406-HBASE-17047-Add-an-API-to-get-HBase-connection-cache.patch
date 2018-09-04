@@ -1,7 +1,7 @@
 From c66778f7ad174868b97154cde7e98986b859ffaf Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Fri, 11 Nov 2016 06:50:01 -0800
-Subject: [PATCH 406/473] HBASE-17047 Add an API to get HBase connection cache
+Subject: [PATCH 406/474] HBASE-17047 Add an API to get HBase connection cache
  statistics (Weiqing Yang)
 
 (cherry picked from commit 81623a353cdfbeef231f36d60aaa3419267f22d4)

@@ -1,7 +1,7 @@
 From 1ac1e7f59425378d28e88fa3c55330642aa5b402 Mon Sep 17 00:00:00 2001
 From: Michael Stack <stack@apache.org>
 Date: Mon, 27 Feb 2017 20:54:51 +0000
-Subject: [PATCH 287/473] CDH-50415 backport HBASE-16765 New
+Subject: [PATCH 287/474] CDH-50415 backport HBASE-16765 New
  SteppingRegionSplitPolicy, avoid too aggressive
  spread of regions for small tables. Includes
  HBASE-16765 and the amendment HBASE-16765 Amend:

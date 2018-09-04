@@ -1,7 +1,7 @@
 From caec2df7d1419ff988a595bf94d98da891cef0c8 Mon Sep 17 00:00:00 2001
 From: Mikhail Antonov <antonov@apache.org>
 Date: Mon, 7 Mar 2016 17:33:43 -0800
-Subject: [PATCH 437/473] HBASE-15354 Use same criteria for clearing meta
+Subject: [PATCH 437/474] HBASE-15354 Use same criteria for clearing meta
  cache for all operations (Ashu Pachauri)
 
 (cherry picked from commit 0fc287ad9f3bb64f996be06eea1c5be2068454d5)

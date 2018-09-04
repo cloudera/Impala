@@ -1,7 +1,7 @@
 From ff971be89a05ed8a0f894422bcdaea1ff538e540 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Tue, 11 Oct 2016 09:04:26 -0700
-Subject: [PATCH 403/473] HBASE-16638 Reduce the number of Connection's
+Subject: [PATCH 403/474] HBASE-16638 Reduce the number of Connection's
  created in classes of hbase-spark module (Weiqing
  Yang)
 

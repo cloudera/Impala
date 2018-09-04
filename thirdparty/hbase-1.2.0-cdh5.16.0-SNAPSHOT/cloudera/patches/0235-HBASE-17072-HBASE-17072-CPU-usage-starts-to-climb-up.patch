@@ -1,7 +1,7 @@
 From 806a08c9a5a3f2abe0fe38d4f95ab4c2fb375a08 Mon Sep 17 00:00:00 2001
 From: Michael Stack <stack@apache.org>
 Date: Fri, 9 Dec 2016 13:59:13 -0800
-Subject: [PATCH 235/473] HBASE-17072 HBASE-17072 CPU usage starts to climb up
+Subject: [PATCH 235/474] HBASE-17072 HBASE-17072 CPU usage starts to climb up
  to 90-100% when using G1GC; purge ThreadLocal usage
  Author: Michael Stack Reason: Bug/Performance Ref:
  CDH-48133

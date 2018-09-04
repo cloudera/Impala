@@ -1,7 +1,7 @@
 From 644f45b450f003fdea35425e4ee976ec5a756ea0 Mon Sep 17 00:00:00 2001
 From: Andrew Purtell <apurtell@apache.org>
 Date: Mon, 14 Nov 2016 12:28:19 -0800
-Subject: [PATCH 279/473] HBASE-17044 Fix merge failed before creating merged
+Subject: [PATCH 279/474] HBASE-17044 Fix merge failed before creating merged
  region leaves meta inconsistent
 
 (cherry picked from commit c1701571d89b9f74413e6a397cfa0da4cf5edf76)

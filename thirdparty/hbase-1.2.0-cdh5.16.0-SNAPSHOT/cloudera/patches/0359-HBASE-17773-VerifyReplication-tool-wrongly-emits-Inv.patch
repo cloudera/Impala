@@ -1,7 +1,7 @@
 From ea7eb1394759457421eb7de8a4814ad1d230d8f4 Mon Sep 17 00:00:00 2001
 From: Guanghao Zhang <zghao@apache.org>
 Date: Mon, 13 Mar 2017 17:53:43 +0800
-Subject: [PATCH 359/473] HBASE-17773 VerifyReplication tool wrongly emits
+Subject: [PATCH 359/474] HBASE-17773 VerifyReplication tool wrongly emits
  Invalid arguments error (Tom Tsuruhara)
 
 (cherry picked from commit 759d63b15ca63464dd51d1eeff0f6b7763ab6e01)

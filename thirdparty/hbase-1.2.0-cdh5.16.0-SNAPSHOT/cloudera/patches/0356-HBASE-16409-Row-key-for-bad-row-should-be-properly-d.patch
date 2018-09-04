@@ -1,7 +1,7 @@
 From d29b84fe5076fa0af9606a8462fc8cf2bc3001ce Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Sat, 20 Aug 2016 17:18:27 -0700
-Subject: [PATCH 356/473] HBASE-16409 Row key for bad row should be properly
+Subject: [PATCH 356/474] HBASE-16409 Row key for bad row should be properly
  delimited in VerifyReplication
 
 HBASE-16409 Addendum fixes the case where delimiter is not specified by user

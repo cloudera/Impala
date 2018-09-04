@@ -1,7 +1,7 @@
 From 522218f1dbf34a9d2bc3b72e3578eb58611e3440 Mon Sep 17 00:00:00 2001
 From: Pankaj Kumar <pankaj.kr@huawei.com>
 Date: Thu, 7 Dec 2017 22:51:01 +0530
-Subject: [PATCH 451/473] HBASE-19364, Truncate_preserve fails with table when
+Subject: [PATCH 451/474] HBASE-19364, Truncate_preserve fails with table when
  replica region > 1
 
 Change-Id: I5c5c37b93d331b189ad8d52725ef9a650701698f

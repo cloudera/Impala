@@ -1,7 +1,7 @@
 From 5be370dc17e724d2395480e7e72e0258dce4b820 Mon Sep 17 00:00:00 2001
 From: Chia-Ping Tsai <chia7712@gmail.com>
 Date: Fri, 1 Dec 2017 04:01:15 +0800
-Subject: [PATCH 458/473] HBASE-19350 TestMetaWithReplicas is flaky
+Subject: [PATCH 458/474] HBASE-19350 TestMetaWithReplicas is flaky
 
 (cherry picked from commit 9ab637c2292e36313b22b41be1e86809c6ac60f6)
 

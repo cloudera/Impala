@@ -1,7 +1,7 @@
 From eb7175608b1e3fbbecc589182f130fbfa6d10be8 Mon Sep 17 00:00:00 2001
 From: CHIA-PING TSAI <chia7712@gmail.com>
 Date: Thu, 9 Mar 2017 10:04:49 +0800
-Subject: [PATCH 350/473] HBASE-17736 Some options can't be configured by the
+Subject: [PATCH 350/474] HBASE-17736 Some options can't be configured by the
  shell
 
 Signed-off-by: Andrew Purtell <apurtell@apache.org>

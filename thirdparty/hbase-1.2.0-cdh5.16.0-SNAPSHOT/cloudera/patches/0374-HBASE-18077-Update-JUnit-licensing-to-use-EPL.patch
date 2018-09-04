@@ -1,7 +1,7 @@
 From 8ba82a26739a397027a82c4671354df801e28bdb Mon Sep 17 00:00:00 2001
 From: Mike Drob <mdrob@apache.org>
 Date: Thu, 18 May 2017 19:16:56 -0700
-Subject: [PATCH 374/473] HBASE-18077 Update JUnit licensing to use EPL
+Subject: [PATCH 374/474] HBASE-18077 Update JUnit licensing to use EPL
 
 Signed-off-by: Sean Busbey <busbey@apache.org>
 

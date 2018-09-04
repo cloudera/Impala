@@ -1,7 +1,7 @@
 From e15b2064f729ab2b7b18b1c06e69843917ed047a Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@apache.org>
 Date: Wed, 22 Feb 2017 13:31:51 -0600
-Subject: [PATCH 260/473] HBASE-17677 ServerName parsing from directory name
+Subject: [PATCH 260/474] HBASE-17677 ServerName parsing from directory name
  should be more robust to errors from guava's
  HostAndPort
 

@@ -1,7 +1,7 @@
 From 1b328050685d288cb185847977de4de4a1c7ea84 Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@apache.org>
 Date: Mon, 16 Oct 2017 16:11:39 -0500
-Subject: [PATCH 421/473] HBASE-19020 HBase Rest test for xml parsing external
+Subject: [PATCH 421/474] HBASE-19020 HBase Rest test for xml parsing external
  entities should not rely on implementation of java
  XML APIs.
 

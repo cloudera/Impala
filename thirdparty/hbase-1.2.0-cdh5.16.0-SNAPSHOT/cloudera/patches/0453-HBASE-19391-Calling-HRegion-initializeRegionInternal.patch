@@ -1,7 +1,7 @@
 From f75ebe41c5461853883691abcde445a74c3b06d0 Mon Sep 17 00:00:00 2001
 From: Esteban Gutierrez <esteban@apache.org>
 Date: Wed, 21 Feb 2018 15:28:50 -0800
-Subject: [PATCH 453/473] HBASE-19391 Calling
+Subject: [PATCH 453/474] HBASE-19391 Calling
  HRegion#initializeRegionInternals from a region
  replica can still re-create a region directory
 

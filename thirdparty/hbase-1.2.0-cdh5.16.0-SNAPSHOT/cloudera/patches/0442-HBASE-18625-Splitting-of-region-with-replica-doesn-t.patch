@@ -1,7 +1,7 @@
 From 0faffd3dc6f3496966d52f4cb0f8b015523c9c54 Mon Sep 17 00:00:00 2001
 From: huaxiang sun <huaxiangsun@apache.org>
 Date: Wed, 3 Jan 2018 12:24:05 -0800
-Subject: [PATCH 442/473] HBASE-18625 Splitting of region with replica,
+Subject: [PATCH 442/474] HBASE-18625 Splitting of region with replica,
  doesn't update region list in serverHolding. A
  server crash leads to overlap.
 

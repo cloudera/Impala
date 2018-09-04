@@ -1,7 +1,7 @@
 From ff3d8128112fc3bc10879730c65f54adf548b322 Mon Sep 17 00:00:00 2001
 From: Zach York <zyork@amazon.com>
 Date: Thu, 31 Aug 2017 10:25:32 -0700
-Subject: [PATCH 419/473] HBASE-18757 Fix improper bitwise & in bucketcache
+Subject: [PATCH 419/474] HBASE-18757 Fix improper bitwise & in bucketcache
  offset calculation
 
 This correctly casts the operand to a long to avoid negative offsets created by sign extending the integer operand.

@@ -1,7 +1,7 @@
 From 21636fa6897d4c161353496e4ee420ba43e44ca7 Mon Sep 17 00:00:00 2001
 From: Michael Stack <stack@apache.org>
 Date: Mon, 6 Feb 2017 10:35:26 -0800
-Subject: [PATCH 241/473] HBASE-6721 RegionServer Group based Assignment
+Subject: [PATCH 241/474] HBASE-6721 RegionServer Group based Assignment
  (Francis Liu)
 
 Change-Id: Idd79561b609bd8482b94d1eafff742620bd5a2f8

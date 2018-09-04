@@ -1,7 +1,7 @@
 From 944265b35fd8d3724ad1676701e669c972c3f8ab Mon Sep 17 00:00:00 2001
 From: stack <stack@apache.org>
 Date: Mon, 18 Jul 2016 14:36:11 -0700
-Subject: [PATCH 293/473] HBASE-16238 It's useless to catch SESSIONEXPIRED
+Subject: [PATCH 293/474] HBASE-16238 It's useless to catch SESSIONEXPIRED
  exception and retry in RecoverableZooKeeper (Allan
  Yang)
 

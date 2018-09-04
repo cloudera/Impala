@@ -1,7 +1,7 @@
 From 1f5e2d1e031c3679e745b98394d9735f6549f652 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Wed, 14 Dec 2016 20:03:44 -0800
-Subject: [PATCH 238/473] HBASE-17309 Fix connection leaks in
+Subject: [PATCH 238/474] HBASE-17309 Fix connection leaks in
  TestAcidGuarantees (huaxiang sun)
 
 Author: Huaxiang Sun

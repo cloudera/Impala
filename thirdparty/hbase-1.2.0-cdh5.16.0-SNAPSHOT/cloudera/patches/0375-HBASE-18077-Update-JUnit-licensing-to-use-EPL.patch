@@ -1,7 +1,7 @@
 From 6ed1e7ac477d23e087fa249f1514877fc27048e3 Mon Sep 17 00:00:00 2001
 From: Balazs Meszaros <balazs.meszaros@cloudera.com>
 Date: Tue, 15 Aug 2017 12:04:58 +0200
-Subject: [PATCH 375/473] HBASE-18077 Update JUnit licensing to use EPL
+Subject: [PATCH 375/474] HBASE-18077 Update JUnit licensing to use EPL
 
 This commit contains some fixes for CDH.
 

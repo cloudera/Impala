@@ -1,7 +1,7 @@
 From 4e8d9ed66439fa58e527762c480801821a07a474 Mon Sep 17 00:00:00 2001
 From: Yi Liang <easyliangjob@gmail.com>
 Date: Tue, 14 Feb 2017 10:22:22 -0800
-Subject: [PATCH 378/473] HBASE-17648: HBase Table-level synchronization fails
+Subject: [PATCH 378/474] HBASE-17648: HBase Table-level synchronization fails
  between two secured(kerberized) cluster
 
 Signed-off-by: tedyu <yuzhihong@gmail.com>

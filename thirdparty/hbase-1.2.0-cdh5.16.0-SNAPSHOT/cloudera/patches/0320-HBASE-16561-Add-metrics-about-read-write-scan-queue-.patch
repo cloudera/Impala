@@ -1,7 +1,7 @@
 From 18913bf962c7e03da534aafa1f04c900d94ebea8 Mon Sep 17 00:00:00 2001
 From: Guanghao Zhang <zghaobac@gmail.com>
 Date: Fri, 25 Nov 2016 14:13:21 +0800
-Subject: [PATCH 320/473] HBASE-16561 Add metrics about read/write/scan queue
+Subject: [PATCH 320/474] HBASE-16561 Add metrics about read/write/scan queue
  length and active read/write/scan handler count
 
 Signed-off-by: zhangduo <zhangduo@apache.org>

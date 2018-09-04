@@ -1,7 +1,7 @@
 From 98e0eca54035a5ae46b87a3479aeb224136f62a2 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Tue, 11 Jul 2017 18:19:37 -0700
-Subject: [PATCH 404/473] HBASE-18358 Backport HBASE-18099
+Subject: [PATCH 404/474] HBASE-18358 Backport HBASE-18099
  'FlushSnapshotSubprocedure should wait for
  concurrent Region#flush() to finish'
 

@@ -1,7 +1,7 @@
 From 9d1a409890f960516f5c8e3586e35b8b54b5e507 Mon Sep 17 00:00:00 2001
 From: Gary Helmling <garyh@apache.org>
 Date: Thu, 13 Oct 2016 15:31:42 -0700
-Subject: [PATCH 306/473] HBASE-16754 All WALSplitter OutputSinks should
+Subject: [PATCH 306/474] HBASE-16754 All WALSplitter OutputSinks should
  process compaction events
 
 Change-Id: I42d4f38e46778acaa1df850bf520486866851684

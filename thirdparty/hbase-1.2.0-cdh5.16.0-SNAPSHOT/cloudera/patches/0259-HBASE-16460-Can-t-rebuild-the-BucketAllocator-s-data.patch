@@ -1,7 +1,7 @@
 From 306a9948b2e4f437811651f3e6fe7adc40599719 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Mon, 5 Sep 2016 06:52:03 -0700
-Subject: [PATCH 259/473] HBASE-16460 Can't rebuild the BucketAllocator's data
+Subject: [PATCH 259/474] HBASE-16460 Can't rebuild the BucketAllocator's data
  structures when BucketCache uses FileIOEngine
  (Guanghao Zhang)
 

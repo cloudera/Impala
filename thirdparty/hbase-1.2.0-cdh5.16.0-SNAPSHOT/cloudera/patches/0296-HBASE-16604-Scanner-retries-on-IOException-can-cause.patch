@@ -1,7 +1,7 @@
 From 3d111d1fee63240ca0ff9d2a848c5aef86b8ea7c Mon Sep 17 00:00:00 2001
 From: Enis Soztutar <enis@apache.org>
 Date: Thu, 22 Sep 2016 17:41:01 -0700
-Subject: [PATCH 296/473] HBASE-16604 Scanner retries on IOException can cause
+Subject: [PATCH 296/474] HBASE-16604 Scanner retries on IOException can cause
  the scans to miss data
 
 Reason: Bug

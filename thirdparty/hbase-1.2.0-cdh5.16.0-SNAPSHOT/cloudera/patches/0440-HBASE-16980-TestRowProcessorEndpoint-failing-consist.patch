@@ -1,7 +1,7 @@
 From fcb8c7f912e57e8fe366c7783cb6c2804786b4cc Mon Sep 17 00:00:00 2001
 From: Andrew Purtell <apurtell@apache.org>
 Date: Tue, 1 Nov 2016 19:09:17 -0700
-Subject: [PATCH 440/473] HBASE-16980 TestRowProcessorEndpoint failing
+Subject: [PATCH 440/474] HBASE-16980 TestRowProcessorEndpoint failing
  consistently (Yu Li)
 
 (cherry picked from commit 8b7053fb392b621f62bfe2c4d47a7d03945d44bd)

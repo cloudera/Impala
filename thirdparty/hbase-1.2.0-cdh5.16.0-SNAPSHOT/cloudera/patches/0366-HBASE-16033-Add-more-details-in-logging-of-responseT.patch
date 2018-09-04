@@ -1,7 +1,7 @@
 From ef42c61c2706680284f431ef8df1e3e33810e73e Mon Sep 17 00:00:00 2001
 From: Yu Li <liyu@apache.org>
 Date: Thu, 16 Jun 2016 16:40:38 +0800
-Subject: [PATCH 366/473] HBASE-16033 Add more details in logging of
+Subject: [PATCH 366/474] HBASE-16033 Add more details in logging of
  responseTooSlow/TooLarge
 
 (cherry picked from commit b206809d330bdbb048c472c9809663d074052c3e)

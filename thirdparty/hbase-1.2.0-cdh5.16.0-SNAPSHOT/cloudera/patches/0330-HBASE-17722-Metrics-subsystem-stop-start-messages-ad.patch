@@ -1,7 +1,7 @@
 From f5f6c46dec0d39cd0986ecb6b1421b45c3b73aa9 Mon Sep 17 00:00:00 2001
 From: Andrew Purtell <apurtell@apache.org>
 Date: Fri, 3 Mar 2017 12:31:00 -0800
-Subject: [PATCH 330/473] HBASE-17722 Metrics subsystem stop/start messages
+Subject: [PATCH 330/474] HBASE-17722 Metrics subsystem stop/start messages
  add a lot of useless bulk to operational logging
 
 Ref: CDH-53383

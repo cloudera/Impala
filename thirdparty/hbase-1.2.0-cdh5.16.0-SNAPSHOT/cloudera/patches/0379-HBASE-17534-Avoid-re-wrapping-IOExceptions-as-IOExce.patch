@@ -1,7 +1,7 @@
 From 566b5311aff8d601a0743d00712f3a6b771764d6 Mon Sep 17 00:00:00 2001
 From: Josh Elser <elserj@apache.org>
 Date: Wed, 25 Jan 2017 18:41:34 -0500
-Subject: [PATCH 379/473] HBASE-17534 Avoid re-wrapping IOExceptions as
+Subject: [PATCH 379/474] HBASE-17534 Avoid re-wrapping IOExceptions as
  IOExceptions
 
 This ensures that when a DoNotRetryIOException is returned

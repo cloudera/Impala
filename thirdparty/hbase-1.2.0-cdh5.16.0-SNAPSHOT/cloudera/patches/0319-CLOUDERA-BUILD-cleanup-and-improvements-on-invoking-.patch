@@ -1,7 +1,7 @@
 From 3822761b238334faad08dc1d79b79be7c7a95097 Mon Sep 17 00:00:00 2001
 From: Sean Busbey <busbey@cloudera.com>
 Date: Fri, 31 Mar 2017 10:11:51 -0500
-Subject: [PATCH 319/473] CLOUDERA-BUILD cleanup and improvements on invoking
+Subject: [PATCH 319/474] CLOUDERA-BUILD cleanup and improvements on invoking
  compatibility checker.
 
 Change-Id: I7362b650531e75babcb8198b3390269eff792d1f

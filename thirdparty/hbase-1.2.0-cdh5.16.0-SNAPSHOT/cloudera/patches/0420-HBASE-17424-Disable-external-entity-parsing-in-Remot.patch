@@ -1,7 +1,7 @@
 From fe2c09736bed82aabac9d7da1e29a7a463c6cb71 Mon Sep 17 00:00:00 2001
 From: Josh Elser <elserj@apache.org>
 Date: Tue, 3 Jan 2017 19:02:08 -0500
-Subject: [PATCH 420/473] HBASE-17424 Disable external entity parsing in
+Subject: [PATCH 420/474] HBASE-17424 Disable external entity parsing in
  RemoteAdmin
 
 (cherry picked from commit 4f008bb01d5c7ef745333d37ddbf7a1b04ba1852)

@@ -1,7 +1,7 @@
 From 94b3290354d53d0a46b30f5210a29a59e596bc28 Mon Sep 17 00:00:00 2001
 From: Elliott Clark <eclark@apache.org>
 Date: Tue, 15 Dec 2015 15:35:16 -0800
-Subject: [PATCH 314/473] HBASE-14983 Create metrics for per block type
+Subject: [PATCH 314/474] HBASE-14983 Create metrics for per block type
  hit/miss ratios
 
 Summary: Missing a root index block is worse than missing a data block. We should know the difference

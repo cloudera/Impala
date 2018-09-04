@@ -1,7 +1,7 @@
 From 10448018fbc5c949db8fc69f25f23b9d3e2d19cc Mon Sep 17 00:00:00 2001
 From: Karan Mehta <k.mehta@kmehta-ltm1.internal.salesforce.com>
 Date: Mon, 6 Mar 2017 15:56:24 -0800
-Subject: [PATCH 381/473] HBASE-17698 ReplicationEndpoint choosing sinks
+Subject: [PATCH 381/474] HBASE-17698 ReplicationEndpoint choosing sinks
 
 Signed-off-by: Andrew Purtell <apurtell@apache.org>
 

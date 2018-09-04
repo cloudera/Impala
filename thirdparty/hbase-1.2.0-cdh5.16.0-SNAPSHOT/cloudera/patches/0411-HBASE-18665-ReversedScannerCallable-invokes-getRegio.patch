@@ -1,7 +1,7 @@
 From 35d8ab26aca55a97ab087d0ec9b620fef79aa0bc Mon Sep 17 00:00:00 2001
 From: Peter Somogyi <psomogyi@cloudera.com>
 Date: Tue, 29 Aug 2017 17:36:32 +0200
-Subject: [PATCH 411/473] HBASE-18665 ReversedScannerCallable invokes
+Subject: [PATCH 411/474] HBASE-18665 ReversedScannerCallable invokes
  getRegionLocations incorrectly
 
 The way how ReversedScannerCallable#prepare called getRegionLocations was faulty.

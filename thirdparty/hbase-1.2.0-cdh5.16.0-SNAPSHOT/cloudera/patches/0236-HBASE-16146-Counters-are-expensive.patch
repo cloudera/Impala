@@ -1,7 +1,7 @@
 From bdbf9573d82a9b1148a706fda02ea1bc3751e525 Mon Sep 17 00:00:00 2001
 From: Michael Stack <stack@apache.org>
 Date: Fri, 9 Dec 2016 14:14:04 -0800
-Subject: [PATCH 236/473] HBASE-16146 Counters are expensive... Author: Gary
+Subject: [PATCH 236/474] HBASE-16146 Counters are expensive... Author: Gary
  Helmling Reason: Bug/Performance Ref: CDH-48135
 
 Change-Id: I11696a53553b04920fb574163832e962def04527

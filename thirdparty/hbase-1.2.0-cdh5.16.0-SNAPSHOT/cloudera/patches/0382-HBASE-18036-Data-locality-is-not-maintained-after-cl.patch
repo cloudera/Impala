@@ -1,7 +1,7 @@
 From e8315ff0a1002fb2ccb30356ed4fb3e48d9c1118 Mon Sep 17 00:00:00 2001
 From: Stephen Yuan Jiang <syuanjiangdev@gmail.com>
 Date: Tue, 20 Jun 2017 12:34:23 -0700
-Subject: [PATCH 382/473] HBASE-18036 Data locality is not maintained after
+Subject: [PATCH 382/474] HBASE-18036 Data locality is not maintained after
  cluster restart or SSH (Stephen Yuan Jiang)
 
 (cherry picked from commit 3f9ba2f247ef0fb7cebf35a4501bd7cfa36197bc)

@@ -1,7 +1,7 @@
 From 376c706fc76370a0a76d71f3a4dafe1c9f556e53 Mon Sep 17 00:00:00 2001
 From: Michael Stack <stack@apache.org>
 Date: Thu, 9 Feb 2017 23:09:09 -0800
-Subject: [PATCH 242/473] Address review comments by Sean and Appy
+Subject: [PATCH 242/474] Address review comments by Sean and Appy
 
 Adds a new type to hold hostname and port. It is called
 Address. It is a facade over Guava's HostAndPort. Replace

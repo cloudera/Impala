@@ -1,7 +1,7 @@
 From 3d910c1b269e94c8a3f98dd9a60c93bbe289b59a Mon Sep 17 00:00:00 2001
 From: Zach York <zyork@amazon.com>
 Date: Thu, 2 Feb 2017 02:44:58 -0800
-Subject: [PATCH 367/473] HBASE-17587 Do not Rethrow DoNotRetryIOException as
+Subject: [PATCH 367/474] HBASE-17587 Do not Rethrow DoNotRetryIOException as
  UnknownScannerException
 
 Signed-off-by: Andrew Purtell <apurtell@apache.org>

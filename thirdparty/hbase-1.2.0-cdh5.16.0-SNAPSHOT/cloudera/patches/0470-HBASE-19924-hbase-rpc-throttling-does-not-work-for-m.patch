@@ -1,7 +1,7 @@
 From d3812872a868b907ee0a0e005449b173209d9149 Mon Sep 17 00:00:00 2001
 From: Huaxiang Sun <hsun@cloudera.com>
 Date: Thu, 26 Apr 2018 10:43:59 -0700
-Subject: [PATCH 470/473] HBASE-19924 hbase rpc throttling does not work for
+Subject: [PATCH 470/474] HBASE-19924 hbase rpc throttling does not work for
  multi() with request count rater.
 
 Change-Id: Id38e9c967f4ee178c52df31ed76e44861424c814

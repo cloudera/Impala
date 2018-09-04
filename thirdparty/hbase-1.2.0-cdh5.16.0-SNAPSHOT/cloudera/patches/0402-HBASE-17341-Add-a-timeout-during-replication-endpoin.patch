@@ -1,7 +1,7 @@
 From 47a2b579cc07908a2585b8d9564307ae5715c493 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Wed, 21 Dec 2016 08:27:45 -0800
-Subject: [PATCH 402/473] HBASE-17341 Add a timeout during replication
+Subject: [PATCH 402/474] HBASE-17341 Add a timeout during replication
  endpoint termination (Vincent Poon)
 
 Change-Id: I8ec966a5c71d46e6201a17e6f2a120eb9f4dfc82

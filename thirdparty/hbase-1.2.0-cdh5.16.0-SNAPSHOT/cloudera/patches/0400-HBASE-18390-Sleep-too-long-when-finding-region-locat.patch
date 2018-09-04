@@ -1,7 +1,7 @@
 From 82417c4927f917497eb2c2b6e1b01eb60934be9c Mon Sep 17 00:00:00 2001
 From: Phil Yang <yangzhe1991@apache.org>
 Date: Wed, 19 Jul 2017 11:34:57 +0800
-Subject: [PATCH 400/473] HBASE-18390 Sleep too long when finding region
+Subject: [PATCH 400/474] HBASE-18390 Sleep too long when finding region
  location failed
 
 (cherry picked from commit 0e4ceccc82878a7fd4f729ee153cdc0d80f78c74)

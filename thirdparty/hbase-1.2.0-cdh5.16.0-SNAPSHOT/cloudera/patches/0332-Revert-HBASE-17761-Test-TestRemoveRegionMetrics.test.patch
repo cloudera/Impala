@@ -1,7 +1,7 @@
 From caef30c607a1880b2f7ff9dc00accc2e791cee00 Mon Sep 17 00:00:00 2001
 From: Mike Drob <mdrob@cloudera.com>
 Date: Tue, 9 May 2017 06:55:42 -0800
-Subject: [PATCH 332/473] Revert "HBASE-17761: Test
+Subject: [PATCH 332/474] Revert "HBASE-17761: Test
  TestRemoveRegionMetrics.testMoveRegion fails
  intermittently because of race condition"
 

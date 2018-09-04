@@ -1,7 +1,7 @@
 From dc217ac378e1415143b974376f217f79dfe34c73 Mon Sep 17 00:00:00 2001
 From: Phil Yang <ud1937@gmail.com>
 Date: Tue, 9 Aug 2016 15:09:00 +0800
-Subject: [PATCH 310/473] HBASE-16368 test*WhenRegionMove in
+Subject: [PATCH 310/474] HBASE-16368 test*WhenRegionMove in
  TestPartialResultsFromClientSide is flaky
 
 Author: Phil Yang

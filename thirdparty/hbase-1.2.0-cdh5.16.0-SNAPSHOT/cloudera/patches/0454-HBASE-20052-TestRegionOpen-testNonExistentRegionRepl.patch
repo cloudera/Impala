@@ -1,7 +1,7 @@
 From 0adb1658eec17cba64f4d882f1d31bb346f19d22 Mon Sep 17 00:00:00 2001
 From: tedyu <yuzhihong@gmail.com>
 Date: Thu, 22 Feb 2018 12:41:13 -0800
-Subject: [PATCH 454/473] HBASE-20052
+Subject: [PATCH 454/474] HBASE-20052
  TestRegionOpen#testNonExistentRegionReplica fails
  due to NPE
 

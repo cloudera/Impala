@@ -1,7 +1,7 @@
 From 40f42421d2172e2f5acf2aa7ec7df4d5e28e3876 Mon Sep 17 00:00:00 2001
 From: Michael Stack <stack@apache.org>
 Date: Fri, 10 Feb 2017 17:01:20 -0800
-Subject: [PATCH 244/473] Revert "HBASE-6721 RegionServer Group based
+Subject: [PATCH 244/474] Revert "HBASE-6721 RegionServer Group based
  Assignment (Francis Liu)" Revert premature push....
 
 This reverts commit 21636fa6897d4c161353496e4ee420ba43e44ca7.

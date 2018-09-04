@@ -1,7 +1,7 @@
 From 1b6e332fbb929b6d56a2682ab4352f9fa255afd7 Mon Sep 17 00:00:00 2001
 From: Stephen Yuan Jiang <syuanjiangdev@gmail.com>
 Date: Fri, 3 Jun 2016 15:48:48 -0700
-Subject: [PATCH 299/473] HBASE-15955 Disable action in
+Subject: [PATCH 299/474] HBASE-15955 Disable action in
  CatalogJanitor#setEnabled should wait for active
  cleanup scan to finish (Stephen Yuan Jiang)
 

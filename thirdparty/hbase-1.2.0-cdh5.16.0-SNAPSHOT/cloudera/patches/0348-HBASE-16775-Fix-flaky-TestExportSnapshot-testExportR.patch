@@ -1,7 +1,7 @@
 From a36206ac1cddca3ea1f19611edefeb39b3f43329 Mon Sep 17 00:00:00 2001
 From: Apekshit Sharma <appy@apache.org>
 Date: Thu, 6 Oct 2016 14:20:58 -0700
-Subject: [PATCH 348/473] HBASE-16775 Fix flaky
+Subject: [PATCH 348/474] HBASE-16775 Fix flaky
  TestExportSnapshot#testExportRetry.
 
 Reason for flakyness: Current test is probability based fault injection and triggers failure 3% of the time. Earlier when test used LocalJobRunner which didn't honor "mapreduce.map.maxattempts", it'd pass 97% time (when no fault is injected) and fail 3% time (when fault was injected). Point being, even when the test was complete wrong, we couldn't catch it because it was probability based.

@@ -1,7 +1,7 @@
 From e9410ec57ce6a5ec50a480edb41f8f3818d45369 Mon Sep 17 00:00:00 2001
 From: Michael Stack <stack@apache.org>
 Date: Thu, 14 Sep 2017 12:27:37 -0700
-Subject: [PATCH 426/473] HBASE-18818 TestConnectionImplemenation fails
+Subject: [PATCH 426/474] HBASE-18818 TestConnectionImplemenation fails
 
 (cherry picked from commit 23a8027c7dec72706a865b77d0468a636d9a68a5)
 
