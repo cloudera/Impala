@@ -1056,7 +1056,18 @@ public class Frontend {
       throws ImpalaException {
     // Timeline of important events in the planning process, used for debugging
     // and profiling.
-    EventSequence timeline = new EventSequence("Query Compilation");
+    try (FrontendProfile.Scope scope = FrontendProfile.createNewWithScope()) {
+      EventSequence timeline = new EventSequence("Query Compilation");
+      TExecRequest result = getTExecRequest(queryCtx, timeline, explainString);
+      timeline.markEvent("Planning finished");
+      result.setTimeline(timeline.toThrift());
+      result.setProfile(FrontendProfile.getCurrent().emitAsThrift());
+      return result;
+    }
+  }
+
+  private TExecRequest getTExecRequest(TQueryCtx queryCtx, EventSequence timeline,
+      StringBuilder explainString) throws ImpalaException {
     LOG.info("Analyzing query: " + queryCtx.client_request.stmt);
 
     int attempt = 0;

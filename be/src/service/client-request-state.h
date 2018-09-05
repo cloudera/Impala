@@ -63,6 +63,11 @@ class ClientRequestState {
 
   ~ClientRequestState();
 
+  /// Sets the profile that is produced by the frontend. The frontend creates the
+  /// profile during planning and returns it to the backend via TExecRequest,
+  /// which then sets the frontend profile.
+  void SetFrontendProfile(TRuntimeProfileNode profile);
+
   /// Initiates execution of a exec_request.
   /// Non-blocking.
   /// Must *not* be called with lock_ held.
@@ -304,6 +309,8 @@ class ClientRequestState {
   /// The ClientRequestState builds three separate profiles.
   /// * profile_ is the top-level profile which houses the other
   ///   profiles, plus the query timeline
+  /// * frontend_profile_ is the profile emitted by the frontend
+  //    during planning.
   /// * summary_profile_ contains mostly static information about the
   ///   query, including the query statement, the plan and the user who submitted it.
   /// * server_profile_ tracks time spent inside the ImpalaServer,
@@ -322,6 +329,7 @@ class ClientRequestState {
   /// - Query Status
   /// - Error logs
   RuntimeProfile* const profile_;
+  RuntimeProfile* const frontend_profile_;
   RuntimeProfile* const server_profile_;
   RuntimeProfile* const summary_profile_;
   RuntimeProfile::Counter* row_materialization_timer_;
