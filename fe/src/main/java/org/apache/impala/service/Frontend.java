@@ -150,6 +150,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.google.common.util.concurrent.Uninterruptibles;
 
 /**
  * Frontend API for the impalad process.
@@ -165,6 +166,9 @@ public class Frontend {
 
   // TODO: Make the reload interval configurable.
   private static final int AUTHORIZATION_POLICY_RELOAD_INTERVAL_SECS = 5 * 60;
+
+  // Maximum number of times to retry a query if it fails due to inconsistent metadata.
+  private static final int INCONSISTENT_METADATA_NUM_RETRIES = 10;
 
   private final FeCatalogManager catalogManager_;
   private final AuthorizationConfig authzConfig_;
@@ -1041,14 +1045,36 @@ public class Frontend {
    */
   public TExecRequest createExecRequest(TQueryCtx queryCtx, StringBuilder explainString)
       throws ImpalaException {
-    // TODO(todd): wrap the planning in a retry loop which catches
-    // InconsistentMetadataFetchException.
-
     // Timeline of important events in the planning process, used for debugging
     // and profiling.
     EventSequence timeline = new EventSequence("Query Compilation");
     LOG.info("Analyzing query: " + queryCtx.client_request.stmt);
 
+    int attempt = 0;
+    while (true) {
+      try {
+        return doCreateExecRequest(queryCtx, timeline, explainString);
+      } catch (InconsistentMetadataFetchException e) {
+        if (attempt++ == INCONSISTENT_METADATA_NUM_RETRIES) {
+          throw e;
+        }
+        if (attempt > 1) {
+          // Back-off a bit on later retries.
+          Uninterruptibles.sleepUninterruptibly(200 * attempt, TimeUnit.MILLISECONDS);
+        }
+        timeline.markEvent(
+            String.format("Retrying query planning due to inconsistent metadata "
+                    + "fetch, attempt %s of %s: ",
+                attempt, INCONSISTENT_METADATA_NUM_RETRIES)
+            + e.getMessage());
+        LOG.warn("Retrying plan of query {}: {} (retry #{})",
+            queryCtx.client_request.stmt, e.getMessage(), attempt);
+      }
+    }
+  }
+
+  private TExecRequest doCreateExecRequest(TQueryCtx queryCtx, EventSequence timeline,
+      StringBuilder explainString) throws ImpalaException {
     // Parse stmt and collect/load metadata to populate a stmt-local table cache
     StatementBase stmt = parse(queryCtx.client_request.stmt);
     StmtMetadataLoader metadataLoader =
