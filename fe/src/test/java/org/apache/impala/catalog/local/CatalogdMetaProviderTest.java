@@ -156,7 +156,7 @@ public class CatalogdMetaProviderTest {
     // the size loosely.
     SizeOfWeigher weigher = new SizeOfWeigher();
     assertTrue(weigher.weigh(refs, null) > 3000);
-    assertTrue(weigher.weigh(refs, null) < 4000);
+    assertTrue(weigher.weigh(refs, null) < 5000);
   }
 
   @Test
