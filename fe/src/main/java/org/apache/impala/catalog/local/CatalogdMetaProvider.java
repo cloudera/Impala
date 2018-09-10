@@ -18,6 +18,7 @@
 package org.apache.impala.catalog.local;
 
 import java.lang.management.ManagementFactory;
+import java.lang.NoSuchMethodError;
 import java.nio.ByteBuffer;
 import java.util.HashSet;
 import java.util.List;
@@ -203,7 +204,7 @@ public class CatalogdMetaProvider implements MetaProvider {
   private DirectMetaProvider directProvider_ = new DirectMetaProvider();
 
 
-  final Cache<Object,Object> cache_;
+  private Cache<Object,Object> cache_;
 
   /**
    * The last catalog version seen in an update from the catalogd.
@@ -257,11 +258,30 @@ public class CatalogdMetaProvider implements MetaProvider {
 
     // TODO(todd) add end-to-end test cases which stress cache eviction (both time
     // and size-triggered) and make sure results are still correct.
-    cache_ = CacheBuilder.newBuilder()
-        .maximumWeight(cacheSizeBytes)
-        .expireAfterAccess(expirationSecs, TimeUnit.SECONDS)
-        .weigher(new SizeOfWeigher())
-        .build();
+    //
+    // ------> Hack to workaround leaked Guava versions in the classpath. <---------
+    //
+    // Starting v12.0, Guava's CacheBuilder requires calling 'recordStats()' explicitly
+    // to record cache stats. Earlier versions had it enabled by default. In 'cdh5-trunk'
+    // branch, Impala and Hive use v11.0.2 Guava dependency whereas HBase leaks v12.0.1.
+    // So, depending on which version is loaded by the classloader, we need to build the
+    // cache_ object accordingly.
+    try {
+      cache_ = CacheBuilder.newBuilder()
+          .maximumWeight(cacheSizeBytes)
+          .expireAfterAccess(expirationSecs, TimeUnit.SECONDS)
+          .weigher(new SizeOfWeigher())
+          .recordStats()
+          .build();
+    } catch (NoSuchMethodError e) {
+      if (!e.getMessage().contains("recordStats")) throw e;
+      cache_ = CacheBuilder.newBuilder()
+          .maximumWeight(cacheSizeBytes)
+          .expireAfterAccess(expirationSecs, TimeUnit.SECONDS)
+          .weigher(new SizeOfWeigher())
+          .build();
+
+    }
   }
 
   public CacheStats getCacheStats() {
