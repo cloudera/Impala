@@ -35,17 +35,17 @@ under the License.
     <beeswax_port>21000</beeswax_port>
     <impalad>localhost</impalad>
     <testExecutionMode>reduced</testExecutionMode>
-    <hadoop.version>3.0.0-cdh6.0.x-SNAPSHOT</hadoop.version>
-    <hive.version>2.1.1-cdh6.0.x-SNAPSHOT</hive.version>
+    <hadoop.version>3.0.0-cdh6.0.1</hadoop.version>
+    <hive.version>2.1.1-cdh6.0.1</hive.version>
     <hive.major.version>2</hive.major.version>
-    <sentry.version>2.0.0-cdh6.0.x-SNAPSHOT</sentry.version>
-    <hbase.version>2.0.0-cdh6.0.x-SNAPSHOT</hbase.version>
-    <parquet.version>1.9.0-cdh6.0.x-SNAPSHOT</parquet.version>
-    <kite.version>1.0.0-cdh6.0.x-SNAPSHOT</kite.version>
+    <sentry.version>2.0.0-cdh6.0.1</sentry.version>
+    <hbase.version>2.0.0-cdh6.0.1</hbase.version>
+    <parquet.version>1.9.0-cdh6.0.1</parquet.version>
+    <kite.version>1.0.0-cdh6.0.1</kite.version>
     <thrift.version>${env.IMPALA_THRIFT_JAVA_VERSION}</thrift.version>
     <impala.extdatasrc.api.version>1.0-SNAPSHOT</impala.extdatasrc.api.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <kudu.version>1.6.0-cdh6.0.x-SNAPSHOT</kudu.version>
+    <kudu.version>1.6.0-cdh6.0.1</kudu.version>
     <commons-io.version>2.6</commons-io.version>
     <slf4j.version>1.7.25</slf4j.version>
     <junit.version>4.12</junit.version>

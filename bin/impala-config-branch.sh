@@ -40,7 +40,7 @@
 
 # Defer to $GLOBAL_BUILD_NUMBER OR $CDH_GBN, in that order.
 export CDH_GBN=${GLOBAL_BUILD_NUMBER:-${CDH_GBN:-}}
-VERSION="6.0.x"
+VERSION="6.0.1"
 BRANCH="cdh${VERSION}"
 CDH_GBN_CONFIG="${IMPALA_HOME}/toolchain/cdh_components/cdh-gbn.sh"
 WGET="wget --no-verbose -O -"
