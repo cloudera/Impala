@@ -17,10 +17,13 @@
 #
 # Tests for IMPALA-1658
 
+import os
 import pytest
 import time
+from subprocess import check_call
 
 from tests.common.custom_cluster_test_suite import CustomClusterTestSuite
+from tests.util.filesystem_utils import get_fs_path
 
 class TestHiveParquetTimestampConversion(CustomClusterTestSuite):
   '''Hive writes timestamps in parquet files by first converting values from local time
@@ -29,12 +32,28 @@ class TestHiveParquetTimestampConversion(CustomClusterTestSuite):
      the conversion and flag behave as expected.
   '''
 
+  _test_tz_name = "PST8PDT"
+  _orig_tz_name = None
+
   @classmethod
   def add_test_dimensions(cls):
     super(CustomClusterTestSuite, cls).add_test_dimensions()
     cls.ImpalaTestMatrix.add_constraint(lambda v:
         v.get_value('table_format').file_format == 'parquet' and
         v.get_value('table_format').compression_codec == 'none')
+
+  @classmethod
+  def setup_class(cls):
+    super(TestHiveParquetTimestampConversion, cls).setup_class()
+    cls._orig_tz_name = os.getenv('TZ')
+    os.environ["TZ"] = cls._test_tz_name
+
+  @classmethod
+  def teardown_class(cls):
+    if cls._orig_tz_name is None:
+      del os.environ['TZ']
+    else:
+      os.environ['TZ'] = cls._orig_tz_name
 
   def check_sanity(self, expect_converted_result):
     data = self.execute_query_expect_success(self.client, """
@@ -61,7 +80,7 @@ class TestHiveParquetTimestampConversion(CustomClusterTestSuite):
   @pytest.mark.execute_serially
   @CustomClusterTestSuite.with_args("-convert_legacy_hive_parquet_utc_timestamps=true")
   def test_conversion(self, vector):
-    tz_name = time.tzname[0]
+    tz_name = TestHiveParquetTimestampConversion._test_tz_name
     self.check_sanity(tz_name not in ("UTC", "GMT"))
     # The value read from the Hive table should be the same as reading a UTC converted
     # value from the Impala table.
@@ -83,7 +102,7 @@ class TestHiveParquetTimestampConversion(CustomClusterTestSuite):
   def test_no_conversion(self, vector):
     self.check_sanity(False)
     # Without conversion all the values will be different.
-    tz_name = time.tzname[0]
+    tz_name = TestHiveParquetTimestampConversion._test_tz_name
     data = self.execute_query_expect_success(self.client, """
         SELECT h.id, h.day, h.timestamp_col, i.timestamp_col
         FROM functional_parquet.alltypesagg_hive_13_1 h
@@ -108,3 +127,33 @@ class TestHiveParquetTimestampConversion(CustomClusterTestSuite):
         """)\
         .get_data()
     assert len(data) == 0
+
+  @pytest.mark.execute_serially
+  @CustomClusterTestSuite.with_args("-convert_legacy_hive_parquet_utc_timestamps=true")
+  def test_stat_filtering(self, vector, unique_database):
+    """ IMPALA-7559: Check that Parquet stat filtering doesn't skip row groups
+        incorrectly when timezone conversion is needed.
+    """
+    self.client.execute(
+       "create table %s.t (i int, d timestamp) stored as parquet" % unique_database)
+
+    tbl_loc = get_fs_path("/test-warehouse/%s.db/t" % unique_database)
+    check_call(['hdfs', 'dfs', '-copyFromLocal', os.environ['IMPALA_HOME'] +
+        "/testdata/data/hive_single_value_timestamp.parq", tbl_loc])
+
+    # This is the backported version of the fix for IMPALA-7559. The Parquet file
+    # used for testing is the same, but timezone is PST8PDT instead of CET, so the
+    # filter and expected data were changed from 2018-10-01 02:30:00 to 2018-09-30
+    # 17:30:00. The reason is that the query option to set timezone is not added on
+    # this branch yet, so env var TZ is set in setup_class() to have a fix timezone.
+    # The upstream version sets TZ to PST8PDT, and this behavior is kept to minimize
+    # differences.
+    data = self.execute_query_expect_success(self.client,
+        'select * from %s.t' % unique_database).get_data()
+    assert data == '1\t2018-09-30 17:30:00'
+
+    # This query returned 0 rows before the fix for IMPALA-7559.
+    data = self.execute_query_expect_success(self.client,
+        'select * from %s.t where d = "2018-09-30 17:30:00"'
+        % unique_database).get_data()
+    assert data == '1\t2018-09-30 17:30:00'

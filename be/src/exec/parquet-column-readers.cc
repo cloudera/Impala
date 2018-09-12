@@ -244,11 +244,8 @@ class ScalarColumnReader : public BaseScalarColumnReader {
       fixed_len_size_ = -1;
     }
     needs_conversion_ = slot_desc_->type().type == TYPE_CHAR ||
-        // TODO: Add logic to detect file versions that have unconverted TIMESTAMP
-        // values. Currently all versions have converted values.
-        (FLAGS_convert_legacy_hive_parquet_utc_timestamps &&
-        slot_desc_->type().type == TYPE_TIMESTAMP &&
-        parent->file_version_.application == "parquet-mr");
+        (slot_desc_->type().type == TYPE_TIMESTAMP &&
+        parent->IsTimezoneConversionNeededForTimestamps());
   }
 
   virtual ~ScalarColumnReader() { }
