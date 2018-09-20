@@ -145,7 +145,7 @@ class ImpalaShell(object, cmd.Cmd):
     self.user = options.user
     self.ldap_password = options.ldap_password
     self.use_ldap = options.use_ldap
-
+    self.client_connect_timeout_ms = options.client_connect_timeout_ms
     self.verbose = options.verbose
     self.prompt = ImpalaShell.DISCONNECTED_PROMPT
     self.server_version = ImpalaShell.UNKNOWN_SERVER_VERSION
@@ -485,7 +485,7 @@ class ImpalaShell(object, cmd.Cmd):
     return ImpalaClient(self.impalad, self.use_kerberos,
                         self.kerberos_service_name, self.use_ssl,
                         self.ca_cert, self.user, self.ldap_password,
-                        self.use_ldap)
+                        self.use_ldap, self.client_connect_timeout_ms, self.verbose)
 
   def _signal_handler(self, signal, frame):
     """Handles query cancellation on a Ctrl+C event"""
@@ -807,12 +807,13 @@ class ImpalaShell(object, cmd.Cmd):
       print_to_stderr("Unable to import the python 'ssl' module. It is"
       " required for an SSL-secured connection.")
       sys.exit(1)
-    except socket.error, (code, e):
+    except socket.error, e:
       # if the socket was interrupted, reconnect the connection with the client
-      if code == errno.EINTR:
+      if e.errno == errno.EINTR:
         self._reconnect_cancellation()
       else:
-        print_to_stderr("Socket error %s: %s" % (code, e))
+        print_to_stderr("Socket error %s: %s" % (e.errno, e))
+        self.imp_client.close_connection()
         self.prompt = self.DISCONNECTED_PROMPT
     except Exception, e:
       print_to_stderr("Error connecting: %s, %s" % (type(e).__name__, e))
