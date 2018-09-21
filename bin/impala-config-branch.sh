@@ -60,6 +60,7 @@ if [ ! "${CDH_GBN}" ]; then
     echo "Using CDH_GBN ${CDH_GBN} based on BuildDB query ${BUILDDB_QUERY}."
   fi
 fi
+export CDH_BUILD_NUMBER=${CDH_GBN}
 
 # Defer to IMPALA_MAVEN_OPTIONS_OVERRIDE. If not set, download an m2-settings.xml file
 # and re-configure to use it.
@@ -88,6 +89,8 @@ export IMPALA_HBASE_VERSION=2.1.0-${BRANCH}-${CDH_GBN}
 export IMPALA_HBASE_URL=${BUILD_REPO_BASE}/hbase-${IMPALA_HBASE_VERSION}.tar.gz
 export IMPALA_HIVE_VERSION=2.1.1-${BRANCH}-${CDH_GBN}
 export IMPALA_HIVE_URL=${BUILD_REPO_BASE}/hive-${IMPALA_HIVE_VERSION}.tar.gz
+export IMPALA_KUDU_VERSION=1.8.0-${BRANCH}-${CDH_GBN}
+export IMPALA_KUDU_URL=${BUILD_REPO_BASE}/kudu-${IMPALA_KUDU_VERSION}-'%(platform_label)'.tar.gz
 export IMPALA_SENTRY_VERSION=2.0.0-${BRANCH}-${CDH_GBN}
 export IMPALA_SENTRY_URL=${BUILD_REPO_BASE}/sentry-${IMPALA_SENTRY_VERSION}.tar.gz
 export IMPALA_PARQUET_VERSION=1.9.0-${BRANCH}
