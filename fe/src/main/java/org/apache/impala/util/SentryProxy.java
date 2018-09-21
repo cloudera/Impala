@@ -23,7 +23,6 @@ import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 import org.apache.impala.catalog.AuthorizationException;
 import org.apache.impala.catalog.CatalogException;
@@ -402,18 +401,20 @@ public class SentryProxy {
 
     // List of privileges that should be removed. If removed, they will be added to
     // the removedPrivileges list.
-    List<TPrivilege> toRemove = null;
+    List<TPrivilege> toRemove = Lists.newArrayList();
 
     if (catNoGrant != null && hasGrantOption) {
-      toRemove = privileges.stream().map(p -> {
-        TPrivilege tp = p.deepCopy();
-        return tp.setPrivilege_name((PrincipalPrivilege
-            .buildPrivilegeName(tp.setHas_grant_opt(false))));
-        }).collect(Collectors.toList());
+      for(TPrivilege privilege: privileges) {
+        TPrivilege p = privilege.deepCopy();
+        toRemove.add(p.setPrivilege_name(PrincipalPrivilege
+            .buildPrivilegeName(p.setHas_grant_opt(false))));
+      }
     } else if (catWithGrant != null && !hasGrantOption) {
       // Elevate the requested privileges.
-      privileges = privileges.stream().map(p -> p.setPrivilege_name(PrincipalPrivilege
-          .buildPrivilegeName(p.setHas_grant_opt(true)))).collect(Collectors.toList());
+      for(TPrivilege privilege: privileges) {
+        privilege.setPrivilege_name(PrincipalPrivilege
+            .buildPrivilegeName(privilege.setHas_grant_opt(true)));
+      }
     }
 
     // This is a list of privileges that were added, to be returned.

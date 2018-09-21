@@ -81,6 +81,10 @@ public class BackendConfig {
 
   public long getMinBufferSize() { return backendCfg_.min_buffer_size; }
 
+  public boolean isAuthorizationFileSet() {
+    return !Strings.isNullOrEmpty(backendCfg_.authorization_policy_file);
+  }
+
   public boolean disableCatalogDataOpsDebugOnly() {
     return backendCfg_.disable_catalog_data_ops_debug_only;
   }

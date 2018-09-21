@@ -42,6 +42,12 @@ CATALOGD_ARGS = 'catalogd_args'
 # Additional args passed to the start-impala-cluster script.
 START_ARGS = 'start_args'
 SENTRY_CONFIG = 'sentry_config'
+LOG_DIR = 'log_dir'
+
+# Run with fast topic updates by default to reduce time to first query running.
+DEFAULT_STATESTORE_ARGS = '--statestore_update_frequency_ms=50 \
+    --statestore_priority_update_frequency_ms=50 \
+    --statestore_heartbeat_frequency_ms=50'
 
 class CustomClusterTestSuite(ImpalaTestSuite):
   """Every test in a test suite deriving from this class gets its own Impala cluster.
@@ -87,7 +93,7 @@ class CustomClusterTestSuite(ImpalaTestSuite):
 
   @staticmethod
   def with_args(impalad_args=None, statestored_args=None, catalogd_args=None,
-      start_args=None, sentry_config=None):
+      start_args=None, sentry_config=None, log_dir=None):
     """Records arguments to be passed to a cluster by adding them to the decorated
     method's func_dict"""
     def decorate(func):
@@ -101,6 +107,8 @@ class CustomClusterTestSuite(ImpalaTestSuite):
         func.func_dict[START_ARGS] = start_args
       if sentry_config is not None:
         func.func_dict[SENTRY_CONFIG] = sentry_config
+      if log_dir is not None:
+        func.func_dict[LOG_DIR] = log_dir
       return func
     return decorate
 
@@ -115,7 +123,11 @@ class CustomClusterTestSuite(ImpalaTestSuite):
     if SENTRY_CONFIG in method.func_dict:
       self._start_sentry_service(method.func_dict[SENTRY_CONFIG])
     # Start a clean new cluster before each test
-    self._start_impala_cluster(cluster_args)
+    if LOG_DIR in method.func_dict:
+      self._start_impala_cluster(cluster_args,
+          log_dir=method.func_dict[LOG_DIR])
+    else:
+      self._start_impala_cluster(cluster_args)
     super(CustomClusterTestSuite, self).setup_class()
 
   def teardown_method(self, method):
