@@ -76,6 +76,7 @@ import org.apache.impala.catalog.CatalogException;
 import org.apache.impala.catalog.Column;
 import org.apache.impala.catalog.DatabaseNotFoundException;
 import org.apache.impala.catalog.FeCatalog;
+import org.apache.impala.catalog.FeCatalogUtils;
 import org.apache.impala.catalog.FeDataSource;
 import org.apache.impala.catalog.FeDataSourceTable;
 import org.apache.impala.catalog.FeDb;
@@ -656,6 +657,7 @@ public class Frontend {
       resp.num_dbs++;
       resp.num_tables += db.getAllTableNames().size();
     }
+    FeCatalogUtils.populateCacheMetrics(getCatalog(), resp);
     return resp;
   }
 
