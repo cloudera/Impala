@@ -245,9 +245,9 @@ public class SentryProxy {
       for (TSentryPrivilege sentryPriv: allPrincipalPrivileges.get(principal.getName())) {
         TPrivilege thriftPriv =
             SentryPolicyService.sentryPrivilegeToTPrivilege(sentryPriv, principal);
-        privilegesToRemove.remove(thriftPriv.getPrivilege_name().toLowerCase());
-        PrincipalPrivilege existingPrincipalPriv =
-            principal.getPrivilege(thriftPriv.getPrivilege_name());
+        String privilegeName = PrincipalPrivilege.buildPrivilegeName(thriftPriv);
+        privilegesToRemove.remove(privilegeName.toLowerCase());
+        PrincipalPrivilege existingPrincipalPriv = principal.getPrivilege(privilegeName);
         // We already know about this privilege (privileges cannot be modified).
         if (existingPrincipalPriv != null &&
             existingPrincipalPriv.getCreateTimeMs() == sentryPriv.getCreateTime()) {
@@ -266,12 +266,10 @@ public class SentryProxy {
 
       // Remove the privileges that no longer exist.
       for (String privilegeName: privilegesToRemove) {
-        TPrivilege privilege = new TPrivilege();
-        privilege.setPrivilege_name(privilegeName);
         if (principal.getPrincipalType() == TPrincipalType.ROLE) {
-          catalog_.removeRolePrivilege(principal.getName(), privilege);
+          catalog_.removeRolePrivilege(principal.getName(), privilegeName);
         } else {
-          catalog_.removeUserPrivilege(principal.getName(), privilege);
+          catalog_.removeUserPrivilege(principal.getName(), privilegeName);
         }
       }
     }
@@ -389,31 +387,25 @@ public class SentryProxy {
     // option set. The only case there will be more than one privilege is in the case
     // of multiple column privileges.
     Preconditions.checkArgument(!privileges.isEmpty());
-    TPrivilege tWithGrant = privileges.get(0).deepCopy().setHas_grant_opt(true);
-    tWithGrant = tWithGrant.setPrivilege_name(PrincipalPrivilege
-        .buildPrivilegeName(tWithGrant));
+    TPrivilege tWithGrant = PrincipalPrivilege.copyPrivilegeWithGrant(privileges.get(0),
+        true);
     PrincipalPrivilege catWithGrant = catalog_.getPrincipalPrivilege(roleName,
         tWithGrant);
-    TPrivilege tNoGrant = privileges.get(0).deepCopy().setHas_grant_opt(false);
-    tNoGrant = tNoGrant.setPrivilege_name(PrincipalPrivilege
-        .buildPrivilegeName(tNoGrant));
+    TPrivilege tNoGrant = PrincipalPrivilege.copyPrivilegeWithGrant(privileges.get(0),
+        false);
     PrincipalPrivilege catNoGrant = catalog_.getPrincipalPrivilege(roleName, tNoGrant);
 
     // List of privileges that should be removed. If removed, they will be added to
     // the removedPrivileges list.
     List<TPrivilege> toRemove = Lists.newArrayList();
-
     if (catNoGrant != null && hasGrantOption) {
       for(TPrivilege privilege: privileges) {
-        TPrivilege p = privilege.deepCopy();
-        toRemove.add(p.setPrivilege_name(PrincipalPrivilege
-            .buildPrivilegeName(p.setHas_grant_opt(false))));
+        toRemove.add(PrincipalPrivilege.copyPrivilegeWithGrant(privilege, false));
       }
     } else if (catWithGrant != null && !hasGrantOption) {
       // Elevate the requested privileges.
       for(TPrivilege privilege: privileges) {
-        privilege.setPrivilege_name(PrincipalPrivilege
-            .buildPrivilegeName(privilege.setHas_grant_opt(true)));
+        privilege.setHas_grant_opt(true);
       }
     }
 
@@ -430,7 +422,8 @@ public class SentryProxy {
     if (toRemove != null && !toRemove.isEmpty()) {
       sentryPolicyService_.revokeRolePrivileges(user, roleName, toRemove);
       for (TPrivilege privilege : toRemove) {
-        PrincipalPrivilege rolePriv = catalog_.removeRolePrivilege(roleName, privilege);
+        PrincipalPrivilege rolePriv = catalog_.removeRolePrivilege(roleName,
+            PrincipalPrivilege.buildPrivilegeName(privilege));
         if (rolePriv == null) continue;
         removedPrivileges.add(rolePriv);
       }
@@ -472,12 +465,10 @@ public class SentryProxy {
       for (TPrivilege privilege: privileges) {
         TPrivilege privNotGrant = privilege.deepCopy();
         privNotGrant.setHas_grant_opt(!privilege.has_grant_opt);
-        privNotGrant.setPrivilege_name(PrincipalPrivilege
-            .buildPrivilegeName(privNotGrant));
         PrincipalPrivilege rolePrivNotGrant = catalog_.removeRolePrivilege(roleName,
-            privNotGrant);
+            PrincipalPrivilege.buildPrivilegeName(privNotGrant));
         PrincipalPrivilege rolePriv = catalog_.removeRolePrivilege(roleName,
-            privilege);
+            PrincipalPrivilege.buildPrivilegeName(privilege));
         if (rolePrivNotGrant != null) {
           rolePrivileges.add(rolePrivNotGrant);
         }
@@ -497,11 +488,11 @@ public class SentryProxy {
         PrincipalPrivilege existingPriv = catalog_.getPrincipalPrivilege(roleName,
             privilege);
         if (existingPriv == null) continue;
-        rolePrivileges.add(catalog_.removeRolePrivilege(roleName, privilege));
+        rolePrivileges.add(catalog_.removeRolePrivilege(roleName,
+            PrincipalPrivilege.buildPrivilegeName(privilege)));
 
         TPrivilege addedPriv = new TPrivilege(existingPriv.toThrift());
         addedPriv.setHas_grant_opt(false);
-        addedPriv.setPrivilege_name(PrincipalPrivilege.buildPrivilegeName(addedPriv));
         newPrivs.add(addedPriv);
       }
       // Re-grant the updated privileges.

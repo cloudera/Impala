@@ -22,7 +22,6 @@ import java.util.Map;
 import java.util.Set;
 
 import org.apache.impala.catalog.Principal;
-import org.apache.impala.catalog.PrincipalPrivilege;
 import org.apache.impala.thrift.TPrincipalType;
 import org.apache.sentry.provider.db.SentryAccessDeniedException;
 import org.apache.sentry.provider.db.SentryAlreadyExistsException;
@@ -506,7 +505,6 @@ public class SentryPolicyService {
     } else {
       privilege.setHas_grant_opt(false);
     }
-    privilege.setPrivilege_name(PrincipalPrivilege.buildPrivilegeName(privilege));
     privilege.setPrincipal_id(principal.getId());
     privilege.setPrincipal_type(principal.getPrincipalType());
     return privilege;

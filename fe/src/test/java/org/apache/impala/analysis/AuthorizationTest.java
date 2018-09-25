@@ -204,8 +204,8 @@ public class AuthorizationTest extends FrontendTestBase {
     String roleName = "admin";
     sentryService.createRole(USER, roleName, true);
 
-    TPrivilege privilege = new TPrivilege("", TPrivilegeLevel.ALL,
-        TPrivilegeScope.SERVER, false);
+    TPrivilege privilege = new TPrivilege(TPrivilegeLevel.ALL, TPrivilegeScope.SERVER,
+        false);
     privilege.setServer_name("server1");
     sentryService.grantRolePrivilege(USER, roleName, privilege);
     sentryService.revokeRoleFromGroup(USER, "admin", USER.getName());
@@ -216,8 +216,7 @@ public class AuthorizationTest extends FrontendTestBase {
     sentryService.createRole(USER, roleName, true);
     sentryService.grantRoleToGroup(USER, roleName, USER.getName());
 
-    privilege = new TPrivilege("", TPrivilegeLevel.INSERT, TPrivilegeScope.TABLE,
-        false);
+    privilege = new TPrivilege(TPrivilegeLevel.INSERT, TPrivilegeScope.TABLE, false);
     privilege.setServer_name("server1");
     privilege.setDb_name("functional");
     privilege.setTable_name("alltypes");
@@ -228,8 +227,7 @@ public class AuthorizationTest extends FrontendTestBase {
     sentryService.createRole(USER, roleName, true);
     sentryService.grantRoleToGroup(USER, roleName, USER.getName());
 
-    privilege = new TPrivilege("", TPrivilegeLevel.INSERT, TPrivilegeScope.TABLE,
-        false);
+    privilege = new TPrivilege(TPrivilegeLevel.INSERT, TPrivilegeScope.TABLE, false);
     privilege.setServer_name("server1");
     privilege.setDb_name("functional_parquet");
     privilege.setTable_name(AuthorizeableTable.ANY_TABLE_NAME);
@@ -240,8 +238,7 @@ public class AuthorizationTest extends FrontendTestBase {
     sentryService.createRole(USER, roleName, true);
     sentryService.grantRoleToGroup(USER, roleName, USER.getName());
 
-    privilege = new TPrivilege("", TPrivilegeLevel.REFRESH,
-        TPrivilegeScope.DATABASE, false);
+    privilege = new TPrivilege(TPrivilegeLevel.REFRESH, TPrivilegeScope.DATABASE, false);
     privilege.setServer_name("server1");
     privilege.setDb_name("functional_text_lzo");
     privilege.setTable_name(AuthorizeableTable.ANY_TABLE_NAME);
@@ -252,8 +249,7 @@ public class AuthorizationTest extends FrontendTestBase {
     sentryService.createRole(USER, roleName, true);
     sentryService.grantRoleToGroup(USER, roleName, USER.getName());
 
-    privilege = new TPrivilege("", TPrivilegeLevel.REFRESH,
-        TPrivilegeScope.TABLE, false);
+    privilege = new TPrivilege(TPrivilegeLevel.REFRESH, TPrivilegeScope.TABLE, false);
     privilege.setServer_name("server1");
     privilege.setDb_name("functional");
     privilege.setTable_name("alltypesagg");
@@ -264,8 +260,7 @@ public class AuthorizationTest extends FrontendTestBase {
     sentryService.createRole(USER, roleName, true);
     sentryService.grantRoleToGroup(USER, roleName, USER.getName());
 
-    privilege = new TPrivilege("", TPrivilegeLevel.DROP,
-        TPrivilegeScope.TABLE, false);
+    privilege = new TPrivilege(TPrivilegeLevel.DROP, TPrivilegeScope.TABLE, false);
     privilege.setServer_name("server1");
     privilege.setDb_name("functional");
     privilege.setTable_name("alltypesagg");
@@ -276,8 +271,7 @@ public class AuthorizationTest extends FrontendTestBase {
     sentryService.createRole(USER, roleName, true);
     sentryService.grantRoleToGroup(USER, roleName, USER.getName());
 
-    privilege = new TPrivilege("", TPrivilegeLevel.REFRESH,
-        TPrivilegeScope.TABLE, false);
+    privilege = new TPrivilege(TPrivilegeLevel.REFRESH, TPrivilegeScope.TABLE, false);
     privilege.setServer_name("server1");
     privilege.setDb_name("functional");
     privilege.setTable_name("view_view");
@@ -288,8 +282,7 @@ public class AuthorizationTest extends FrontendTestBase {
     sentryService.createRole(USER, roleName, true);
     sentryService.grantRoleToGroup(USER, roleName, USER.getName());
 
-    privilege = new TPrivilege("", TPrivilegeLevel.DROP,
-        TPrivilegeScope.TABLE, false);
+    privilege = new TPrivilege(TPrivilegeLevel.DROP, TPrivilegeScope.TABLE, false);
     privilege.setServer_name("server1");
     privilege.setDb_name("functional");
     privilege.setTable_name("alltypes_view");
@@ -300,8 +293,7 @@ public class AuthorizationTest extends FrontendTestBase {
     sentryService.createRole(USER, roleName, true);
     sentryService.grantRoleToGroup(USER, roleName, USER.getName());
 
-    privilege = new TPrivilege("", TPrivilegeLevel.INSERT,
-        TPrivilegeScope.DATABASE, false);
+    privilege = new TPrivilege(TPrivilegeLevel.INSERT, TPrivilegeScope.DATABASE, false);
     privilege.setServer_name("server1");
     privilege.setDb_name("functional_text_lzo");
     privilege.setTable_name(AuthorizeableTable.ANY_TABLE_NAME);
@@ -312,8 +304,7 @@ public class AuthorizationTest extends FrontendTestBase {
     sentryService.createRole(USER, roleName, true);
     sentryService.grantRoleToGroup(USER, roleName, USER.getName());
 
-    privilege = new TPrivilege("", TPrivilegeLevel.CREATE,
-        TPrivilegeScope.DATABASE, false);
+    privilege = new TPrivilege(TPrivilegeLevel.CREATE, TPrivilegeScope.DATABASE, false);
     privilege.setServer_name("server1");
     privilege.setDb_name("functional_text_lzo");
     privilege.setTable_name(AuthorizeableTable.ANY_TABLE_NAME);
@@ -324,8 +315,7 @@ public class AuthorizationTest extends FrontendTestBase {
     sentryService.createRole(USER, roleName, true);
     sentryService.grantRoleToGroup(USER, roleName, USER.getName());
 
-    privilege = new TPrivilege("", TPrivilegeLevel.ALTER, TPrivilegeScope.DATABASE,
-        false);
+    privilege = new TPrivilege(TPrivilegeLevel.ALTER, TPrivilegeScope.DATABASE, false);
     privilege.setServer_name("server1");
     privilege.setDb_name("functional_text_lzo");
     privilege.setTable_name(AuthorizeableTable.ANY_TABLE_NAME);
@@ -336,8 +326,7 @@ public class AuthorizationTest extends FrontendTestBase {
     sentryService.createRole(USER, roleName, true);
     sentryService.grantRoleToGroup(USER, roleName, USER.getName());
 
-    privilege = new TPrivilege("", TPrivilegeLevel.DROP, TPrivilegeScope.DATABASE,
-        false);
+    privilege = new TPrivilege(TPrivilegeLevel.DROP, TPrivilegeScope.DATABASE, false);
     privilege.setServer_name("server1");
     privilege.setDb_name("functional_text_lzo");
     privilege.setTable_name(AuthorizeableTable.ANY_TABLE_NAME);
@@ -348,7 +337,7 @@ public class AuthorizationTest extends FrontendTestBase {
     sentryService.createRole(USER, roleName, true);
     sentryService.grantRoleToGroup(USER, roleName, USER.getName());
 
-    privilege = new TPrivilege("", TPrivilegeLevel.ALTER, TPrivilegeScope.TABLE, false);
+    privilege = new TPrivilege(TPrivilegeLevel.ALTER, TPrivilegeScope.TABLE, false);
     privilege.setServer_name("server1");
     privilege.setDb_name("functional");
     privilege.setTable_name("alltypeserror");
@@ -359,8 +348,7 @@ public class AuthorizationTest extends FrontendTestBase {
     sentryService.createRole(USER, roleName, true);
     sentryService.grantRoleToGroup(USER, roleName, USER.getName());
 
-    privilege = new TPrivilege("", TPrivilegeLevel.ALTER,
-        TPrivilegeScope.TABLE, false);
+    privilege = new TPrivilege(TPrivilegeLevel.ALTER, TPrivilegeScope.TABLE, false);
     privilege.setServer_name("server1");
     privilege.setDb_name("functional");
     privilege.setTable_name("alltypes_view");
@@ -371,28 +359,24 @@ public class AuthorizationTest extends FrontendTestBase {
     sentryService.createRole(USER, roleName, true);
     sentryService.grantRoleToGroup(USER, roleName, USER.getName());
 
-    privilege = new TPrivilege("", TPrivilegeLevel.ALL, TPrivilegeScope.DATABASE,
-        false);
+    privilege = new TPrivilege(TPrivilegeLevel.ALL, TPrivilegeScope.DATABASE, false);
     privilege.setServer_name("server1");
     privilege.setDb_name("newdb");
     sentryService.grantRolePrivilege(USER, roleName, privilege);
 
-    privilege = new TPrivilege("", TPrivilegeLevel.ALL, TPrivilegeScope.URI,
-        false);
+    privilege = new TPrivilege(TPrivilegeLevel.ALL, TPrivilegeScope.URI, false);
     privilege.setServer_name("server1");
     privilege.setUri("hdfs://localhost:20500/test-warehouse/new_table");
     privilege.setTable_name(AuthorizeableTable.ANY_TABLE_NAME);
     sentryService.grantRolePrivilege(USER, roleName, privilege);
 
-    privilege = new TPrivilege("", TPrivilegeLevel.ALL, TPrivilegeScope.URI,
-        false);
+    privilege = new TPrivilege(TPrivilegeLevel.ALL, TPrivilegeScope.URI, false);
     privilege.setServer_name("server1");
     privilege.setUri("hdfs://localhost:20500/test-warehouse/UPPER_CASE");
     privilege.setTable_name(AuthorizeableTable.ANY_TABLE_NAME);
     sentryService.grantRolePrivilege(USER, roleName, privilege);
 
-    privilege = new TPrivilege("", TPrivilegeLevel.ALL, TPrivilegeScope.URI,
-        false);
+    privilege = new TPrivilege(TPrivilegeLevel.ALL, TPrivilegeScope.URI, false);
     privilege.setServer_name("server1");
     privilege.setUri("hdfs://localhost:20500/test-warehouse/libTestUdfs.so");
     privilege.setTable_name(AuthorizeableTable.ANY_TABLE_NAME);
@@ -402,12 +386,12 @@ public class AuthorizationTest extends FrontendTestBase {
     roleName = "all_tpch";
     sentryService.createRole(USER, roleName, true);
     sentryService.grantRoleToGroup(USER, roleName, USER.getName());
-    privilege = new TPrivilege("", TPrivilegeLevel.ALL, TPrivilegeScope.URI, false);
+    privilege = new TPrivilege(TPrivilegeLevel.ALL, TPrivilegeScope.URI, false);
     privilege.setServer_name("server1");
     privilege.setUri("hdfs://localhost:20500/test-warehouse/tpch.lineitem");
     sentryService.grantRolePrivilege(USER, roleName, privilege);
 
-    privilege = new TPrivilege("", TPrivilegeLevel.ALL, TPrivilegeScope.DATABASE, false);
+    privilege = new TPrivilege(TPrivilegeLevel.ALL, TPrivilegeScope.DATABASE, false);
     privilege.setServer_name("server1");
     privilege.setDb_name("tpch");
     sentryService.grantRolePrivilege(USER, roleName, privilege);
@@ -417,7 +401,7 @@ public class AuthorizationTest extends FrontendTestBase {
     sentryService.createRole(USER, roleName, true);
     sentryService.grantRoleToGroup(USER, roleName, USER.getName());
 
-    privilege = new TPrivilege("", TPrivilegeLevel.SELECT, TPrivilegeScope.TABLE, false);
+    privilege = new TPrivilege(TPrivilegeLevel.SELECT, TPrivilegeScope.TABLE, false);
     privilege.setServer_name("server1");
     privilege.setDb_name("tpcds");
     privilege.setTable_name(AuthorizeableTable.ANY_TABLE_NAME);
@@ -428,7 +412,7 @@ public class AuthorizationTest extends FrontendTestBase {
     sentryService.createRole(USER, roleName, true);
     sentryService.grantRoleToGroup(USER, roleName, USER.getName());
 
-    privilege = new TPrivilege("", TPrivilegeLevel.SELECT, TPrivilegeScope.TABLE, false);
+    privilege = new TPrivilege(TPrivilegeLevel.SELECT, TPrivilegeScope.TABLE, false);
     privilege.setServer_name("server1");
     privilege.setDb_name("functional");
     privilege.setTable_name("alltypesagg");
@@ -439,7 +423,7 @@ public class AuthorizationTest extends FrontendTestBase {
     sentryService.createRole(USER, roleName, true);
     sentryService.grantRoleToGroup(USER, roleName, USER.getName());
 
-    privilege = new TPrivilege("", TPrivilegeLevel.SELECT, TPrivilegeScope.TABLE, false);
+    privilege = new TPrivilege(TPrivilegeLevel.SELECT, TPrivilegeScope.TABLE, false);
     privilege.setServer_name("server1");
     privilege.setDb_name("functional");
     privilege.setTable_name("complex_view");
@@ -450,7 +434,7 @@ public class AuthorizationTest extends FrontendTestBase {
     sentryService.createRole(USER, roleName, true);
     sentryService.grantRoleToGroup(USER, roleName, USER.getName());
 
-    privilege = new TPrivilege("", TPrivilegeLevel.SELECT, TPrivilegeScope.TABLE, false);
+    privilege = new TPrivilege(TPrivilegeLevel.SELECT, TPrivilegeScope.TABLE, false);
     privilege.setServer_name("server1");
     privilege.setDb_name("functional");
     privilege.setTable_name("view_view");
@@ -463,7 +447,7 @@ public class AuthorizationTest extends FrontendTestBase {
     sentryService.createRole(USER, roleName, true);
     sentryService.grantRoleToGroup(USER, roleName, USER.getName());
 
-    privilege = new TPrivilege("", TPrivilegeLevel.ALL, TPrivilegeScope.DATABASE, false);
+    privilege = new TPrivilege(TPrivilegeLevel.ALL, TPrivilegeScope.DATABASE, false);
     privilege.setServer_name("server1");
     privilege.setDb_name("functional_seq_snap");
     sentryService.grantRolePrivilege(USER, roleName, privilege);
@@ -476,8 +460,8 @@ public class AuthorizationTest extends FrontendTestBase {
     // select (id, int_col, year) on functional.alltypessmall
     List<TPrivilege> privileges = Lists.newArrayList();
     for (String columnName: Arrays.asList("id", "int_col", "year")) {
-      TPrivilege priv = new TPrivilege("", TPrivilegeLevel.SELECT,
-          TPrivilegeScope.COLUMN, false);
+      TPrivilege priv = new TPrivilege(TPrivilegeLevel.SELECT, TPrivilegeScope.COLUMN,
+          false);
       priv.setServer_name("server1");
       priv.setDb_name("functional");
       priv.setTable_name("alltypessmall");
@@ -490,8 +474,8 @@ public class AuthorizationTest extends FrontendTestBase {
     // select (id, int_struct_col) on functional.allcomplextypes
     for (String columnName: Arrays.asList("id", "int_struct_col", "struct_array_col",
         "int_map_col")) {
-      TPrivilege priv = new TPrivilege("", TPrivilegeLevel.SELECT,
-          TPrivilegeScope.COLUMN, false);
+      TPrivilege priv = new TPrivilege(TPrivilegeLevel.SELECT, TPrivilegeScope.COLUMN,
+          false);
       priv.setServer_name("server1");
       priv.setDb_name("functional");
       priv.setTable_name("allcomplextypes");
@@ -502,7 +486,7 @@ public class AuthorizationTest extends FrontendTestBase {
     privileges.clear();
 
     // table privileges on functional_parquet.allcomplextypes
-    privilege = new TPrivilege("", TPrivilegeLevel.ALL, TPrivilegeScope.TABLE, false);
+    privilege = new TPrivilege(TPrivilegeLevel.ALL, TPrivilegeScope.TABLE, false);
     privilege.setServer_name("server1");
     privilege.setDb_name("functional_parquet");
     privilege.setTable_name("allcomplextypes");
@@ -515,8 +499,8 @@ public class AuthorizationTest extends FrontendTestBase {
         "int_col", "bigint_col", "float_col", "double_col", "date_string_col",
         "timestamp_col", "string_col", "year", "month"};
     for (String columnName: Arrays.asList(columnNames)) {
-      TPrivilege priv = new TPrivilege("", TPrivilegeLevel.SELECT,
-          TPrivilegeScope.COLUMN, false);
+      TPrivilege priv = new TPrivilege(TPrivilegeLevel.SELECT, TPrivilegeScope.COLUMN,
+          false);
       priv.setServer_name("server1");
       priv.setDb_name("functional");
       priv.setTable_name("alltypestiny");
@@ -530,8 +514,7 @@ public class AuthorizationTest extends FrontendTestBase {
     sentryService.createRole(USER, roleName, true);
     sentryService.grantRoleToGroup(USER, roleName, USER.getName());
 
-    privilege = new TPrivilege("", TPrivilegeLevel.SELECT,
-        TPrivilegeScope.COLUMN, false);
+    privilege = new TPrivilege(TPrivilegeLevel.SELECT, TPrivilegeScope.COLUMN, false);
     privilege.setServer_name("server1");
     privilege.setDb_name("functional_avro");
     privilege.setTable_name("alltypessmall");
@@ -549,15 +532,14 @@ public class AuthorizationTest extends FrontendTestBase {
     sentryService.createRole(USER, roleName, true);
     String dbName = UUID.randomUUID().toString();
     TPrivilege privilege =
-        new TPrivilege("", TPrivilegeLevel.ALL, TPrivilegeScope.DATABASE, false);
+        new TPrivilege(TPrivilegeLevel.ALL, TPrivilegeScope.DATABASE, false);
     privilege.setServer_name("server1");
     privilege.setDb_name(dbName);
     sentryService.grantRoleToGroup(USER, roleName, USER.getName());
     sentryService.grantRolePrivilege(USER, roleName, privilege);
 
     for (int i = 0; i < 2; ++i) {
-      privilege = new TPrivilege("", TPrivilegeLevel.SELECT, TPrivilegeScope.TABLE,
-          false);
+      privilege = new TPrivilege(TPrivilegeLevel.SELECT, TPrivilegeScope.TABLE, false);
       privilege.setServer_name("server1");
       privilege.setDb_name(dbName);
       privilege.setTable_name("test_tbl_" + String.valueOf(i));
@@ -566,7 +548,7 @@ public class AuthorizationTest extends FrontendTestBase {
 
     List<TPrivilege> privileges = Lists.newArrayList();
     for (int i = 0; i < 10; ++i) {
-      TPrivilege priv = new TPrivilege("", TPrivilegeLevel.SELECT, TPrivilegeScope.COLUMN,
+      TPrivilege priv = new TPrivilege(TPrivilegeLevel.SELECT, TPrivilegeScope.COLUMN,
           false);
       priv.setServer_name("server1");
       priv.setDb_name(dbName);
