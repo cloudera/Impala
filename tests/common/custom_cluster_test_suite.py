@@ -167,7 +167,7 @@ class CustomClusterTestSuite(ImpalaTestSuite):
 
     if pytest.config.option.pull_incremental_statistics:
       cmd.append("--impalad_args=%s --catalogd_args=%s" %
-                 ("--pull_incremental_statistcs", "--pull_incremental_statistics"))
+                 ("--pull_incremental_statistics", "--pull_incremental_statistics"))
 
     logging.info("Starting cluster with command: %s" %
                  " ".join(pipes.quote(arg) for arg in cmd + options))
