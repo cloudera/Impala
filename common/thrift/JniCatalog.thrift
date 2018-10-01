@@ -707,3 +707,8 @@ struct TGetCatalogUsageResponse{
   2: required list<TTableUsageMetrics> frequently_accessed_tables
 }
 
+// Response to GetCatalogServerMetrics() call.
+struct TGetCatalogServerMetricsResponse {
+  // Partial fetch RPC queue length.
+  1: required i32 catalog_partial_fetch_rpc_queue_len
+}

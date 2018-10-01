@@ -73,7 +73,7 @@ struct TBackendGflags {
   23: required double max_filter_error_rate
 
   24: required i64 min_buffer_size
-  
+
   // 25: required bool enable_orc_scanner BACKPORT NOTE: not backported
 
   // 26: required string authorized_proxy_group_config BACKPORT NOTE: not backported
@@ -99,4 +99,8 @@ struct TBackendGflags {
   36: required double invalidate_tables_fraction_on_memory_pressure
 
   37: required i32 local_catalog_max_fetch_retries
+
+  38: required i32 catalog_max_parallel_partial_fetch_rpc
+
+  39: required i64 catalog_partial_fetch_rpc_queue_timeout_s
 }

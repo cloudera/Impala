@@ -60,6 +60,9 @@ DECLARE_bool(invalidate_tables_on_memory_pressure);
 DECLARE_double(invalidate_tables_gc_old_gen_full_threshold);
 DECLARE_double(invalidate_tables_fraction_on_memory_pressure);
 DECLARE_int32(local_catalog_max_fetch_retries);
+DECLARE_int32(catalog_max_parallel_partial_fetch_rpc);
+DECLARE_int64(catalog_partial_fetch_rpc_queue_timeout_s);
+
 namespace impala {
 
 Status GetThriftBackendGflags(JNIEnv* jni_env, jbyteArray* cfg_bytes) {
@@ -114,6 +117,10 @@ Status GetThriftBackendGflags(JNIEnv* jni_env, jbyteArray* cfg_bytes) {
   cfg.__set_invalidate_tables_fraction_on_memory_pressure(
       FLAGS_invalidate_tables_fraction_on_memory_pressure);
   cfg.__set_local_catalog_max_fetch_retries(FLAGS_local_catalog_max_fetch_retries);
+  cfg.__set_catalog_max_parallel_partial_fetch_rpc(
+      FLAGS_catalog_max_parallel_partial_fetch_rpc);
+  cfg.__set_catalog_partial_fetch_rpc_queue_timeout_s(
+      FLAGS_catalog_partial_fetch_rpc_queue_timeout_s);
   RETURN_IF_ERROR(SerializeThriftMsg(jni_env, &cfg, cfg_bytes));
   return Status::OK();
 }
