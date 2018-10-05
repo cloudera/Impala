@@ -857,31 +857,33 @@ public class CatalogServiceCatalog extends Catalog {
         throw new ImpalaRuntimeException(errorMsg);
       }
       URL[] classLoaderUrls = new URL[] {new URL(localJarPath.toString())};
-      URLClassLoader urlClassLoader = new URLClassLoader(classLoaderUrls);
-      udfClass = urlClassLoader.loadClass(function.getClassName());
-      // Check if the class is of UDF type. Currently we don't support other functions
-      // TODO: Remove this once we support Java UDAF/UDTF
-      if (FunctionUtils.getUDFClassType(udfClass) != FunctionUtils.UDFClassType.UDF) {
-        LOG.warn("Ignoring load of incompatible Java function: " +
-            function.getFunctionName() + " as " + FunctionUtils.getUDFClassType(udfClass)
-            + " is not a supported type. Only UDFs are supported");
-        return result;
-      }
-      // Load each method in the UDF class and create the corresponding Impala Function
-      // object.
-      for (Method m: udfClass.getMethods()) {
-        if (!m.getName().equals(UdfExecutor.UDF_FUNCTION_NAME)) continue;
-        Function fn = ScalarFunction.fromHiveFunction(db,
-            function.getFunctionName(), function.getClassName(),
-            m.getParameterTypes(), m.getReturnType(), jarUri);
-        if (fn == null) {
-          LOG.warn("Ignoring incompatible method: " + m.toString() + " during load of " +
-             "Hive UDF:" + function.getFunctionName() + " from " + udfClass);
-          continue;
+      try (URLClassLoader urlClassLoader = new URLClassLoader(classLoaderUrls)) {
+        udfClass = urlClassLoader.loadClass(function.getClassName());
+        // Check if the class is of UDF type. Currently we don't support other functions
+        // TODO: Remove this once we support Java UDAF/UDTF
+        if (FunctionUtils.getUDFClassType(udfClass) != FunctionUtils.UDFClassType.UDF) {
+          LOG.warn("Ignoring load of incompatible Java function: " +
+              function.getFunctionName() + " as " +
+              FunctionUtils.getUDFClassType(udfClass) + " is not a supported type. " +
+              "Only UDFs are supported");
+          return result;
         }
-        if (!addedSignatures.contains(fn.signatureString())) {
-          result.add(fn);
-          addedSignatures.add(fn.signatureString());
+        // Load each method in the UDF class and create the corresponding Impala Function
+        // object.
+        for (Method m: udfClass.getMethods()) {
+          if (!m.getName().equals(UdfExecutor.UDF_FUNCTION_NAME)) continue;
+          Function fn = ScalarFunction.fromHiveFunction(db,
+              function.getFunctionName(), function.getClassName(),
+              m.getParameterTypes(), m.getReturnType(), jarUri);
+          if (fn == null) {
+            LOG.warn("Ignoring incompatible method: " + m.toString() + " during load of "
+                + "Hive UDF:" + function.getFunctionName() + " from " + udfClass);
+            continue;
+          }
+          if (!addedSignatures.contains(fn.signatureString())) {
+            result.add(fn);
+            addedSignatures.add(fn.signatureString());
+          }
         }
       }
     } catch (ClassNotFoundException c) {
