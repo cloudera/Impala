@@ -1,0 +1,115 @@
+From 28895a03a60d76f4ce8d9d19784b9ef40ab85375 Mon Sep 17 00:00:00 2001
+From: Balazs Meszaros <balazs.meszaros@cloudera.com>
+Date: Mon, 29 Jan 2018 16:43:20 +0100
+Subject: [PATCH 461/480] HBASE-19886 Display maintenance mode in shell, web
+ UI
+
+(cherry picked from commit 1eef181a577dfd120708a8f859cc21546ec8516b)
+
+Author: Balazs Meszaros
+Reason: New Feature
+Ref: CDH-62132
+
+Change-Id: Ic7873882ad9eff6fbf9dea047d90f9f7a2287d74
+---
+ .../hbase/tmpl/master/MasterStatusTmpl.jamon       |    6 ++++
+ hbase-shell/src/main/ruby/hbase/admin.rb           |    7 ++++
+ hbase-shell/src/main/ruby/shell.rb                 |    1 +
+ .../ruby/shell/commands/is_in_maintenance_mode.rb  |   38 ++++++++++++++++++++
+ 4 files changed, 52 insertions(+)
+ create mode 100644 hbase-shell/src/main/ruby/shell/commands/is_in_maintenance_mode.rb
+
+diff --git a/hbase-server/src/main/jamon/org/apache/hadoop/hbase/tmpl/master/MasterStatusTmpl.jamon b/hbase-server/src/main/jamon/org/apache/hadoop/hbase/tmpl/master/MasterStatusTmpl.jamon
+index be38321..870d3a8 100644
+--- a/hbase-server/src/main/jamon/org/apache/hadoop/hbase/tmpl/master/MasterStatusTmpl.jamon
++++ b/hbase-server/src/main/jamon/org/apache/hadoop/hbase/tmpl/master/MasterStatusTmpl.jamon
+@@ -162,6 +162,12 @@ AssignmentManager assignmentManager = master.getAssignmentManager();
+           re-enabled from the hbase shell by running the command 'catalogjanitor_switch true'
+           </div>
+         </%if>
++        <%if master.isInMaintenanceMode() %>
++          <div class="alert alert-warning">
++          Your Master is in maintenance mode. This may be because of HBCK aborting while
++          running in repair mode. Please re-run HBCK in repair mode.
++          </div>
++        </%if>
+         <%if !master.isBalancerOn() %>
+           <div class="alert alert-warning">
+             The Load Balancer is not enabled which will eventually cause performance degradation
+diff --git a/hbase-shell/src/main/ruby/hbase/admin.rb b/hbase-shell/src/main/ruby/hbase/admin.rb
+index c2b6080..2511f94 100644
+--- a/hbase-shell/src/main/ruby/hbase/admin.rb
++++ b/hbase-shell/src/main/ruby/hbase/admin.rb
+@@ -184,6 +184,13 @@ module Hbase
+     end
+ 
+     #----------------------------------------------------------------------------------------------
++    # Query the current state of master in maintenance mode.
++    # Returns the state of maintenance mode (true is on).
++    def in_maintenance_mode?
++      @admin.isMasterInMaintenanceMode
++    end
++
++    #----------------------------------------------------------------------------------------------
+     # Request a scan of the catalog table (for garbage collection)
+     # Returns an int signifying the number of entries cleaned
+     def catalogjanitor_run()
+diff --git a/hbase-shell/src/main/ruby/shell.rb b/hbase-shell/src/main/ruby/shell.rb
+index 5a5a9e3..40a85a8 100644
+--- a/hbase-shell/src/main/ruby/shell.rb
++++ b/hbase-shell/src/main/ruby/shell.rb
+@@ -322,6 +322,7 @@ Shell.load_command_group(
+     normalize
+     normalizer_switch
+     normalizer_enabled
++    is_in_maintenance_mode
+     close_region
+     compact
+     flush
+diff --git a/hbase-shell/src/main/ruby/shell/commands/is_in_maintenance_mode.rb b/hbase-shell/src/main/ruby/shell/commands/is_in_maintenance_mode.rb
+new file mode 100644
+index 0000000..8ed244c
+--- /dev/null
++++ b/hbase-shell/src/main/ruby/shell/commands/is_in_maintenance_mode.rb
+@@ -0,0 +1,38 @@
++#
++#
++# Licensed to the Apache Software Foundation (ASF) under one
++# or more contributor license agreements.  See the NOTICE file
++# distributed with this work for additional information
++# regarding copyright ownership.  The ASF licenses this file
++# to you under the Apache License, Version 2.0 (the
++# "License"); you may not use this file except in compliance
++# with the License.  You may obtain a copy of the License at
++#
++#     http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++#
++
++module Shell
++  module Commands
++    class IsInMaintenanceMode < Command
++      def help
++        <<-EOF
++Is master in maintenance mode? For example:
++
++  hbase> is_in_maintenance_mode
++EOF
++      end
++
++      def command
++        state = admin.in_maintenance_mode?
++        formatter.row([state.to_s])
++        state
++      end
++    end
++  end
++end
+-- 
+1.7.9.5
+
