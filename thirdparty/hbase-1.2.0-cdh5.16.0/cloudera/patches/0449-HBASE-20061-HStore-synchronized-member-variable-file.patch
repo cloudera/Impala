@@ -1,0 +1,39 @@
+From 47558d9149016175da3e6770fd7740f65a0a1ef4 Mon Sep 17 00:00:00 2001
+From: Sean Busbey <busbey@apache.org>
+Date: Fri, 23 Feb 2018 14:38:03 -0600
+Subject: [PATCH 449/481] HBASE-20061 HStore synchronized member variable
+ filesCompacting should be private
+
+Signed-off-by: Chia-Ping Tsai <chia7712@gmail.com>
+
+ Conflicts:
+	hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HStore.java
+
+(cherry picked from commit d2fe2a5a98a64b944390ca7381abf4dae41b6191)
+
+Change-Id: Iaa6144d877892dec0f227083bfdea6c5d73020c4
+Author: Sean Busbey
+Reason: Bug
+Ref: CDH-65326
+---
+ .../apache/hadoop/hbase/regionserver/HStore.java   |    3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HStore.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HStore.java
+index 0de082b..98f2eed 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HStore.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HStore.java
+@@ -154,8 +154,9 @@ public class HStore implements Store {
+ 
+   private ScanInfo scanInfo;
+ 
++  // All access must be synchronized.
+   // TODO: ideally, this should be part of storeFileManager, as we keep passing this to it.
+-  final List<StoreFile> filesCompacting = Lists.newArrayList();
++  private final List<StoreFile> filesCompacting = Lists.newArrayList();
+ 
+   // All access must be synchronized.
+   private final Set<ChangedReadersObserver> changedReaderObservers =
+-- 
+1.7.9.5
+

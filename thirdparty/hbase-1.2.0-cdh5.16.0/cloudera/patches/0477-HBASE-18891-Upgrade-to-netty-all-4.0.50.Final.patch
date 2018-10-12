@@ -1,0 +1,35 @@
+From 7d7a1ccda0268e5ab16049037f36523531238235 Mon Sep 17 00:00:00 2001
+From: Josh Elser <elserj@apache.org>
+Date: Wed, 27 Sep 2017 11:58:44 -0400
+Subject: [PATCH 477/481] HBASE-18891 Upgrade to netty-all 4.0.50.Final
+
+Not moved to 4.0.52 because of Java8 compatibility reasons
+
+Signed-off-by: Ted Yu <tedyu@apache.org>
+
+Change-Id: Ic08e8877f44963003fec82ab095d1e1c28b3c06d
+Ref: CDH-65322
+Reason: Security
+---
+ pom.xml |    5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/pom.xml b/pom.xml
+index abcba76..b731609 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -1347,7 +1347,10 @@
+     <jets3.version>0.9.0</jets3.version>
+     <jamon-runtime.version>2.4.1</jamon-runtime.version>
+     <jettison.version>1.3.3</jettison.version>
+-    <netty.version>4.0.23.Final</netty.version>
++    <!-- There is a 4.0.52.Final we'd prefer to use, but that
++         bundles a version of JCTools which was built using
++         Java8 which could potentially break our Java7 compat -->
++    <netty.version>4.0.50.Final</netty.version>
+     <netty.hadoop.version>3.6.2.Final</netty.hadoop.version>
+     <joni.version>2.1.2</joni.version>
+     <jcodings.version>1.0.8</jcodings.version>
+-- 
+1.7.9.5
+

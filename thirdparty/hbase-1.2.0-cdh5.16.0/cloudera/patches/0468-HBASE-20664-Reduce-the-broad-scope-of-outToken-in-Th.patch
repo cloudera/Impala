@@ -1,0 +1,81 @@
+From e12ff11a7c2302858d3d42893273fa8d2dd298d0 Mon Sep 17 00:00:00 2001
+From: Josh Elser <elserj@apache.org>
+Date: Thu, 31 May 2018 13:02:53 -0400
+Subject: [PATCH 468/481] HBASE-20664 Reduce the broad scope of outToken in
+ ThriftHttpServlet
+
+Signed-off-by: Andrew Purtell <apurtell@apache.org>
+(cherry picked from commit f7e50346322c6ba0ee46e64c07677e9ea052718e)
+
+Change-Id: I8f87bef5378deebc1e4c8fc683c745356f3900f6
+Reason: Bug
+Author: Josh Elser
+Ref: CDH-69267
+---
+ .../hadoop/hbase/thrift/ThriftHttpServlet.java     |   24 +++++++++++++++-----
+ 1 file changed, 18 insertions(+), 6 deletions(-)
+
+diff --git a/hbase-thrift/src/main/java/org/apache/hadoop/hbase/thrift/ThriftHttpServlet.java b/hbase-thrift/src/main/java/org/apache/hadoop/hbase/thrift/ThriftHttpServlet.java
+index 28aa0e1..3dfa50a 100644
+--- a/hbase-thrift/src/main/java/org/apache/hadoop/hbase/thrift/ThriftHttpServlet.java
++++ b/hbase-thrift/src/main/java/org/apache/hadoop/hbase/thrift/ThriftHttpServlet.java
+@@ -57,7 +57,6 @@ public class ThriftHttpServlet extends TServlet {
+   private final boolean securityEnabled;
+   private final boolean doAsEnabled;
+   private transient ThriftServerRunner.HBaseHandler hbaseHandler;
+-  private String outToken;
+ 
+   // HTTP Header related constants.
+   public static final String WWW_AUTHENTICATE = "WWW-Authenticate";
+@@ -83,10 +82,11 @@ public class ThriftHttpServlet extends TServlet {
+       try {
+         // As Thrift HTTP transport doesn't support SPNEGO yet (THRIFT-889),
+         // Kerberos authentication is being done at servlet level.
+-        effectiveUser = doKerberosAuth(request);
++        final RemoteUserIdentity identity = doKerberosAuth(request);
++        effectiveUser = identity.principal;
+         // It is standard for client applications expect this header.
+         // Please see http://tools.ietf.org/html/rfc4559 for more details.
+-        response.addHeader(WWW_AUTHENTICATE,  NEGOTIATE + " " + outToken);
++        response.addHeader(WWW_AUTHENTICATE,  NEGOTIATE + " " + identity.outToken);
+       } catch (HttpAuthenticationException e) {
+         LOG.error("Kerberos Authentication failed", e);
+         // Send a 401 to the client
+@@ -127,19 +127,31 @@ public class ThriftHttpServlet extends TServlet {
+    * We already have a logged in subject in the form of serviceUGI,
+    * which GSS-API will extract information from.
+    */
+-  private String doKerberosAuth(HttpServletRequest request)
++  private RemoteUserIdentity doKerberosAuth(HttpServletRequest request)
+       throws HttpAuthenticationException {
+     HttpKerberosServerAction action = new HttpKerberosServerAction(request, realUser);
+     try {
+       String principal = realUser.doAs(action);
+-      outToken = action.outToken;
+-      return principal;
++      return new RemoteUserIdentity(principal, action.outToken);
+     } catch (Exception e) {
+       LOG.error("Failed to perform authentication");
+       throw new HttpAuthenticationException(e);
+     }
+   }
+ 
++  /**
++   * Basic "struct" class to hold the final base64-encoded, authenticated GSSAPI token
++   * for the user with the given principal talking to the Thrift server.
++   */
++  private static class RemoteUserIdentity {
++    final String outToken;
++    final String principal;
++
++    RemoteUserIdentity(String principal, String outToken) {
++      this.principal = principal;
++      this.outToken = outToken;
++    }
++  }
+ 
+   private static class HttpKerberosServerAction implements PrivilegedExceptionAction<String> {
+     HttpServletRequest request;
+-- 
+1.7.9.5
+

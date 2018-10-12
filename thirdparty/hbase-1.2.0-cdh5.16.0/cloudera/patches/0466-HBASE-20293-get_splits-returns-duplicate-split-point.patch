@@ -1,0 +1,247 @@
+From a7dd287cfa8dfd6e943d379728accc77414ac890 Mon Sep 17 00:00:00 2001
+From: Toshihiro Suzuki <brfrn169@gmail.com>
+Date: Wed, 18 Apr 2018 14:47:04 +0900
+Subject: [PATCH 466/481] HBASE-20293 get_splits returns duplicate split
+ points when region replication is on
+
+Author: Toshihiro Suzuki
+Reason: Bug
+Ref: CDH-67816
+
+Change-Id: Icc0f60a4b29cc482de861adf5fc10754c66951fe
+Signed-off-by: Ted Yu <yuzhihong@gmail.com>
+Signed-off-by: Huaxiang Sun <hsun@apache.org>
+Signed-off-by: Sean Busbey <busbey@apache.org>
+---
+ hbase-shell/src/main/ruby/hbase/table.rb      |   62 ++++++++++++++++---------
+ hbase-shell/src/test/ruby/hbase/table_test.rb |   18 ++++++-
+ hbase-shell/src/test/ruby/test_helper.rb      |   11 +++++
+ 3 files changed, 67 insertions(+), 24 deletions(-)
+
+diff --git a/hbase-shell/src/main/ruby/hbase/table.rb b/hbase-shell/src/main/ruby/hbase/table.rb
+index c86cab9..9f717a9 100644
+--- a/hbase-shell/src/main/ruby/hbase/table.rb
++++ b/hbase-shell/src/main/ruby/hbase/table.rb
+@@ -19,6 +19,10 @@
+ 
+ include Java
+ 
++java_import org.apache.hadoop.hbase.util.Bytes
++java_import org.apache.hadoop.hbase.client.RegionReplicaUtil
++java_import org.apache.hadoop.hbase.client.Scan
++
+ # Wrapper for org.apache.hadoop.hbase.client.Table
+ 
+ module Hbase
+@@ -45,8 +49,9 @@ module Hbase
+       method  = name.to_sym
+       self.class_eval do
+         define_method method do |*args|
+-            @shell.internal_command(shell_command, internal_method_name, self, *args)
+-         end
++          @shell.internal_command(shell_command, internal_method_name, self,
++                                  *args)
++        end
+       end
+     end
+ 
+@@ -140,7 +145,7 @@ EOF
+       end
+       #Case where attributes are specified without timestamp
+       if timestamp.kind_of?(Hash)
+-      	timestamp.each do |k, v|
++        timestamp.each do |k, v|
+           if k == 'ATTRIBUTES'
+             set_attributes(p, v)
+           elsif k == 'VISIBILITY'
+@@ -182,12 +187,12 @@ EOF
+       	  timestamp = org.apache.hadoop.hbase.HConstants::LATEST_TIMESTAMP
+       end
+       d = org.apache.hadoop.hbase.client.Delete.new(row.to_s.to_java_bytes, timestamp)
+-      if temptimestamp.kind_of?(Hash)
+-      	temptimestamp.each do |k, v|
+-      	  if v.kind_of?(String)
+-      	  	set_cell_visibility(d, v) if v
+-      	  end
+-      	 end
++      if temptimestamp.is_a?(Hash)
++        temptimestamp.each do |_, v|
++          if v.is_a?(String)
++            set_cell_visibility(d, v) if v
++          end
++        end
+       end
+       if args.any?
+          visibility = args[VISIBILITY]
+@@ -254,9 +259,11 @@ EOF
+ 
+     #----------------------------------------------------------------------------------------------
+     # Count rows in a table
++
++    # rubocop:disable Metrics/AbcSize
+     def _count_internal(interval = 1000, caching_rows = 10)
+       # We can safely set scanner caching with the first key only filter
+-      scan = org.apache.hadoop.hbase.client.Scan.new
++      scan = Scan.new
+       scan.setCacheBlocks(false)
+       scan.setCaching(caching_rows)
+       scan.setFilter(org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter.new)
+@@ -280,6 +287,7 @@ EOF
+       # Return the counter
+       return count
+     end
++    # rubocop:enable Metrics/AbcSize
+ 
+     #----------------------------------------------------------------------------------------------
+     # Get from table
+@@ -412,6 +420,8 @@ EOF
+       org.apache.hadoop.hbase.util.Bytes::toLong(cell.getValue)
+     end
+ 
++    # rubocop:disable Metrics/AbcSize
++    # rubocop:disable Metrics/MethodLength
+     def _hash_to_scan(args)
+       if args.any?
+         enablemetrics = args["ALL_METRICS"].nil? ? false : args["ALL_METRICS"]
+@@ -440,10 +450,10 @@ EOF
+         end
+ 
+         scan = if stoprow
+-          org.apache.hadoop.hbase.client.Scan.new(startrow.to_java_bytes, stoprow.to_java_bytes)
+-        else
+-          org.apache.hadoop.hbase.client.Scan.new(startrow.to_java_bytes)
+-        end
++                 Scan.new(startrow.to_java_bytes, stoprow.to_java_bytes)
++               else
++                 Scan.new(startrow.to_java_bytes)
++               end
+ 
+         # This will overwrite any startrow/stoprow settings
+         scan.setRowPrefixFilter(rowprefixfilter.to_java_bytes) if rowprefixfilter
+@@ -480,11 +490,13 @@ EOF
+         set_authorizations(scan, authorizations) if authorizations
+         scan.setConsistency(org.apache.hadoop.hbase.client.Consistency.valueOf(consistency)) if consistency
+       else
+-        scan = org.apache.hadoop.hbase.client.Scan.new
++        scan = Scan.new
+       end
+ 
+       scan
+     end
++    # rubocop:enable Metrics/MethodLength
++    # rubocop:enable Metrics/AbcSize
+ 
+     def _get_scanner(args)
+       @table.getScanner(_hash_to_scan(args))
+@@ -492,10 +504,11 @@ EOF
+ 
+     #----------------------------------------------------------------------------------------------
+     # Scans whole table or a range of keys and returns rows matching specific criteria
++    # rubocop:disable Metrics/AbcSize
+     def _scan_internal(args = {}, scan = nil)
+       raise(ArgumentError, "Args should be a Hash") unless args.kind_of?(Hash)
+       raise(ArgumentError, "Scan argument should be org.apache.hadoop.hbase.client.Scan") \
+-        unless scan == nil || scan.kind_of?(org.apache.hadoop.hbase.client.Scan)
++        unless scan.nil? || scan.is_a?(Scan)
+ 
+       limit = args["LIMIT"] || -1
+       maxlength = args.delete("MAXLENGTH") || -1
+@@ -538,8 +551,9 @@ EOF
+       scanner.close()
+       return ((block_given?) ? count : res)
+     end
++    # rubocop:enable Metrics/AbcSize
+ 
+-     # Apply OperationAttributes to puts/scans/gets
++    # Apply OperationAttributes to puts/scans/gets
+     def set_attributes(oprattr, attributes)
+       raise(ArgumentError, "Attributes must be a Hash type") unless attributes.kind_of?(Hash)
+       for k,v in attributes
+@@ -705,12 +719,14 @@ EOF
+     #----------------------------------------------------------------------------------------------
+     # Get the split points for the table
+     def _get_splits_internal()
+-      locator = @table.getRegionLocator()
+-      splits = locator.getAllRegionLocations().
+-          map{|i| Bytes.toStringBinary(i.getRegionInfo().getStartKey)}.delete_if{|k| k == ""}
+-      locator.close()
+-      puts("Total number of splits = %s" % [splits.size + 1])
+-      return splits
++      locator = @table.getRegionLocator
++      locator.getAllRegionLocations.select do |s|
++        RegionReplicaUtil.isDefaultReplica(s.getRegionInfo)
++      end.map do |i|
++        Bytes.toStringBinary(i.getRegionInfo.getStartKey)
++      end.delete_if { |k| k == '' }
++    ensure
++      locator.close
+     end
+   end
+ end
+diff --git a/hbase-shell/src/test/ruby/hbase/table_test.rb b/hbase-shell/src/test/ruby/hbase/table_test.rb
+index 8704ec5..d79e912 100644
+--- a/hbase-shell/src/test/ruby/hbase/table_test.rb
++++ b/hbase-shell/src/test/ruby/hbase/table_test.rb
+@@ -187,6 +187,7 @@ module Hbase
+   end
+ 
+   # Complex data management methods tests
++  # rubocop:disable Metrics/ClassLength
+   class TableComplexMethodsTest < Test::Unit::TestCase
+     include TestHelpers
+ 
+@@ -301,7 +302,8 @@ module Hbase
+       assert_not_nil(res['x:b'])
+     end
+     
+-     define_test "get should work with hash columns spec and TIMESTAMP and AUTHORIZATIONS" do
++    define_test 'get should work with hash columns spec and TIMESTAMP and' \
++                ' AUTHORIZATIONS' do
+       res = @test_table._get_internal('1', TIMESTAMP => 1234, AUTHORIZATIONS=>['PRIVATE'])
+       assert_nil(res)
+     end
+@@ -634,5 +636,19 @@ module Hbase
+       assert_equal(0, splits.size)
+       assert_equal([], splits)
+     end
++
++    define_test 'Split count for a table with region replicas' do
++      @test_table_name = 'tableWithRegionReplicas'
++      create_test_table_with_region_replicas(@test_table_name, 3,
++                                             SPLITS => ['10'])
++      @table = table(@test_table_name)
++      splits = @table._get_splits_internal
++      # In this case, total splits should be 1 even if the number of region
++      # replicas is 3.
++      assert_equal(1, splits.size)
++      assert_equal(['10'], splits)
++      drop_test_table(@test_table_name)
++    end
+   end
++  # rubocop:enable Metrics/ClassLength
+ end
+diff --git a/hbase-shell/src/test/ruby/test_helper.rb b/hbase-shell/src/test/ruby/test_helper.rb
+index e75cd36..1e01820 100644
+--- a/hbase-shell/src/test/ruby/test_helper.rb
++++ b/hbase-shell/src/test/ruby/test_helper.rb
+@@ -101,6 +101,17 @@ module Hbase
+       end
+     end
+ 
++    def create_test_table_with_region_replicas(name, num_of_replicas, splits)
++      # Create the table if needed
++      unless admin.exists?(name)
++        admin.create name, 'f1', { REGION_REPLICATION => num_of_replicas },
++                     splits
++      end
++
++      # Enable the table if needed
++      admin.enable(name) unless admin.enabled?(name)
++    end
++
+     def drop_test_table(name)
+       return unless admin.exists?(name)
+       begin
+-- 
+1.7.9.5
+
