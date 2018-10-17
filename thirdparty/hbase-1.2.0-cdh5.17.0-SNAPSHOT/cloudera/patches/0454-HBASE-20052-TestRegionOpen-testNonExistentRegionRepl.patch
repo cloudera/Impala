@@ -1,0 +1,37 @@
+From 0adb1658eec17cba64f4d882f1d31bb346f19d22 Mon Sep 17 00:00:00 2001
+From: tedyu <yuzhihong@gmail.com>
+Date: Thu, 22 Feb 2018 12:41:13 -0800
+Subject: [PATCH 454/480] HBASE-20052
+ TestRegionOpen#testNonExistentRegionReplica fails
+ due to NPE
+
+Author: Ted Yu
+Reason: Bug
+Ref: CDH-65334
+
+Change-Id: I40471d0e20ae2e80f2d39966db2dfdd2ab693c12
+---
+ .../hbase/regionserver/HRegionFileSystem.java      |    3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionFileSystem.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionFileSystem.java
+index 6ca618c..0a26662 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionFileSystem.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HRegionFileSystem.java
+@@ -914,12 +914,11 @@ public class HRegionFileSystem {
+ 
+       // Write HRI to a file in case we need to recover hbase:meta
+       regionFs.writeRegionInfoOnFilesystem(false);
+-      return regionFs;
+     } else {
+       if (LOG.isDebugEnabled())
+         LOG.debug("Skipping creation of .regioninfo file for " + regionInfo);
+     }
+-    return null;
++    return regionFs;
+   }
+ 
+   /**
+-- 
+1.7.9.5
+
