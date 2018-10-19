@@ -137,6 +137,9 @@
       <Host name="localhost" appBase="webapps"
             unpackWARs="true" autoDeploy="true"
             xmlValidation="false" xmlNamespaceAware="false">
+        <Context path="/kms"
+                 mapperContextRootRedirectEnabled="true"
+                 mapperDirectoryRedirectEnabled="true" />
 
         <!-- SingleSignOn valve, share authentication between web applications
              Documentation at: /docs/config/valve.html -->
