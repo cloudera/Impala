@@ -330,3 +330,25 @@ class TestGrantRevoke(SentryCacheTestSuite):
       assert privileges_before.data == privileges_after.data
     finally:
       self.client.execute("drop role {0}".format(role_name))
+
+  @pytest.mark.execute_serially
+  @SentryCacheTestSuite.with_args(
+      impalad_args="--server_name=server1",
+      catalogd_args="--sentry_config={0}".format(SENTRY_CONFIG_FILE),
+      sentry_config=SENTRY_CONFIG_FILE)
+  def test_invalidate_metadata(self, unique_role):
+    """IMPALA-7729: Tests running invalidate metadata with role names that have different
+    case sensitivity."""
+    for role_name in [unique_role.lower(), unique_role.upper(), unique_role.capitalize()]:
+      try:
+        self.client.execute("create role {0}".format(role_name))
+        self.client.execute("grant all on server to {0}".format(role_name))
+        self.client.execute("grant role {0} to group `{1}`".format(
+          role_name, grp.getgrnam(getuser()).gr_name))
+
+        # Verify that running invalidate metadata won't hang due to case sensitivity
+        # in the role names.
+        result = self.client.execute("invalidate metadata")
+        assert result.success
+      finally:
+        self.client.execute("drop role {0}".format(role_name))
