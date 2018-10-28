@@ -135,9 +135,8 @@ class TestOwnerPrivileges(SentryCacheTestSuite):
         grant=True))
     self.__execute_owner_privilege_tests(TestObject(TestObject.TABLE,
         unique_database + ".owner_priv_tbl", grant=True))
-    # TODO: enable once CDH-74197 is fixed.
-    # self.__execute_owner_privilege_tests(TestObject(TestObject.VIEW,
-    #     unique_database + ".owner_priv_view", grant=True))
+    self.__execute_owner_privilege_tests(TestObject(TestObject.VIEW,
+        unique_database + ".owner_priv_view", grant=True))
 
   @pytest.mark.execute_serially
   @SentryCacheTestSuite.with_args(
@@ -158,10 +157,9 @@ class TestOwnerPrivileges(SentryCacheTestSuite):
     self.__execute_owner_privilege_tests(TestObject(TestObject.TABLE,
         unique_database + ".owner_priv_tbl", grant=True),
         sentry_refresh_timeout_s=SENTRY_REFRESH_TIMEOUT_S)
-    # TODO: enable once CDH-74197 is fixed.
-    # self.__execute_owner_privilege_tests(TestObject(TestObject.VIEW,
-    #     unique_database + ".owner_priv_view", grant=True),
-    #     sentry_refresh_timeout_s=SENTRY_REFRESH_TIMEOUT_S)
+    self.__execute_owner_privilege_tests(TestObject(TestObject.VIEW,
+        unique_database + ".owner_priv_view", grant=True),
+        sentry_refresh_timeout_s=SENTRY_REFRESH_TIMEOUT_S)
 
   def __execute_owner_privilege_tests(self, test_obj, sentry_refresh_timeout_s=0):
     """
@@ -261,9 +259,8 @@ class TestOwnerPrivileges(SentryCacheTestSuite):
         "owner_priv_db"))
     self.__execute_owner_privilege_tests_no_oo(TestObject(TestObject.TABLE,
         unique_database + ".owner_priv_tbl"))
-    # TODO: enable once CDH-74197 is fixed.
-    # self.__execute_owner_privilege_tests_no_oo(TestObject(TestObject.VIEW,
-    #     unique_database + ".owner_priv_view"))
+    self.__execute_owner_privilege_tests_no_oo(TestObject(TestObject.VIEW,
+        unique_database + ".owner_priv_view"))
 
   @pytest.mark.execute_serially
   @SentryCacheTestSuite.with_args(
@@ -284,10 +281,9 @@ class TestOwnerPrivileges(SentryCacheTestSuite):
     self.__execute_owner_privilege_tests_no_oo(TestObject(TestObject.TABLE,
         unique_database + ".owner_priv_tbl"),
         sentry_refresh_timeout_s=SENTRY_REFRESH_TIMEOUT_S)
-    # TODO: enable once CDH-74197 is fixed.
-    # self.__execute_owner_privilege_tests_no_oo(TestObject(TestObject.VIEW,
-    #     unique_database + ".owner_priv_view"),
-    #     sentry_refresh_timeout_s=SENTRY_REFRESH_TIMEOUT_S)
+    self.__execute_owner_privilege_tests_no_oo(TestObject(TestObject.VIEW,
+        unique_database + ".owner_priv_view"),
+        sentry_refresh_timeout_s=SENTRY_REFRESH_TIMEOUT_S)
 
   def __execute_owner_privilege_tests_no_oo(self, test_obj, sentry_refresh_timeout_s=0):
     """
@@ -342,9 +338,8 @@ class TestOwnerPrivileges(SentryCacheTestSuite):
         "owner_priv_db"))
     self.__execute_owner_privilege_tests_oo_nogrant(TestObject(TestObject.TABLE,
         unique_database + ".owner_priv_tbl"))
-    # TODO: enable once CDH-74197 is fixed.
-    # self.__execute_owner_privilege_tests_oo_nogrant(TestObject(TestObject.VIEW,
-    #     unique_database + ".owner_priv_view"))
+    self.__execute_owner_privilege_tests_oo_nogrant(TestObject(TestObject.VIEW,
+        unique_database + ".owner_priv_view"))
 
   @pytest.mark.execute_serially
   @SentryCacheTestSuite.with_args(
@@ -366,10 +361,9 @@ class TestOwnerPrivileges(SentryCacheTestSuite):
     self.__execute_owner_privilege_tests_oo_nogrant(TestObject(TestObject.TABLE,
         unique_database + ".owner_priv_tbl"),
         sentry_refresh_timeout_s=SENTRY_REFRESH_TIMEOUT_S)
-    # TODO: enable once CDH-74197 is fixed.
-    # self.__execute_owner_privilege_tests_oo_nogrant(TestObject(TestObject.VIEW,
-    #     unique_database + ".owner_priv_view"),
-    #     sentry_refresh_timeout_s=SENTRY_REFRESH_TIMEOUT_S)
+    self.__execute_owner_privilege_tests_oo_nogrant(TestObject(TestObject.VIEW,
+        unique_database + ".owner_priv_view"),
+        sentry_refresh_timeout_s=SENTRY_REFRESH_TIMEOUT_S)
 
   def __execute_owner_privilege_tests_oo_nogrant(self, test_obj,
       sentry_refresh_timeout_s=0):
