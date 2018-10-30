@@ -33,7 +33,8 @@
 using namespace impala;
 using namespace impala::io;
 
-DEFINE_bool(enable_orc_scanner, true,
+// CDH-67627: ORC scanner is disabled by default for now.
+DEFINE_bool(enable_orc_scanner, false,
     "If false, reading from ORC format tables is not supported");
 
 Status HdfsOrcScanner::IssueInitialRanges(HdfsScanNodeBase* scan_node,

@@ -76,6 +76,9 @@ if [[ "${ERASURE_CODING}" = true ]]; then
     --impalad_args=--default_query_options=allow_erasure_coded_files=true"
 fi
 
+# CDH-67627: always enable ORC scanner for testing.
+TEST_START_CLUSTER_ARGS+=" --impalad_args=--enable_orc_scanner=true"
+
 # Indicates whether code coverage reports should be generated.
 : ${CODE_COVERAGE:=false}
 
