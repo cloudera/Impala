@@ -202,6 +202,10 @@ class CustomClusterTestSuite(ImpalaTestSuite):
       cmd.append("--impalad_args=%s --catalogd_args=%s" %
                  ("--pull_incremental_statistics", "--pull_incremental_statistics"))
 
+    # CDH-67627: enable ORC in case tests use ORC tables. If custom cluster tests
+    # need to override this, their argument will appear later in the argument list.
+    cmd.append("--impalad_args=--enable_orc_scanner=true")
+
     default_query_option_kvs = []
     # Put any defaults first, then any arguments after that so they can override defaults.
     if os.environ.get("ERASURE_CODING") == "true":

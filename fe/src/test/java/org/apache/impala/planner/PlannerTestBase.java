@@ -41,6 +41,7 @@ import org.apache.impala.common.FrontendTestBase;
 import org.apache.impala.common.ImpalaException;
 import org.apache.impala.common.RuntimeEnv;
 import org.apache.impala.datagenerator.HBaseTestDataRegionAssignment;
+import org.apache.impala.service.BackendConfig;
 import org.apache.impala.testutil.TestFileParser;
 import org.apache.impala.testutil.TestFileParser.Section;
 import org.apache.impala.testutil.TestFileParser.TestCase;
@@ -130,6 +131,9 @@ public class PlannerTestBase extends FrontendTestBase {
     RuntimeEnv.INSTANCE.setNumCores(8);
     // Set test env to control the explain level.
     RuntimeEnv.INSTANCE.setTestEnv(true);
+
+    // CDH-67627: run planner tests with ORC enabled.
+    BackendConfig.INSTANCE.setOrcScannerEnabled(true);
   }
 
   @AfterClass
@@ -140,6 +144,9 @@ public class PlannerTestBase extends FrontendTestBase {
       kuduClient_.close();
       kuduClient_ = null;
     }
+
+    // CDH-67627: reset config to default.
+    BackendConfig.INSTANCE.setOrcScannerEnabled(false);
   }
 
   /**
