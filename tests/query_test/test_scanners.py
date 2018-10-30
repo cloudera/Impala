@@ -703,7 +703,7 @@ class TestTpchScanRangeLengths(ImpalaTestSuite):
         ImpalaTestDimension('scan_range_length', *TPCH_SCAN_RANGE_LENGTHS))
     # IMPALA-7360: sequence file scan returns spurious errors
     cls.ImpalaTestMatrix.add_constraint(
-        lambda v: v.get_value('table_format').file_format not in ('seq', 'kudu'))
+        lambda v: v.get_value('table_format').file_format != 'kudu')
 
   def test_tpch_scan_ranges(self, vector):
     # Randomly adjust the scan range length to exercise different code paths.
