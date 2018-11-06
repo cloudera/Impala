@@ -138,6 +138,7 @@ echo "REMOTE_LOAD=${REMOTE_LOAD:-}"
 function start-impala {
   : ${START_CLUSTER_ARGS=""}
   START_CLUSTER_ARGS_INT=""
+  START_CLUSTER_ARGS_INT+=("--impalad_args=--enable_orc_scanner=true")
   if [[ "${TARGET_FILESYSTEM}" == "local" ]]; then
     START_CLUSTER_ARGS_INT+=("--impalad_args=--abort_on_config_error=false -s 1")
   else
