@@ -1,0 +1,239 @@
+From 522218f1dbf34a9d2bc3b72e3578eb58611e3440 Mon Sep 17 00:00:00 2001
+From: Pankaj Kumar <pankaj.kr@huawei.com>
+Date: Thu, 7 Dec 2017 22:51:01 +0530
+Subject: [PATCH 451/479] HBASE-19364, Truncate_preserve fails with table when
+ replica region > 1
+
+Change-Id: I5c5c37b93d331b189ad8d52725ef9a650701698f
+Author: Pankaj Kumar
+Reason: Bug
+Ref: CDH-65334
+---
+ .../org/apache/hadoop/hbase/MetaTableAccessor.java |   45 +++++++++++++++++---
+ .../hbase/master/procedure/ProcedureSyncWait.java  |   24 ++++++-----
+ .../master/procedure/TruncateTableProcedure.java   |    2 +-
+ .../procedure/MasterProcedureTestingUtility.java   |    5 +++
+ .../procedure/TestTruncateTableProcedure.java      |   44 +++++++++++++------
+ 5 files changed, 90 insertions(+), 30 deletions(-)
+
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/MetaTableAccessor.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/MetaTableAccessor.java
+index d123a52..0dc22b6 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/MetaTableAccessor.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/MetaTableAccessor.java
+@@ -392,12 +392,27 @@ public class MetaTableAccessor {
+    * @return Ordered list of {@link HRegionInfo}.
+    * @throws IOException
+    */
+-  public static List<HRegionInfo> getTableRegions(ZooKeeperWatcher zkw,
+-      Connection connection, TableName tableName, final boolean excludeOfflinedSplitParents)
+-        throws IOException {
++  public static List<HRegionInfo> getTableRegions(ZooKeeperWatcher zkw, Connection connection,
++      TableName tableName, final boolean excludeOfflinedSplitParents) throws IOException {
++    return getTableRegions(zkw, connection, tableName, excludeOfflinedSplitParents, false);
++  }
++
++  /**
++   * Gets all of the regions of the specified table.
++   * @param zkw zookeeper connection to access meta table
++   * @param connection connection we're using
++   * @param tableName table we're looking for
++   * @param excludeOfflinedSplitParents If true, do not include offlined split parents in the
++   *          return.
++   * @param excludeReplicaRegions If true, do not include replica regions in the result.
++   * @return Ordered list of {@link HRegionInfo}.
++   */
++  public static List<HRegionInfo> getTableRegions(ZooKeeperWatcher zkw, Connection connection,
++      TableName tableName, final boolean excludeOfflinedSplitParents,
++      final boolean excludeReplicaRegions) throws IOException {
+     List<Pair<HRegionInfo, ServerName>> result = null;
+-      result = getTableRegionsAndLocations(zkw, connection, tableName,
+-        excludeOfflinedSplitParents);
++    result = getTableRegionsAndLocations(zkw, connection, tableName, excludeOfflinedSplitParents,
++      excludeReplicaRegions);
+     return getListOfHRegionInfos(result);
+   }
+ 
+@@ -478,7 +493,22 @@ public class MetaTableAccessor {
+   public static List<Pair<HRegionInfo, ServerName>> getTableRegionsAndLocations(
+       ZooKeeperWatcher zkw, Connection connection, final TableName tableName,
+       final boolean excludeOfflinedSplitParents) throws IOException {
++    return getTableRegionsAndLocations(zkw, connection, tableName, excludeOfflinedSplitParents,
++      false);
++  }
+ 
++  /**
++   * @param zkw ZooKeeperWatcher instance we're using to get hbase:meta location
++   * @param connection connection we're using
++   * @param tableName table to work with
++   * @param excludeOfflinedSplitParents Exclude offline regions
++   * @param excludeReplicaRegions If true, do not include replica regions in the result.
++   * @return List of regioninfos and server addresses.
++   */
++  public static List<Pair<HRegionInfo, ServerName>> getTableRegionsAndLocations(
++      ZooKeeperWatcher zkw, Connection connection, final TableName tableName,
++      final boolean excludeOfflinedSplitParents, final boolean excludeReplicaRegions)
++          throws IOException {
+     if (tableName.equals(TableName.META_TABLE_NAME)) {
+       // If meta, do a bit of special handling.
+       ServerName serverName = new MetaTableLocator().getMetaRegionLocation(zkw);
+@@ -514,6 +544,11 @@ public class MetaTableAccessor {
+           }
+           for (HRegionLocation loc : current.getRegionLocations()) {
+             if (loc != null) {
++              // Exclude replica region from the result
++              if (excludeReplicaRegions
++                  && !RegionReplicaUtil.isDefaultReplica(loc.getRegionInfo())) {
++                continue;
++              }
+               this.results.add(new Pair<HRegionInfo, ServerName>(
+                 loc.getRegionInfo(), loc.getServerName()));
+             }
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/ProcedureSyncWait.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/ProcedureSyncWait.java
+index d0dea0a..1846cef 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/ProcedureSyncWait.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/ProcedureSyncWait.java
+@@ -149,22 +149,24 @@ public final class ProcedureSyncWait {
+ 
+   protected static List<HRegionInfo> getRegionsFromMeta(final MasterProcedureEnv env,
+       final TableName tableName) throws IOException {
+-    return getRegionsFromMeta(env, tableName, false);
++    return getRegionsFromMeta(env, tableName, false, false);
+   }
+ 
+   protected static List<HRegionInfo> getRegionsFromMeta(final MasterProcedureEnv env,
+-      final TableName tableName,  final boolean excludeOfflinedSplitParents) throws IOException {
++      final TableName tableName, final boolean excludeOfflinedSplitParents,
++      final boolean excludeReplicaRegions) throws IOException {
+     return ProcedureSyncWait.waitFor(env, "regions of table=" + tableName + " from meta",
+-        new ProcedureSyncWait.Predicate<List<HRegionInfo>>() {
+-          @Override
+-          public List<HRegionInfo> evaluate() throws IOException {
+-            if (TableName.META_TABLE_NAME.equals(tableName)) {
+-              return new MetaTableLocator().getMetaRegions(env.getMasterServices().getZooKeeper());
+-            }
+-            return MetaTableAccessor.getTableRegions(env.getMasterServices().getZooKeeper(),
+-                env.getMasterServices().getConnection(), tableName, excludeOfflinedSplitParents);
++      new ProcedureSyncWait.Predicate<List<HRegionInfo>>() {
++        @Override
++        public List<HRegionInfo> evaluate() throws IOException {
++          if (TableName.META_TABLE_NAME.equals(tableName)) {
++            return new MetaTableLocator().getMetaRegions(env.getMasterServices().getZooKeeper());
+           }
+-        });
++          return MetaTableAccessor.getTableRegions(env.getMasterServices().getZooKeeper(),
++            env.getMasterServices().getConnection(), tableName, excludeOfflinedSplitParents,
++            excludeReplicaRegions);
++        }
++      });
+   }
+ 
+   protected static void waitRegionInTransition(final MasterProcedureEnv env,
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/TruncateTableProcedure.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/TruncateTableProcedure.java
+index eb93289..3692246 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/TruncateTableProcedure.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/procedure/TruncateTableProcedure.java
+@@ -85,7 +85,7 @@ public class TruncateTableProcedure
+ 
+           // TODO: Move out... in the acquireLock()
+           LOG.debug("waiting for '" + getTableName() + "' regions in transition");
+-          regions = ProcedureSyncWait.getRegionsFromMeta(env, getTableName(), true);
++          regions = ProcedureSyncWait.getRegionsFromMeta(env, getTableName(), true, true);
+           assert regions != null && !regions.isEmpty() : "unexpected 0 regions";
+           ProcedureSyncWait.waitRegionInTransition(env, regions);
+ 
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/procedure/MasterProcedureTestingUtility.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/procedure/MasterProcedureTestingUtility.java
+index 77ca96e..f7f5967 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/procedure/MasterProcedureTestingUtility.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/procedure/MasterProcedureTestingUtility.java
+@@ -75,6 +75,11 @@ public class MasterProcedureTestingUtility {
+   public static HRegionInfo[] createTable(final ProcedureExecutor<MasterProcedureEnv> procExec,
+       final TableName tableName, final byte[][] splitKeys, String... family) throws IOException {
+     HTableDescriptor htd = createHTD(tableName, family);
++    return createTable(procExec, htd, splitKeys);
++  }
++
++  public static HRegionInfo[] createTable(final ProcedureExecutor<MasterProcedureEnv> procExec,
++      HTableDescriptor htd, final byte[][] splitKeys) throws IOException {
+     HRegionInfo[] regions = ModifyRegionUtils.createHRegionInfos(htd, splitKeys);
+     long procId = ProcedureTestingUtility.submitAndWait(procExec,
+       new CreateTableProcedure(procExec.getEnvironment(), htd, regions));
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/procedure/TestTruncateTableProcedure.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/procedure/TestTruncateTableProcedure.java
+index 7a3df0f..8952ae9 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/master/procedure/TestTruncateTableProcedure.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/master/procedure/TestTruncateTableProcedure.java
+@@ -44,6 +44,8 @@ import org.junit.experimental.categories.Category;
+ import static org.junit.Assert.assertEquals;
+ import static org.junit.Assert.assertTrue;
+ 
++import java.io.IOException;
++
+ @Category(MediumTests.class)
+ public class TestTruncateTableProcedure {
+   private static final Log LOG = LogFactory.getLog(TestTruncateTableProcedure.class);
+@@ -251,23 +253,40 @@ public class TestTruncateTableProcedure {
+     return UTIL.getHBaseCluster().getMaster().getMasterProcedureExecutor();
+   }
+ 
+-  @Test(timeout=60000)
+-  public void testTruncateWithPreserveAfterSplit() throws Exception{
++  @Test(timeout = 60000)
++  public void testTruncateWithPreserveAfterSplit() throws Exception {
+     final String[] families = new String[] { "f1", "f2" };
+-    final byte[][] splitKeys = new byte[][] {
+-        Bytes.toBytes("a"), Bytes.toBytes("b"), Bytes.toBytes("c")
+-    };
++    final byte[][] splitKeys =
++        new byte[][] { Bytes.toBytes("a"), Bytes.toBytes("b"), Bytes.toBytes("c") };
+     TableName tableName = TableName.valueOf("testTruncateWithPreserveAfterSplit");
+-    HRegionInfo[] regions = MasterProcedureTestingUtility.createTable(
+-        getMasterProcedureExecutor(), tableName, splitKeys, families);
++    HRegionInfo[] regions = MasterProcedureTestingUtility.createTable(getMasterProcedureExecutor(),
++      tableName, splitKeys, families);
++    splitAndTruncate(families, splitKeys, tableName, regions);
++  }
++
++  @Test(timeout = 60000)
++  public void testTruncatePreserveWithReplicaRegionAfterSplit() throws Exception {
++    final String[] families = new String[] { "f1", "f2" };
++    final byte[][] splitKeys =
++        new byte[][] { Bytes.toBytes("a"), Bytes.toBytes("b"), Bytes.toBytes("c") };
++    TableName tableName = TableName.valueOf("testTruncateWithPreserveAfterSplit");
++    HTableDescriptor htd = MasterProcedureTestingUtility.createHTD(tableName, families);
++    htd.setRegionReplication(3);
++    HRegionInfo[] regions =
++        MasterProcedureTestingUtility.createTable(getMasterProcedureExecutor(), htd, splitKeys);
++    splitAndTruncate(families, splitKeys, tableName, regions);
++  }
++
++  private void splitAndTruncate(final String[] families, final byte[][] splitKeys,
++      TableName tableName, HRegionInfo[] regions) throws IOException, InterruptedException {
+     // load enough data so the table can split
+-    MasterProcedureTestingUtility.loadData(
+-        UTIL.getConnection(), tableName, 5000, splitKeys, families);
++    MasterProcedureTestingUtility.loadData(UTIL.getConnection(), tableName, 5000, splitKeys,
++      families);
+     assertEquals(5000, UTIL.countRows(tableName));
+     UTIL.getHBaseAdmin().split(tableName);
+     UTIL.waitUntilAllRegionsAssigned(tableName);
+-    //wait until split really happens
+-    while(UTIL.getHBaseAdmin().getTableRegions(tableName).size() <= regions.length) {
++    // wait until split really happens
++    while (UTIL.getHBaseAdmin().getTableRegions(tableName).size() <= regions.length) {
+       Thread.sleep(50);
+     }
+     // disable the table
+@@ -275,10 +294,9 @@ public class TestTruncateTableProcedure {
+     // truncate the table
+     final ProcedureExecutor<MasterProcedureEnv> procExec = getMasterProcedureExecutor();
+     long procId = ProcedureTestingUtility.submitAndWait(procExec,
+-        new TruncateTableProcedure(procExec.getEnvironment(), tableName, true));
++      new TruncateTableProcedure(procExec.getEnvironment(), tableName, true));
+     ProcedureTestingUtility.assertProcNotFailed(procExec, procId);
+ 
+     UTIL.waitUntilAllRegionsAssigned(tableName);
+-
+   }
+ }
+-- 
+1.7.9.5
+

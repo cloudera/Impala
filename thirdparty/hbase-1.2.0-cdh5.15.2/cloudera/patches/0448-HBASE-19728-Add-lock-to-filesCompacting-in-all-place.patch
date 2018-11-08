@@ -1,0 +1,48 @@
+From 51e2c8e025fca189847812eb458a626dea30cd8b Mon Sep 17 00:00:00 2001
+From: binlijin <binlijin@gmail.com>
+Date: Wed, 31 Jan 2018 17:01:58 +0800
+Subject: [PATCH 448/479] HBASE-19728 Add lock to filesCompacting in all
+ place.
+
+Signed-off-by: Sean Busbey <busbey@apache.org>
+(cherry picked from commit 14ad07199c514976ec3b9e9bd994f66a27d7a331)
+
+Change-Id: Ib50302fb243fa3764597d473f3689b1d413f6849
+Author: Lijin Bin
+Reason: Bug
+Ref: CDH-65326
+---
+ .../apache/hadoop/hbase/regionserver/HStore.java   |   10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HStore.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HStore.java
+index e27bb21..0de082b 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HStore.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/HStore.java
+@@ -1363,7 +1363,9 @@ public class HStore implements Store {
+     this.lock.writeLock().lock();
+     try {
+       this.storeEngine.getStoreFileManager().addCompactionResults(compactedFiles, result);
+-      filesCompacting.removeAll(compactedFiles); // safe bc: lock.writeLock();
++      synchronized (filesCompacting) {
++        filesCompacting.removeAll(compactedFiles);
++      }
+     } finally {
+       this.lock.writeLock().unlock();
+     }
+@@ -2415,7 +2417,11 @@ public class HStore implements Store {
+ 
+   @Override
+   public boolean needsCompaction() {
+-    return this.storeEngine.needsCompaction(this.filesCompacting);
++    List<StoreFile> filesCompactingClone = null;
++    synchronized (filesCompacting) {
++      filesCompactingClone = Lists.newArrayList(filesCompacting);
++    }
++    return this.storeEngine.needsCompaction(filesCompactingClone);
+   }
+ 
+   @Override
+-- 
+1.7.9.5
+
