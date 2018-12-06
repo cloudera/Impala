@@ -376,7 +376,7 @@ class ScanRange : public RequestRange {
   boost::mutex lock_;
 
   /// Number of bytes read so far for this scan range
-  int bytes_read_;
+  int64_t bytes_read_;
 
   /// Status for this range. This is non-ok if is_cancelled_ is true.
   /// Note: an individual range can fail without the RequestContext being
