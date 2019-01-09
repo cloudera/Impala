@@ -400,7 +400,8 @@ public class PlannerTestBase extends FrontendTestBase {
    * of 'testCase'.
    */
   private void runTestCase(TestCase testCase, StringBuilder errorLog,
-      StringBuilder actualOutput, String dbName, boolean ignoreExplainHeader)
+      StringBuilder actualOutput, String dbName, boolean ignoreExplainHeader,
+      Set<PlannerTestOption> testOptions)
       throws CatalogException {
     String query = testCase.getQuery();
     LOG.info("running query " + query);
@@ -413,6 +414,8 @@ public class PlannerTestBase extends FrontendTestBase {
     TQueryCtx queryCtx = TestUtils.createQueryContext(
         dbName, System.getProperty("user.name"));
     queryCtx.client_request.query_options = testCase.getOptions();
+    queryCtx.setDisable_hbase_row_est(
+        testOptions.contains(PlannerTestOption.DISABLE_HBASE_KEY_ESTIMATE));
     // Test single node plan, scan range locations, and column lineage.
     TExecRequest singleNodeExecRequest = testPlan(testCase, Section.PLAN, queryCtx.deepCopy(),
         ignoreExplainHeader, errorLog, actualOutput);
@@ -756,6 +759,37 @@ public class PlannerTestBase extends FrontendTestBase {
     return explain;
   }
 
+  /**
+   * Assorted binary options that alter the behaviour of planner tests, generally
+   * enabling additional more-detailed checks.
+   */
+  protected static enum PlannerTestOption {
+    // Generate extended explain plans (default is STANDARD).
+    EXTENDED_EXPLAIN,
+    // Include the header of the explain plan (default is to strip the explain header).
+    INCLUDE_EXPLAIN_HEADER,
+    // Include the part of the explain header that has top-level resource consumption.
+    // If INCLUDE_EXPLAIN_HEADER is enabled, these are already included.
+    INCLUDE_RESOURCE_HEADER,
+    // Include the part of the extended explain header that has the query including
+    // implicit casts. Equivalent to enabling INCLUDE_EXPLAIN_HEADER and EXTENDED_EXPLAIN.
+    INCLUDE_QUERY_WITH_IMPLICIT_CASTS,
+    // Validate the values of resource requirement values within the plan (default is to
+    // ignore differences in resource values). Operator- and fragment-level resource
+    // requirements are only included if EXTENDED_EXPLAIN is also enabled.
+    VALIDATE_RESOURCES,
+    // Verify the row size and cardinality fields in the plan. Default is
+    // to ignore these values (for backward compatibility.) Turn this option
+    // on for test that validate cardinality calculations: joins, scan
+    // cardinality, etc.
+    VALIDATE_CARDINALITY,
+    // If set, disables the normal HBase key estimate scan in favor of using
+    // HMS table stats and key predicate selectivity. Enable this to test
+    // the case when HBase key stats are unavailable (such as due to overly
+    // restrictive key predicates).
+    DISABLE_HBASE_KEY_ESTIMATE
+  }
+
   protected void runPlannerTestFile(String testFile, TQueryOptions options) {
     runPlannerTestFile(testFile, options, true);
   }
@@ -767,6 +801,12 @@ public class PlannerTestBase extends FrontendTestBase {
 
   private void runPlannerTestFile(String testFile, String dbName, TQueryOptions options,
       boolean ignoreExplainHeader) {
+    runPlannerTestFile(
+            testFile, dbName, options, ignoreExplainHeader, new HashSet<PlannerTestOption>());
+  }
+
+  private void runPlannerTestFile(String testFile, String dbName, TQueryOptions options,
+                                  boolean ignoreExplainHeader, Set<PlannerTestOption> testOptions) {
     String fileName = testDir_.resolve(testFile + ".test").toString();
     if (options == null) {
       options = defaultQueryOptions();
@@ -789,7 +829,7 @@ public class PlannerTestBase extends FrontendTestBase {
         actualOutput.append("\n");
       }
       try {
-        runTestCase(testCase, errorLog, actualOutput, dbName, ignoreExplainHeader);
+        runTestCase(testCase, errorLog, actualOutput, dbName, ignoreExplainHeader, testOptions);
       } catch (CatalogException e) {
         errorLog.append(String.format("Failed to plan query\n%s\n%s",
             testCase.getQuery(), e.getMessage()));
@@ -816,6 +856,10 @@ public class PlannerTestBase extends FrontendTestBase {
 
   protected void runPlannerTestFile(String testFile) {
     runPlannerTestFile(testFile, "default", null, true);
+  }
+
+  protected void runPlannerTestFile(String testFile, Set<PlannerTestOption> testOptions) {
+    runPlannerTestFile(testFile, "default", null, true, testOptions);
   }
 
   protected void runPlannerTestFile(String testFile, String dbName) {

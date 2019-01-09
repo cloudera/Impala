@@ -59,6 +59,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import com.google.common.base.Charsets;
+import com.google.common.base.Preconditions;
 
 public interface FeHBaseTable extends FeTable {
   /**
@@ -401,6 +403,16 @@ public interface FeHBaseTable extends FeTable {
         }
         if (totalSize == 0) {
           rowCount = totalEstimatedRows;
+        } else if (statsSize.mean() < 1) {
+          // No meaningful row width found. The < 1 handles both the
+          // no row case and the potential case where the average is
+          // too small to be meaningful.
+          LOG.warn(String.format("Table %s: no data available to compute " +
+              "row count estimate for key range ('%s', '%s')",
+              tbl.getFullName(),
+              new String(startRowKey, Charsets.UTF_8),
+              new String(endRowKey, Charsets.UTF_8)));
+          return new Pair<>(-1L, -1L);
         } else {
           rowCount = (long) (totalSize / statsSize.mean());
         }

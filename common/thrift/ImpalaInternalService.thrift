@@ -432,6 +432,12 @@ struct TQueryCtx {
   // String containing a timestamp (in UTC) set as the query submission time. It
   // represents the same point in time as now_string
   17: required string utc_timestamp_string
+
+  // Disables the code that estimates HBase scan cardinality from key ranges.
+  // When disabled, scan cardinality is estimated from HMS table row count
+  // stats and key column predicate selectivity. Generally only disabled
+  // for testing.
+  18: optional bool disable_hbase_row_est = false;
 }
 
 // Specification of one output destination of a plan fragment

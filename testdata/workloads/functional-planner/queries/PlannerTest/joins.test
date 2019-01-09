@@ -342,6 +342,7 @@ PLAN-ROOT SINK
 |  runtime filters: RF000 <- b.int_col, RF001 <- CAST(b.id AS INT)
 |
 |--01:SCAN HBASE [functional_hbase.stringids b]
+|     key predicates: b.id = '5'
 |     start key: 5
 |     stop key: 5\0
 |     predicates: b.tinyint_col = 5
@@ -372,6 +373,7 @@ PLAN-ROOT SINK
 |--03:EXCHANGE [BROADCAST]
 |  |
 |  01:SCAN HBASE [functional_hbase.stringids b]
+|     key predicates: b.id = '5'
 |     start key: 5
 |     stop key: 5\0
 |     predicates: b.tinyint_col = 5
