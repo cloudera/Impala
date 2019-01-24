@@ -71,7 +71,7 @@ elif [ -z "$CAULDRON_DOCKER_PLATFORM" ]; then
   MAVEN_CONFIG_FILE="${IMPALA_HOME}/toolchain/cdh_components/m2-settings.xml"
   if [ ! -e "${MAVEN_CONFIG_FILE}" ]; then
     mkdir -p "$(dirname ${MAVEN_CONFIG_FILE})"
-    $WGET http://github.mtv.cloudera.com/raw/CDH/cdh/${BRANCH}/gbn-m2-settings.xml \
+    $WGET https://github.infra.cloudera.com/raw/CDH/cdh/${BRANCH}/gbn-m2-settings.xml \
       -O "${MAVEN_CONFIG_FILE}"
   fi
   export IMPALA_MAVEN_OPTIONS="-s ${MAVEN_CONFIG_FILE}"
