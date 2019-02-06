@@ -281,6 +281,12 @@ export LOCAL_FS="file:${WAREHOUSE_LOCATION_PREFIX}"
 ESCAPED_IMPALA_HOME=$(sed "s/[^0-9a-zA-Z]/_/g" <<< "$IMPALA_HOME")
 export METASTORE_DB=${METASTORE_DB-$(cut -c-63 <<< HMS$ESCAPED_IMPALA_HOME)}
 export SENTRY_POLICY_DB=${SENTRY_POLICY_DB-$(cut -c-63 <<< SP$ESCAPED_IMPALA_HOME)}
+if [[ "${TARGET_FILESYSTEM}" == "s3" ]]; then
+    # On S3, disable Sentry HDFS sync plugin.
+    export SENTRY_PROCESSOR_FACTORIES="org.apache.sentry.api.service.thrift.SentryPolicyStoreProcessorFactory"
+else
+    export SENTRY_PROCESSOR_FACTORIES="org.apache.sentry.api.service.thrift.SentryPolicyStoreProcessorFactory,org.apache.sentry.hdfs.SentryHDFSServiceProcessorFactory"
+fi
 
 # Environment variables carrying AWS security credentials are prepared
 # according to the following rules:
