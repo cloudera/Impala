@@ -19,6 +19,7 @@ package org.apache.impala.catalog;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -38,6 +39,7 @@ import org.apache.impala.catalog.HdfsPartition.FileDescriptor;
 import org.apache.impala.catalog.local.LocalCatalog;
 import org.apache.impala.catalog.local.MetaProvider;
 import org.apache.impala.service.BackendConfig;
+import org.apache.impala.thrift.TCatalogObject;
 import org.apache.impala.thrift.TColumnDescriptor;
 import org.apache.impala.thrift.TGetCatalogMetricsResult;
 import org.apache.impala.thrift.THdfsPartition;
@@ -399,5 +401,19 @@ public abstract class FeCatalogUtils {
     metrics.setCache_miss_rate(stats.missRate());
   }
 
+
+  /**
+   * Returns a debug string for a given list of TCatalogObjects. Includes the unique key
+   * and version number for each object.
+   */
+  public static String debugString(List<TCatalogObject> objects) {
+    if (objects == null || objects.size() == 0) return "[]";
+    List<String> catalogObjs = new ArrayList<>();
+    for (TCatalogObject object: objects) {
+      catalogObjs.add(String.format("%s version: %d",
+          Catalog.toCatalogObjectKey(object), object.catalog_version));
+    }
+    return "[" + Joiner.on(",").join(catalogObjs) + "]";
+  }
 
 }

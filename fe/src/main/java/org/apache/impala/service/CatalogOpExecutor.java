@@ -155,7 +155,7 @@ import org.apache.impala.thrift.TUpdateCatalogResponse;
 import org.apache.impala.util.FunctionUtils;
 import org.apache.impala.util.HdfsCachingUtil;
 import org.apache.impala.util.MetaStoreUtil;
-import org.apache.log4j.Logger;
+import org.slf4j.Logger;
 import org.apache.thrift.TException;
 
 import com.codahale.metrics.Timer;
@@ -164,6 +164,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import org.slf4j.LoggerFactory;
 
 /**
  * Class used to execute Catalog Operations, including DDL and refresh/invalidate
@@ -234,6 +235,8 @@ import com.google.common.collect.Sets;
  * metastore out of this class.
  */
 public class CatalogOpExecutor {
+  private static final Logger LOG = LoggerFactory.getLogger(CatalogOpExecutor.class);
+
   // Format string for exceptions returned by Hive Metastore RPCs.
   private final static String HMS_RPC_ERROR_FORMAT_STR =
       "Error making '%s' RPC to Hive Metastore: ";
@@ -243,7 +246,6 @@ public class CatalogOpExecutor {
   // Lock used to ensure that CREATE[DROP] TABLE[DATABASE] operations performed in
   // catalog_ and the corresponding RPC to apply the change in HMS are atomic.
   private final Object metastoreDdlLock_ = new Object();
-  private static final Logger LOG = Logger.getLogger(CatalogOpExecutor.class);
 
   // The maximum number of partitions to update in one Hive Metastore RPC.
   // Used when persisting the results of COMPUTE STATS statements.
@@ -265,6 +267,7 @@ public class CatalogOpExecutor {
       requestingUser = new User(ddlRequest.getHeader().getRequesting_user());
     }
 
+    boolean syncDdl = ddlRequest.isSync_ddl();
     switch (ddlRequest.ddl_type) {
       case ALTER_TABLE:
         alterTable(ddlRequest.getAlter_table_params(), response);
@@ -276,14 +279,14 @@ public class CatalogOpExecutor {
         createDatabase(ddlRequest.getCreate_db_params(), response);
         break;
       case CREATE_TABLE_AS_SELECT:
-        response.setNew_table_created(
-            createTable(ddlRequest.getCreate_table_params(), response));
+        response.setNew_table_created(createTable(
+            ddlRequest.getCreate_table_params(), response, syncDdl));
         break;
       case CREATE_TABLE:
-        createTable(ddlRequest.getCreate_table_params(), response);
+        createTable(ddlRequest.getCreate_table_params(), response, syncDdl);
         break;
       case CREATE_TABLE_LIKE:
-        createTableLike(ddlRequest.getCreate_table_like_params(), response);
+        createTableLike(ddlRequest.getCreate_table_like_params(), response, syncDdl);
         break;
       case CREATE_VIEW:
         createView(ddlRequest.getCreate_view_params(), response);
@@ -342,7 +345,7 @@ public class CatalogOpExecutor {
     // operation. The version of this catalog update is returned to the requesting
     // impalad which will wait until this catalog update has been broadcast to all the
     // coordinators.
-    if (ddlRequest.isSync_ddl()) {
+    if (syncDdl) {
       response.getResult().setVersion(
           catalog_.waitForSyncDdlVersion(response.getResult()));
     }
@@ -1588,9 +1591,12 @@ public class CatalogOpExecutor {
    * lazily load the new metadata on the next access. If this is a managed Kudu table,
    * the table is also created in the Kudu storage engine. Re-throws any HMS or Kudu
    * exceptions encountered during the create.
+   * @param  syncDdl tells if SYNC_DDL option is enabled on this DDL request.
+   * @return true if a new table has been created with the given params, false
+   * otherwise.
    */
-  private boolean createTable(TCreateTableParams params, TDdlExecResponse response)
-      throws ImpalaException {
+  private boolean createTable(TCreateTableParams params, TDdlExecResponse response,
+      boolean syncDdl) throws ImpalaException {
     Preconditions.checkNotNull(params);
     TableName tableName = TableName.fromThrift(params.getTable_name());
     Preconditions.checkState(tableName != null && tableName.isFullyQualified());
@@ -1599,18 +1605,35 @@ public class CatalogOpExecutor {
 
     Table existingTbl = catalog_.getTableNoThrow(tableName.getDb(), tableName.getTbl());
     if (params.if_not_exists && existingTbl != null) {
-      LOG.trace(String.format("Skipping table creation because %s already exists and " +
-          "IF NOT EXISTS was specified.", tableName));
-      existingTbl.getLock().lock();
+      LOG.trace("Skipping table creation because {} already exists and " +
+          "IF NOT EXISTS was specified.", tableName);
+      tryLock(existingTbl);
       try {
-        addTableToCatalogUpdate(existingTbl, response.getResult());
-        return false;
+        if (syncDdl) {
+          // When SYNC_DDL is enabled and the table already exists, we force a version
+          // bump on it so that it is added to the next statestore update. Without this
+          // we could potentially be referring to a table object that has already been
+          // GC'ed from the TopicUpdateLog and waitForSyncDdlVersion() cannot find a
+          // covering topic version (IMPALA-7961).
+          //
+          // This is a conservative hack to not break the SYNC_DDL semantics and could
+          // possibly result in false-positive invalidates on this table. However, that is
+          // better than breaking the SYNC_DDL semantics and the subsequent queries
+          // referring to this table failing with "table not found" errors.
+          long newVersion = catalog_.incrementAndGetCatalogVersion();
+          existingTbl.setCatalogVersion(newVersion);
+          LOG.trace("Table {} version bumped to {} because SYNC_DDL is enabled.",
+              tableName, newVersion);
+        }
+        addTableToCatalogUpdate(existingTbl, response.result);
       } finally {
+        catalog_.getLock().writeLock().unlock();
         existingTbl.getLock().unlock();
       }
+      return false;
     }
     org.apache.hadoop.hive.metastore.api.Table tbl = createMetaStoreTable(params);
-    LOG.trace(String.format("Creating table %s", tableName));
+    LOG.trace("Creating table {}", tableName);
     if (KuduTable.isKuduTable(tbl)) return createKuduTable(tbl, params, response);
     Preconditions.checkState(params.getColumns().size() > 0,
         "Empty column list given as argument to Catalog.createTable");
@@ -1828,8 +1851,10 @@ public class CatalogOpExecutor {
    * No data is copied as part of this process, it is a metadata only operation. If the
    * creation succeeds, an entry is added to the metadata cache to lazily load the new
    * table's metadata on the next access.
+   * @param  syncDdl tells is SYNC_DDL is enabled for this DDL request.
    */
-  private void createTableLike(TCreateTableLikeParams params, TDdlExecResponse response)
+  private void createTableLike(TCreateTableLikeParams params, TDdlExecResponse response
+      , boolean syncDdl)
       throws ImpalaException {
     Preconditions.checkNotNull(params);
 
@@ -1845,13 +1870,30 @@ public class CatalogOpExecutor {
     if (params.if_not_exists && existingTbl != null) {
       LOG.trace(String.format("Skipping table creation because %s already exists and " +
           "IF NOT EXISTS was specified.", tblName));
-      existingTbl.getLock().lock();
+      tryLock(existingTbl);
       try {
-        addTableToCatalogUpdate(existingTbl, response.getResult());
-        return;
+        if (syncDdl) {
+          // When SYNC_DDL is enabled and the table already exists, we force a version
+          // bump on it so that it is added to the next statestore update. Without this
+          // we could potentially be referring to a table object that has already been
+          // GC'ed from the TopicUpdateLog and waitForSyncDdlVersion() cannot find a
+          // covering topic version (IMPALA-7961).
+          //
+          // This is a conservative hack to not break the SYNC_DDL semantics and could
+          // possibly result in false-positive invalidates on this table. However, that is
+          // better than breaking the SYNC_DDL semantics and the subsequent queries
+          // referring to this table failing with "table not found" errors.
+          long newVersion = catalog_.incrementAndGetCatalogVersion();
+          existingTbl.setCatalogVersion(newVersion);
+          LOG.trace("Table {} version bumped to {} because SYNC_DDL is enabled.",
+              existingTbl.getFullName(), newVersion);
+        }
+        addTableToCatalogUpdate(existingTbl, response.result);
       } finally {
+        catalog_.getLock().writeLock().unlock();
         existingTbl.getLock().unlock();
       }
+      return;
     }
     Table srcTable = getExistingTable(srcTblName.getDb(), srcTblName.getTbl());
     org.apache.hadoop.hive.metastore.api.Table tbl =
@@ -3692,6 +3734,18 @@ public class CatalogOpExecutor {
       result.setVersion(updatedCatalogObject.getCatalog_version());
     } finally {
       catalog_.getLock().writeLock().unlock();
+    }
+  }
+
+  /**
+   * Try to lock a table in the catalog. Throw an InternalException if the catalog is
+   * unable to lock the given table.
+   */
+  private void tryLock(Table tbl) throws InternalException {
+    String type = tbl instanceof View ? "view" : "table";
+    if (!catalog_.tryLockTable(tbl)) {
+      throw new InternalException(String.format("Error altering %s %s due to " +
+          "lock contention.", type, tbl.getFullName()));
     }
   }
 }
