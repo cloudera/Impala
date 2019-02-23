@@ -244,9 +244,10 @@ class KrpcDataStreamMgr : public DataStreamMgrBase {
   /// caller. 'client' is the BufferPool's client handle for allocating buffers.
   /// It's owned by the parent exchange node.
   std::shared_ptr<DataStreamRecvrBase> CreateRecvr(const RowDescriptor* row_desc,
-      const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id, int num_senders,
-      int64_t buffer_size, bool is_merging, RuntimeProfile* profile,
-      MemTracker* parent_tracker, BufferPool::ClientHandle* client) override;
+      const RuntimeState& runtime_state, const TUniqueId& fragment_instance_id,
+      PlanNodeId dest_node_id, int num_senders, int64_t buffer_size, bool is_merging,
+      RuntimeProfile* profile, MemTracker* parent_tracker,
+      BufferPool::ClientHandle* client) override;
 
   /// Handler for TransmitData() RPC.
   ///

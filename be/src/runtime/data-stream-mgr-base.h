@@ -46,9 +46,10 @@ class DataStreamMgrBase : public CacheLineAligned {
 
   /// Create a receiver for a specific fragment_instance_id/node_id destination;
   virtual std::shared_ptr<DataStreamRecvrBase> CreateRecvr(const RowDescriptor* row_desc,
-      const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id, int num_senders,
-      int64_t buffer_size, bool is_merging, RuntimeProfile* profile,
-      MemTracker* parent_tracker, BufferPool::ClientHandle* client = nullptr) = 0;
+      const RuntimeState& runtime_state, const TUniqueId& fragment_instance_id,
+      PlanNodeId dest_node_id, int num_senders, int64_t buffer_size, bool is_merging,
+      RuntimeProfile* profile, MemTracker* parent_tracker,
+      BufferPool::ClientHandle* client = nullptr) = 0;
 
   /// Closes all receivers registered for fragment_instance_id immediately.
   virtual void Cancel(const TUniqueId& fragment_instance_id) = 0;

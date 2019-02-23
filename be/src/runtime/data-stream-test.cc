@@ -454,8 +454,9 @@ class DataStreamTest : public DataStreamTestBase<testing::TestWithParam<KrpcSwit
     GetNextInstanceId(&instance_id);
     receiver_info_.push_back(ReceiverInfo(stream_type, num_senders, receiver_num));
     ReceiverInfo& info = receiver_info_.back();
-    info.stream_recvr = stream_mgr_->CreateRecvr(row_desc_, instance_id, DEST_NODE_ID,
-        num_senders, buffer_size, is_merging, profile, &tracker_, &buffer_pool_client_);
+    info.stream_recvr = stream_mgr_->CreateRecvr(row_desc_,  *runtime_state_.get(),
+        instance_id, DEST_NODE_ID, num_senders, buffer_size, is_merging, profile,
+        &tracker_, &buffer_pool_client_);
     if (!is_merging) {
       info.thread_handle = new thread(&DataStreamTest::ReadStream, this, &info);
     } else {
@@ -811,7 +812,8 @@ TEST_P(DataStreamTestThriftOnly, CloseRecvrWhileReferencesRemain) {
   TUniqueId instance_id;
   GetNextInstanceId(&instance_id);
   shared_ptr<DataStreamRecvrBase> stream_recvr = stream_mgr_->CreateRecvr(row_desc_,
-      instance_id, DEST_NODE_ID, 1, 1, false, profile, &tracker_, nullptr);
+      *runtime_state_.get(), instance_id, DEST_NODE_ID, 1, 1, false, profile, &tracker_,
+      nullptr);
 
   // Perform tear down, but keep a reference to the receiver so that it is deleted last
   // (to confirm that the destructor does not access invalid state after tear-down).
@@ -874,8 +876,9 @@ TEST_P(DataStreamTestShortDeserQueue, TestNoDeadlock) {
   RuntimeProfile* profile = RuntimeProfile::Create(&obj_pool_, "TestReceiver");
   receiver_info_.push_back(ReceiverInfo(TPartitionType::UNPARTITIONED, 4, 1));
   ReceiverInfo& info = receiver_info_.back();
-  info.stream_recvr = stream_mgr_->CreateRecvr(row_desc_, instance_id, DEST_NODE_ID,
-      4, 1024 * 1024, false, profile, &tracker_, &buffer_pool_client_);
+  info.stream_recvr = stream_mgr_->CreateRecvr(row_desc_, *runtime_state_.get(),
+      instance_id, DEST_NODE_ID, 4, 1024 * 1024, false, profile, &tracker_,
+      &buffer_pool_client_);
   info.thread_handle = new thread(
       &DataStreamTestShortDeserQueue_TestNoDeadlock_Test::ReadStream, this, &info);
 
