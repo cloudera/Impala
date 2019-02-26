@@ -962,6 +962,8 @@ class StressRunner(object):
               do_check_for_impala_crashes = True
               # TODO: Handle case for num_queries_dequeued != num_queries_submitted
               num_submitted = runner._metrics[NUM_QUERIES_SUBMITTED].value
+              num_started_or_cancelled = \
+                  runner._metrics[NUM_QUERIES_STARTED_RUNNING_OR_CANCELLED]
               num_finished = runner._metrics[NUM_QUERIES_FINISHED].value
               if num_submitted != num_finished:
                 # The query runner process may have crashed before updating the number
@@ -969,6 +971,10 @@ class StressRunner(object):
                 # submitted.
                 assert num_submitted - num_finished == 1
                 increment(runner._metrics[NUM_QUERIES_FINISHED])
+                if num_submitted != num_started_or_cancelled:
+                  assert num_submitted - num_started_or_cancelled == 1
+                  increment(runner._metrics[NUM_QUERIES_STARTED_RUNNING_OR_CANCELLED])
+
                 # Since we know that the runner crashed while trying to run a query, we
                 # count it as an 'other error'
                 increment(runner._metrics[NUM_OTHER_ERRORS])
