@@ -99,6 +99,8 @@ import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 import com.google.common.collect.Lists;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Main test class to cover the functionality of MetastoreEventProcessor. In order to make
@@ -118,6 +120,8 @@ public class MetastoreEventsProcessorTest {
   private static CatalogServiceCatalog catalog_;
   private static CatalogOpExecutor catalogOpExecutor_;
   private static MetastoreEventsProcessor eventsProcessor_;
+  private static final Logger LOG =
+      LoggerFactory.getLogger(MetastoreEventsProcessorTest.class);
 
   @BeforeClass
   public static void setUpTestEnvironment() throws TException {
@@ -968,7 +972,7 @@ public class MetastoreEventsProcessorTest {
 
     AlterTableEvent alterTableEvent = new AlterTableEvent(
         fakeCatalog, eventsProcessor_.getMetrics(), fakeAlterTableNotification);
-    Assert.assertFalse("Alter table which " + "changes the flags should not be skipped. "
+    Assert.assertFalse("Alter table which changes the flags should not be skipped. "
             + printFlagTransistions(dbFlag, tblFlagTransition),
         alterTableEvent.isEventProcessingDisabled());
 
