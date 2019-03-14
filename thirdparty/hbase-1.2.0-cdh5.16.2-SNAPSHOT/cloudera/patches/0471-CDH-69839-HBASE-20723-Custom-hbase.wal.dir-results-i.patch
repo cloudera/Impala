@@ -1,0 +1,499 @@
+From 3d6dcdc5396ad83fe6fd7c2f87bf4290ee65c016 Mon Sep 17 00:00:00 2001
+From: Sakthi <jatsakthi@cloudera.com>
+Date: Mon, 30 Jul 2018 14:30:48 -0700
+Subject: [PATCH 471/488] CDH-69839: HBASE-20723 Custom hbase.wal.dir results
+ in data loss because we write recovered edits into
+ a different place than where the recovering region
+ server looks for them ==C5_APPROVED_BUGFIX==
+ (cherry picked from commit
+ c7923def7fa4ececdcf6593b3c8a3d97ecc2caad)
+
+changing comment to retrigger the build
+
+Change-Id: I5fbb6f6d503b2177d8bc793c0a5791ecbbce59a0
+---
+ .../hadoop/hbase/wal/DefaultWALProvider.java       |    3 +-
+ .../org/apache/hadoop/hbase/wal/WALSplitter.java   |   46 +++++++------
+ .../hbase/regionserver/wal/TestWALReplay.java      |   70 ++++++++++----------
+ .../apache/hadoop/hbase/wal/TestWALFactory.java    |    2 +-
+ .../org/apache/hadoop/hbase/wal/TestWALSplit.java  |    4 +-
+ 5 files changed, 64 insertions(+), 61 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/wal/DefaultWALProvider.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/wal/DefaultWALProvider.java
+index eeb22c9..71b6cef 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/wal/DefaultWALProvider.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/wal/DefaultWALProvider.java
+@@ -392,7 +392,8 @@ public class DefaultWALProvider implements WALProvider {
+     Writer writer = null;
+     try {
+       writer = logWriterClass.newInstance();
+-      writer.init(fs, path, conf, overwritable);
++      FileSystem rootFs = FileSystem.get(path.toUri(), conf);
++      writer.init(rootFs, path, conf, overwritable);
+       return writer;
+     } catch (Exception e) {
+       LOG.debug("Error instantiating log writer.", e);
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/wal/WALSplitter.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/wal/WALSplitter.java
+index f62646c..b11a06f 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/wal/WALSplitter.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/wal/WALSplitter.java
+@@ -139,7 +139,7 @@ public class WALSplitter {
+   public static final boolean SPLIT_SKIP_ERRORS_DEFAULT = false;
+ 
+   // Parameters for split process
+-  protected final Path rootDir;
++  protected final Path walDir;
+   protected final FileSystem fs;
+   protected final Configuration conf;
+ 
+@@ -177,14 +177,14 @@ public class WALSplitter {
+   // Min batch size when replay WAL edits
+   private final int minBatchSize;
+ 
+-  WALSplitter(final WALFactory factory, Configuration conf, Path rootDir,
++  WALSplitter(final WALFactory factory, Configuration conf, Path walDir,
+       FileSystem fs, LastSequenceId idChecker,
+       CoordinatedStateManager csm, RecoveryMode mode) {
+     this.conf = HBaseConfiguration.create(conf);
+     String codecClassName = conf
+         .get(WALCellCodec.WAL_CELL_CODEC_CLASS_KEY, WALCellCodec.class.getName());
+     this.conf.set(HConstants.RPC_CODEC_CONF_KEY, codecClassName);
+-    this.rootDir = rootDir;
++    this.walDir = walDir;
+     this.fs = fs;
+     this.sequenceIdChecker = idChecker;
+     this.csm = (BaseCoordinatedStateManager)csm;
+@@ -219,7 +219,7 @@ public class WALSplitter {
+    * <p>
+    * If the log file has N regions then N recovered.edits files will be produced.
+    * <p>
+-   * @param rootDir
++   * @param walDir
+    * @param logfile
+    * @param fs
+    * @param conf
+@@ -229,10 +229,10 @@ public class WALSplitter {
+    * @return false if it is interrupted by the progress-able.
+    * @throws IOException
+    */
+-  public static boolean splitLogFile(Path rootDir, FileStatus logfile, FileSystem fs,
++  public static boolean splitLogFile(Path walDir, FileStatus logfile, FileSystem fs,
+       Configuration conf, CancelableProgressable reporter, LastSequenceId idChecker,
+       CoordinatedStateManager cp, RecoveryMode mode, final WALFactory factory) throws IOException {
+-    WALSplitter s = new WALSplitter(factory, conf, rootDir, fs, idChecker, cp, mode);
++    WALSplitter s = new WALSplitter(factory, conf, walDir, fs, idChecker, cp, mode);
+     return s.splitLogFile(logfile, reporter);
+   }
+ 
+@@ -298,7 +298,7 @@ public class WALSplitter {
+         in = getReader(logfile, skipErrors, reporter);
+       } catch (CorruptedLogFileException e) {
+         LOG.warn("Could not get reader, corrupted log file " + logPath, e);
+-        ZKSplitLog.markCorrupted(rootDir, logfile.getPath().getName(), fs);
++        ZKSplitLog.markCorrupted(walDir, logfile.getPath().getName(), fs);
+         isCorrupted = true;
+       }
+       if (in == null) {
+@@ -389,7 +389,7 @@ public class WALSplitter {
+       throw iie;
+     } catch (CorruptedLogFileException e) {
+       LOG.warn("Could not parse, corrupted log file " + logPath, e);
+-      csm.getSplitLogWorkerCoordination().markCorrupted(rootDir,
++      csm.getSplitLogWorkerCoordination().markCorrupted(walDir,
+         logfile.getPath().getName(), fs);
+       isCorrupted = true;
+     } catch (IOException e) {
+@@ -520,16 +520,16 @@ public class WALSplitter {
+    * <code>logEntry</code>: e.g. /hbase/some_table/2323432434/recovered.edits/2332.
+    * This method also ensures existence of RECOVERED_EDITS_DIR under the region
+    * creating it if necessary.
+-   * @param fs
+    * @param logEntry
+-   * @param rootDir HBase root dir.
++   * @param conf
+    * @return Path to file into which to dump split log edits.
+    * @throws IOException
+    */
+   @SuppressWarnings("deprecation")
+-  static Path getRegionSplitEditsPath(final FileSystem fs,
+-      final Entry logEntry, final Path rootDir, boolean isCreate)
++  static Path getRegionSplitEditsPath(final Entry logEntry, boolean isCreate, Configuration conf)
+   throws IOException {
++    FileSystem fs = FileSystem.get(conf);
++    Path rootDir = FSUtils.getRootDir(conf);
+     Path tableDir = FSUtils.getTableDir(rootDir, logEntry.getKey().getTablename());
+     String encodedRegionName = Bytes.toString(logEntry.getKey().getEncodedRegionName());
+     Path regiondir = HRegion.getRegionDir(tableDir, encodedRegionName);
+@@ -1347,6 +1347,7 @@ public class WALSplitter {
+           public Void call() throws Exception {
+             WriterAndPath wap = (WriterAndPath) writersEntry.getValue();
+             if (LOG.isTraceEnabled()) LOG.trace("Closing " + wap.p);
++            FileSystem rootFs = FileSystem.get(conf);
+             try {
+               wap.w.close();
+             } catch (IOException ioe) {
+@@ -1361,7 +1362,7 @@ public class WALSplitter {
+             }
+             if (wap.editsWritten == 0) {
+               // just remove the empty recovered.edits file
+-              if (fs.exists(wap.p) && !fs.delete(wap.p, false)) {
++              if (rootFs.exists(wap.p) && !rootFs.delete(wap.p, false)) {
+                 LOG.warn("Failed deleting empty " + wap.p);
+                 throw new IOException("Failed deleting empty  " + wap.p);
+               }
+@@ -1371,7 +1372,7 @@ public class WALSplitter {
+             Path dst = getCompletedRecoveredEditsFilePath(wap.p,
+               regionMaximumEditLogSeqNum.get(writersEntry.getKey()));
+             try {
+-              if (!dst.equals(wap.p) && fs.exists(dst)) {
++              if (!dst.equals(wap.p) && rootFs.exists(dst)) {
+                 LOG.warn("Found existing old edits file. It could be the "
+                     + "result of a previous failed split attempt. Deleting " + dst + ", length="
+                     + fs.getFileStatus(dst).getLen());
+@@ -1383,8 +1384,8 @@ public class WALSplitter {
+               // Skip the unit tests which create a splitter that reads and
+               // writes the data without touching disk.
+               // TestHLogSplit#testThreading is an example.
+-              if (fs.exists(wap.p)) {
+-                if (!fs.rename(wap.p, dst)) {
++              if (rootFs.exists(wap.p)) {
++                if (!rootFs.rename(wap.p, dst)) {
+                   throw new IOException("Failed renaming " + wap.p + " to " + dst);
+                 }
+                 LOG.info("Rename " + wap.p + " to " + dst);
+@@ -1490,7 +1491,7 @@ public class WALSplitter {
+       if (blacklistedRegions.contains(region)) {
+         return null;
+       }
+-      ret = createWAP(region, entry, rootDir);
++      ret = createWAP(region, entry);
+       if (ret == null) {
+         blacklistedRegions.add(region);
+         return null;
+@@ -1502,16 +1503,17 @@ public class WALSplitter {
+     /**
+      * @return a path with a write for that path. caller should close.
+      */
+-    private WriterAndPath createWAP(byte[] region, Entry entry, Path rootdir) throws IOException {
+-      Path regionedits = getRegionSplitEditsPath(fs, entry, rootdir, true);
++    private WriterAndPath createWAP(byte[] region, Entry entry) throws IOException {
++      Path regionedits = getRegionSplitEditsPath(entry, true, conf);
+       if (regionedits == null) {
+         return null;
+       }
+-      if (fs.exists(regionedits)) {
++      FileSystem rootFs = FileSystem.get(conf);
++      if (rootFs.exists(regionedits)) {
+         LOG.warn("Found old edits file. It could be the "
+             + "result of a previous failed split attempt. Deleting " + regionedits + ", length="
+-            + fs.getFileStatus(regionedits).getLen());
+-        if (!fs.delete(regionedits, false)) {
++            + rootFs.getFileStatus(regionedits).getLen());
++        if (!rootFs.delete(regionedits, false)) {
+           LOG.warn("Failed delete of old " + regionedits);
+         }
+       }
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/wal/TestWALReplay.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/wal/TestWALReplay.java
+index efa86bb..2791865 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/wal/TestWALReplay.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/wal/TestWALReplay.java
+@@ -275,11 +275,11 @@ public class TestWALReplay {
+ 
+     MultiVersionConcurrencyControl mvcc = new MultiVersionConcurrencyControl();
+     HRegionInfo hri = createBasic3FamilyHRegionInfo(tableName);
+-    Path basedir = FSUtils.getTableDir(hbaseWALRootDir, tableName);
++    Path basedir = FSUtils.getTableDir(hbaseRootDir, tableName);
+     deleteDir(basedir);
+ 
+     HTableDescriptor htd = createBasic3FamilyHTD(tableName);
+-    HRegion region2 = HRegion.createHRegion(hri, hbaseWALRootDir, this.conf, htd);
++    HRegion region2 = HRegion.createHRegion(hri, hbaseRootDir, this.conf, htd);
+     HRegion.closeHRegion(region2);
+     final byte [] rowName = tableName.getName();
+ 
+@@ -305,7 +305,7 @@ public class TestWALReplay {
+ 
+     WAL wal3 = createWAL(this.conf);
+     try {
+-      HRegion region = HRegion.openHRegion(this.conf, this.fs, hbaseWALRootDir, hri, htd, wal3);
++      HRegion region = HRegion.openHRegion(this.conf, this.fs, hbaseRootDir, hri, htd, wal3);
+       long seqid = region.getOpenSeqNum();
+       // The regions opens with sequenceId as 1. With 6k edits, its sequence number reaches 6k + 1.
+       // When opened, this region would apply 6k edits, and increment the sequenceId by 1
+@@ -337,13 +337,13 @@ public class TestWALReplay {
+     final TableName tableName =
+         TableName.valueOf("testRegionMadeOfBulkLoadedFilesOnly");
+     final HRegionInfo hri = createBasic3FamilyHRegionInfo(tableName);
+-    final Path basedir = new Path(this.hbaseWALRootDir, tableName.getNameAsString());
++    final Path basedir = new Path(this.hbaseRootDir, tableName.getNameAsString());
+     deleteDir(basedir);
+     final HTableDescriptor htd = createBasic3FamilyHTD(tableName);
+-    HRegion region2 = HRegion.createHRegion(hri, hbaseWALRootDir, this.conf, htd);
++    HRegion region2 = HRegion.createHRegion(hri, hbaseRootDir, this.conf, htd);
+     HRegion.closeHRegion(region2);
+     WAL wal = createWAL(this.conf);
+-    HRegion region = HRegion.openHRegion(this.conf, this.fs, hbaseWALRootDir, hri, htd, wal);
++    HRegion region = HRegion.openHRegion(this.conf, this.fs, hbaseRootDir, hri, htd, wal);
+ 
+     byte [] family = htd.getFamilies().iterator().next().getName();
+     Path f =  new Path(basedir, "hfile");
+@@ -372,7 +372,7 @@ public class TestWALReplay {
+         WAL wal2 = createWAL(newConf);
+ 
+         HRegion region2 = HRegion.openHRegion(newConf, FileSystem.get(newConf),
+-          hbaseWALRootDir, hri, htd, wal2);
++          hbaseRootDir, hri, htd, wal2);
+         long seqid2 = region2.getOpenSeqNum();
+         assertTrue(seqid2 > -1);
+         assertEquals(rowsInsertedCount, getScannedCount(region2.getScanner(new Scan())));
+@@ -403,14 +403,14 @@ public class TestWALReplay {
+     final TableName tableName =
+         TableName.valueOf("testCompactedBulkLoadedFiles");
+     final HRegionInfo hri = createBasic3FamilyHRegionInfo(tableName);
+-    final Path basedir = new Path(this.hbaseWALRootDir, tableName.getNameAsString());
++    final Path basedir = new Path(this.hbaseRootDir, tableName.getNameAsString());
+     deleteDir(basedir);
+     final HTableDescriptor htd = createBasic3FamilyHTD(tableName);
+     HRegion region2 = HRegion.createHRegion(hri,
+-        hbaseWALRootDir, this.conf, htd);
++        hbaseRootDir, this.conf, htd);
+     HRegion.closeHRegion(region2);
+     WAL wal = createWAL(this.conf);
+-    HRegion region = HRegion.openHRegion(this.conf, this.fs, hbaseWALRootDir, hri, htd, wal);
++    HRegion region = HRegion.openHRegion(this.conf, this.fs, hbaseRootDir, hri, htd, wal);
+ 
+     // Add an edit so something in the WAL
+     byte [] row = tableName.getName();
+@@ -444,7 +444,7 @@ public class TestWALReplay {
+         WAL wal2 = createWAL(newConf);
+ 
+         HRegion region2 = HRegion.openHRegion(newConf, FileSystem.get(newConf),
+-            hbaseWALRootDir, hri, htd, wal2);
++            hbaseRootDir, hri, htd, wal2);
+         long seqid2 = region2.getOpenSeqNum();
+         assertTrue(seqid2 > -1);
+         assertEquals(rowsInsertedCount, getScannedCount(region2.getScanner(new Scan())));
+@@ -474,19 +474,19 @@ public class TestWALReplay {
+     final TableName tableName =
+         TableName.valueOf("testReplayEditsWrittenViaHRegion");
+     final HRegionInfo hri = createBasic3FamilyHRegionInfo(tableName);
+-    final Path basedir = FSUtils.getTableDir(this.hbaseWALRootDir, tableName);
++    final Path basedir = FSUtils.getTableDir(this.hbaseRootDir, tableName);
+     deleteDir(basedir);
+     final byte[] rowName = tableName.getName();
+     final int countPerFamily = 10;
+     final HTableDescriptor htd = createBasic3FamilyHTD(tableName);
+     HRegion region3 = HRegion.createHRegion(hri,
+-            hbaseWALRootDir, this.conf, htd);
++            hbaseRootDir, this.conf, htd);
+     HRegion.closeHRegion(region3);
+     // Write countPerFamily edits into the three families.  Do a flush on one
+     // of the families during the load of edits so its seqid is not same as
+     // others to test we do right thing when different seqids.
+     WAL wal = createWAL(this.conf);
+-    HRegion region = HRegion.openHRegion(this.conf, this.fs, hbaseWALRootDir, hri, htd, wal);
++    HRegion region = HRegion.openHRegion(this.conf, this.fs, hbaseRootDir, hri, htd, wal);
+     long seqid = region.getOpenSeqNum();
+     boolean first = true;
+     for (HColumnDescriptor hcd: htd.getFamilies()) {
+@@ -509,7 +509,7 @@ public class TestWALReplay {
+     wal.shutdown();
+     runWALSplit(this.conf);
+     WAL wal2 = createWAL(this.conf);
+-    HRegion region2 = HRegion.openHRegion(conf, this.fs, hbaseWALRootDir, hri, htd, wal2);
++    HRegion region2 = HRegion.openHRegion(conf, this.fs, hbaseRootDir, hri, htd, wal2);
+     long seqid2 = region2.getOpenSeqNum();
+     assertTrue(seqid + result.size() < seqid2);
+     final Result result1b = region2.get(g);
+@@ -584,19 +584,19 @@ public class TestWALReplay {
+     final TableName tableName =
+         TableName.valueOf("testReplayEditsWrittenViaHRegion");
+     final HRegionInfo hri = createBasic3FamilyHRegionInfo(tableName);
+-    final Path basedir = FSUtils.getTableDir(this.hbaseWALRootDir, tableName);
++    final Path basedir = FSUtils.getTableDir(this.hbaseRootDir, tableName);
+     deleteDir(basedir);
+     final byte[] rowName = tableName.getName();
+     final int countPerFamily = 10;
+     final HTableDescriptor htd = createBasic3FamilyHTD(tableName);
+     HRegion region3 = HRegion.createHRegion(hri,
+-            hbaseWALRootDir, this.conf, htd);
++            hbaseRootDir, this.conf, htd);
+     HRegion.closeHRegion(region3);
+     // Write countPerFamily edits into the three families.  Do a flush on one
+     // of the families during the load of edits so its seqid is not same as
+     // others to test we do right thing when different seqids.
+     WAL wal = createWAL(this.conf);
+-    HRegion region = HRegion.openHRegion(this.conf, this.fs, hbaseWALRootDir, hri, htd, wal);
++    HRegion region = HRegion.openHRegion(this.conf, this.fs, hbaseRootDir, hri, htd, wal);
+     long seqid = region.getOpenSeqNum();
+     for (HColumnDescriptor hcd: htd.getFamilies()) {
+       addRegionEdits(rowName, hcd.getName(), countPerFamily, this.ee, region, "x");
+@@ -629,7 +629,7 @@ public class TestWALReplay {
+     // Let us try to split and recover
+     runWALSplit(this.conf);
+     WAL wal2 = createWAL(this.conf);
+-    HRegion region2 = HRegion.openHRegion(this.conf, this.fs, hbaseWALRootDir, hri, htd, wal2);
++    HRegion region2 = HRegion.openHRegion(this.conf, this.fs, hbaseRootDir, hri, htd, wal2);
+     long seqid2 = region2.getOpenSeqNum();
+     assertTrue(seqid + result.size() < seqid2);
+ 
+@@ -669,10 +669,10 @@ public class TestWALReplay {
+     final TableName tableName =
+         TableName.valueOf("testReplayEditsAfterAbortingFlush");
+     final HRegionInfo hri = createBasic3FamilyHRegionInfo(tableName);
+-    final Path basedir = FSUtils.getTableDir(this.hbaseWALRootDir, tableName);
++    final Path basedir = FSUtils.getTableDir(this.hbaseRootDir, tableName);
+     deleteDir(basedir);
+     final HTableDescriptor htd = createBasic3FamilyHTD(tableName);
+-    HRegion region3 = HRegion.createHRegion(hri, hbaseWALRootDir, this.conf, htd);
++    HRegion region3 = HRegion.createHRegion(hri, hbaseRootDir, this.conf, htd);
+     region3.close();
+     region3.getWAL().close();
+     // Write countPerFamily edits into the three families. Do a flush on one
+@@ -686,7 +686,7 @@ public class TestWALReplay {
+     customConf.set(DefaultStoreEngine.DEFAULT_STORE_FLUSHER_CLASS_KEY,
+         CustomStoreFlusher.class.getName());
+     HRegion region =
+-      HRegion.openHRegion(this.hbaseWALRootDir, hri, htd, wal, customConf, rsServices, null);
++      HRegion.openHRegion(this.hbaseRootDir, hri, htd, wal, customConf, rsServices, null);
+     int writtenRowCount = 10;
+     List<HColumnDescriptor> families = new ArrayList<HColumnDescriptor>(
+         htd.getFamilies());
+@@ -740,7 +740,7 @@ public class TestWALReplay {
+     WAL wal2 = createWAL(this.conf);
+     Mockito.doReturn(false).when(rsServices).isAborted();
+     HRegion region2 =
+-      HRegion.openHRegion(this.hbaseWALRootDir, hri, htd, wal2, this.conf, rsServices, null);
++      HRegion.openHRegion(this.hbaseRootDir, hri, htd, wal2, this.conf, rsServices, null);
+     scanner = region2.getScanner(new Scan());
+     assertEquals(writtenRowCount, getScannedCount(scanner));
+   }
+@@ -770,12 +770,12 @@ public class TestWALReplay {
+         TableName.valueOf("testReplayEditsWrittenIntoWAL");
+     final MultiVersionConcurrencyControl mvcc = new MultiVersionConcurrencyControl();
+     final HRegionInfo hri = createBasic3FamilyHRegionInfo(tableName);
+-    final Path basedir = FSUtils.getTableDir(hbaseWALRootDir, tableName);
++    final Path basedir = FSUtils.getTableDir(hbaseRootDir, tableName);
+     deleteDir(basedir);
+ 
+     final HTableDescriptor htd = createBasic3FamilyHTD(tableName);
+     HRegion region2 = HRegion.createHRegion(hri,
+-            hbaseWALRootDir, this.conf, htd);
++            hbaseRootDir, this.conf, htd);
+     HRegion.closeHRegion(region2);
+     final WAL wal = createWAL(this.conf);
+     final byte[] rowName = tableName.getName();
+@@ -869,7 +869,7 @@ public class TestWALReplay {
+     final TableName tableName = TableName.valueOf(currentTest.getMethodName());
+     final HRegionInfo hri = createBasic3FamilyHRegionInfo(tableName);
+     final Path basedir =
+-        FSUtils.getTableDir(this.hbaseWALRootDir, tableName);
++        FSUtils.getTableDir(this.hbaseRootDir, tableName);
+     deleteDir(basedir);
+     final byte[] rowName = tableName.getName();
+     final int countPerFamily = 10;
+@@ -878,7 +878,7 @@ public class TestWALReplay {
+     // Mock the WAL
+     MockWAL wal = createMockWAL();
+ 
+-    HRegion region = HRegion.openHRegion(this.conf, this.fs, hbaseWALRootDir, hri, htd, wal);
++    HRegion region = HRegion.openHRegion(this.conf, this.fs, hbaseRootDir, hri, htd, wal);
+     for (HColumnDescriptor hcd : htd.getFamilies()) {
+       addRegionEdits(rowName, hcd.getName(), countPerFamily, this.ee, region, "x");
+     }
+@@ -899,10 +899,10 @@ public class TestWALReplay {
+     FileStatus[] listStatus = wal.getFiles();
+     assertNotNull(listStatus);
+     assertTrue(listStatus.length > 0);
+-    WALSplitter.splitLogFile(hbaseWALRootDir, listStatus[0],
++    WALSplitter.splitLogFile(hbaseRootDir, listStatus[0],
+         this.fs, this.conf, null, null, null, mode, wals);
+     FileStatus[] listStatus1 = this.fs.listStatus(
+-      new Path(FSUtils.getTableDir(hbaseWALRootDir, tableName), new Path(hri.getEncodedName(),
++      new Path(FSUtils.getTableDir(hbaseRootDir, tableName), new Path(hri.getEncodedName(),
+           "recovered.edits")), new PathFilter() {
+         @Override
+         public boolean accept(Path p) {
+@@ -930,17 +930,17 @@ public class TestWALReplay {
+       IllegalAccessException {
+     final TableName tableName = TableName.valueOf("testDatalossWhenInputError");
+     final HRegionInfo hri = createBasic3FamilyHRegionInfo(tableName);
+-    final Path basedir = FSUtils.getTableDir(this.hbaseWALRootDir, tableName);
++    final Path basedir = FSUtils.getTableDir(this.hbaseRootDir, tableName);
+     deleteDir(basedir);
+     final byte[] rowName = tableName.getName();
+     final int countPerFamily = 10;
+     final HTableDescriptor htd = createBasic1FamilyHTD(tableName);
+-    HRegion region1 = HBaseTestingUtility.createRegionAndWAL(hri, hbaseWALRootDir, this.hbaseWALRootDir, this.conf, htd);
++    HRegion region1 = HBaseTestingUtility.createRegionAndWAL(hri, hbaseRootDir, this.hbaseWALRootDir, this.conf, htd);
+     Path regionDir = region1.getRegionFileSystem().getRegionDir();
+     HBaseTestingUtility.closeRegionAndWAL(region1);
+ 
+     WAL wal = createWAL(this.conf);
+-    HRegion region = HRegion.openHRegion(this.conf, this.fs, hbaseWALRootDir, hri, htd, wal);
++    HRegion region = HRegion.openHRegion(this.conf, this.fs, hbaseRootDir, hri, htd, wal);
+     for (HColumnDescriptor hcd : htd.getFamilies()) {
+       addRegionEdits(rowName, hcd.getName(), countPerFamily, this.ee, region, "x");
+     }
+@@ -1010,12 +1010,12 @@ public class TestWALReplay {
+     HRegion region2;
+     try {
+       // log replay should fail due to the IOException, otherwise we may lose data.
+-      region2 = HRegion.openHRegion(conf, spyFs, hbaseWALRootDir, hri, htd, wal2);
++      region2 = HRegion.openHRegion(conf, spyFs, hbaseRootDir, hri, htd, wal2);
+       assertEquals(result.size(), region2.get(g).size());
+     } catch (IOException e) {
+       assertEquals("read over limit", e.getMessage());
+     }
+-    region2 = HRegion.openHRegion(conf, fs, hbaseWALRootDir, hri, htd, wal2);
++    region2 = HRegion.openHRegion(conf, fs, hbaseRootDir, hri, htd, wal2);
+     assertEquals(result.size(), region2.get(g).size());
+   }
+ 
+@@ -1044,7 +1044,7 @@ public class TestWALReplay {
+   }
+ 
+   private MockWAL createMockWAL() throws IOException {
+-    MockWAL wal = new MockWAL(fs, hbaseWALRootDir, logName, conf);
++    MockWAL wal = new MockWAL(fs, hbaseRootDir, logName, conf);
+     // Set down maximum recovery so we dfsclient doesn't linger retrying something
+     // long gone.
+     HBaseTestingUtility.setMaxRecoveryErrorCount(wal.getOutputStream(), 1);
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/wal/TestWALFactory.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/wal/TestWALFactory.java
+index 2c81f4c..3870cef 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/wal/TestWALFactory.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/wal/TestWALFactory.java
+@@ -177,7 +177,7 @@ public class TestWALFactory {
+     Path oldLogDir = new Path(hbaseWALDir, HConstants.HREGION_OLDLOGDIR_NAME);
+     final int howmany = 3;
+     HRegionInfo[] infos = new HRegionInfo[3];
+-    Path tabledir = FSUtils.getTableDir(hbaseWALDir, tableName);
++    Path tabledir = FSUtils.getTableDir(hbaseDir, tableName);
+     fs.mkdirs(tabledir);
+     for(int i = 0; i < howmany; i++) {
+       infos[i] = new HRegionInfo(tableName,
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/wal/TestWALSplit.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/wal/TestWALSplit.java
+index 8c70200..764871e 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/wal/TestWALSplit.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/wal/TestWALSplit.java
+@@ -384,7 +384,7 @@ public class TestWALSplit {
+         new Entry(new WALKey(encoded,
+             TableName.META_TABLE_NAME, 1, now, HConstants.DEFAULT_CLUSTER_ID),
+             new WALEdit());
+-    Path p = WALSplitter.getRegionSplitEditsPath(fs, entry, HBASEDIR, true);
++    Path p = WALSplitter.getRegionSplitEditsPath(entry,true, conf);
+     String parentOfParent = p.getParent().getParent().getName();
+     assertEquals(parentOfParent, HRegionInfo.FIRST_META_REGIONINFO.getEncodedName());
+   }
+@@ -409,7 +409,7 @@ public class TestWALSplit {
+     assertEquals(parent.getName(), HConstants.RECOVERED_EDITS_DIR);
+     fs.createNewFile(parent); // create a recovered.edits file
+ 
+-    Path p = WALSplitter.getRegionSplitEditsPath(fs, entry, HBASEDIR, true);
++    Path p = WALSplitter.getRegionSplitEditsPath(entry,true, conf);
+     String parentOfParent = p.getParent().getParent().getName();
+     assertEquals(parentOfParent, HRegionInfo.FIRST_META_REGIONINFO.getEncodedName());
+     WALFactory.createRecoveredEditsWriter(fs, p, conf).close();
+-- 
+1.7.9.5
+
