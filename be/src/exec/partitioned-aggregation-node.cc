@@ -709,7 +709,12 @@ Status PartitionedAggregationNode::Partition::InitHashTable(bool* got_memory) {
       1L << (32 - NUM_PARTITIONING_BITS), PAGG_DEFAULT_HASH_TABLE_SZ));
   // Please update the error message in CreateHashPartitions() if initial size of
   // hash table changes.
-  return hash_tbl->Init(got_memory);
+  Status status = hash_tbl->Init(got_memory);
+  if (!status.ok() || !(*got_memory)) {
+    hash_tbl->Close();
+    hash_tbl.reset();
+  }
+  return status;
 }
 
 Status PartitionedAggregationNode::Partition::SerializeStreamForSpilling() {
