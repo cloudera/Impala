@@ -48,6 +48,7 @@ under the License.
     <parquet.version>${cdh.apache-parquet.version}</parquet.version>
     <kite.version>${cdh.kite.version}</kite.version>
     <thrift.version>${cdh.thrift.version}</thrift.version>
+    <postgres.jdbc.version>${env.IMPALA_POSTGRES_JDBC_DRIVER_VERSION}</postgres.jdbc.version>
     <impala.extdatasrc.api.version>1.0-SNAPSHOT</impala.extdatasrc.api.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <kudu.version>${cdh.kudu.version}</kudu.version>
