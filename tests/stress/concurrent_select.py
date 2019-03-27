@@ -477,7 +477,7 @@ class StressRunner(object):
     # These are the cumulative values of all the queries that have started/finished/-
     # dequeued, etc. on runners that have already died. Every time we notice that a query
     # runner has died, we update these values.
-    self._past_runner_metrics = defaultdict(lambda: 0)
+    self._past_runner_metrics = defaultdict(lambda: Value("i", 0))
 
     self._query_consumer_thread = None
     self._mem_polling_thread = None
@@ -488,12 +488,14 @@ class StressRunner(object):
         MUST hold '_query_runners_lock' before calling.
     """
     for key, synchronized_val in query_runner._metrics.iteritems():
-      self._past_runner_metrics[key] += synchronized_val.value
+      self._past_runner_metrics[key].value += synchronized_val.value
 
   def _calc_total_runner_metrics(self):
     """ Calculate the total of metrics across past and active query runners. """
-    totals = copy(self._past_runner_metrics)
+    totals = defaultdict(lambda: 0)
     with self._query_runners_lock:
+      for key in self._past_runner_metrics:
+        totals[key] = self._past_runner_metrics[key].value
       for query_runner in self._query_runners:
         for key, synchronized_val in query_runner._metrics.iteritems():
           totals[key] += synchronized_val.value
@@ -508,7 +510,7 @@ class StressRunner(object):
     """ TODO: Get rid of this function after reformatting how we obtain query indices.
         _query_runners_lock MUST be taken before calling this function.
     """
-    total = self._past_runner_metrics[key]
+    total = self._past_runner_metrics[key].value
     for runner in self._query_runners:
       total += runner._metrics[key].value
     return total
