@@ -121,6 +121,9 @@ import org.slf4j.LoggerFactory;
  * |             |              |            |            |
  * | DROP EVENT  | Remove       | Remove     | Ignore     |
  * |             |              |            |            |
+ * |             |              |            |            |
+ * | INSERT EVENT| Refresh      | Ignore     | Ignore     |
+ * |             |              |            |            |
  * +-------------+--------------+------------+------------+
  * </pre>
  *

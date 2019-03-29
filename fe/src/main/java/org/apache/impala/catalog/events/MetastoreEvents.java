@@ -18,10 +18,12 @@
 package org.apache.impala.catalog.events;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
@@ -34,6 +36,8 @@ import org.apache.hadoop.hive.metastore.messaging.AddPartitionMessage;
 import org.apache.hadoop.hive.metastore.messaging.AlterPartitionMessage;
 import org.apache.hadoop.hive.metastore.messaging.CreateTableMessage;
 import org.apache.hadoop.hive.metastore.messaging.DropPartitionMessage;
+import org.apache.hadoop.hive.metastore.messaging.json.JSONAlterDatabaseMessage;
+import org.apache.hadoop.hive.metastore.messaging.InsertMessage;
 import org.apache.hadoop.hive.metastore.messaging.json.JSONAlterTableMessage;
 import org.apache.hadoop.hive.metastore.messaging.json.JSONCreateDatabaseMessage;
 import org.apache.hadoop.hive.metastore.messaging.json.JSONDropDatabaseMessage;
@@ -92,6 +96,7 @@ public class MetastoreEvents {
     ADD_PARTITION("ADD_PARTITION"),
     ALTER_PARTITION("ALTER_PARTITION"),
     DROP_PARTITION("DROP_PARTITION"),
+    INSERT("INSERT"),
     OTHER("OTHER");
 
     private final String eventType_;
@@ -167,6 +172,9 @@ public class MetastoreEvents {
         case ALTER_PARTITION:
           // alter partition events triggers invalidate table currently
           return new AlterPartitionEvent(catalog_, metrics_, event);
+        case INSERT:
+          // Insert events trigger refresh on a table/partition currently
+          return new InsertEvent(catalog_, metrics_, event);
         default:
           // ignore all the unknown events by creating a IgnoredEvent
           return new IgnoredEvent(catalog_, metrics_, event);
@@ -587,6 +595,121 @@ public class MetastoreEvents {
         }
       }
       return false;
+    }
+  }
+
+  /**
+   *  Metastore event handler for INSERT events. Handles insert events at both table
+   *  and partition scopes.
+   */
+  public static class InsertEvent extends MetastoreTableEvent {
+
+    // Represents the partition for this insert. Null if the table is unpartitioned.
+    private final org.apache.hadoop.hive.metastore.api.Partition insertPartition_;
+
+    /**
+     * Prevent instantiation from outside should use MetastoreEventFactory instead
+     */
+    @VisibleForTesting
+    InsertEvent(CatalogServiceCatalog catalog, Metrics metrics,
+        NotificationEvent event) throws MetastoreNotificationException {
+      super(catalog, metrics, event);
+      Preconditions.checkArgument(MetastoreEventType.INSERT.equals(eventType_));
+      InsertMessage insertMessage =
+          MetastoreEventsProcessor.getMessageFactory()
+              .getDeserializer().getInsertMessage(event.getMessage());
+      try {
+        msTbl_ = Preconditions.checkNotNull(insertMessage.getTableObj());
+        insertPartition_ = insertMessage.getPtnObj();
+      } catch (Exception e) {
+        throw new MetastoreNotificationException(debugString("Unable to "
+            + "parse insert message"), e);
+      }
+    }
+
+    /**
+     * Currently we do not check for self-events in Inserts. Existing self-events logic
+     * cannot be used for insert events since firing insert event does not allow us to
+     * modify table parameters in HMS. Hence, we cannot get CatalogServiceIdentifiers in
+     * Insert Events.
+     * TODO: Handle self-events for insert case.
+     */
+    @Override
+    public void process() throws MetastoreNotificationException {
+      if (insertPartition_ != null)
+        processPartitionInserts();
+      else {
+        processTableInserts();
+      }
+    }
+
+    /**
+     * Process partition inserts
+     */
+    private void processPartitionInserts() throws MetastoreNotificationException {
+      // For partitioned table, refresh the partition only.
+      Preconditions.checkNotNull(insertPartition_);
+      Map<String, String> partSpec = new HashMap<>();
+      List<org.apache.hadoop.hive.metastore.api.FieldSchema> fsList =
+          msTbl_.getPartitionKeys();
+      List<String> partVals = insertPartition_.getValues();
+      Preconditions.checkNotNull(partVals);
+      Preconditions.checkState(fsList.size() == partVals.size());
+      for (int i = 0; i < fsList.size(); i++) {
+        partSpec.put(fsList.get(i).getName(), partVals.get(i));
+      }
+      try {
+        // Ignore event if table or database is not in catalog. Throw exception if
+        // refresh fails.
+        if (!catalog_.refreshPartitionIfExists(dbName_, tblName_, partSpec)) {
+          debugLog("Refresh of table {} partition {} after insert "
+                  + "event failed as the table is not present in the catalog.",
+              getFullyQualifiedTblName(), Joiner.on(",").withKeyValueSeparator("=")
+                  .join(partSpec));
+        } else {
+          infoLog("Table {} partition {} has been refreshed after insert.",
+              getFullyQualifiedTblName(), Joiner.on(",").withKeyValueSeparator("=")
+                  .join(partSpec));
+        }
+      } catch (DatabaseNotFoundException e) {
+        debugLog("Refresh of table {} partition {} for insert "
+                + "event failed as the database is not present in the catalog.",
+            getFullyQualifiedTblName(), Joiner.on(",").withKeyValueSeparator("=")
+                .join(partSpec));
+      } catch (CatalogException e) {
+        throw new MetastoreNotificationNeedsInvalidateException(debugString("Refresh "
+                + "partition on table {} partition {} failed. Event processing cannot "
+                + "continue. Issue and invalidate command to reset the event processor "
+                + "state.", getFullyQualifiedTblName(),
+            Joiner.on(",").withKeyValueSeparator("=").join(partSpec)));
+      }
+    }
+
+    /**
+     *  Process unpartitioned table inserts
+     */
+    private void processTableInserts() throws MetastoreNotificationException {
+      // For non-partitioned tables, refresh the whole table.
+      Preconditions.checkArgument(insertPartition_ == null);
+      try {
+        // Ignore event if table or database is not in the catalog. Throw exception if
+        // refresh fails.
+        if (!catalog_.refreshTableIfExists(dbName_, tblName_)) {
+          debugLog("Automatic refresh table {} failed as the table is not "
+              + "present in the catalog. ", getFullyQualifiedTblName());
+        } else {
+          infoLog("Table {} has been refreshed after insert.",
+              getFullyQualifiedTblName());
+        }
+      } catch (DatabaseNotFoundException e) {
+        debugLog("Automatic refresh of table {} insert failed as the "
+            + "database is not present in the catalog.", getFullyQualifiedTblName());
+      } catch (CatalogException e) {
+        throw new MetastoreNotificationNeedsInvalidateException(
+            debugString("Refresh table {} failed. Event processing "
+                + "cannot continue. Issue an invalidate metadata command to reset "
+                + "the event processor state.", getFullyQualifiedTblName()));
+      }
     }
   }
 
