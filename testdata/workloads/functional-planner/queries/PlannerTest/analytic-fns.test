@@ -2479,11 +2479,9 @@ PLAN-ROOT SINK
 |  functions: first_value(0)
 |  order by: 0 ASC
 |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-|  row-size=1B cardinality=8
 |
 00:SCAN HDFS [functional.alltypestiny]
    partitions=4/4 files=4 size=460B
-   row-size=0B cardinality=8
 ====
 # Regression test for IMPALA-8069
 # Same case as in end-to-end test analytic-fns.test
@@ -2496,10 +2494,8 @@ PLAN-ROOT SINK
 |  functions: first_value(0), row_number()
 |  order by: 0 ASC
 |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-|  row-size=9B cardinality=8
 |
 00:SCAN HDFS [functional.alltypestiny]
    partitions=4/4 files=4 size=460B
-   row-size=0B cardinality=8
 ====
 
