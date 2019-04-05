@@ -27,6 +27,7 @@
 #include <boost/scoped_ptr.hpp>
 #include <boost/thread/mutex.hpp>
 
+#include "common/atomic.h"
 #include "exec/filter-context.h"
 #include "exec/hdfs-scan-node-base.h"
 #include "runtime/io/disk-io-mgr.h"
@@ -76,7 +77,7 @@ class HdfsScanNode : public HdfsScanNodeBase {
 
   virtual bool HasRowBatchQueue() const { return true; }
 
-  bool done() const { return done_; }
+  bool done() const { return done_.Load(); }
 
   /// Adds ranges to the io mgr queue and starts up new scanner threads if possible.
   virtual Status AddDiskIoRanges(const std::vector<io::ScanRange*>& ranges,
@@ -119,8 +120,10 @@ class HdfsScanNode : public HdfsScanNodeBase {
 
   /// Lock protects access between scanner thread and main query thread (the one calling
   /// GetNext()) for all fields below.  If this lock and any other locks needs to be taken
-  /// together, this lock must be taken first.
-  boost::mutex lock_;
+  /// together, this lock must be taken first. This is a "timed_mutex" to allow specifying
+  /// a timeout when acquiring the mutex. Almost all code locations acquire the mutex
+  /// without a timeout; see ThreadTokenAvailableCb for a location using a timeout.
+  boost::timed_mutex lock_;
 
   /// Protects file_type_counts_. Cannot be taken together with any other lock
   /// except lock_, and if so, lock_ must be taken first.
@@ -129,8 +132,10 @@ class HdfsScanNode : public HdfsScanNodeBase {
   /// Flag signaling that all scanner threads are done.  This could be because they
   /// are finished, an error/cancellation occurred, or the limit was reached.
   /// Setting this to true triggers the scanner threads to clean up.
-  /// This should not be explicitly set. Instead, call SetDone().
-  bool done_;
+
+  /// This should not be explicitly set. Instead, call SetDone(). This is set while
+  /// holding lock_, but it is atomic to allow reads without holding the lock.
+  AtomicBool done_;
 
   /// Set to true if all ranges have started. Some of the ranges may still be in flight
   /// being processed by scanner threads, but no new ScannerThreads should be started.

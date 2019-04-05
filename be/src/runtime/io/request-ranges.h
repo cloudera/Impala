@@ -240,6 +240,7 @@ class ScanRange : public RequestRange {
   /// wakes up any threads blocked on GetNext().
   /// Status is the reason the range was cancelled. Must not be ok().
   /// Status is returned to the user in GetNext().
+  /// Note that this may block waiting for other threads that are performing IO.
   void Cancel(const Status& status);
 
   /// return a descriptive string for debug.

@@ -150,6 +150,21 @@ class AtomicEnum {
   internal::AtomicInt<int32_t> enum_;
 };
 
+/// Atomic bool. Operations have the same semantics as AtomicInt.
+class AtomicBool {
+ public:
+  AtomicBool(bool initial = false) : boolean_(initial) {}
+
+  /// Atomic load with "acquire" memory-ordering semantic.
+  ALWAYS_INLINE bool Load() const { return boolean_.Load(); }
+
+  /// Atomic store with "release" memory-ordering semantic.
+  ALWAYS_INLINE void Store(bool val) { boolean_.Store(val); }
+
+ private:
+  internal::AtomicInt<int32_t> boolean_;
+};
+
 }
 
 #endif

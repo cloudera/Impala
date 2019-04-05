@@ -99,7 +99,7 @@ Status HdfsScanNode::GetNext(RuntimeState* state, RowBatch* row_batch, bool* eos
       // the non-ok status represents the error in ValidateScanRange() or describes
       // the unsupported compression formats. For such non-CANCELLED cases, the status
       // returned by IssueInitialScanRanges() takes precedence.
-      unique_lock<mutex> l(lock_);
+      unique_lock<timed_mutex> l(lock_);
       if (status.IsCancelled() && !status_.ok()) return status_;
       return status;
     }
@@ -112,7 +112,7 @@ Status HdfsScanNode::GetNext(RuntimeState* state, RowBatch* row_batch, bool* eos
 
   Status status = GetNextInternal(state, row_batch, eos);
   if (!status.ok() || *eos) {
-    unique_lock<mutex> l(lock_);
+    unique_lock<timed_mutex> l(lock_);
     lock_guard<SpinLock> l2(file_type_counts_);
     StopAndFinalizeCounters();
     row_batches_put_timer_->Set(materialized_row_batches_->total_put_wait_time());
@@ -160,7 +160,7 @@ Status HdfsScanNode::GetNextInternal(
   // The RowBatchQueue was shutdown either because all scan ranges are complete or a
   // scanner thread encountered an error.  Check status_ to distinguish those cases.
   *eos = true;
-  unique_lock<mutex> l(lock_);
+  unique_lock<timed_mutex> l(lock_);
   return status_;
 }
 
@@ -283,7 +283,7 @@ void HdfsScanNode::RangeComplete(const THdfsFileFormat::type& file_type,
 }
 
 void HdfsScanNode::TransferToScanNodePool(MemPool* pool) {
-  unique_lock<mutex> l(lock_);
+  unique_lock<timed_mutex> l(lock_);
   HdfsScanNodeBase::TransferToScanNodePool(pool);
 }
 
@@ -365,11 +365,23 @@ void HdfsScanNode::ThreadTokenAvailableCb(ThreadResourceMgr::ResourcePool* pool)
   while (true) {
     // The lock must be given up between loops in order to give writers to done_,
     // all_ranges_started_ etc. a chance to grab the lock.
+    // IMPALA-8322: Another thread can hold this lock for significant periods of time
+    // if the scan node is being cancelled. Since this function can be called while
+    // holding other locks that can block other threads (e.g. ThreadResourceMgr::lock_),
+    // avoid blocking unnecessarily. There are two remedies. First, we do a check of
+    // done() to try to avoid acquiring the lock_, as there is nothing to do if
+    // the scan node is done. Second, this uses a timeout of 10 milliseconds when
+    // acquiring the lock_ to allow a periodic check of done(). The 10 millisecond
+    // timeout is arbitrary.
     // TODO: This still leans heavily on starvation-free locks, come up with a more
-    // correct way to communicate between this method and ScannerThreadHelper
-    unique_lock<mutex> lock(lock_);
+    // correct way to communicate between this method and ScannerThread().
+    if (done()) break;
+    unique_lock<timed_mutex> lock(lock_, boost::chrono::milliseconds(10));
+    if (!lock.owns_lock()) {
+      continue;
+    }
     // Cases 1, 2, 3.
-    if (done_ || all_ranges_started_ ||
+    if (done() || all_ranges_started_ ||
         active_scanner_thread_counter_.value() >= progress_.remaining()) {
       break;
     }
@@ -438,13 +450,13 @@ void HdfsScanNode::ScannerThread() {
     filter_ctxs.push_back(filter);
   }
 
-  while (!done_) {
+  while (!done()) {
     // Prevent memory accumulating across scan ranges.
     expr_results_pool.Clear();
     {
       // Check if we have enough resources (thread token and memory) to keep using
       // this thread.
-      unique_lock<mutex> l(lock_);
+      unique_lock<timed_mutex> l(lock_);
       if (active_scanner_thread_counter_.value() > 1) {
         if (runtime_state_->resource_pool()->optional_exceeded() ||
             !EnoughMemoryForScannerThread(false)) {
@@ -485,11 +497,11 @@ void HdfsScanNode::ScannerThread() {
     }
 
     if (!status.ok()) {
-      unique_lock<mutex> l(lock_);
+      unique_lock<timed_mutex> l(lock_);
       // If there was already an error, the main thread will do the cleanup
       if (!status_.ok()) break;
 
-      if (status.IsCancelled() && done_) {
+      if (status.IsCancelled() && done()) {
         // Scan node initiated scanner thread cancellation.  No need to do anything.
         break;
       }
@@ -510,7 +522,7 @@ void HdfsScanNode::ScannerThread() {
     if (scan_range == NULL && num_unqueued_files == 0) {
       // TODO: Based on the usage pattern of all_ranges_started_, it looks like it is not
       // needed to acquire the lock in x86.
-      unique_lock<mutex> l(lock_);
+      unique_lock<timed_mutex> l(lock_);
       // All ranges have been queued and GetNextRange() returned NULL. This means that
       // every range is either done or being processed by another thread.
       all_ranges_started_ = true;
@@ -593,8 +605,8 @@ Status HdfsScanNode::ProcessSplit(const vector<FilterContext>& filter_ctxs,
 }
 
 void HdfsScanNode::SetDoneInternal() {
-  if (done_) return;
-  done_ = true;
+  if (done()) return;
+  done_.Store(true);
   if (reader_context_ != nullptr) {
     runtime_state_->io_mgr()->CancelContext(reader_context_.get());
   }
@@ -602,6 +614,6 @@ void HdfsScanNode::SetDoneInternal() {
 }
 
 void HdfsScanNode::SetDone() {
-  unique_lock<mutex> l(lock_);
+  unique_lock<timed_mutex> l(lock_);
   SetDoneInternal();
 }
