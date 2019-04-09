@@ -689,6 +689,82 @@ class TestDdlStatements(TestDdlBase):
       self.run_test_case('QueryTest/partition-ddl-predicates-hdfs-only', vector,
           use_db=unique_database, multiple_impalad=self._use_multiple_impalad(vector))
 
+  def test_create_table_file_format(self, vector, unique_database):
+    # When default_file_format query option is not specified, the default table file
+    # format is TEXT.
+    text_table = "{0}.text_tbl".format(unique_database)
+    self.execute_query_expect_success(
+        self.client, "create table {0}(i int)".format(text_table))
+    result = self.execute_query_expect_success(
+        self.client, "show create table {0}".format(text_table))
+    assert any("TEXTFILE" in x for x in result.data)
+
+    self.execute_query_expect_failure(
+        self.client, "create table {0}.foobar_tbl".format(unique_database),
+        {"default_file_format": "foobar"})
+
+    parquet_table = "{0}.parquet_tbl".format(unique_database)
+    self.execute_query_expect_success(
+        self.client, "create table {0}(i int)".format(parquet_table),
+        {"default_file_format": "parquet"})
+    result = self.execute_query_expect_success(
+        self.client, "show create table {0}".format(parquet_table))
+    assert any("PARQUET" in x for x in result.data)
+
+    # The table created should still be ORC even though the default_file_format query
+    # option is set to parquet.
+    orc_table = "{0}.orc_tbl".format(unique_database)
+    self.execute_query_expect_success(
+        self.client,
+        "create table {0}(i int) stored as orc".format(orc_table),
+        {"default_file_format": "parquet"})
+    result = self.execute_query_expect_success(
+      self.client, "show create table {0}".format(orc_table))
+    assert any("ORC" in x for x in result.data)
+
+  def test_kudu_column_comment(self, vector, unique_database):
+    table = "{0}.kudu_table0".format(unique_database)
+    self.client.execute("create table {0}(x int comment 'x' primary key) \
+                        stored as kudu".format(table))
+    comment = self._get_column_comment(table, 'x')
+    assert "x" == comment
+
+    table = "{0}.kudu_table".format(unique_database)
+    self.client.execute("create table {0}(i int primary key) stored as kudu"
+                        .format(table))
+    comment = self._get_column_comment(table, 'i')
+    assert "" == comment
+
+    self.client.execute("comment on column {0}.i is 'comment1'".format(table))
+    comment = self._get_column_comment(table, 'i')
+    assert "comment1" == comment
+
+    self.client.execute("comment on column {0}.i is ''".format(table))
+    comment = self._get_column_comment(table, 'i')
+    assert "" == comment
+
+    self.client.execute("comment on column {0}.i is 'comment2'".format(table))
+    comment = self._get_column_comment(table, 'i')
+    assert "comment2" == comment
+
+    self.client.execute("comment on column {0}.i is null".format(table))
+    comment = self._get_column_comment(table, 'i')
+    assert "" == comment
+
+    self.client.execute("alter table {0} alter column i set comment 'comment3'"
+                        .format(table))
+    comment = self._get_column_comment(table, 'i')
+    assert "comment3" == comment
+
+    self.client.execute("alter table {0} alter column i set comment ''".format(table))
+    comment = self._get_column_comment(table, 'i')
+    assert "" == comment
+
+    self.client.execute("alter table {0} add columns (j int comment 'comment4')"
+                        .format(table))
+    comment = self._get_column_comment(table, 'j')
+    assert "comment4" == comment
+
 # IMPALA-2002: Tests repeated adding/dropping of .jar and .so in the lib cache.
 class TestLibCache(TestDdlBase):
   @classmethod
