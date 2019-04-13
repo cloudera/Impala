@@ -608,12 +608,6 @@ public class MetastoreEventsProcessorTest {
     addPartitions(TEST_DB_NAME, testTblName, partVals);
 
     eventsProcessor_.processEvents();
-    // after ADD_PARTITION event is received currently we just invalidate the table
-    assertTrue("Table should have been invalidated after add partition event",
-        catalog_.getTable(TEST_DB_NAME, testTblName)
-                instanceof IncompleteTable);
-
-    loadTable(testTblName);
     assertEquals("Unexpected number of partitions fetched for the loaded table", 4,
         ((HdfsTable) catalog_.getTable(TEST_DB_NAME, testTblName))
             .getPartitions()
@@ -627,10 +621,6 @@ public class MetastoreEventsProcessorTest {
     dropPartitions(testTblName, partVals);
     eventsProcessor_.processEvents();
 
-    assertTrue("Table should have been invalidated after drop partition event",
-        catalog_.getTable(TEST_DB_NAME, testTblName)
-            instanceof IncompleteTable);
-    loadTable(testTblName);
     assertEquals("Unexpected number of partitions fetched for the loaded table", 1,
         ((HdfsTable) catalog_.getTable(TEST_DB_NAME, testTblName))
             .getPartitions().size());
@@ -638,13 +628,16 @@ public class MetastoreEventsProcessorTest {
     // issue alter partition ops
     partVals.clear();
     partVals.add(Arrays.asList("4"));
-    Map<String, String> newParams = new HashMap<>(2);
-    newParams.put("alterKey1", "alterVal1");
-    alterPartitions(testTblName, partVals, newParams);
+    String newLocation = "/path/to/location/";
+    alterPartitions(testTblName, partVals, newLocation);
     eventsProcessor_.processEvents();
-    assertTrue("Table should have been invalidated after alter partition event",
-        catalog_.getTable(TEST_DB_NAME, testTblName)
-            instanceof IncompleteTable);
+
+    Collection<? extends FeFsPartition> parts =
+        FeCatalogUtils.loadAllPartitions((HdfsTable)
+            catalog_.getTable(TEST_DB_NAME, testTblName));
+    FeFsPartition singlePartition =
+        Iterables.getOnlyElement(parts);
+    assertTrue(newLocation.equals(singlePartition.getLocation()));
   }
 
   /**
@@ -1712,8 +1705,10 @@ public class MetastoreEventsProcessorTest {
         assertEquals(1, eventsProcessor_.getNextMetastoreEvents().size());
         eventsProcessor_.processEvents();
         if (shouldEventBeProcessed) {
-          assertTrue("Table should have been invalidated after add partition event",
-              catalog_.getTable(dbName, tblName) instanceof IncompleteTable);
+          Collection<? extends FeFsPartition> partsAfterAdd =
+              FeCatalogUtils.loadAllPartitions((HdfsTable)
+                  catalog_.getTable(dbName, tblName));
+          assertTrue("Partitions should have been added.", partsAfterAdd.size() == 6);
         } else {
           assertFalse("Table should still have been in loaded state since sync is "
               + "disabled",
@@ -1732,8 +1727,10 @@ public class MetastoreEventsProcessorTest {
         assertEquals(1, eventsProcessor_.getNextMetastoreEvents().size());
         eventsProcessor_.processEvents();
         if (shouldEventBeProcessed) {
-          assertTrue("Table should have been invalidated after alter partition event",
-              catalog_.getTable(dbName, tblName) instanceof IncompleteTable);
+          Collection<? extends FeFsPartition> partsAfterDrop =
+              FeCatalogUtils.loadAllPartitions((HdfsTable) catalog_.getTable(dbName,
+                  tblName));
+          assertTrue("Partitions should have been dropped", partsAfterDrop.size() == 2);
         } else {
           assertFalse("Table should still have been in loaded state since sync is "
                   + "disabled",
@@ -1747,16 +1744,21 @@ public class MetastoreEventsProcessorTest {
         eventsProcessor_.processEvents();
         loadTable(tblName);
         List<List<String>> partValues = new ArrayList<>(1);
+        partValues.add(Arrays.asList("3"));
         partValues.add(Arrays.asList("2"));
         partValues.add(Arrays.asList("1"));
-        Map<String, String> newParams = new HashMap<>();
-        newParams.put("newParamk1", "newParamv1");
-        alterPartitions(tblName, partValues, newParams);
-        assertEquals(2, eventsProcessor_.getNextMetastoreEvents().size());
+        String location = "/path/to/partition";
+        alterPartitions(tblName, partValues, location);
+        assertEquals(3, eventsProcessor_.getNextMetastoreEvents().size());
         eventsProcessor_.processEvents();
         if (shouldEventBeProcessed) {
-          assertTrue("Table should have been invalidated after alter partition event",
-              catalog_.getTable(dbName, tblName) instanceof IncompleteTable);
+          Collection<? extends FeFsPartition> partsAfterAlter =
+              FeCatalogUtils.loadAllPartitions((HdfsTable)
+                  catalog_.getTable(dbName, tblName));
+          for (FeFsPartition part : partsAfterAlter) {
+            assertTrue("Partition location should have been modified by alter.",
+                location.equals(part.getLocation()));
+          }
         } else {
           assertFalse("Table should still have been in loaded state since sync is "
                   + "disabled",
@@ -2025,8 +2027,6 @@ public class MetastoreEventsProcessorTest {
         Arrays.asList(partitionKeyValue1, partitionKeyValue2));
     eventsProcessor_.processEvents();
     assertNotNull(catalog_.getTable(TEST_DB_NAME, testTblName));
-    assertTrue(catalog_.getTable(TEST_DB_NAME, testTblName)
-                   instanceof IncompleteTable);
   }
 
   /**
@@ -2578,7 +2578,7 @@ public class MetastoreEventsProcessorTest {
   }
 
   private void alterPartitions(String tblName, List<List<String>> partValsList,
-      Map<String, String> newParams)
+      String location)
       throws TException {
     GetPartitionsRequest request = new GetPartitionsRequest();
     request.setDbName(TEST_DB_NAME);
@@ -2588,10 +2588,9 @@ public class MetastoreEventsProcessorTest {
         Partition partition = metaStoreClient.getHiveClient().getPartition(TEST_DB_NAME,
             tblName,
             partVal);
-        partition.setParameters(newParams);
+        partition.getSd().setLocation(location);
         partitions.add(partition);
       }
-
       metaStoreClient.getHiveClient().alter_partitions(TEST_DB_NAME, tblName, partitions);
     }
   }
