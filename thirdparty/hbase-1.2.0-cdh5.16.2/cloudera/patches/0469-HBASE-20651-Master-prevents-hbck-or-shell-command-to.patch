@@ -1,0 +1,34 @@
+From 7451e2409631f1ef7f6a88100537c948b10db18d Mon Sep 17 00:00:00 2001
+From: Huaxiang Sun <hsun@cloudera.com>
+Date: Tue, 10 Jul 2018 16:05:57 -0700
+Subject: [PATCH 469/489] HBASE-20651 Master, prevents hbck or shell command
+ to reassign the split parent region Signed-off-by:
+ Esteban Gutierrez <esteban@apache.org>
+
+Change-Id: I896a9ccbe28751d08a14ab3d8c4e358c95fd3784
+Reason: Bug
+Author: Huaxiang Sun
+Ref: CDH-70523
+---
+ .../hadoop/hbase/master/AssignmentManager.java     |    5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java
+index cc0d96c..8da67e8 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/master/AssignmentManager.java
+@@ -1547,6 +1547,11 @@ public class AssignmentManager extends ZooKeeperListener {
+    * @param regionInfo
+    */
+   public void regionOffline(final HRegionInfo regionInfo) {
++    if (regionStates.isRegionInState(regionInfo, State.MERGED, State.SPLIT)) {
++      LOG.info("Try to offline region " + regionInfo.getEncodedName() +
++          ", which is at state " + regionStates.getRegionState(regionInfo).getState() + ", skip");
++      return;
++    }
+     regionOffline(regionInfo, null);
+   }
+ 
+-- 
+1.7.9.5
+

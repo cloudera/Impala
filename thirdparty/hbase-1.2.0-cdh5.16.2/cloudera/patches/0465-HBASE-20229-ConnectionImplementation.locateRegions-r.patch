@@ -1,0 +1,109 @@
+From 3e9fb92c8e3f25f366730cfe079cc21bf105471d Mon Sep 17 00:00:00 2001
+From: Toshihiro Suzuki <brfrn169@gmail.com>
+Date: Wed, 25 Apr 2018 13:34:03 -0700
+Subject: [PATCH 465/489] HBASE-20229 ConnectionImplementation.locateRegions()
+ returns duplicated entries when region replication
+ is on
+
+Change-Id: I71612c7da73a51da749037240886c9f41b5af87c
+Author: Toshihiro Suzuki
+Reason: Bug
+Ref: CDH-67776
+---
+ .../hadoop/hbase/client/ConnectionManager.java     |    3 ++
+ .../hbase/client/TestConnectionImplementation.java |   48 +++++++++++++++++++-
+ 2 files changed, 49 insertions(+), 2 deletions(-)
+
+diff --git a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ConnectionManager.java b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ConnectionManager.java
+index baa4456..93216d0 100644
+--- a/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ConnectionManager.java
++++ b/hbase-client/src/main/java/org/apache/hadoop/hbase/client/ConnectionManager.java
+@@ -1128,6 +1128,9 @@ class ConnectionManager {
+       NavigableMap<HRegionInfo, ServerName> regions = MetaScanner.allTableRegions(this, tableName);
+       final List<HRegionLocation> locations = new ArrayList<HRegionLocation>();
+       for (HRegionInfo regionInfo : regions.keySet()) {
++        if (!RegionReplicaUtil.isDefaultReplica(regionInfo)) {
++          continue;
++        }
+         RegionLocations list = locateRegion(tableName, regionInfo.getStartKey(), useCache, true);
+         if (list != null) {
+           for (HRegionLocation loc : list.getRegionLocations()) {
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestConnectionImplementation.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestConnectionImplementation.java
+index 30f44ce..2256340 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestConnectionImplementation.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/client/TestConnectionImplementation.java
+@@ -18,20 +18,32 @@
+ 
+ package org.apache.hadoop.hbase.client;
+ 
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertTrue;
+ import static org.junit.Assert.fail;
+ 
++import java.io.IOException;
++import java.net.UnknownHostException;
++import java.util.Arrays;
++import java.util.HashSet;
++import java.util.List;
++import java.util.Set;
++
+ import org.apache.hadoop.hbase.HBaseTestingUtility;
++import org.apache.hadoop.hbase.HColumnDescriptor;
+ import org.apache.hadoop.hbase.HConstants;
++import org.apache.hadoop.hbase.HRegionLocation;
++import org.apache.hadoop.hbase.HTableDescriptor;
+ import org.apache.hadoop.hbase.ServerName;
++import org.apache.hadoop.hbase.TableName;
+ import org.apache.hadoop.hbase.testclassification.ClientTests;
+ import org.apache.hadoop.hbase.testclassification.MediumTests;
++import org.apache.hadoop.hbase.util.Bytes;
+ import org.junit.AfterClass;
+ import org.junit.BeforeClass;
+ import org.junit.Test;
+ import org.junit.experimental.categories.Category;
+ 
+-import java.net.UnknownHostException;
+-
+ /**
+  * Tests that we fail fast when hostname resolution is not working and do not cache
+  * unresolved InetSocketAddresses.
+@@ -91,4 +103,36 @@ public class TestConnectionImplementation {
+     conn.getAdmin(badHost);
+     fail("Obtaining client to unresolvable hostname should have failed");
+   }
++
++  @Test
++  public void testLocateRegionsWithRegionReplicas() throws IOException {
++    int regionReplication = 3;
++    byte[] family = Bytes.toBytes("cf");
++    TableName tableName = TableName.valueOf("testLocateRegionsWithRegionReplicas");
++
++    // Create a table with region replicas
++    HTableDescriptor desc = new HTableDescriptor(tableName);
++    desc.addFamily(new HColumnDescriptor(family));
++    desc.setRegionReplication(regionReplication);
++    testUtil.getConnection().getAdmin().createTable(desc);
++
++    try (ConnectionManager.HConnectionImplementation con =
++      (ConnectionManager.HConnectionImplementation) ConnectionFactory.
++        createConnection(testUtil.getConfiguration())) {
++
++      // Get locations of the regions of the table
++      List<HRegionLocation> locations = con.locateRegions(tableName, false, false);
++
++      // The size of the returned locations should be 3
++      assertEquals(regionReplication, locations.size());
++
++      // The replicaIds of the returned locations should be 0, 1 and 2
++      Set<Integer> expectedReplicaIds = new HashSet<>(Arrays.asList(0, 1, 2));
++      for (HRegionLocation location : locations) {
++        assertTrue(expectedReplicaIds.remove(location.getRegionInfo().getReplicaId()));
++      }
++    } finally {
++      testUtil.deleteTable(tableName);
++    }
++  }
+ }
+-- 
+1.7.9.5
+

@@ -1,2 +1,0 @@
--- not create index for foreign key AUTHZ_OBJ_ID in case some customer already has such index
--- CREATE INDEX "AUTHZ_PATH_FK_IDX" ON "AUTHZ_PATH" ("AUTHZ_OBJ_ID");

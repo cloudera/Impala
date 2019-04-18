@@ -1,0 +1,246 @@
+From 487fe17e95612048ac677f1d3f249448e15eabe6 Mon Sep 17 00:00:00 2001
+From: tedyu <yuzhihong@gmail.com>
+Date: Mon, 8 Jan 2018 12:30:51 -0800
+Subject: [PATCH 488/489] HBASE-19730 Backport HBASE-14497 Reverse Scan threw
+ StackOverflow caused by readPt checking
+
+==C5_APPROVED_BUGFIX==
+
+(cherry picked from commit 96e2da5c37b01c1f424bab5f3f2a80c97ece945c)
+
+Change-Id: Ia03046afd80eadf2807b6254a68dc39e54acf5d0
+Author: Ted Yu
+Reason: Bug
+Ref: CDH-71603
+---
+ .../hadoop/hbase/regionserver/DefaultMemStore.java |   54 ++++++++-------
+ .../hbase/regionserver/StoreFileScanner.java       |   71 +++++++++++---------
+ .../hadoop/hbase/regionserver/TestHRegion.java     |   56 +++++++++++++++
+ 3 files changed, 126 insertions(+), 55 deletions(-)
+
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/DefaultMemStore.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/DefaultMemStore.java
+index 64e1e28..df7815f 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/DefaultMemStore.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/DefaultMemStore.java
+@@ -994,29 +994,37 @@ public class DefaultMemStore implements MemStore {
+      * specified key, then seek to the first KeyValue of previous row
+      */
+     @Override
+-    public synchronized boolean seekToPreviousRow(Cell key) {
+-      Cell firstKeyOnRow = KeyValueUtil.createFirstOnRow(key.getRowArray(), key.getRowOffset(),
+-          key.getRowLength());
+-      SortedSet<Cell> cellHead = cellSetAtCreation.headSet(firstKeyOnRow);
+-      Cell cellSetBeforeRow = cellHead.isEmpty() ? null : cellHead.last();
+-      SortedSet<Cell> snapshotHead = snapshotAtCreation
+-          .headSet(firstKeyOnRow);
+-      Cell snapshotBeforeRow = snapshotHead.isEmpty() ? null : snapshotHead
+-          .last();
+-      Cell lastCellBeforeRow = getHighest(cellSetBeforeRow, snapshotBeforeRow);
+-      if (lastCellBeforeRow == null) {
+-        theNext = null;
+-        return false;
+-      }
+-      Cell firstKeyOnPreviousRow = KeyValueUtil.createFirstOnRow(lastCellBeforeRow.getRowArray(),
+-          lastCellBeforeRow.getRowOffset(), lastCellBeforeRow.getRowLength());
+-      this.stopSkippingCellsIfNextRow = true;
+-      seek(firstKeyOnPreviousRow);
+-      this.stopSkippingCellsIfNextRow = false;
+-      if (peek() == null
+-          || comparator.compareRows(peek(), firstKeyOnPreviousRow) > 0) {
+-        return seekToPreviousRow(lastCellBeforeRow);
+-      }
++    public synchronized boolean seekToPreviousRow(Cell originalKey) {
++      boolean keepSeeking = false;
++      Cell key = originalKey;
++      do {
++        Cell firstKeyOnRow = KeyValueUtil.createFirstOnRow(key.getRowArray(), key.getRowOffset(),
++            key.getRowLength());
++        SortedSet<Cell> cellHead = cellSetAtCreation.headSet(firstKeyOnRow);
++        Cell cellSetBeforeRow = cellHead.isEmpty() ? null : cellHead.last();
++        SortedSet<Cell> snapshotHead = snapshotAtCreation
++            .headSet(firstKeyOnRow);
++        Cell snapshotBeforeRow = snapshotHead.isEmpty() ? null : snapshotHead
++            .last();
++        Cell lastCellBeforeRow = getHighest(cellSetBeforeRow, snapshotBeforeRow);
++        if (lastCellBeforeRow == null) {
++          theNext = null;
++          return false;
++        }
++        Cell firstKeyOnPreviousRow = KeyValueUtil.createFirstOnRow(lastCellBeforeRow.getRowArray(),
++            lastCellBeforeRow.getRowOffset(), lastCellBeforeRow.getRowLength());
++        this.stopSkippingCellsIfNextRow = true;
++        seek(firstKeyOnPreviousRow);
++        this.stopSkippingCellsIfNextRow = false;
++        if (peek() == null
++            || comparator.compareRows(peek(), firstKeyOnPreviousRow) > 0) {
++          keepSeeking = true;
++          key = firstKeyOnPreviousRow;
++          continue;
++        } else {
++          keepSeeking = false;
++        }
++      } while (keepSeeking);
+       return true;
+     }
+ 
+diff --git a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/StoreFileScanner.java b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/StoreFileScanner.java
+index 5e917b2..b2e15e8 100644
+--- a/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/StoreFileScanner.java
++++ b/hbase-server/src/main/java/org/apache/hadoop/hbase/regionserver/StoreFileScanner.java
+@@ -475,39 +475,46 @@ public class StoreFileScanner implements KeyValueScanner {
+ 
+   @Override
+   @SuppressWarnings("deprecation")
+-  public boolean seekToPreviousRow(Cell key) throws IOException {
++  public boolean seekToPreviousRow(Cell originalKey) throws IOException {
+     try {
+       try {
+-        KeyValue seekKey = KeyValueUtil.createFirstOnRow(key.getRowArray(), key.getRowOffset(),
+-            key.getRowLength());
+-        if (seekCount != null) seekCount.incrementAndGet();
+-        if (!hfs.seekBefore(seekKey.getBuffer(), seekKey.getKeyOffset(),
+-            seekKey.getKeyLength())) {
+-          close();
+-          return false;
+-        }
+-        KeyValue firstKeyOfPreviousRow = KeyValueUtil.createFirstOnRow(hfs.getKeyValue()
+-            .getRowArray(), hfs.getKeyValue().getRowOffset(), hfs.getKeyValue().getRowLength());
+-
+-        if (seekCount != null) seekCount.incrementAndGet();
+-        if (!seekAtOrAfter(hfs, firstKeyOfPreviousRow)) {
+-          close();
+-          return false;
+-        }
+-
+-        setCurrentCell(hfs.getKeyValue());
+-        this.stopSkippingKVsIfNextRow = true;
+-        boolean resultOfSkipKVs;
+-        try {
+-          resultOfSkipKVs = skipKVsNewerThanReadpoint();
+-        } finally {
+-          this.stopSkippingKVsIfNextRow = false;
+-        }
+-        if (!resultOfSkipKVs
+-            || getComparator().compareRows(cur, firstKeyOfPreviousRow) > 0) {
+-          return seekToPreviousRow(firstKeyOfPreviousRow);
+-        }
+-
++        boolean keepSeeking = false;
++        Cell key = originalKey;
++        do {
++          KeyValue seekKey = KeyValueUtil.createFirstOnRow(key.getRowArray(), key.getRowOffset(),
++              key.getRowLength());
++          if (seekCount != null) seekCount.incrementAndGet();
++          if (!hfs.seekBefore(seekKey.getBuffer(), seekKey.getKeyOffset(),
++              seekKey.getKeyLength())) {
++            close();
++            return false;
++          }
++          KeyValue firstKeyOfPreviousRow = KeyValueUtil.createFirstOnRow(hfs.getKeyValue()
++              .getRowArray(), hfs.getKeyValue().getRowOffset(), hfs.getKeyValue().getRowLength());
++
++          if (seekCount != null) seekCount.incrementAndGet();
++          if (!seekAtOrAfter(hfs, firstKeyOfPreviousRow)) {
++            close();
++            return false;
++          }
++
++          setCurrentCell(hfs.getKeyValue());
++          this.stopSkippingKVsIfNextRow = true;
++          boolean resultOfSkipKVs;
++          try {
++            resultOfSkipKVs = skipKVsNewerThanReadpoint();
++          } finally {
++            this.stopSkippingKVsIfNextRow = false;
++          }
++          if (!resultOfSkipKVs
++              || getComparator().compareRows(cur, firstKeyOfPreviousRow) > 0) {
++            keepSeeking = true;
++            key = firstKeyOfPreviousRow;
++            continue;
++          } else {
++            keepSeeking = false;
++          }
++        } while (keepSeeking);
+         return true;
+       } finally {
+         realSeekDone = true;
+@@ -516,7 +523,7 @@ public class StoreFileScanner implements KeyValueScanner {
+       throw e;
+     } catch (IOException ioe) {
+       throw new IOException("Could not seekToPreviousRow " + this + " to key "
+-          + key, ioe);
++          + originalKey, ioe);
+     }
+   }
+ 
+diff --git a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestHRegion.java b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestHRegion.java
+index 7a20dda..f5048b6 100644
+--- a/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestHRegion.java
++++ b/hbase-server/src/test/java/org/apache/hadoop/hbase/regionserver/TestHRegion.java
+@@ -5811,6 +5811,62 @@ public class TestHRegion {
+     }
+   }
+ 
++  /**
++   * Test for HBASE-14497: Reverse Scan threw StackOverflow caused by readPt checking
++   */
++  @Test (timeout = 60000)
++  public void testReverseScanner_StackOverflow() throws IOException {
++    byte[] cf1 = Bytes.toBytes("CF1");
++    byte[][] families = {cf1};
++    byte[] col = Bytes.toBytes("C");
++    String method = this.getName();
++    HBaseConfiguration conf = new HBaseConfiguration();
++    this.region = initHRegion(tableName, method, conf, families);
++    try {
++      // setup with one storefile and one memstore, to create scanner and get an earlier readPt
++      Put put = new Put(Bytes.toBytes("19998"));
++      put.add(cf1, col, Bytes.toBytes("val"));
++      region.put(put);
++      region.flushcache(true, true);
++      Put put2 = new Put(Bytes.toBytes("19997"));
++      put2.add(cf1, col, Bytes.toBytes("val"));
++      region.put(put2);
++
++      Scan scan = new Scan(Bytes.toBytes("19998"));
++      scan.setReversed(true);
++      InternalScanner scanner = region.getScanner(scan);
++
++      // create one storefile contains many rows will be skipped
++      // to check StoreFileScanner.seekToPreviousRow
++      for (int i = 10000; i < 20000; i++) {
++        Put p = new Put(Bytes.toBytes("" + i));
++        p.add(cf1, col, Bytes.toBytes("" + i));
++        region.put(p);
++      }
++      region.flushcache(true, true);
++
++      // create one memstore contains many rows will be skipped
++      // to check MemStoreScanner.seekToPreviousRow
++      for (int i = 10000; i < 20000; i++) {
++        Put p = new Put(Bytes.toBytes("" + i));
++        p.add(cf1, col, Bytes.toBytes("" + i));
++        region.put(p);
++      }
++
++      List<Cell> currRow = new ArrayList<>();
++      boolean hasNext;
++      do {
++        hasNext = scanner.next(currRow);
++      } while (hasNext);
++      assertEquals(2, currRow.size());
++      assertArrayEquals(Bytes.toBytes("19998"), currRow.get(0).getRow());
++      assertArrayEquals(Bytes.toBytes("19997"), currRow.get(1).getRow());
++    } finally {
++      HBaseTestingUtility.closeRegionAndWAL(this.region);
++      this.region = null;
++    }
++  }
++
+   @Test (timeout=60000)
+   public void testSplitRegionWithReverseScan() throws IOException {
+     byte [] tableName = Bytes.toBytes("testSplitRegionWithReverseScan");
+-- 
+1.7.9.5
+

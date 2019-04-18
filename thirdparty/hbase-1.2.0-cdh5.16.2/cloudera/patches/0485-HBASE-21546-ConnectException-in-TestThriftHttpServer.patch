@@ -1,0 +1,47 @@
+From 5f108be040c7ef3330de969534f72e26792a7807 Mon Sep 17 00:00:00 2001
+From: Peter Somogyi <psomogyi@apache.org>
+Date: Tue, 4 Dec 2018 14:57:50 +0100
+Subject: [PATCH 485/489] HBASE-21546 ConnectException in TestThriftHttpServer
+
+Signed-off-by: Sean Busbey <busbey@apache.org>
+(cherry picked from commit 333cd1972848dad3c0d71e845ea04be85ccaca5b)
+
+==C5_APPROVED_BUGFIX==
+
+Change-Id: I9ded4f8201bb1f85c5622b5f8e4f57907483d096
+Author: Peter Somogyi
+Reason: Bug
+Ref: CDH-76115
+---
+ .../hadoop/hbase/thrift/TestThriftHttpServer.java  |    8 ++------
+ 1 file changed, 2 insertions(+), 6 deletions(-)
+
+diff --git a/hbase-thrift/src/test/java/org/apache/hadoop/hbase/thrift/TestThriftHttpServer.java b/hbase-thrift/src/test/java/org/apache/hadoop/hbase/thrift/TestThriftHttpServer.java
+index b34d540..cf58f6a 100644
+--- a/hbase-thrift/src/test/java/org/apache/hadoop/hbase/thrift/TestThriftHttpServer.java
++++ b/hbase-thrift/src/test/java/org/apache/hadoop/hbase/thrift/TestThriftHttpServer.java
+@@ -164,11 +164,7 @@ public class TestThriftHttpServer {
+ 
+   private void waitThriftServerStartup() throws Exception{
+     // wait up to 10s for the server to start
+-    for (int i = 0; i < 100
+-        && ( thriftServer.serverRunner == null ||  thriftServer.serverRunner.httpServer ==
+-        null); i++) {
+-      Thread.sleep(100);
+-    }
++    HBaseTestingUtility.waitForHostPort(HConstants.LOCALHOST, port);
+   }
+ 
+   private void runThriftServer(int customHeaderSize) throws Exception {
+@@ -249,7 +245,7 @@ public class TestThriftHttpServer {
+   }
+ 
+   private void stopHttpServerThread() throws Exception {
+-    LOG.debug("Stopping " + " Thrift HTTP server");
++    LOG.debug("Stopping Thrift HTTP server");
+     thriftServer.stop();
+     httpServerThread.join();
+     if (httpServerException != null) {
+-- 
+1.7.9.5
+
