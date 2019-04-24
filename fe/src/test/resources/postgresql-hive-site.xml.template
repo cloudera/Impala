@@ -243,4 +243,8 @@ See IMPALA-7954 for details -->
   <name>hive.metastore.notification.parameters.exclude.patterns</name>
   <value></value>
 </property>
+<property>
+  <name>hive.metastore.dml.events</name>
+  <value>true</value>
+</property>
 </configuration>
