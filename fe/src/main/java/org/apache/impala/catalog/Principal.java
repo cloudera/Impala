@@ -37,9 +37,9 @@ public abstract class Principal extends CatalogObjectImpl {
   private final TPrincipal principal_;
   // The last principal ID assigned, starts at 0.
   private static AtomicInteger principalId_ = new AtomicInteger(0);
-
+  // URIs are case sensitive, so we need to store privilege names in a case sensitive way.
   private final CatalogObjectCache<PrincipalPrivilege> principalPrivileges_ =
-      new CatalogObjectCache<>();
+      new CatalogObjectCache<>(false);
 
   protected Principal(String principalName, TPrincipalType type,
       Set<String> grantGroups) {

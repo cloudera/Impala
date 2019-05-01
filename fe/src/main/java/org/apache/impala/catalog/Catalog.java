@@ -564,9 +564,8 @@ public abstract class Catalog {
       case PRIVILEGE:
         // The combination of privilege name + principal ID is guaranteed to be unique.
         return "PRIVILEGE:" +
-            PrincipalPrivilege.buildPrivilegeName(catalogObject.getPrivilege())
-                .toLowerCase() + "." +
-            Integer.toString(catalogObject.getPrivilege().getPrincipal_id());
+            PrincipalPrivilege.buildPrivilegeName(catalogObject.getPrivilege()) + "." +
+            catalogObject.getPrivilege().getPrincipal_id();
       case HDFS_CACHE_POOL:
         return "HDFS_CACHE_POOL:" +
             catalogObject.getCache_pool().getPool_name().toLowerCase();
