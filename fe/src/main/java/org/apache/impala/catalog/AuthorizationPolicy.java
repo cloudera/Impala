@@ -163,28 +163,6 @@ public class AuthorizationPolicy implements PrivilegeCache {
   }
 
   /**
-   * Removes a privilege from the policy mapping to the role specified by the principal ID
-   * in the privilege. Throws a CatalogException if no role with a corresponding ID exists
-   * in the catalog. Returns null if no matching privilege is found in this principal.
-   */
-  public synchronized PrincipalPrivilege removePrivilege(PrincipalPrivilege privilege)
-      throws CatalogException {
-    Principal principal = getPrincipal(privilege.getPrincipalId(),
-        privilege.getPrincipalType());
-    if (principal == null) {
-      throw new CatalogException(String.format("Error removing privilege: %s. %s ID " +
-          "'%d' does not exist.", privilege.getName(),
-          Principal.toString(privilege.getPrincipalType()), privilege.getPrincipalId()));
-    }
-    if (LOG.isTraceEnabled()) {
-      LOG.trace("Removing privilege: " + privilege.getName() + " from " +
-          Principal.toString(privilege.getPrincipalType()).toLowerCase() + ": " +
-          principal.getName() + " with ID: " + principal.getId());
-    }
-    return principal.removePrivilege(privilege.getName());
-  }
-
-  /**
    * Returns all roles in the policy. Returns an empty list if no roles exist.
    */
   public synchronized List<Role> getAllRoles() {
@@ -407,8 +385,7 @@ public class AuthorizationPolicy implements PrivilegeCache {
    * Returns a set of privilege strings in Sentry format.
    */
   @Override
-  public synchronized Set<String> listPrivileges(Set<String> groups,
-      ActiveRoleSet roleSet) {
+  public Set<String> listPrivileges(Set<String> groups, ActiveRoleSet roleSet) {
     Set<String> privileges = new HashSet<>();
     if (roleSet != ActiveRoleSet.ALL) {
       throw new UnsupportedOperationException("Impala does not support role subsets.");
@@ -418,16 +395,7 @@ public class AuthorizationPolicy implements PrivilegeCache {
     for (String groupName: groups) {
       List<Role> grantedRoles = getGrantedRoles(groupName);
       for (Role role: grantedRoles) {
-        for (PrincipalPrivilege privilege: role.getPrivileges()) {
-          String authorizeable = privilege.getName();
-          if (authorizeable == null) {
-            if (LOG.isTraceEnabled()) {
-              LOG.trace("Ignoring invalid privilege: " + privilege.getName());
-            }
-            continue;
-          }
-          privileges.add(authorizeable);
-        }
+        privileges.addAll(role.getPrivilegeNames());
       }
     }
     return privileges;
@@ -437,22 +405,13 @@ public class AuthorizationPolicy implements PrivilegeCache {
    * Returns a set of privilege strings in Sentry format.
    */
   @Override
-  public synchronized Set<String> listPrivileges(Set<String> groups, Set<String> users,
+  public Set<String> listPrivileges(Set<String> groups, Set<String> users,
       ActiveRoleSet roleSet) {
     Set<String> privileges = listPrivileges(groups, roleSet);
     for (String userName: users) {
       User user = getUser(userName);
       if (user != null) {
-        for (PrincipalPrivilege privilege: user.getPrivileges()) {
-          String authorizeable = privilege.getName();
-          if (authorizeable == null) {
-            if (LOG.isTraceEnabled()) {
-              LOG.trace("Ignoring invalid privilege: " + privilege.getName());
-            }
-            continue;
-          }
-          privileges.add(authorizeable);
-        }
+        privileges.addAll(user.getPrivilegeNames());
       }
     }
     return privileges;
