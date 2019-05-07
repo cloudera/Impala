@@ -73,7 +73,8 @@ enum THdfsCompression {
   SNAPPY_BLOCKED,
   LZO,
   LZ4,
-  ZLIB
+  ZLIB,
+  ZSTD
 }
 
 enum TColumnEncoding {

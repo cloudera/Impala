@@ -868,17 +868,6 @@ public class HdfsPartition implements FeFsPartition, PrunablePartition {
       hmsParameters_ = Maps.newHashMap();
     }
 
-    // TODO: instead of raising an exception, we should consider marking this partition
-    // invalid and moving on, so that table loading won't fail and user can query other
-    // partitions.
-    for (FileDescriptor fileDescriptor: fileDescriptors) {
-      StringBuilder errorMsg = new StringBuilder();
-      if (!getInputFormatDescriptor().getFileFormat().isFileCompressionTypeSupported(
-          fileDescriptor.getFileName(), errorMsg)) {
-        throw new RuntimeException(errorMsg.toString());
-      }
-    }
-
     extractAndCompressPartStats();
   }
 

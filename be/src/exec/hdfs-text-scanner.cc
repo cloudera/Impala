@@ -141,7 +141,9 @@ Status HdfsTextScanner::IssueInitialRanges(HdfsScanNodeBase* scan_node,
         break;
 
       default:
-        DCHECK(false);
+        return Status(Substitute("Unsupported compression type $0 for file $1",
+            _THdfsCompression_VALUES_TO_NAMES.find(compression)->second,
+            files[i]->filename));
     }
   }
   RETURN_IF_ERROR(scan_node->AddDiskIoRanges(compressed_text_scan_ranges,
