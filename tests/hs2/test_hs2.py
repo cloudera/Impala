@@ -17,25 +17,43 @@
 #
 # Client tests for Impala's HiveServer2 interface
 
+from getpass import getuser
 import json
+import logging
 import pytest
 import time
 
 from urllib2 import urlopen
 
 from ImpalaService import ImpalaHiveServer2Service
-from tests.hs2.hs2_test_suite import HS2TestSuite, needs_session, operation_id_to_query_id
+from tests.hs2.hs2_test_suite import (HS2TestSuite, needs_session,
+    operation_id_to_query_id, create_session_handle_without_secret,
+    create_op_handle_without_secret)
 from TCLIService import TCLIService
+
+LOG = logging.getLogger('test_hs2')
 
 SQLSTATE_GENERAL_ERROR = "HY000"
 
 class TestHS2(HS2TestSuite):
+  def setup_method(self, method):
+    # Keep track of extra session handless opened by _open_extra_session.
+    self.__extra_sessions = []
+
+  def teardown_method(self, method):
+    for session in self.__extra_sessions:
+      try:
+        close_session_req = TCLIService.TCloseSessionReq(session)
+        self.hs2_client.CloseSession(close_session_req)
+      except Exception:
+        LOG.log_exception("Error closing session.")
+
   def test_open_session(self):
     """Check that a session can be opened"""
     open_session_req = TCLIService.TOpenSessionReq()
     TestHS2.check_response(self.hs2_client.OpenSession(open_session_req))
 
-  def test_open_sesssion_query_options(self):
+  def test_open_session_query_options(self):
     """Check that OpenSession sets query options"""
     open_session_req = TCLIService.TOpenSessionReq()
     open_session_req.configuration = {'MAX_ERRORS': '45678',
@@ -163,6 +181,13 @@ class TestHS2(HS2TestSuite):
     resp = self.hs2_client.OpenSession(open_session_req)
     TestHS2.check_response(resp)
 
+    # Check that CloseSession validates session secret and acts as if the session didn't
+    # exist.
+    invalid_close_session_req = TCLIService.TCloseSessionReq()
+    invalid_close_session_req.sessionHandle = create_session_handle_without_secret(
+        resp.sessionHandle)
+    TestHS2.check_invalid_session(self.hs2_client.CloseSession(invalid_close_session_req))
+
     close_session_req = TCLIService.TCloseSessionReq()
     close_session_req.sessionHandle = resp.sessionHandle
     TestHS2.check_response(self.hs2_client.CloseSession(close_session_req))
@@ -178,8 +203,7 @@ class TestHS2(HS2TestSuite):
     TestHS2.check_response(self.hs2_client.CloseSession(close_session_req))
 
     # Double close should be an error
-    TestHS2.check_response(self.hs2_client.CloseSession(close_session_req),
-                           TCLIService.TStatusCode.ERROR_STATUS)
+    TestHS2.check_invalid_session(self.hs2_client.CloseSession(close_session_req))
 
   # This test verifies the number of open and expired sessions so avoid running
   # concurrently with other sessions.
@@ -268,6 +292,11 @@ class TestHS2(HS2TestSuite):
     # After fetching the results, the query must be in state FINISHED.
     assert get_operation_status_resp.operationState == \
         TCLIService.TOperationState.FINISHED_STATE
+
+    # Validate that the operation secret is checked.
+    TestHS2.check_invalid_query(self.get_operation_status(
+        create_op_handle_without_secret(execute_statement_resp.operationHandle)),
+        expect_legacy_err=True)
 
     close_operation_req = TCLIService.TCloseOperationReq()
     close_operation_req.operationHandle = execute_statement_resp.operationHandle
@@ -382,6 +411,15 @@ class TestHS2(HS2TestSuite):
         "impala-server.num-open-hiveserver2-sessions", num_sessions)
 
   @needs_session()
+  def test_get_info(self):
+    # Negative test for invalid session secret.
+    invalid_req = TCLIService.TGetInfoReq(create_session_handle_without_secret(
+        self.session_handle), TCLIService.TGetInfoType.CLI_DBMS_NAME)
+    TestHS2.check_invalid_session(self.hs2_client.GetInfo(invalid_req))
+
+    # TODO: it would be useful to add positive tests for GetInfo().
+
+  @needs_session()
   def test_get_schemas(self):
     get_schemas_req = TCLIService.TGetSchemasReq()
     get_schemas_req.sessionHandle = self.session_handle
@@ -399,6 +437,65 @@ class TestHS2(HS2TestSuite):
     assert "Sql Statement: GET_SCHEMAS" in profile_page
     assert "Query Type: DDL" in profile_page
 
+    # Test that session secret is validated by this API.
+    get_schemas_req.sessionHandle = create_session_handle_without_secret(
+        self.session_handle)
+    TestHS2.check_invalid_session(self.hs2_client.GetSchemas(get_schemas_req))
+
+  @pytest.mark.execute_serially
+  @needs_session()
+  def test_get_tables(self):
+    """Basic test for the GetTables() HS2 method. Needs to execute serially because
+    the test depends on controlling whether a table is loaded or not and other
+    concurrent tests loading or invalidating tables could interfere with it."""
+    # TODO: unique_database would be better, but it doesn't work with @needs_session
+    # at the moment.
+    table = "__hs2_column_comments_test"
+    self.execute_query("drop table if exists {0}".format(table))
+    self.execute_query("""
+        create table {0} (a int comment 'column comment')
+        comment 'table comment'""".format(table))
+    try:
+      req = TCLIService.TGetTablesReq()
+      req.sessionHandle = self.session_handle
+      req.schemaName = "default"
+      req.tableName = table
+
+      # Execute the request twice, the first time with the table unloaded and the second
+      # with it loaded.
+      self.execute_query("invalidate metadata {0}".format(table))
+      for i in range(2):
+        get_tables_resp = self.hs2_client.GetTables(req)
+        TestHS2.check_response(get_tables_resp)
+
+        fetch_results_resp = self._fetch_results(get_tables_resp.operationHandle, 100)
+        results = fetch_results_resp.results
+        table_cat = results.columns[0].stringVal.values[0]
+        table_schema = results.columns[1].stringVal.values[0]
+        table_name = results.columns[2].stringVal.values[0]
+        table_type = results.columns[3].stringVal.values[0]
+        table_remarks = results.columns[4].stringVal.values[0]
+        assert table_cat == ''
+        assert table_schema == "default"
+        assert table_name == table
+        assert table_type == "TABLE"
+        if i == 0:
+          # IMPALA-7587: comments not returned for non-loaded tables with legacy catalog.
+          assert table_remarks == ""
+        else:
+          assert table_remarks == "table comment"
+        # Ensure the table is loaded for the second iteration.
+        self.execute_query("describe {0}".format(table))
+
+      # Test that session secret is validated by this API.
+      invalid_req = TCLIService.TGetTablesReq()
+      invalid_req.sessionHandle = create_session_handle_without_secret(
+          self.session_handle)
+      invalid_req.schemaName = "default"
+      invalid_req.tableName = table
+      TestHS2.check_invalid_session(self.hs2_client.GetTables(invalid_req))
+    finally:
+      self.execute_query("drop table {0}".format(table))
 
   @needs_session(conf_overlay={"idle_session_timeout": "5"})
   def test_get_operation_status_session_timeout(self):
@@ -431,6 +528,13 @@ class TestHS2(HS2TestSuite):
       fetch_results_resp = self.hs2_client.FetchResults(fetch_results_req)
       TestHS2.check_response(fetch_results_resp)
       has_more_results = fetch_results_resp.hasMoreRows
+
+    # Test that secret is validated.
+    invalid_get_log_req = TCLIService.TGetLogReq()
+    invalid_get_log_req.operationHandle = create_op_handle_without_secret(
+        execute_statement_resp.operationHandle)
+    TestHS2.check_invalid_query(self.hs2_client.GetLog(invalid_get_log_req),
+        expect_legacy_err=True)
 
     get_log_req = TCLIService.TGetLogReq()
     get_log_req.operationHandle = execute_statement_resp.operationHandle
@@ -468,10 +572,30 @@ class TestHS2(HS2TestSuite):
     TestHS2.check_response(exec_summary_resp)
     assert len(exec_summary_resp.summary.nodes) > 0
 
+    # Test that session secret is validated. Note that operation secret does not need to
+    # be validated in addition if the session secret is valid and the operation belongs
+    # to the session, because the user has full access to the session.
+    TestHS2.check_invalid_session(self.hs2_client.GetExecSummary(
+      ImpalaHiveServer2Service.TGetExecSummaryReq(execute_statement_resp.operationHandle,
+        create_session_handle_without_secret(self.session_handle))))
+
+    # Attempt to access query with different user should fail.
+    evil_user = getuser() + "_evil_twin"
+    session_handle2 = self._open_extra_session(evil_user)
+    TestHS2.check_profile_access_denied(self.hs2_client.GetExecSummary(
+      ImpalaHiveServer2Service.TGetExecSummaryReq(execute_statement_resp.operationHandle,
+        session_handle2)), user=evil_user)
+
     # Now close the query and verify the exec summary is available.
     close_operation_req = TCLIService.TCloseOperationReq()
     close_operation_req.operationHandle = execute_statement_resp.operationHandle
     TestHS2.check_response(self.hs2_client.CloseOperation(close_operation_req))
+
+    # Attempt to access query with different user from log should fail.
+    TestHS2.check_profile_access_denied(self.hs2_client.GetRuntimeProfile(
+      ImpalaHiveServer2Service.TGetRuntimeProfileReq(
+        execute_statement_resp.operationHandle, session_handle2)),
+      user=evil_user)
 
     exec_summary_resp = self.hs2_client.GetExecSummary(exec_summary_req)
     TestHS2.check_response(exec_summary_resp)
@@ -505,9 +629,31 @@ class TestHS2(HS2TestSuite):
     # After fetching the results, we must be in state FINISHED.
     assert "Query State: FINISHED" in get_profile_resp.profile, get_profile_resp.profile
 
+    # Test that session secret is validated. Note that operation secret does not need to
+    # be validated in addition if the session secret is valid and the operation belongs
+    # to the session, because the user has full access to the session.
+    TestHS2.check_invalid_session(self.hs2_client.GetRuntimeProfile(
+      ImpalaHiveServer2Service.TGetRuntimeProfileReq(
+        execute_statement_resp.operationHandle,
+        create_session_handle_without_secret(self.session_handle))))
+
+    # Attempt to access query with different user should fail.
+    evil_user = getuser() + "_evil_twin"
+    session_handle2 = self._open_extra_session(evil_user)
+    TestHS2.check_profile_access_denied(self.hs2_client.GetRuntimeProfile(
+      ImpalaHiveServer2Service.TGetRuntimeProfileReq(
+        execute_statement_resp.operationHandle, session_handle2)),
+        user=evil_user)
+
     close_operation_req = TCLIService.TCloseOperationReq()
     close_operation_req.operationHandle = execute_statement_resp.operationHandle
     TestHS2.check_response(self.hs2_client.CloseOperation(close_operation_req))
+
+    # Attempt to access query with different user from log should fail.
+    TestHS2.check_profile_access_denied(self.hs2_client.GetRuntimeProfile(
+      ImpalaHiveServer2Service.TGetRuntimeProfileReq(
+        execute_statement_resp.operationHandle, session_handle2)),
+        user=evil_user)
 
     get_profile_resp = self.hs2_client.GetRuntimeProfile(get_profile_req)
     TestHS2.check_response(get_profile_resp)
@@ -533,3 +679,48 @@ class TestHS2(HS2TestSuite):
     execute_statement_req.statement = "SELECT 1 FROM alltypes LIMIT 1"
     execute_statement_resp = self.hs2_client.ExecuteStatement(execute_statement_req)
     TestHS2.check_response(execute_statement_resp, TCLIService.TStatusCode.ERROR_STATUS)
+
+  @needs_session()
+  def test_get_type_info(self):
+    get_type_info_req = TCLIService.TGetTypeInfoReq()
+    get_type_info_req.sessionHandle = self.session_handle
+    get_type_info_resp = self.hs2_client.GetTypeInfo(get_type_info_req)
+    TestHS2.check_response(get_type_info_resp)
+    fetch_results_req = TCLIService.TFetchResultsReq()
+    fetch_results_req.operationHandle = get_type_info_resp.operationHandle
+    fetch_results_req.maxRows = 100
+    fetch_results_resp = self.hs2_client.FetchResults(fetch_results_req)
+    TestHS2.check_response(fetch_results_resp)
+    results = fetch_results_resp.results
+    # IMPALA-1856: not all supported types are returned.
+    types = ['NULL_TYPE', 'BOOLEAN', 'TINYINT', 'SMALLINT', 'INT', 'BIGINT', 'FLOAT', 'DOUBLE',
+             'TIMESTAMP', 'STRING', 'BINARY']
+    assert self.get_num_rows(results) == len(types), str(results) + " " + str(types)
+    # Validate that each type description (result row) has the required 18 fields as
+    # described in the DatabaseMetaData.getTypeInfo() documentation.
+    assert len(results.columns) == 18
+    typed_col = getattr(results.columns[0], 'stringVal')
+    for colType in types:
+      assert typed_col.values.count(colType) == 1, colType
+
+    # Test that session secret is validated by this API.
+    invalid_req = TCLIService.TGetTypeInfoReq(
+        create_session_handle_without_secret(self.session_handle))
+    TestHS2.check_invalid_session(self.hs2_client.GetTypeInfo(invalid_req))
+
+  def _fetch_results(self, operation_handle, max_rows):
+    """Fetch results from 'operation_handle' with up to 'max_rows' rows using
+    self.hs2_client, returning the TFetchResultsResp object."""
+    fetch_results_req = TCLIService.TFetchResultsReq()
+    fetch_results_req.operationHandle = operation_handle
+    fetch_results_req.maxRows = max_rows
+    fetch_results_resp = self.hs2_client.FetchResults(fetch_results_req)
+    TestHS2.check_response(fetch_results_resp)
+    return fetch_results_resp
+
+  def _open_extra_session(self, user_name):
+    """Open an extra session with the provided username that will be automatically
+    closed at the end of the test. Returns the session handle."""
+    resp = self.hs2_client.OpenSession(TCLIService.TOpenSessionReq(username=user_name))
+    TestHS2.check_response(resp)
+    return resp.sessionHandle
