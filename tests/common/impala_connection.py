@@ -155,6 +155,10 @@ class BeeswaxConnection(ImpalaConnection):
     LOG.info("-- closing query for operation handle: %s" % operation_handle)
     self.__beeswax_client.close_query(operation_handle.get_handle())
 
+  def close_dml(self, operation_handle):
+    LOG.info("-- closing DML query for operation handle: %s" % operation_handle)
+    self.__beeswax_client.close_dml(operation_handle.get_handle())
+
   def execute(self, sql_stmt, user=None):
     LOG.info("-- executing against %s\n%s;\n" % (self.__host_port, sql_stmt))
     return self.__beeswax_client.execute(sql_stmt, user=user)
@@ -171,13 +175,17 @@ class BeeswaxConnection(ImpalaConnection):
     LOG.info("-- getting state for operation: %s" % operation_handle)
     return self.__beeswax_client.get_state(operation_handle.get_handle())
 
+  def get_exec_summary(self, operation_handle):
+    LOG.info("-- getting exec summary operation: %s" % operation_handle)
+    return self.__beeswax_client.get_exec_summary(operation_handle.get_handle())
+
   def get_runtime_profile(self, operation_handle):
     LOG.info("-- getting runtime profile operation: %s" % operation_handle)
     return self.__beeswax_client.get_runtime_profile(operation_handle.get_handle())
 
   def get_log(self, operation_handle):
     LOG.info("-- getting log for operation: %s" % operation_handle)
-    return self.__beeswax_client.get_log(operation_handle.get_handle())
+    return self.__beeswax_client.get_log(operation_handle.get_handle().log_context)
 
   def refresh(self):
     """Invalidate the Impalad catalog"""

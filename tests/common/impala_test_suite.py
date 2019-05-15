@@ -166,7 +166,10 @@ class ImpalaTestSuite(BaseTestSuite):
       cls.client.close()
 
   @classmethod
-  def create_impala_client(cls, host_port=IMPALAD):
+  def create_impala_client(cls, host_port=IMPALAD, protocol="beeswax"):
+    """protocol is added as an aid to backport tests from that explicitly specify
+    the protocol. Only "beeswax" is accepted."""
+    assert protocol == "beeswax"
     client = create_connection(host_port=host_port,
         use_kerberos=pytest.config.option.use_kerberos)
     client.connect()

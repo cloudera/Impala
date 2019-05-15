@@ -178,7 +178,7 @@ class ImpalaBeeswaxClient(object):
       # fetch_results() will close the query after which there is no guarantee that
       # profile and log will be available so fetch them first.
       runtime_profile = self.get_runtime_profile(handle)
-      exec_summary = self.get_exec_summary(handle)
+      exec_summary = self.get_exec_summary_and_parse(handle)
       log = self.get_log(handle.log_context)
 
       result = self.fetch_results(query_string, handle)
@@ -191,14 +191,18 @@ class ImpalaBeeswaxClient(object):
       result = self.fetch_results(query_string, handle)
       result.time_taken = time.time() - start
       result.start_time = start_time
-      result.exec_summary = self.get_exec_summary(handle)
+      result.exec_summary = self.get_exec_summary_and_parse(handle)
       result.log = self.get_log(handle.log_context)
       result.runtime_profile = self.get_runtime_profile(handle)
       self.close_query(handle)
     return result
 
   def get_exec_summary(self, handle):
-    """Calls GetExecSummary() for the last query handle"""
+    return self.__do_rpc(lambda: self.imp_service.GetExecSummary(handle))
+
+  def get_exec_summary_and_parse(self, handle):
+    """Calls GetExecSummary() for the last query handle, parses it and returns a summary
+    table. Returns None in case of an error or an empty result"""
     try:
       summary = self.__do_rpc(lambda: self.imp_service.GetExecSummary(handle))
     except ImpalaBeeswaxException:
@@ -414,9 +418,12 @@ class ImpalaBeeswaxClient(object):
     exec_result.summary = 'Returned %d rows' % (len(result_rows))
     return exec_result
 
+  def close_dml(self, handle):
+    return self.__do_rpc(lambda: self.imp_service.CloseInsert(handle))
+
   def __fetch_insert_results(self, handle):
     """Executes an insert query"""
-    result = self.__do_rpc(lambda: self.imp_service.CloseInsert(handle))
+    result = self.close_dml(handle)
     # The insert was successful
     num_rows = sum(map(int, result.rows_modified.values()))
     data = ["%s: %s" % row for row in result.rows_modified.iteritems()]

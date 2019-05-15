@@ -18,6 +18,8 @@
 # Superclass of all HS2 tests containing commonly used functions.
 
 from getpass import getuser
+import traceback
+
 from TCLIService import TCLIService
 from ImpalaService import ImpalaHiveServer2Service
 from thrift.transport.TSocket import TSocket
@@ -46,6 +48,9 @@ def needs_session(protocol_version=
       assert protocol_version <= resp.serverProtocolVersion
       try:
         fn(self)
+      except:
+        traceback.print_exc()
+        raise
       finally:
         close_session_req = TCLIService.TCloseSessionReq()
         close_session_req.sessionHandle = resp.sessionHandle
@@ -60,6 +65,22 @@ def operation_id_to_query_id(operation_id):
   lo = ''.join(['%0.2X' % ord(c) for c in lo[::-1]])
   hi = ''.join(['%0.2X' % ord(c) for c in hi[::-1]])
   return "%s:%s" % (lo, hi)
+
+
+def create_session_handle_without_secret(session_handle):
+  """Create a HS2 session handle with the same session ID as 'session_handle' but a
+  bogus secret of the right length, i.e. 16 bytes."""
+  return TCLIService.TSessionHandle(TCLIService.THandleIdentifier(
+      session_handle.sessionId.guid, r"xxxxxxxxxxxxxxxx"))
+
+
+def create_op_handle_without_secret(op_handle):
+  """Create a HS2 operation handle with same parameters as 'op_handle' but with a bogus
+  secret of the right length, i.e. 16 bytes."""
+  op_id = TCLIService.THandleIdentifier(op_handle.operationId.guid, r"xxxxxxxxxxxxxxxx")
+  return TCLIService.TOperationHandle(
+      op_id, op_handle.operationType, op_handle.hasResultSet)
+
 
 class HS2TestSuite(ImpalaTestSuite):
   TEST_DB = 'hs2_db'
@@ -89,6 +110,35 @@ class HS2TestSuite(ImpalaTestSuite):
     if expected_status_code != TCLIService.TStatusCode.SUCCESS_STATUS\
        and expected_error_prefix is not None:
       assert response.status.errorMessage.startswith(expected_error_prefix)
+
+  @staticmethod
+  def check_invalid_session(response):
+    """Checks that the HS2 API response is the correct response if the session is invalid,
+    i.e. the session doesn't exist or the secret is invalid."""
+    HS2TestSuite.check_response(response, TCLIService.TStatusCode.ERROR_STATUS,
+                                "Invalid session id:")
+
+  @staticmethod
+  def check_invalid_query(response, expect_legacy_err=False):
+    """Checks that the HS2 API response is the correct response if the query is invalid,
+    i.e. the query doesn't exist, doesn't match the session provided, or the secret is
+    invalid. """
+    if expect_legacy_err:
+      # Some operations return non-standard errors like "Query id ... not found".
+      expected_err = "Query id"
+    else:
+      # We should standardise on this error message.
+      expected_err = "Invalid query handle:"
+    HS2TestSuite.check_response(response, TCLIService.TStatusCode.ERROR_STATUS,
+                                expected_err)
+
+  @staticmethod
+  def check_profile_access_denied(response, user):
+    """Checks that the HS2 API response is the correct response if the user is not
+    authorised to access the query's profile."""
+    HS2TestSuite.check_response(response, TCLIService.TStatusCode.ERROR_STATUS,
+                                "User {0} is not authorized to access the runtime "
+                                "profile or execution summary".format(user))
 
   def close(self, op_handle):
     close_op_req = TCLIService.TCloseOperationReq()
@@ -227,6 +277,12 @@ class HS2TestSuite(ImpalaTestSuite):
       sleep(interval)
     assert False, 'Did not reach expected operation state %s in time, actual state was ' \
         '%s' % (expected_state, get_operation_status_resp.operationState)
+
+  def wait_for_admission_control(self, operation_handle, timeout = 10):
+    """Waits for the admission control processing of the query. This is a no-op in this
+    version because admission control is synchronous (IMPALA-5216). This method exists
+    just to minimise changes to backported tests."""
+    pass
 
   def execute_statement(self, statement, conf_overlay=None,
                         expected_status_code=TCLIService.TStatusCode.SUCCESS_STATUS,
