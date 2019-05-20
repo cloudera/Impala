@@ -20,6 +20,7 @@ package org.apache.impala.common;
 import static org.junit.Assert.fail;
 
 import java.util.ArrayList;
+import java.util.Set;
 
 import org.apache.impala.analysis.AnalysisContext;
 import org.apache.impala.analysis.AnalysisContext.AnalysisResult;
@@ -31,14 +32,17 @@ import org.apache.impala.analysis.StatementBase;
 import org.apache.impala.analysis.StmtMetadataLoader;
 import org.apache.impala.analysis.StmtMetadataLoader.StmtTableCache;
 import org.apache.impala.authorization.AuthorizationConfig;
+import org.apache.impala.catalog.AuthorizationException;
 import org.apache.impala.catalog.Catalog;
 import org.apache.impala.catalog.Db;
 import org.apache.impala.catalog.Function;
 import org.apache.impala.catalog.ScalarType;
 import org.apache.impala.catalog.Table;
 import org.apache.impala.catalog.Type;
+import org.apache.impala.common.AnalysisException;
 import org.apache.impala.service.Frontend;
 import org.apache.impala.testutil.ImpaladTestCatalog;
+import org.apache.impala.thrift.TAccessEvent;
 import org.apache.impala.thrift.TQueryOptions;
 import org.junit.Assert;
 
@@ -280,6 +284,22 @@ public class FrontendTestBase extends AbstractFrontendTest {
         new StmtMetadataLoader(fe, ctx.getQueryCtx().session.database, null);
     StmtTableCache stmtTableCache = mdLoader.loadTables(parsedStmt);
     return ctx.analyzeAndAuthorize(parsedStmt, stmtTableCache, fe.getAuthzChecker());
+  }
+
+  /**
+   * Analyzes the given statement and returns the set of TAccessEvents
+   * that were captured as part of analysis.
+   */
+  protected Set<TAccessEvent> AnalyzeAccessEvents(String stmt)
+      throws AuthorizationException, AnalysisException {
+    return AnalyzeAccessEvents(stmt, Catalog.DEFAULT_DB);
+  }
+
+  protected Set<TAccessEvent> AnalyzeAccessEvents(String stmt, String db)
+      throws AuthorizationException, AnalysisException {
+    AnalysisContext ctx = createAnalysisCtx(db);
+    AnalyzesOk(stmt, ctx);
+    return ctx.getAnalyzer().getAccessEvents();
   }
 
   /**
