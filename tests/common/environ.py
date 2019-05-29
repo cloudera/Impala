@@ -20,11 +20,19 @@ import logging
 import os
 import re
 import requests
+import platform
 
 LOG = logging.getLogger('tests.common.environ')
 test_start_cluster_args = os.environ.get("TEST_START_CLUSTER_ARGS", "")
 IMPALA_HOME = os.environ.get("IMPALA_HOME", "")
 IMPALA_REMOTE_URL = os.environ.get("IMPALA_REMOTE_URL", "")
+
+# Check if it is Red Hat/CentOS Linux
+dist = platform.linux_distribution()[0].lower()
+if dist.find('centos') or dist.find('red hat'):
+  IS_REDHAT_DERIVATIVE = True
+else:
+  IS_REDHAT_DERIVATIVE = False
 
 # Find the likely BuildType of the running Impala. Assume it's found through the path
 # $IMPALA_HOME/be/build/latest as a fallback.
