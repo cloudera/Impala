@@ -115,10 +115,6 @@ public class AlterTableSetTblProperties extends AlterTableSetStmt {
   }
 
   private void analyzeKuduTable(Analyzer analyzer) throws AnalysisException {
-    // Checking for 'EXTERNAL' is case-insensitive, see IMPALA-5637.
-    String keyForExternalProperty =
-        MetaStoreUtil.findTblPropKeyCaseInsensitive(tblProperties_, "EXTERNAL");
-
     // Throw error if kudu.table_name is provided for managed Kudu tables
     // TODO IMPALA-6375: Allow setting kudu.table_name for managed Kudu tables
     // if the 'EXTERNAL' property is set to TRUE in the same step.
@@ -127,7 +123,14 @@ public class AlterTableSetTblProperties extends AlterTableSetStmt {
           String.format("Not allowed to set '%s' manually for managed Kudu tables .",
               KuduTable.KEY_TABLE_NAME));
     }
+    // Throw error if kudu.table_id is provided for Kudu tables.
+    AnalysisUtils.throwIfNotNull(tblProperties_.get(KuduTable.KEY_TABLE_ID),
+        String.format("Property '%s' cannot be altered for Kudu tables",
+           KuduTable.KEY_TABLE_ID));
     if (analyzer.getAuthzConfig().isEnabled()) {
+      // Checking for 'EXTERNAL' is case-insensitive, see IMPALA-5637.
+      String keyForExternalProperty =
+          MetaStoreUtil.findTblPropKeyCaseInsensitive(tblProperties_, "EXTERNAL");
       if (keyForExternalProperty != null ||
           tblProperties_.containsKey(KuduTable.KEY_MASTER_HOSTS)) {
         String authzServer = analyzer.getAuthzConfig().getServerName();
