@@ -153,7 +153,7 @@
 <!-- These properties are for enabling the notifications between Hive and Sentry -->
 <property>
   <name>hive.metastore.transactional.event.listeners</name>
-  <value>org.apache.hive.hcatalog.listener.DbNotificationListener</value>
+  <value>org.apache.hive.hcatalog.listener.DbNotificationListener,org.apache.kudu.hive.metastore.KuduMetastorePlugin</value>
 </property>
 <property>
   <name>hive.metastore.event.listeners</name>

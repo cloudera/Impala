@@ -169,7 +169,7 @@ export IMPALA_PARQUET_VERSION=1.9.0-cdh6.x-SNAPSHOT
 export IMPALA_AVRO_JAVA_VERSION=1.8.2-cdh6.x-SNAPSHOT
 export IMPALA_LLAMA_MINIKDC_VERSION=1.0.0
 export IMPALA_KITE_VERSION=1.0.0-cdh6.x-SNAPSHOT
-export KUDU_JAVA_VERSION=1.10.0-cdh6.x-SNAPSHOT
+export IMPALA_KUDU_JAVA_VERSION=1.10.0-cdh6.x-SNAPSHOT
 
 # When IMPALA_(CDH_COMPONENT)_URL are overridden, they may contain '$(platform_label)'
 # which will be substituted for the CDH platform label in bootstrap_toolchain.py
@@ -706,6 +706,7 @@ echo "DOWNLOAD_CDH_COMPONENTS = $DOWNLOAD_CDH_COMPONENTS"
 echo "IMPALA_MAVEN_OPTIONS    = $IMPALA_MAVEN_OPTIONS"
 echo "CDH_DOWNLOAD_HOST       = $CDH_DOWNLOAD_HOST"
 echo "CDH_BUILD_NUMBER        = $CDH_BUILD_NUMBER"
+echo "IMPALA_KUDU_JAVA_VERSION= $IMPALA_KUDU_JAVA_VERSION"
 
 # Kerberos things.  If the cluster exists and is kerberized, source
 # the required environment.  This is required for any hadoop tool to

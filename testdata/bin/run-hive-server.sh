@@ -65,6 +65,15 @@ ${CLUSTER_BIN}/kill-hive-server.sh &> /dev/null
 
 export HIVE_METASTORE_HADOOP_OPTS="-Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=30010"
 
+# Add kudu-hive.jar to the Hive Metastore classpath, so that Kudu's HMS
+# plugin can be loaded.
+FILE_NAME="${CDH_COMPONENTS_HOME}/kudu-${IMPALA_KUDU_JAVA_VERSION}/\
+kudu-hive-${IMPALA_KUDU_JAVA_VERSION}.jar"
+export HADOOP_CLASSPATH=${HADOOP_CLASSPATH}:${FILE_NAME}
+# Default to skip validation on Kudu tables if KUDU_SKIP_HMS_PLUGIN_VALIDATION
+# is unset.
+export KUDU_SKIP_HMS_PLUGIN_VALIDATION=${KUDU_SKIP_HMS_PLUGIN_VALIDATION:-1}
+
 # Starts a Hive Metastore Server on the specified port.
 # To debug log4j2 loading issues, add to HADOOP_CLIENT_OPTS:
 #   -Dorg.apache.logging.log4j.simplelog.StatusLogger.level=TRACE
