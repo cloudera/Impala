@@ -397,6 +397,8 @@ error_codes = (
   ("ROWS_PRODUCED_LIMIT_EXCEEDED", 131,
    "Query $0 terminated due to rows produced limit of $1. "
    "Unset or increase NUM_ROWS_PRODUCED_LIMIT query option to produce more rows."),
+
+  ("ZSTD_ERROR", 132, "$0 failed with error: $1"),
 )
 
 import sys

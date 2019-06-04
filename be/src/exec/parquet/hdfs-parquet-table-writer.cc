@@ -94,10 +94,10 @@ class HdfsParquetTableWriter::BaseColumnWriter {
  public:
   // expr - the expression to generate output values for this column.
   BaseColumnWriter(HdfsParquetTableWriter* parent, ScalarExprEvaluator* expr_eval,
-      const THdfsCompression::type& codec)
+      const Codec::CodecInfo& codec_info)
     : parent_(parent),
       expr_eval_(expr_eval),
-      codec_(codec),
+      codec_info_(codec_info),
       page_size_(DEFAULT_DATA_PAGE_SIZE),
       current_page_(nullptr),
       num_values_(0),
@@ -122,7 +122,7 @@ class HdfsParquetTableWriter::BaseColumnWriter {
   // Called after the constructor to initialize the column writer.
   Status Init() WARN_UNUSED_RESULT {
     Reset();
-    RETURN_IF_ERROR(Codec::CreateCompressor(nullptr, false, codec_, &compressor_));
+    RETURN_IF_ERROR(Codec::CreateCompressor(nullptr, false, codec_info_, &compressor_));
     return Status::OK();
   }
 
@@ -202,7 +202,7 @@ class HdfsParquetTableWriter::BaseColumnWriter {
   uint64_t total_compressed_size() const { return total_compressed_byte_size_; }
   uint64_t total_uncompressed_size() const { return total_uncompressed_byte_size_; }
   parquet::CompressionCodec::type GetParquetCodec() const {
-    return ConvertImpalaToParquetCodec(codec_);
+    return ConvertImpalaToParquetCodec(codec_info_.format_);
   }
 
  protected:
@@ -303,7 +303,7 @@ class HdfsParquetTableWriter::BaseColumnWriter {
   HdfsParquetTableWriter* parent_;
   ScalarExprEvaluator* expr_eval_;
 
-  THdfsCompression::type codec_;
+  Codec::CodecInfo codec_info_;
 
   // Compression codec for this column.  If nullptr, this column is will not be
   // compressed.
@@ -385,8 +385,8 @@ class HdfsParquetTableWriter::ColumnWriter :
     public HdfsParquetTableWriter::BaseColumnWriter {
  public:
   ColumnWriter(HdfsParquetTableWriter* parent, ScalarExprEvaluator* eval,
-      const THdfsCompression::type& codec)
-    : BaseColumnWriter(parent, eval, codec),
+      const Codec::CodecInfo& codec_info)
+    : BaseColumnWriter(parent, eval, codec_info),
       num_values_since_dict_size_check_(0),
       plain_encoded_value_size_(
           ParquetPlainEncoder::EncodedByteSize(eval->root().type())) {
@@ -505,8 +505,8 @@ class HdfsParquetTableWriter::BoolColumnWriter :
     public HdfsParquetTableWriter::BaseColumnWriter {
  public:
   BoolColumnWriter(HdfsParquetTableWriter* parent, ScalarExprEvaluator* eval,
-      const THdfsCompression::type& codec)
-    : BaseColumnWriter(parent, eval, codec),
+      const Codec::CodecInfo& codec_info)
+    : BaseColumnWriter(parent, eval, codec_info),
       page_stats_(parent_->reusable_col_mem_pool_.get(), -1),
       row_group_stats_(parent_->reusable_col_mem_pool_.get(), -1) {
     DCHECK_EQ(eval->root().type().type, TYPE_BOOLEAN);
@@ -870,20 +870,25 @@ Status HdfsParquetTableWriter::Init() {
 
   // Default to snappy compressed
   THdfsCompression::type codec = THdfsCompression::SNAPPY;
-
+  // Compression level only supported for zstd.
+  int clevel = ZSTD_CLEVEL_DEFAULT;
   const TQueryOptions& query_options = state_->query_options();
   if (query_options.__isset.compression_codec) {
-    codec = query_options.compression_codec;
+    codec = query_options.compression_codec.codec;
+    clevel = query_options.compression_codec.compression_level;
   }
   if (!(codec == THdfsCompression::NONE ||
         codec == THdfsCompression::GZIP ||
-        codec == THdfsCompression::SNAPPY)) {
+        codec == THdfsCompression::SNAPPY ||
+        codec == THdfsCompression::ZSTD)) {
     stringstream ss;
     ss << "Invalid parquet compression codec " << Codec::GetCodecName(codec);
     return Status(ss.str());
   }
-
   VLOG_FILE << "Using compression codec: " << codec;
+  if (codec == THdfsCompression::ZSTD) {
+    VLOG_FILE << "Using compression level: " << clevel;
+  }
 
   int num_cols = table_desc_->num_cols() - table_desc_->num_clustering_cols();
   // When opening files using the hdfsOpenFile() API, the maximum block size is limited to
@@ -897,6 +902,8 @@ Status HdfsParquetTableWriter::Init() {
         PrettyPrinter::Print(min_block_size, TUnit::BYTES), num_cols));
   }
 
+  Codec::CodecInfo codec_info(codec, clevel);
+
   columns_.resize(num_cols);
   // Initialize each column structure.
   for (int i = 0; i < columns_.size(); ++i) {
@@ -904,25 +911,25 @@ Status HdfsParquetTableWriter::Init() {
     const ColumnType& type = output_expr_evals_[i]->root().type();
     switch (type.type) {
       case TYPE_BOOLEAN:
-        writer = new BoolColumnWriter(this, output_expr_evals_[i], codec);
+        writer = new BoolColumnWriter(this, output_expr_evals_[i], codec_info);
         break;
       case TYPE_TINYINT:
-        writer = new ColumnWriter<int8_t>(this, output_expr_evals_[i], codec);
+        writer = new ColumnWriter<int8_t>(this, output_expr_evals_[i], codec_info);
         break;
       case TYPE_SMALLINT:
-        writer = new ColumnWriter<int16_t>(this, output_expr_evals_[i], codec);
+        writer = new ColumnWriter<int16_t>(this, output_expr_evals_[i], codec_info);
         break;
       case TYPE_INT:
-        writer = new ColumnWriter<int32_t>(this, output_expr_evals_[i], codec);
+        writer = new ColumnWriter<int32_t>(this, output_expr_evals_[i], codec_info);
         break;
       case TYPE_BIGINT:
-        writer = new ColumnWriter<int64_t>(this, output_expr_evals_[i], codec);
+        writer = new ColumnWriter<int64_t>(this, output_expr_evals_[i], codec_info);
         break;
       case TYPE_FLOAT:
-        writer = new ColumnWriter<float>(this, output_expr_evals_[i], codec);
+        writer = new ColumnWriter<float>(this, output_expr_evals_[i], codec_info);
         break;
       case TYPE_DOUBLE:
-        writer = new ColumnWriter<double>(this, output_expr_evals_[i], codec);
+        writer = new ColumnWriter<double>(this, output_expr_evals_[i], codec_info);
         break;
       case TYPE_TIMESTAMP:
         writer = new ColumnWriter<TimestampValue>(
@@ -931,21 +938,21 @@ Status HdfsParquetTableWriter::Init() {
       case TYPE_VARCHAR:
       case TYPE_STRING:
       case TYPE_CHAR:
-        writer = new ColumnWriter<StringValue>(this, output_expr_evals_[i], codec);
+        writer = new ColumnWriter<StringValue>(this, output_expr_evals_[i], codec_info);
         break;
       case TYPE_DECIMAL:
         switch (output_expr_evals_[i]->root().type().GetByteSize()) {
           case 4:
-            writer = new ColumnWriter<Decimal4Value>(
-                this, output_expr_evals_[i], codec);
+            writer =
+                new ColumnWriter<Decimal4Value>(this, output_expr_evals_[i], codec_info);
             break;
           case 8:
-            writer = new ColumnWriter<Decimal8Value>(
-                this, output_expr_evals_[i], codec);
+            writer =
+                new ColumnWriter<Decimal8Value>(this, output_expr_evals_[i], codec_info);
             break;
           case 16:
-            writer = new ColumnWriter<Decimal16Value>(
-                this, output_expr_evals_[i], codec);
+            writer =
+                new ColumnWriter<Decimal16Value>(this, output_expr_evals_[i], codec_info);
             break;
           default:
             DCHECK(false);

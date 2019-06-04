@@ -76,6 +76,7 @@ enum THdfsCompression {
   LZ4 = 8
   ZLIB = 9
   ZSTD = 10
+  BROTLI = 11
 }
 
 enum TColumnEncoding {
@@ -105,6 +106,13 @@ enum TAccessLevel {
   READ_WRITE = 1
   READ_ONLY = 2
   WRITE_ONLY = 3
+}
+
+struct TCompressionCodec {
+  // Compression codec
+  1: required THdfsCompression codec
+  // Compression level
+  2: optional i32 compression_level
 }
 
 // Mapping from names defined by Avro to values in the THdfsCompression enum.
