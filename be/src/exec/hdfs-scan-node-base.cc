@@ -236,7 +236,7 @@ Status HdfsScanNodeBase::Prepare(RuntimeState* state) {
     file_desc->splits.push_back(
         AllocateScanRange(file_desc->fs, file_desc->filename.c_str(), split.length,
             split.offset, split.partition_id, params.volume_id, expected_local,
-            file_desc->is_erasure_coded, BufferOpts(try_cache, file_desc->mtime)));
+            file_desc->is_erasure_coded, file_desc->mtime, BufferOpts(try_cache)));
   }
 
   // Update server wide metrics for number of scan ranges and ranges that have
@@ -581,17 +581,17 @@ int64_t HdfsScanNodeBase::IncreaseReservationIncrementally(int64_t curr_reservat
 
 ScanRange* HdfsScanNodeBase::AllocateScanRange(hdfsFS fs, const char* file,
     int64_t len, int64_t offset, int64_t partition_id, int disk_id, bool expected_local,
-    bool is_erasure_coded, const BufferOpts& buffer_opts,
+    bool is_erasure_coded, int64_t mtime,  const BufferOpts& buffer_opts,
     const ScanRange* original_split) {
   ScanRangeMetadata* metadata = runtime_state_->obj_pool()->Add(
         new ScanRangeMetadata(partition_id, original_split));
   return AllocateScanRange(fs, file, len, offset, metadata, disk_id, expected_local,
-      is_erasure_coded, buffer_opts);
+      mtime, is_erasure_coded, buffer_opts);
 }
 
 ScanRange* HdfsScanNodeBase::AllocateScanRange(hdfsFS fs, const char* file,
     int64_t len, int64_t offset, ScanRangeMetadata* metadata, int disk_id, bool expected_local,
-    bool is_erasure_coded, const BufferOpts& buffer_opts) {
+    bool is_erasure_coded, int64_t mtime, const BufferOpts& buffer_opts) {
   DCHECK_GE(disk_id, -1);
   // Require that the scan range is within [0, file_length). While this cannot be used
   // to guarantee safety (file_length metadata may be stale), it avoids different
@@ -606,7 +606,7 @@ ScanRange* HdfsScanNodeBase::AllocateScanRange(hdfsFS fs, const char* file,
 
   ScanRange* range = runtime_state_->obj_pool()->Add(new ScanRange);
   range->Reset(fs, file, len, offset, disk_id, expected_local, is_erasure_coded,
-      buffer_opts, metadata);
+      mtime, buffer_opts, metadata);
   return range;
 }
 
@@ -615,7 +615,7 @@ ScanRange* HdfsScanNodeBase::AllocateScanRange(hdfsFS fs, const char* file,
     bool expected_local, int mtime, bool is_erasure_coded,
     const ScanRange* original_split) {
   return AllocateScanRange(fs, file, len, offset, partition_id, disk_id, expected_local,
-      is_erasure_coded, BufferOpts(try_cache, mtime), original_split);
+      is_erasure_coded, mtime, BufferOpts(try_cache), original_split);
 }
 
 Status HdfsScanNodeBase::AddDiskIoRanges(const vector<ScanRange*>& ranges,
