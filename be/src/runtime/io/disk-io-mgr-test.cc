@@ -65,7 +65,8 @@ class DiskIoMgrTest : public testing::Test {
     if (status.ok()) {
       ScanRange* scan_range = pool_.Add(new ScanRange());
       scan_range->Reset(nullptr, (*written_range)->file(), (*written_range)->len(),
-          (*written_range)->offset(), 0, false, BufferOpts::Uncached());
+          (*written_range)->offset(), 0, false, ScanRange::INVALID_MTIME,
+          BufferOpts::Uncached());
       ValidateSyncRead(io_mgr, reader, scan_range, reinterpret_cast<const char*>(data),
           sizeof(int32_t));
     }
@@ -172,7 +173,7 @@ class DiskIoMgrTest : public testing::Test {
       int disk_id, int64_t mtime, void* meta_data = nullptr, bool is_cached = false) {
     ScanRange* range = AllocateRange();
     range->Reset(nullptr, file_path, len, offset, disk_id, true,
-        BufferOpts(is_cached, mtime), meta_data);
+        mtime, BufferOpts(is_cached), meta_data);
     EXPECT_EQ(mtime, range->mtime());
     return range;
   }
@@ -1042,7 +1043,7 @@ TEST_F(DiskIoMgrTest, ReadIntoClientBuffer) {
     vector<uint8_t> client_buffer(buffer_len);
     int scan_len = min(len, buffer_len);
     ScanRange* range = AllocateRange();
-    range->Reset(nullptr, tmp_file, scan_len, 0, 0, true,
+    range->Reset(nullptr, tmp_file, scan_len, 0, 0, true, ScanRange::INVALID_MTIME,
         BufferOpts::ReadInto(client_buffer.data(), buffer_len));
     ASSERT_OK(io_mgr->AddScanRange(reader.get(), range, true));
 
@@ -1080,7 +1081,7 @@ TEST_F(DiskIoMgrTest, ReadIntoClientBufferError) {
   for (int i = 0; i < 1000; ++i) {
     reader = io_mgr->RegisterContext(reader_mem_tracker);
     ScanRange* range = AllocateRange();
-    range->Reset(nullptr, tmp_file, SCAN_LEN, 0, 0, true,
+    range->Reset(nullptr, tmp_file, SCAN_LEN, 0, 0, true, ScanRange::INVALID_MTIME,
         BufferOpts::ReadInto(client_buffer.data(), SCAN_LEN));
     ASSERT_OK(io_mgr->AddScanRange(reader.get(), range, true));
 

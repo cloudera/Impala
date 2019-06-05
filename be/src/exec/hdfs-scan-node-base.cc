@@ -238,7 +238,7 @@ Status HdfsScanNodeBase::Prepare(RuntimeState* state) {
     file_desc->splits.push_back(
         AllocateScanRange(file_desc->fs, file_desc->filename.c_str(), split.length,
             split.offset, split.partition_id, params.volume_id, expected_local,
-            BufferOpts(try_cache, file_desc->mtime)));
+            file_desc->mtime, BufferOpts(try_cache)));
   }
 
   // Update server wide metrics for number of scan ranges and ranges that have
@@ -486,17 +486,17 @@ bool HdfsScanNodeBase::FilePassesFilterPredicates(
 
 ScanRange* HdfsScanNodeBase::AllocateScanRange(hdfsFS fs, const char* file,
     int64_t len, int64_t offset, int64_t partition_id, int disk_id, bool expected_local,
-    const BufferOpts& buffer_opts,
+    int64_t mtime, const BufferOpts& buffer_opts,
     const ScanRange* original_split) {
   ScanRangeMetadata* metadata = runtime_state_->obj_pool()->Add(
         new ScanRangeMetadata(partition_id, original_split));
-  return AllocateScanRange(fs, file, len, offset, metadata, disk_id, expected_local,
+  return AllocateScanRange(fs, file, len, offset, metadata, disk_id, expected_local, mtime,
       buffer_opts);
 }
 
 ScanRange* HdfsScanNodeBase::AllocateScanRange(hdfsFS fs, const char* file,
-    int64_t len, int64_t offset, ScanRangeMetadata* metadata, int disk_id, bool expected_local,
-    const BufferOpts& buffer_opts) {
+    int64_t len, int64_t offset, ScanRangeMetadata* metadata, int disk_id,
+    bool expected_local, int64_t mtime, const BufferOpts& buffer_opts) {
   DCHECK_GE(disk_id, -1);
   // Require that the scan range is within [0, file_length). While this cannot be used
   // to guarantee safety (file_length metadata may be stale), it avoids different
@@ -509,7 +509,8 @@ ScanRange* HdfsScanNodeBase::AllocateScanRange(hdfsFS fs, const char* file,
   disk_id = runtime_state_->io_mgr()->AssignQueue(file, disk_id, expected_local);
 
   ScanRange* range = runtime_state_->obj_pool()->Add(new ScanRange);
-  range->Reset(fs, file, len, offset, disk_id, expected_local, buffer_opts, metadata);
+  range->Reset(fs, file, len, offset, disk_id, expected_local, mtime, buffer_opts,
+      metadata);
   return range;
 }
 
@@ -517,7 +518,7 @@ ScanRange* HdfsScanNodeBase::AllocateScanRange(hdfsFS fs, const char* file,
     int64_t len, int64_t offset, int64_t partition_id, int disk_id, bool try_cache,
     bool expected_local, int mtime, const ScanRange* original_split) {
   return AllocateScanRange(fs, file, len, offset, partition_id, disk_id, expected_local,
-      BufferOpts(try_cache, mtime), original_split);
+      mtime, BufferOpts(try_cache), original_split);
 }
 
 Status HdfsScanNodeBase::AddDiskIoRanges(

@@ -213,7 +213,8 @@ ScanRange::~ScanRange() {
 }
 
 void ScanRange::Reset(hdfsFS fs, const char* file, int64_t len, int64_t offset,
-    int disk_id, bool expected_local, const BufferOpts& buffer_opts, void* meta_data) {
+    int disk_id, bool expected_local, int64_t mtime, const BufferOpts& buffer_opts,
+    void* meta_data) {
   DCHECK(ready_buffers_.empty());
   DCHECK(file != nullptr);
   DCHECK_GE(len, 0);
@@ -226,7 +227,9 @@ void ScanRange::Reset(hdfsFS fs, const char* file, int64_t len, int64_t offset,
   offset_ = offset;
   disk_id_ = disk_id;
   try_cache_ = buffer_opts.try_cache_;
-  mtime_ = buffer_opts.mtime_;
+  // HDFS ranges must have an mtime > 0. Local ranges do not use mtime.
+  if (fs_) DCHECK_GT(mtime, 0);
+  mtime_ = mtime;
   expected_local_ = expected_local;
   num_remote_bytes_ = 0;
   meta_data_ = meta_data;

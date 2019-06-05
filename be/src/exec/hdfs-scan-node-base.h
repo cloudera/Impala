@@ -210,6 +210,7 @@ class HdfsScanNodeBase : public ScanNode {
   /// This is thread safe.
   io::ScanRange* AllocateScanRange(hdfsFS fs, const char* file, int64_t len,
       int64_t offset, int64_t partition_id, int disk_id, bool expected_local,
+      int64_t mtime,
       const io::BufferOpts& buffer_opts,
       const io::ScanRange* original_split = NULL);
 
@@ -217,7 +218,7 @@ class HdfsScanNodeBase : public ScanNode {
   /// the partition_id, original_splits, and other information about the scan range.
   io::ScanRange* AllocateScanRange(hdfsFS fs, const char* file, int64_t len,
       int64_t offset, ScanRangeMetadata* metadata, int disk_id, bool expected_local,
-      const io::BufferOpts& buffer_opts);
+      int64_t mtime, const io::BufferOpts& buffer_opts);
 
   /// Old API for compatibility with text scanners (e.g. LZO text scanner).
   io::ScanRange* AllocateScanRange(hdfsFS fs, const char* file, int64_t len,

@@ -235,7 +235,7 @@ void DiskIoMgrStress::NewClient(int i) {
 
     ScanRange* range = new ScanRange();
     range->Reset(NULL, files_[client.file_idx].filename.c_str(), range_len, assigned_len,
-        0, false, BufferOpts::Uncached());
+        0, false, ScanRange::INVALID_MTIME, BufferOpts::Uncached());
     client.scan_ranges.push_back(range);
     assigned_len += range_len;
   }

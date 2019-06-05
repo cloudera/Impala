@@ -142,7 +142,7 @@ Status ScannerContext::Stream::GetNextBuffer(int64_t read_past_size) {
     int64_t partition_id = parent_->partition_descriptor()->id();
     ScanRange* range = parent_->scan_node_->AllocateScanRange(
         scan_range_->fs(), filename(), read_past_buffer_size, offset, partition_id,
-        scan_range_->disk_id(), false, BufferOpts::Uncached());
+        scan_range_->disk_id(), false, scan_range_->mtime(), BufferOpts::Uncached());
     RETURN_IF_ERROR(parent_->state_->io_mgr()->Read(
         parent_->scan_node_->reader_context(), range, &io_buffer_));
   }

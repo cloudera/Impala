@@ -105,14 +105,14 @@ Status HdfsParquetScanner::IssueInitialRanges(HdfsScanNodeBase* scan_node,
           footer_range = scan_node->AllocateScanRange(files[i]->fs,
               files[i]->filename.c_str(), footer_size, footer_start,
               split_metadata->partition_id, footer_split->disk_id(),
-              footer_split->expected_local(),
-              BufferOpts(footer_split->try_cache(), files[i]->mtime), split);
+              footer_split->expected_local(), files[i]->mtime,
+              BufferOpts(footer_split->try_cache()), split);
         } else {
           // If we did not find the last split, we know it is going to be a remote read.
           footer_range =
               scan_node->AllocateScanRange(files[i]->fs, files[i]->filename.c_str(),
                   footer_size, footer_start, split_metadata->partition_id, -1, false,
-                  BufferOpts::Uncached(), split);
+                  files[i]->mtime, BufferOpts::Uncached(), split);
         }
 
         footer_ranges.push_back(footer_range);
@@ -1436,6 +1436,7 @@ Status HdfsParquetScanner::ProcessFooter() {
     ScanRange* metadata_range = scan_node_->AllocateScanRange(
         metadata_range_->fs(), filename(), metadata_size, metadata_start, partition_id,
         metadata_range_->disk_id(), metadata_range_->expected_local(),
+        metadata_range_->mtime(),
         BufferOpts::ReadInto(metadata_buffer.buffer(), metadata_size));
 
     unique_ptr<BufferDescriptor> io_buffer;
@@ -1722,8 +1723,8 @@ Status HdfsParquetScanner::InitScalarColumns(
         && col_end <= split_range->offset() + split_range->len();
     ScanRange* col_range = scan_node_->AllocateScanRange(metadata_range_->fs(),
         filename(), col_len, col_start, partition_id, split_range->disk_id(),
-        col_range_local,
-        BufferOpts(split_range->try_cache(), file_desc->mtime));
+        col_range_local, file_desc->mtime,
+        BufferOpts(split_range->try_cache()));
     col_ranges.push_back(col_range);
 
     // Get the stream that will be used for this column
