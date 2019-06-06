@@ -359,6 +359,11 @@ class ImpalaServer : public ImpalaServiceIf,
       const StatestoreSubscriber::TopicDeltaMap& incoming_topic_deltas,
       std::vector<TTopicDelta>* subscriber_topic_updates);
 
+  /// Returns true if the connection is considered idle. A connection is considered
+  /// idle if all the sessions associated with it have expired due to idle timeout.
+  /// Called when a client has been inactive for --idle_client_poll_period_s seconds.
+  virtual bool IsIdleConnection(const ThriftServer::ConnectionContext& session_context);
+
   void CatalogUpdateCallback(const StatestoreSubscriber::TopicDeltaMap& topic_deltas,
       std::vector<TTopicDelta>* topic_updates);
 
