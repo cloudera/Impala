@@ -60,6 +60,7 @@ class TAcceptQueueServer : public TServer {
       const boost::shared_ptr<TTransportFactory>& transportFactory,
       const boost::shared_ptr<TProtocolFactory>& protocolFactory,
       int32_t maxTasks = 0,
+      int64_t idle_poll_period_ms = 0,
       THRIFT_OVERLOAD_IF(ProcessorFactory, TProcessorFactory));
 
   template <typename ProcessorFactory>
@@ -69,6 +70,7 @@ class TAcceptQueueServer : public TServer {
       const boost::shared_ptr<TProtocolFactory>& protocolFactory,
       const boost::shared_ptr<ThreadFactory>& threadFactory,
       int32_t maxTasks = 0,
+      int64_t idle_poll_period_ms = 0,
       THRIFT_OVERLOAD_IF(ProcessorFactory, TProcessorFactory));
 
   template <typename Processor>
@@ -77,6 +79,7 @@ class TAcceptQueueServer : public TServer {
       const boost::shared_ptr<TTransportFactory>& transportFactory,
       const boost::shared_ptr<TProtocolFactory>& protocolFactory,
       int32_t maxTasks = 0,
+      int64_t idle_poll_period_ms = 0,
       THRIFT_OVERLOAD_IF(Processor, TProcessor));
 
   template <typename Processor>
@@ -86,6 +89,7 @@ class TAcceptQueueServer : public TServer {
       const boost::shared_ptr<TProtocolFactory>& protocolFactory,
       const boost::shared_ptr<ThreadFactory>& threadFactory,
       int32_t maxTasks = 0,
+      int64_t idle_poll_period_ms = 0,
       THRIFT_OVERLOAD_IF(Processor, TProcessor));
 
   virtual ~TAcceptQueueServer();
@@ -124,6 +128,11 @@ class TAcceptQueueServer : public TServer {
 
   /// New - Number of connections that have been accepted and are waiting to be setup.
   impala::IntGauge* queue_size_metric_;
+
+  /// Amount of time, in milliseconds, of client's inactivity before the service thread
+  /// wakes up to check if the connection should be closed due to inactivity. If 0, no
+  /// polling happens.
+  int64_t idle_poll_period_ms_;
 };
 
 template <typename ProcessorFactory>
@@ -133,9 +142,10 @@ TAcceptQueueServer::TAcceptQueueServer(
     const boost::shared_ptr<TTransportFactory>& transportFactory,
     const boost::shared_ptr<TProtocolFactory>& protocolFactory,
     int32_t maxTasks,
+    int64_t idle_poll_period_ms,
     THRIFT_OVERLOAD_IF_DEFN(ProcessorFactory, TProcessorFactory))
   : TServer(processorFactory, serverTransport, transportFactory, protocolFactory),
-    maxTasks_(maxTasks) {
+    maxTasks_(maxTasks), idle_poll_period_ms_(idle_poll_period_ms) {
   init();
 }
 
@@ -147,9 +157,11 @@ TAcceptQueueServer::TAcceptQueueServer(
     const boost::shared_ptr<TProtocolFactory>& protocolFactory,
     const boost::shared_ptr<ThreadFactory>& threadFactory,
     int32_t maxTasks,
+    int64_t idle_poll_period_ms,
     THRIFT_OVERLOAD_IF_DEFN(ProcessorFactory, TProcessorFactory))
   : TServer(processorFactory, serverTransport, transportFactory, protocolFactory),
-    threadFactory_(threadFactory), maxTasks_(maxTasks) {
+    threadFactory_(threadFactory), maxTasks_(maxTasks),
+    idle_poll_period_ms_(idle_poll_period_ms) {
   init();
 }
 
@@ -159,9 +171,10 @@ TAcceptQueueServer::TAcceptQueueServer(const boost::shared_ptr<Processor>& proce
     const boost::shared_ptr<TTransportFactory>& transportFactory,
     const boost::shared_ptr<TProtocolFactory>& protocolFactory,
     int32_t maxTasks,
+    int64_t idle_poll_period_ms,
     THRIFT_OVERLOAD_IF_DEFN(Processor, TProcessor))
   : TServer(processor, serverTransport, transportFactory, protocolFactory),
-    maxTasks_(maxTasks) {
+    maxTasks_(maxTasks), idle_poll_period_ms_(idle_poll_period_ms) {
   init();
 }
 
@@ -172,9 +185,11 @@ TAcceptQueueServer::TAcceptQueueServer(const boost::shared_ptr<Processor>& proce
     const boost::shared_ptr<TProtocolFactory>& protocolFactory,
     const boost::shared_ptr<ThreadFactory>& threadFactory,
     int32_t maxTasks,
+    int64_t idle_poll_period_ms,
     THRIFT_OVERLOAD_IF_DEFN(Processor, TProcessor))
   : TServer(processor, serverTransport, transportFactory, protocolFactory),
-    threadFactory_(threadFactory), maxTasks_(maxTasks) {
+    threadFactory_(threadFactory), maxTasks_(maxTasks),
+    idle_poll_period_ms_(idle_poll_period_ms) {
   init();
 }
 } // namespace server

@@ -39,6 +39,7 @@ LOG.setLevel(level=logging.DEBUG)
 IMPALA_HOME = os.environ['IMPALA_HOME']
 CATALOGD_PATH = os.path.join(IMPALA_HOME, 'bin/start-catalogd.sh')
 IMPALAD_PATH = os.path.join(IMPALA_HOME, 'bin/start-impalad.sh -build_type=latest')
+DEFAULT_HS2_PORT = 21050
 
 # Represents a set of Impala processes. Each Impala process must be created with
 # a basic set of command line options (beeswax_port, webserver_port, etc)
@@ -227,6 +228,9 @@ class ImpaladProcess(BaseImpalaProcess):
 
   def __get_hs2_port(self, default=None):
     return int(self._get_arg_value('hs2_port', default))
+
+  def _get_hostname(self):
+    return self.hostname
 
   def start(self, wait_until_ready=True):
     """Starts the impalad and waits until the service is ready to accept connections."""

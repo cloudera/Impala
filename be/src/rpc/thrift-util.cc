@@ -186,12 +186,20 @@ static_assert(PACKAGE_VERSION[3] == '.', "");
 static_assert(PACKAGE_VERSION[4] == '0', "");
 static_assert(PACKAGE_VERSION[5] == '\0', "");
 
-bool IsRecvTimeoutTException(const TTransportException& e) {
-  // String taken from TSocket::read() Thrift's TSocket.cpp.
+bool IsReadTimeoutTException(const TTransportException& e) {
+  // String taken from TSocket::read() Thrift's TSocket.cpp and TSSLSocket.cpp.
   return (e.getType() == TTransportException::TIMED_OUT &&
              strstr(e.what(), "EAGAIN (timed out)") != nullptr) ||
          (e.getType() == TTransportException::INTERNAL_ERROR &&
              strstr(e.what(), "SSL_read: Resource temporarily unavailable") != nullptr);
+}
+
+bool IsPeekTimeoutTException(const TTransportException& e) {
+  // String taken from TSocket::peek() Thrift's TSocket.cpp and TSSLSocket.cpp.
+  return (e.getType() == TTransportException::UNKNOWN &&
+             strstr(e.what(), "recv(): Resource temporarily unavailable") != nullptr) ||
+         (e.getType() == TTransportException::INTERNAL_ERROR &&
+             strstr(e.what(), "SSL_peek: Resource temporarily unavailable") != nullptr);
 }
 
 bool IsConnResetTException(const TTransportException& e) {
