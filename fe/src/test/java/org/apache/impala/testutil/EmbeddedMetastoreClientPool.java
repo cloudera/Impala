@@ -18,6 +18,7 @@
 package org.apache.impala.testutil;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.impala.catalog.MetaStoreClientPool;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.log4j.Logger;
@@ -64,6 +65,8 @@ public class EmbeddedMetastoreClientPool extends  MetaStoreClientPool {
     conf.setBoolean(HiveConf.ConfVars.METASTORE_AUTO_CREATE_ALL.toString(), true);
     conf.set(HiveConf.ConfVars.METASTORECONNECTURLKEY.toString(),
         String.format(CONNECTION_URL_TEMPLATE, dbStorePath.toString()));
+    // Disabling notification event listeners
+    conf.set(ConfVars.METASTORE_TRANSACTIONAL_EVENT_LISTENERS.varname, "");
     return conf;
   }
 
