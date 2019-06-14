@@ -121,11 +121,11 @@ public class AuditingKuduTest extends FrontendTestBase {
     // Describe
     accessEvents = AnalyzeAccessEvents("describe functional_kudu.testtbl");
     Assert.assertEquals(accessEvents, Sets.newHashSet(new TAccessEvent(
-        "functional_kudu.testtbl", TCatalogObjectType.TABLE, "ANY")));
+        "functional_kudu.testtbl", TCatalogObjectType.TABLE, "VIEW_METADATA")));
 
     // Describe formatted
     accessEvents = AnalyzeAccessEvents("describe formatted functional_kudu.testtbl");
     Assert.assertEquals(accessEvents, Sets.newHashSet(new TAccessEvent(
-        "functional_kudu.testtbl", TCatalogObjectType.TABLE, "ANY")));
+        "functional_kudu.testtbl", TCatalogObjectType.TABLE, "VIEW_METADATA")));
   }
 }
