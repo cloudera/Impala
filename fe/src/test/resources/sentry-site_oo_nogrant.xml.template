@@ -55,7 +55,7 @@
   </property>
   <property>
     <name>sentry.store.jdbc.url</name>
-    <value>jdbc:postgresql://${INTERNAL_LISTEN_HOST}:5432/${SENTRY_POLICY_DB}/;create=true</value>
+    <value>jdbc:postgresql://${INTERNAL_LISTEN_HOST}:5432/${SENTRY_POLICY_DB}</value>
   </property>
   <property>
     <name>sentry.store.jdbc.user</name>
