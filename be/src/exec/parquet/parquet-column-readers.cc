@@ -1018,8 +1018,8 @@ Status BaseScalarColumnReader::Reset(const HdfsFileDesc& file_desc,
       && col_end <= split_range->offset() + split_range->len();
   scan_range_ = parent_->scan_node_->AllocateScanRange(metadata_range->fs(),
       filename(), col_len, col_start, partition_id, split_range->disk_id(),
-      col_range_local, split_range->is_erasure_coded(), file_desc.mtime,
-      BufferOpts(split_range->try_cache()));
+      col_range_local, split_range->is_erasure_coded(),
+      BufferOpts(split_range->try_cache(), file_desc.mtime));
   ClearDictionaryDecoder();
   return Status::OK();
 }
