@@ -516,7 +516,7 @@ ScanRange* HdfsScanNodeBase::AllocateScanRange(hdfsFS fs, const char* file,
 
 ScanRange* HdfsScanNodeBase::AllocateScanRange(hdfsFS fs, const char* file,
     int64_t len, int64_t offset, int64_t partition_id, int disk_id, bool try_cache,
-    bool expected_local, int mtime, const ScanRange* original_split) {
+    bool expected_local, int64_t mtime, const ScanRange* original_split) {
   return AllocateScanRange(fs, file, len, offset, partition_id, disk_id, expected_local,
       mtime, BufferOpts(try_cache), original_split);
 }
