@@ -312,8 +312,9 @@ void QueryState::StartFInstances() {
   DCHECK_GT(exec_resource_refcnt_.Load(), 0) << "Should have been taken in Init()";
 
   // set up desc tbl
-  DCHECK(query_ctx().__isset.desc_tbl);
-  Status status = DescriptorTbl::Create(&obj_pool_, query_ctx().desc_tbl, &desc_tbl_);
+  DCHECK(query_ctx().__isset.desc_tbl_serialized);
+  Status status = DescriptorTbl::Create(&obj_pool_, query_ctx().desc_tbl_serialized,
+      &desc_tbl_);
   if (!status.ok()) {
     instances_prepared_promise_.Set(status);
     ReportExecStatusAux(true, status, nullptr, false);

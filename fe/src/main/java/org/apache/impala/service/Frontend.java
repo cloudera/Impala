@@ -1053,20 +1053,31 @@ public class Frontend {
   }
 
   /**
-   * Create a populated TExecRequest corresponding to the supplied TQueryCtx.
+   * Create a populated TExecRequest corresponding to the supplied TQueryCtx. This
+   * overload should only be used directly by tests, as production code should always
+   * have serializeDescTbl set to true.
    */
-  public TExecRequest createExecRequest(TQueryCtx queryCtx, StringBuilder explainString)
-      throws ImpalaException {
+  public TExecRequest createExecRequest(TQueryCtx queryCtx, StringBuilder explainString,
+      boolean serializeDescTbl) throws ImpalaException {
     // Timeline of important events in the planning process, used for debugging
     // and profiling.
     try (FrontendProfile.Scope scope = FrontendProfile.createNewWithScope()) {
       EventSequence timeline = new EventSequence("Query Compilation");
-      TExecRequest result = getTExecRequest(queryCtx, timeline, explainString);
+      TExecRequest result = getTExecRequest(queryCtx, timeline, explainString,
+          serializeDescTbl);
       timeline.markEvent("Planning finished");
       result.setTimeline(timeline.toThrift());
       result.setProfile(FrontendProfile.getCurrent().emitAsThrift());
       return result;
     }
+  }
+
+  /**
+   * Create a populated TExecRequest corresponding to the supplied TQueryCtx.
+   */
+  public TExecRequest createExecRequest(TQueryCtx queryCtx, StringBuilder explainString)
+    throws ImpalaException {
+    return createExecRequest(queryCtx, explainString, true);
   }
 
   /**
@@ -1082,14 +1093,15 @@ public class Frontend {
   }
 
   private TExecRequest getTExecRequest(TQueryCtx queryCtx, EventSequence timeline,
-      StringBuilder explainString) throws ImpalaException {
+      StringBuilder explainString, boolean serializeDescTbl) throws ImpalaException {
     LOG.info("Analyzing query: " + queryCtx.client_request.stmt);
 
     int attempt = 0;
     String retryMsg = "";
     while (true) {
       try {
-        TExecRequest req = doCreateExecRequest(queryCtx, timeline, explainString);
+        TExecRequest req = doCreateExecRequest(queryCtx, timeline, explainString,
+            serializeDescTbl);
         markTimelineRetries(attempt, retryMsg, timeline);
         return req;
       } catch (InconsistentMetadataFetchException e) {
@@ -1110,7 +1122,7 @@ public class Frontend {
   }
 
   private TExecRequest doCreateExecRequest(TQueryCtx queryCtx, EventSequence timeline,
-      StringBuilder explainString) throws ImpalaException {
+      StringBuilder explainString, boolean serializeDescTbl) throws ImpalaException {
     // Parse stmt and collect/load metadata to populate a stmt-local table cache
     StatementBase stmt = parse(queryCtx.client_request.stmt);
     StmtMetadataLoader metadataLoader =
@@ -1175,8 +1187,13 @@ public class Frontend {
 
     Planner planner = new Planner(analysisResult, queryCtx, timeline);
     TQueryExecRequest queryExecRequest = createExecRequest(planner, explainString);
-    queryCtx.setDesc_tbl(
-        planner.getAnalysisResult().getAnalyzer().getDescTbl().toThrift());
+    if (serializeDescTbl) {
+      queryCtx.setDesc_tbl_serialized(
+          planner.getAnalysisResult().getAnalyzer().getDescTbl().toSerializedThrift());
+    } else {
+      queryCtx.setDesc_tbl_testonly(
+          planner.getAnalysisResult().getAnalyzer().getDescTbl().toThrift());
+    }
     queryExecRequest.setQuery_ctx(queryCtx);
     queryExecRequest.setHost_list(analysisResult.getAnalyzer().getHostIndex().getList());
 

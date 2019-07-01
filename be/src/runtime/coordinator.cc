@@ -559,7 +559,8 @@ Status Coordinator::FinalizeSuccessfulInsert() {
   // 1. If OVERWRITE, remove all the files in the target directory
   // 2. Create all the necessary partition directories.
   HdfsTableDescriptor* hdfs_table;
-  RETURN_IF_ERROR(DescriptorTbl::CreateHdfsTblDescriptor(query_ctx_.desc_tbl,
+  DCHECK(query_ctx_.__isset.desc_tbl_serialized);
+  RETURN_IF_ERROR(DescriptorTbl::CreateHdfsTblDescriptor(query_ctx_.desc_tbl_serialized,
       finalize_params_.table_id, obj_pool(), &hdfs_table));
   DCHECK(hdfs_table != nullptr)
       << "INSERT target table not known in descriptor table: "
