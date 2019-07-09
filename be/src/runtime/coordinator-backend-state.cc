@@ -446,8 +446,7 @@ bool Coordinator::BackendState::Cancel() {
              << " backend=" << TNetworkAddressToString(krpc_host_);
 
   std::unique_ptr<ControlServiceProxy> proxy;
-  Status get_proxy_status =
-      ControlService::GetProxy(krpc_host_, krpc_host_.hostname, &proxy);
+  Status get_proxy_status = ControlService::GetProxy(krpc_host_, host_.hostname, &proxy);
   if (!get_proxy_status.ok()) {
     status_.MergeStatus(get_proxy_status);
     VLOG_QUERY << "Cancel query_id= " << PrintId(query_id()) << " could not get proxy to "
