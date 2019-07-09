@@ -663,20 +663,21 @@ Status ClientRequestState::ExecShutdownRequest() {
             << " to ip address, error: " << ip_status.GetDetail();
     return ip_status;
   }
-  TNetworkAddress addr = MakeNetworkAddress(ip_address, port);
+  TNetworkAddress krpc_addr = MakeNetworkAddress(ip_address, port);
 
   std::unique_ptr<ControlServiceProxy> proxy;
-  Status get_proxy_status = ControlService::GetProxy(addr, addr.hostname, &proxy);
+  Status get_proxy_status =
+      ControlService::GetProxy(krpc_addr, request.backend.hostname, &proxy);
   if (!get_proxy_status.ok()) {
     return Status(
         Substitute("Could not get Proxy to ControlService at $0 with error: $1.",
-            TNetworkAddressToString(addr), get_proxy_status.msg().msg()));
+            TNetworkAddressToString(krpc_addr), get_proxy_status.msg().msg()));
   }
 
   RemoteShutdownParamsPB params;
   if (request.__isset.deadline_s) params.set_deadline_s(request.deadline_s);
   RemoteShutdownResultPB resp;
-  VLOG_QUERY << "Sending Shutdown RPC to " << TNetworkAddressToString(addr);
+  VLOG_QUERY << "Sending Shutdown RPC to " << TNetworkAddressToString(krpc_addr);
 
   auto shutdown_rpc = [&](RpcController* rpc_controller) -> kudu::Status {
     return proxy->RemoteShutdown(params, &resp, rpc_controller);
@@ -688,10 +689,10 @@ Status ClientRequestState::ExecShutdownRequest() {
   if (!rpc_status.ok()) {
     const string& msg = rpc_status.msg().msg();
     VLOG_QUERY << "RemoteShutdown query_id= " << PrintId(query_id())
-               << " failed to send RPC to " << TNetworkAddressToString(addr) << " :"
+               << " failed to send RPC to " << TNetworkAddressToString(krpc_addr) << " :"
                << msg;
     string err_string = Substitute(
-        "Rpc to $0 failed with error '$1'", TNetworkAddressToString(addr), msg);
+        "Rpc to $0 failed with error '$1'", TNetworkAddressToString(krpc_addr), msg);
     // Attempt to detect if the the failure is because of not using a KRPC port.
     if (backend_port_specified
         && msg.find("RemoteShutdown() RPC failed: Timed out: connection negotiation to")
