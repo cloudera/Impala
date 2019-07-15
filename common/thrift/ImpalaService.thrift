@@ -377,6 +377,10 @@ enum TImpalaQueryOptions {
   // debugging a testcase. Should not be set in user clusters. If set, a warning
   // is emitted in the query runtime profile.
   PLANNER_TESTCASE_MODE = 77
+
+  // Default hints for insert statement. Will be overridden by hints in the INSERT
+  // statement, if any.
+  DEFAULT_HINTS_INSERT_STATEMENT = 78
 }
 
 // The summary of a DML statement.
