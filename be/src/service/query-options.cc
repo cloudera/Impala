@@ -765,6 +765,10 @@ Status impala::SetQueryOption(const string& key, const string& value,
         query_options->__set_num_rows_produced_limit(num_rows_produced_limit);
         break;
       }
+      case TImpalaQueryOptions::DEFAULT_HINTS_INSERT_STATEMENT: {
+        query_options->__set_default_hints_insert_statement(value);
+        break;
+      }
       default:
         if (IsRemovedQueryOption(key)) {
           LOG(WARNING) << "Ignoring attempt to set removed query option '" << key << "'";
