@@ -176,14 +176,14 @@ public class TestUtils {
     int maxLen = Math.min(actual.size(), expected.size());
     outer:
     for (int i = 0; i < maxLen; ++i) {
-      String expectedStr = expected.get(i).trim();
+      String expectedStr = expected.get(i);
       String actualStr = actual.get(i);
       // Apply all default and caller-supplied filters to the expected and actual output.
       boolean containsPrefix = false;
       for (List<ResultFilter> filters:
           Arrays.<List<ResultFilter>>asList(DEFAULT_FILTERS, lineFilters)) {
         for (ResultFilter filter: filters) {
-          if (filter.matches(expectedStr)) {
+          if (filter.matches(expectedStr) || filter.matches(actualStr)) {
             containsPrefix = true;
             expectedStr = filter.transform(expectedStr);
             actualStr = filter.transform(actualStr);

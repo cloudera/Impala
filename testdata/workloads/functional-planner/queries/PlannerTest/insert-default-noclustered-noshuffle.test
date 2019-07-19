@@ -17,13 +17,13 @@ upsert into functional_kudu.alltypes  select * from functional.alltypes
 UPSERT INTO KUDU [functional_kudu.alltypes]
 |
 00:SCAN HDFS [functional.alltypes]
-   HDFS partitions=24/24 files=24 size=478.45KB
+   partitions=24/24 files=24 size=478.45KB
    row-size=89B cardinality=7.30K
 ---- DISTRIBUTEDPLAN
 UPSERT INTO KUDU [functional_kudu.alltypes]
 |
 00:SCAN HDFS [functional.alltypes]
-   HDFS partitions=24/24 files=24 size=478.45KB
+   partitions=24/24 files=24 size=478.45KB
    row-size=89B cardinality=7.30K
 ====
 # PARTITIONED; DEFAULT: NOCLUSTERED, NOSHUFFLE; EXPECT: NO SORT, NO EXCHANGE;
@@ -34,14 +34,14 @@ WRITE TO HDFS [functional.alltypes, OVERWRITE=false, PARTITION-KEYS=(functional.
 |  partitions=24
 |
 00:SCAN HDFS [functional.alltypes]
-   HDFS partitions=24/24 files=24 size=478.45KB
+   partitions=24/24 files=24 size=478.45KB
    row-size=89B cardinality=7.30K
 ---- DISTRIBUTEDPLAN
 WRITE TO HDFS [functional.alltypes, OVERWRITE=false, PARTITION-KEYS=(functional.alltypes.year,functional.alltypes.month)]
 |  partitions=24
 |
 00:SCAN HDFS [functional.alltypes]
-   HDFS partitions=24/24 files=24 size=478.45KB
+   partitions=24/24 files=24 size=478.45KB
    row-size=89B cardinality=7.30K
 ====
 # NON-PARTITIONED; DEFAULT: NOCLUSTERED, NOSHUFFLE; EXPECT: NO SORT, NO EXCHANGE;
@@ -51,14 +51,14 @@ WRITE TO HDFS [functional.alltypesnopart, OVERWRITE=false]
 |  partitions=1
 |
 00:SCAN HDFS [functional.alltypesnopart]
-   HDFS partitions=1/1 files=0 size=0B
+   partitions=1/1 files=0 size=0B
    row-size=72B cardinality=0
 ---- DISTRIBUTEDPLAN
 WRITE TO HDFS [functional.alltypesnopart, OVERWRITE=false]
 |  partitions=1
 |
 00:SCAN HDFS [functional.alltypesnopart]
-   HDFS partitions=1/1 files=0 size=0B
+   partitions=1/1 files=0 size=0B
    row-size=72B cardinality=0
 ====
 # PARTITIONED; DEFAULT: NOCLUSTERED, NOSHUFFLE; PLAN HINT: CLUSTERED; EXPECT: SORT, EXCHANGE;
@@ -73,7 +73,7 @@ WRITE TO HDFS [functional.alltypes, OVERWRITE=false, PARTITION-KEYS=(year,month)
 |  row-size=89B cardinality=7.30K
 |
 00:SCAN HDFS [functional.alltypes]
-   HDFS partitions=24/24 files=24 size=478.45KB
+   partitions=24/24 files=24 size=478.45KB
    row-size=89B cardinality=7.30K
 ---- DISTRIBUTEDPLAN
 WRITE TO HDFS [functional.alltypes, OVERWRITE=false, PARTITION-KEYS=(year,month)]
@@ -86,7 +86,7 @@ WRITE TO HDFS [functional.alltypes, OVERWRITE=false, PARTITION-KEYS=(year,month)
 01:EXCHANGE [HASH(functional.alltypes.year,functional.alltypes.month)]
 |
 00:SCAN HDFS [functional.alltypes]
-   HDFS partitions=24/24 files=24 size=478.45KB
+   partitions=24/24 files=24 size=478.45KB
    row-size=89B cardinality=7.30K
 ====
 # PARTITIONED; DEFAULT: NOCLUSTERED, NOSHUFFLE; PLAN HINT: SHUFFLE; EXPECT: SORT, EXCHANGE;
@@ -101,7 +101,7 @@ WRITE TO HDFS [functional.alltypes, OVERWRITE=false, PARTITION-KEYS=(year,month)
 |  row-size=89B cardinality=7.30K
 |
 00:SCAN HDFS [functional.alltypes]
-   HDFS partitions=24/24 files=24 size=478.45KB
+   partitions=24/24 files=24 size=478.45KB
    row-size=89B cardinality=7.30K
 ---- DISTRIBUTEDPLAN
 WRITE TO HDFS [functional.alltypes, OVERWRITE=false, PARTITION-KEYS=(year,month)]
@@ -114,7 +114,7 @@ WRITE TO HDFS [functional.alltypes, OVERWRITE=false, PARTITION-KEYS=(year,month)
 01:EXCHANGE [HASH(functional.alltypes.year,functional.alltypes.month)]
 |
 00:SCAN HDFS [functional.alltypes]
-   HDFS partitions=24/24 files=24 size=478.45KB
+   partitions=24/24 files=24 size=478.45KB
    row-size=89B cardinality=7.30K
 ====
 # PARTITIONED; DEFAULT: NOCLUSTERED, NOSHUFFLE; PLAN HINT: CLUSTERED, SHUFFLE; EXPECT: SORT, EXCHANGE;
@@ -129,7 +129,7 @@ WRITE TO HDFS [functional.alltypes, OVERWRITE=false, PARTITION-KEYS=(year,month)
 |  row-size=89B cardinality=7.30K
 |
 00:SCAN HDFS [functional.alltypes]
-   HDFS partitions=24/24 files=24 size=478.45KB
+   partitions=24/24 files=24 size=478.45KB
    row-size=89B cardinality=7.30K
 ---- DISTRIBUTEDPLAN
 WRITE TO HDFS [functional.alltypes, OVERWRITE=false, PARTITION-KEYS=(year,month)]
@@ -142,7 +142,7 @@ WRITE TO HDFS [functional.alltypes, OVERWRITE=false, PARTITION-KEYS=(year,month)
 01:EXCHANGE [HASH(functional.alltypes.year,functional.alltypes.month)]
 |
 00:SCAN HDFS [functional.alltypes]
-   HDFS partitions=24/24 files=24 size=478.45KB
+   partitions=24/24 files=24 size=478.45KB
    row-size=89B cardinality=7.30K
 ====
 # KUDU; DEFAULT: NOCLUSTERED, NOSHUFFLE; PLAN HINT: CLUSTERED, SHUFFLE; EXPECT: SORT, EXCHANGE;
@@ -155,7 +155,7 @@ UPSERT INTO KUDU [functional_kudu.alltypes]
 |  row-size=93B cardinality=7.30K
 |
 00:SCAN HDFS [functional.alltypes]
-   HDFS partitions=24/24 files=24 size=478.45KB
+   partitions=24/24 files=24 size=478.45KB
    row-size=89B cardinality=7.30K
 ---- DISTRIBUTEDPLAN
 UPSERT INTO KUDU [functional_kudu.alltypes]
@@ -167,6 +167,6 @@ UPSERT INTO KUDU [functional_kudu.alltypes]
 01:EXCHANGE [KUDU(KuduPartition(functional.alltypes.id))]
 |
 00:SCAN HDFS [functional.alltypes]
-   HDFS partitions=24/24 files=24 size=478.45KB
+   partitions=24/24 files=24 size=478.45KB
    row-size=89B cardinality=7.30K
 ====
