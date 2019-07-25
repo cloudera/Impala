@@ -33,6 +33,26 @@ console_handler.setFormatter(logging.Formatter('%(message)s'))
 LOG.addHandler(console_handler)
 LOG.propagate = False
 
+MAX_SQL_LOGGING_LENGTH = 128 * 1024
+
+
+# test_exprs.py's TestExprLimits executes extremely large SQLs (multiple MBs). It is the
+# only test that runs SQL larger than 128KB. Logging these SQLs in execute() increases
+# the size of the JUnitXML files, causing problems for users of JUnitXML like Jenkins.
+# This function limits the size of the SQL logged if it is larger than 128KB.
+def log_sql_stmt(sql_stmt):
+  """If the 'sql_stmt' is shorter than MAX_SQL_LOGGING_LENGTH, log it unchanged. If
+     it is larger than MAX_SQL_LOGGING_LENGTH, truncate it and comment it out."""
+  if (len(sql_stmt) <= MAX_SQL_LOGGING_LENGTH):
+    LOG.info("{0};\n".format(sql_stmt))
+  else:
+    # The logging output should be valid SQL, so the truncated SQL is commented out.
+    LOG.info("-- Skip logging full SQL statement of length {0}".format(len(sql_stmt)))
+    LOG.info("-- Logging a truncated version, commented out:")
+    for line in sql_stmt[0:MAX_SQL_LOGGING_LENGTH].split("\n"):
+      LOG.info("-- {0}".format(line))
+    LOG.info("-- [...]")
+
 # Common wrapper around the internal types of HS2/Beeswax operation/query handles.
 class OperationHandle(object):
   def __init__(self, handle):
@@ -160,11 +180,13 @@ class BeeswaxConnection(ImpalaConnection):
     self.__beeswax_client.close_dml(operation_handle.get_handle())
 
   def execute(self, sql_stmt, user=None):
-    LOG.info("-- executing against %s\n%s;\n" % (self.__host_port, sql_stmt))
+    LOG.info("-- executing against %s\n" % (self.__host_port))
+    log_sql_stmt(sql_stmt)
     return self.__beeswax_client.execute(sql_stmt, user=user)
 
   def execute_async(self, sql_stmt, user=None):
-    LOG.info("-- executing async: %s\n%s;\n" % (self.__host_port, sql_stmt))
+    LOG.info("-- executing async: %s\n" % (self.__host_port))
+    log_sql_stmt(sql_stmt)
     return OperationHandle(self.__beeswax_client.execute_query_async(sql_stmt, user=user))
 
   def cancel(self, operation_handle):

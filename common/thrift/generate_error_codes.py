@@ -359,6 +359,78 @@ error_codes = (
   ("LIB_VERSION_MISMATCH", 117,
    "The library $0 last modified time $1 does not match the expected last "
    "modified time $2. Run 'refresh functions <db name>'."),
+
+  ("SCRATCH_READ_VERIFY_FAILED", 118, "Error reading $0 bytes from scratch file '$1' "
+   "on backend $2 at offset $3: verification of read data failed."),
+
+  ("CANCELLED_INTERNALLY", 119, "Cancelled in $0"),
+
+  ("SERVER_SHUTTING_DOWN", 120, "Server is being shut down: $0."),
+
+  ("PARQUET_TIMESTAMP_INVALID_TIME_OF_DAY", 121,
+   "Parquet file '$0' column '$1' contains a timestamp with invalid time of day. "
+   "The time of day should be 0 <= and < 24 hour (in nanoseconds)."),
+
+  ("PARQUET_CORRUPT_BOOL_VALUE", 122, "File '$0' is corrupt: error decoding BOOLEAN "
+   "value with encoding $1 at offset $2"),
+
+  ("THREAD_POOL_SUBMIT_FAILED", 123,
+   "Failed to submit $0 to thread pool after waiting $1 seconds"),
+
+  ("THREAD_POOL_TASK_TIMED_OUT", 124,
+   "$0 failed to finish before the $1 second timeout"),
+
+  ("UNREACHABLE_IMPALADS", 125, "Failed due to unreachable impalad(s): $0"),
+
+  ("INACTIVE_SESSION_EXPIRED", 126, "Session expired due to inactivity"),
+
+  ("INACTIVE_QUERY_EXPIRED", 127,
+   "Query $0 expired due to client inactivity (timeout is $1)"),
+
+  ("EXEC_TIME_LIMIT_EXCEEDED", 128, "Query $0 expired due to execution time limit of $1"),
+
+  ("CPU_LIMIT_EXCEEDED", 129, "Query $0 terminated due to CPU limit of $1"),
+
+  ("SCAN_BYTES_LIMIT_EXCEEDED", 130, "Query $0 terminated due to scan bytes limit of $1"),
+
+  ("ROWS_PRODUCED_LIMIT_EXCEEDED", 131,
+   "Query $0 terminated due to rows produced limit of $1. "
+   "Unset or increase NUM_ROWS_PRODUCED_LIMIT query option to produce more rows."),
+
+  ("EXPR_REWRITE_RESULT_LIMIT_EXCEEDED", 132,
+   "Expression rewrite rejected due to result size ($0) exceeding the limit ($1)."),
+
+  ("UNRESPONSIVE_BACKEND", 133,
+   "Query $0 cancelled due to unresponsive backend: $1 has not sent a report in $2ms "
+   "(max allowed lag is $3ms)"),
+
+  ("PARQUET_DATE_OUT_OF_RANGE", 134,
+   "Parquet file '$0' column '$1' contains an out of range date. "
+   "The valid date range is 0000-01-01..9999-12-31."),
+
+  ("DISCONNECTED_SESSION_CLOSED", 135,
+   "Session closed because it has no active connections"),
+
+  ("UNAUTHORIZED_SESSION_USER", 136,
+   "The user authorized on the connection '$0' does not match the session username '$1'"),
+
+  ("ZSTD_ERROR", 137, "$0 failed with error: $1"),
+
+  ("LZ4_BLOCK_DECOMPRESS_DECOMPRESS_SIZE_INCORRECT", 138,
+   "LZ4Block: Decompressed size is not correct."),
+
+  ("LZ4_BLOCK_DECOMPRESS_INVALID_INPUT_LENGTH", 139,
+   "LZ4Block: Invalid input length."),
+
+  ("LZ4_BLOCK_DECOMPRESS_INVALID_COMPRESSED_LENGTH", 140,
+   "LZ4Block: Invalid compressed length.  Data is likely corrupt."),
+
+  ("LZ4_DECOMPRESS_SAFE_FAILED", 141, "LZ4: LZ4_decompress_safe failed"),
+
+  ("LZ4_COMPRESS_DEFAULT_FAILED", 142, "LZ4: LZ4_compress_default failed"),
+
+  ("MAX_STATEMENT_LENGTH_EXCEEDED", 143, "Statement length of $0 bytes exceeds the "
+   "maximum statement length ($1 bytes)"),
 )
 
 import sys

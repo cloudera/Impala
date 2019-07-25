@@ -331,6 +331,20 @@ enum TImpalaQueryOptions {
   // workaround if the planner's memory estimate is too high and prevents a runnable
   // query from being admitted. 0 or -1 means this has no effect. Defaults to 0.
   MAX_MEM_ESTIMATE_FOR_ADMISSION,
+
+  // Limit on the total number of expressions in the statement. Statements that exceed
+  // the limit will get an error during analysis. This is intended to set an upper
+  // bound on the complexity of statements to avoid resource impacts such as excessive
+  // time in analysis or codegen. This is enforced only for the first pass of analysis
+  // before any rewrites are applied.
+  STATEMENT_EXPRESSION_LIMIT,
+
+  // Limit on the total length of a SQL statement. Statements that exceed the maximum
+  // length will get an error before parsing/analysis. This is complementary to the
+  // statement expression limit, because statements of a certain size are highly
+  // likely to violate the statement expression limit. Rejecting them early avoids
+  // the cost of parsing/analysis.
+  MAX_STATEMENT_LENGTH_BYTES,
 }
 
 // The summary of a DML statement.
