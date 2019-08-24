@@ -44,13 +44,12 @@ class TestEventProcessing(CustomClusterTestSuite):
     catalogd_args="--hms_event_polling_interval_s=1"
   )
   def test_empty_partition_events(self, unique_database):
-    self._run_test_empty_partition_events(unique_database, False)
+    self._run_test_empty_partition_events(unique_database)
 
   def _run_test_empty_partition_events(self, unique_database):
-    TBLPROPERTIES = ""
     test_tbl = unique_database + ".test_events"
     self.run_stmt_in_hive("create table {0} (key string, value string) \
-      partitioned by (year int) {1} stored as parquet".format(test_tbl, TBLPROPERTIES))
+      partitioned by (year int) stored as parquet".format(test_tbl))
     EventProcessorUtils.wait_for_event_processing(self.hive_client)
     self.client.execute("describe {0}".format(test_tbl))
 
