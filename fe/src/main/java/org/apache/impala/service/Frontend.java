@@ -779,11 +779,15 @@ public class Frontend {
       User user) throws ImpalaException {
     List<String> tblNames = getCatalog().getTableNames(dbName, matcher);
     if (authzConfig_.isEnabled()) {
+      Privilege requiredPrivilege = Privilege.ANY;
+      if (BackendConfig.INSTANCE.simplifyCheckOnShowTables()) {
+        requiredPrivilege = Privilege.SELECT;
+      }
       Iterator<String> iter = tblNames.iterator();
       while (iter.hasNext()) {
         String tblName = iter.next();
         PrivilegeRequest privilegeRequest = new PrivilegeRequestBuilder()
-            .any().onAnyColumn(dbName, tblName).toRequest();
+            .allOf(requiredPrivilege).onAnyColumn(dbName, tblName).toRequest();
         if (!authzChecker_.get().hasAccess(user, privilegeRequest)) {
           iter.remove();
         }

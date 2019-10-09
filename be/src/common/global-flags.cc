@@ -270,6 +270,13 @@ DEFINE_bool_hidden(enable_parquet_page_index_writing_debug_only, false, "If true
     "We plan to remove this flag once Impala is able to read the page index and has "
     "better test coverage around it.");
 
+DEFINE_bool(simplify_check_on_show_tables, false,
+    "If true, only check SELECT privilege on SHOW TABLES or GET_TABLES when enabling "
+    "authorization. If false, all privileges will be checked for visibility of a table. "
+    "A table will show up if the user has any privileges on it. This flag is used to "
+    "improve SHOW TABLES performance when using Sentry and have thousands of candidate "
+    "tables to be checked. No performance gain is found in using Ranger");
+
 // ++========================++
 // || Startup flag graveyard ||
 // ++========================++

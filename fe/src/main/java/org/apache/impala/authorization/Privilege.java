@@ -23,18 +23,22 @@ import org.apache.sentry.core.common.Action;
 import org.apache.sentry.core.common.BitFieldAction;
 
 /**
- * Maps an Impala Privilege to one or more Impala "Actions".
+ * Maps an Impala Privilege to one or more Impala "Actions". Declare them in the order
+ * from least allowing to most allowing privilege so EnumSet used in
+ * {@link Privilege#getImpliedPrivileges()} can iterate them in this order. This helps
+ * in more efficiently checking for VIEW_METADATA$ and ANY privilege if the user does
+ * have access to the resource.
  */
 public enum Privilege {
-  ALL(ImpalaAction.ALL, false),
+  SELECT(ImpalaAction.SELECT, false),
+  INSERT(ImpalaAction.INSERT, false),
+  REFRESH(ImpalaAction.REFRESH, false),
   ALTER(ImpalaAction.ALTER, false),
   DROP(ImpalaAction.DROP, false),
   CREATE(ImpalaAction.CREATE, false),
-  INSERT(ImpalaAction.INSERT, false),
-  SELECT(ImpalaAction.SELECT, false),
-  REFRESH(ImpalaAction.REFRESH, false),
+  ALL(ImpalaAction.ALL, false),
   // Privileges required to view metadata on a server object.
-  VIEW_METADATA(EnumSet.of(ImpalaAction.INSERT, ImpalaAction.SELECT,
+  VIEW_METADATA(EnumSet.of(ImpalaAction.SELECT, ImpalaAction.INSERT,
       ImpalaAction.REFRESH), true),
   // Special privilege that is used to determine if the user has any valid privileges
   // on a target object.
