@@ -1,4 +1,4 @@
-# the hash partition for aggregation is adjusted if subsequent analytic computation
+
 # can take advantage of it
 select
 max(tinyint_col) over(partition by int_col)
@@ -2957,7 +2957,7 @@ PLAN-ROOT SINK
 |  row-size=25B cardinality=100
 |
 00:SCAN HDFS [functional.alltypes]
-   HDFS partitions=24/24 files=24 size=478.45KB
+   partitions=24/24 files=24 size=478.45KB
    row-size=25B cardinality=7.30K
 ====
 # Regression test for IMPALA-8790
@@ -3008,6 +3008,6 @@ PLAN-ROOT SINK
 |  row-size=25B cardinality=1.00K
 |
 00:SCAN HDFS [functional.alltypes]
-   HDFS partitions=24/24 files=24 size=478.45KB
+   partitions=24/24 files=24 size=478.45KB
    row-size=25B cardinality=7.30K
 ====
