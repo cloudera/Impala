@@ -84,14 +84,21 @@ import com.google.common.collect.Lists;
 public class FrontendFixture {
   // Single instance used for all tests. Logically equivalent to a
   // single Impala cluster used by many clients.
-  protected static final FrontendFixture instance_ = new FrontendFixture();
+  protected static final FrontendFixture instance_;
+
+  static {
+    try {
+      instance_ = new FrontendFixture();
+    } catch (ImpalaException e) {
+      throw new RuntimeException(e);
+    }
+  }
 
   // The test catalog that can hold test-only tables.
   protected final ImpaladTestCatalog catalog_ = new ImpaladTestCatalog();
 
   // The actual Impala frontend that backs this fixture.
-  protected final Frontend frontend_ = new Frontend(
-      AuthorizationConfig.createAuthDisabledConfig(), catalog_);
+  protected final Frontend frontend_;
 
   // Test-local list of test databases and tables.
   protected final List<Db> testDbs_ = new ArrayList<>();
@@ -107,8 +114,10 @@ public class FrontendFixture {
    * Private constructor. Use {@link #instance()} to get access to
    * the front-end fixture.
    */
-  private FrontendFixture() {
+  private FrontendFixture() throws ImpalaException {
     defaultSession_ = new AnalysisSessionFixture();
+    frontend_ = new Frontend(
+      AuthorizationConfig.createAuthDisabledConfig(), catalog_);
   }
 
   /**

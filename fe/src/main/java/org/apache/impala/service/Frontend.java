@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
@@ -151,6 +152,7 @@ import org.slf4j.LoggerFactory;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.Uninterruptibles;
@@ -223,6 +225,8 @@ public class Frontend {
 
   private final FeCatalogManager catalogManager_;
   private final AuthorizationConfig authzConfig_;
+  // Privileges in which the user should have any of them to see a database or table,
+  private final EnumSet<Privilege> minPrivilegeSetForShowStmts_;
   /**
    * Authorization checker. Initialized and periodically loaded by a task
    * running on the {@link #policyReader_} thread.
@@ -234,7 +238,7 @@ public class Frontend {
 
   private final ImpaladTableUsageTracker impaladTableUsageTracker_;
 
-  public Frontend(AuthorizationConfig authorizationConfig) {
+  public Frontend(AuthorizationConfig authorizationConfig) throws ImpalaException {
     this(authorizationConfig, FeCatalogManager.createFromBackendConfig());
   }
 
@@ -244,12 +248,12 @@ public class Frontend {
    */
   @VisibleForTesting
   public Frontend(AuthorizationConfig authorizationConfig,
-      FeCatalog testCatalog) {
+      FeCatalog testCatalog) throws ImpalaException {
     this(authorizationConfig, FeCatalogManager.createForTests(testCatalog));
   }
 
   private Frontend(AuthorizationConfig authorizationConfig,
-      FeCatalogManager catalogManager) {
+      FeCatalogManager catalogManager) throws ImpalaException {
     authzConfig_ = authorizationConfig;
     catalogManager_ = catalogManager;
 
@@ -269,6 +273,7 @@ public class Frontend {
       policyReader_.scheduleAtFixedRate(policyReaderTask,
           delay, AUTHORIZATION_POLICY_RELOAD_INTERVAL_SECS, TimeUnit.SECONDS);
     }
+    minPrivilegeSetForShowStmts_ = getMinPrivilegeSetForShowStmts();
     impaladTableUsageTracker_ = ImpaladTableUsageTracker.createFromConfig(
         BackendConfig.INSTANCE);
   }
@@ -293,6 +298,24 @@ public class Frontend {
         LOG.error("Error reloading policy file: ", e);
       }
     }
+  }
+
+  /**
+   * Returns the required privilege set for showing a database or table.
+   */
+  private EnumSet<Privilege> getMinPrivilegeSetForShowStmts() throws InternalException {
+    String configStr = BackendConfig.INSTANCE.getMinPrivilegeSetForShowStmts();
+    if (Strings.isNullOrEmpty(configStr)) return EnumSet.of(Privilege.ANY);
+    EnumSet<Privilege> privileges = EnumSet.noneOf(Privilege.class);
+    for (String pStr : configStr.toUpperCase().split(",")) {
+      try {
+        privileges.add(Privilege.valueOf(pStr.trim()));
+      } catch (IllegalArgumentException e) {
+        LOG.error("Illegal privilege name '{}'", pStr, e);
+        throw new InternalException("Failed to parse privileges: " + configStr, e);
+      }
+    }
+    return privileges.isEmpty() ? EnumSet.of(Privilege.ANY) : privileges;
   }
 
   public FeCatalog getCatalog() { return catalogManager_.getOrCreateCatalog(); }
@@ -779,16 +802,14 @@ public class Frontend {
       User user) throws ImpalaException {
     List<String> tblNames = getCatalog().getTableNames(dbName, matcher);
     if (authzConfig_.isEnabled()) {
-      Privilege requiredPrivilege = Privilege.ANY;
-      if (BackendConfig.INSTANCE.simplifyCheckOnShowTables()) {
-        requiredPrivilege = Privilege.SELECT;
-      }
       Iterator<String> iter = tblNames.iterator();
       while (iter.hasNext()) {
         String tblName = iter.next();
-        PrivilegeRequest privilegeRequest = new PrivilegeRequestBuilder()
-            .allOf(requiredPrivilege).onAnyColumn(dbName, tblName).toRequest();
-        if (!authzChecker_.get().hasAccess(user, privilegeRequest)) {
+        Set<PrivilegeRequest> requests = new PrivilegeRequestBuilder()
+            .anyOf(minPrivilegeSetForShowStmts_)
+            .onAnyColumn(dbName, tblName)
+            .buildSet();
+        if (!authzChecker_.get().hasAnyAccess(user, requests)) {
           iter.remove();
         }
       }
@@ -847,9 +868,11 @@ public class Frontend {
       // Default DB should always be shown.
       return true;
     }
-    PrivilegeRequest request = new PrivilegeRequestBuilder()
-        .any().onAnyColumn(db.getName(), AuthorizeableTable.ANY_TABLE_NAME).toRequest();
-    return authzChecker_.get().hasAccess(user, request);
+    Set<PrivilegeRequest> requests = new PrivilegeRequestBuilder()
+        .anyOf(minPrivilegeSetForShowStmts_)
+        .onAnyColumn(db.getName(), AuthorizeableTable.ANY_TABLE_NAME)
+        .buildSet();
+    return authzChecker_.get().hasAnyAccess(user, requests);
   }
 
   /**

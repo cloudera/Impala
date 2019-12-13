@@ -72,7 +72,7 @@ DECLARE_int64(exchg_node_buffer_size_bytes);
 DECLARE_int32(kudu_mutation_buffer_size);
 DECLARE_int32(kudu_error_buffer_size);
 DECLARE_int32(hms_event_polling_interval_s);
-DECLARE_bool(simplify_check_on_show_tables);
+DECLARE_string(min_privilege_set_for_show_stmts);
 
 namespace impala {
 
@@ -144,7 +144,7 @@ Status GetThriftBackendGflags(JNIEnv* jni_env, jbyteArray* cfg_bytes) {
   cfg.__set_kudu_error_buffer_size(FLAGS_kudu_error_buffer_size);
   cfg.__set_hms_event_polling_interval_s(FLAGS_hms_event_polling_interval_s);
   cfg.__set_impala_build_version(::GetDaemonBuildVersion());
-  cfg.__set_simplify_check_on_show_tables(FLAGS_simplify_check_on_show_tables);
+  cfg.__set_min_privilege_set_for_show_stmts(FLAGS_min_privilege_set_for_show_stmts);
   RETURN_IF_ERROR(SerializeThriftMsg(jni_env, &cfg, cfg_bytes));
   return Status::OK();
 }

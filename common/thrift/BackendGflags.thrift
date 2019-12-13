@@ -118,5 +118,5 @@ struct TBackendGflags {
 
   46: required string impala_build_version
 
-  60: required bool simplify_check_on_show_tables
+  60: required string min_privilege_set_for_show_stmts
 }

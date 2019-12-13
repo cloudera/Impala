@@ -134,8 +134,8 @@ public class BackendConfig {
     return backendCfg_.enable_orc_scanner;
   }
 
-  public boolean simplifyCheckOnShowTables() {
-    return backendCfg_.simplify_check_on_show_tables;
+  public String getMinPrivilegeSetForShowStmts() {
+    return backendCfg_.min_privilege_set_for_show_stmts;
   }
 
   // Inits the auth_to_local configuration in the static KerberosName class.

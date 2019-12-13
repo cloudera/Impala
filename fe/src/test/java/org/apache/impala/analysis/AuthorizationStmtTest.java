@@ -74,7 +74,7 @@ public class AuthorizationStmtTest extends FrontendTestBase {
   private final ImpaladTestCatalog authzCatalog_;
   private final Frontend authzFrontend_;
 
-  public AuthorizationStmtTest() {
+  public AuthorizationStmtTest() throws ImpalaException {
     AuthorizationConfig authzConfig = createAuthorizationConfig();
     analysisContext_ = createAnalysisCtx(authzConfig, USER.getName());
     authzCatalog_ = new ImpaladTestCatalog(authzConfig);

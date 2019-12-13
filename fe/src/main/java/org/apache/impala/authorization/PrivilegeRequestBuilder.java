@@ -17,7 +17,11 @@
 
 package org.apache.impala.authorization;
 
+import java.util.EnumSet;
+import java.util.Set;
+
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Sets;
 
 /**
  * Class that helps build PrivilegeRequest objects.
@@ -36,6 +40,7 @@ public class PrivilegeRequestBuilder {
   Authorizeable authorizeable_;
   Privilege privilege_;
   boolean grantOption_ = false;
+  private EnumSet<Privilege> privilegeSet_;
 
   /**
    * Sets the authorizeable object to be a column.
@@ -93,6 +98,14 @@ public class PrivilegeRequestBuilder {
   }
 
   /**
+   * Specifies any of the privileges the user needs to have.
+   */
+  public PrivilegeRequestBuilder anyOf(EnumSet<Privilege> privileges) {
+    privilegeSet_ = privileges;
+    return this;
+  }
+
+  /**
    * Specifies the user needs "ALL" privileges
    */
   public PrivilegeRequestBuilder all() {
@@ -124,5 +137,15 @@ public class PrivilegeRequestBuilder {
     Preconditions.checkNotNull(authorizeable_);
     Preconditions.checkNotNull(privilege_);
     return new PrivilegeRequest(authorizeable_, privilege_, grantOption_);
+  }
+
+  public Set<PrivilegeRequest> buildSet() {
+    Preconditions.checkNotNull(authorizeable_);
+    Preconditions.checkNotNull(privilegeSet_);
+    Set<PrivilegeRequest> privileges = Sets.newHashSet();
+    for (Privilege p : privilegeSet_) {
+      privileges.add(new PrivilegeRequest(authorizeable_, p, grantOption_));
+    }
+    return privileges;
   }
 }

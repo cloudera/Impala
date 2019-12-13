@@ -138,6 +138,24 @@ public class AuthorizationChecker {
     }
   }
 
+  /**
+   * Returns true if the given user has permission to execute any of the given requests,
+   * false otherwise. Always returns true if authorization is disabled or the given user
+   * is an admin user.
+   */
+  public boolean hasAnyAccess(User user, Set<PrivilegeRequest> requests)
+      throws InternalException {
+    Preconditions.checkNotNull(user);
+    Preconditions.checkNotNull(requests);
+
+    for (PrivilegeRequest request : requests) {
+      if (hasAccess(user, request)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   private static String grantOption(boolean hasGrantOption) {
     return hasGrantOption ? " with 'GRANT OPTION'" : "";
   }
