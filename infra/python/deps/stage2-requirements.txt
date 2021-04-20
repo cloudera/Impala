@@ -22,7 +22,7 @@
 
 # Requires setuptools-scm
 pytest == 2.9.2
-  py == 1.4.32
+  py == 1.10.0
   pytest-forked == 0.2
   pytest-random == 0.02
   pytest-runner == 4.2
