@@ -27,5 +27,5 @@ impyla == 0.14.0
 psutil == 0.7.1
 # Required for Kudu:
   Cython == 0.23.4
-  numpy == 1.10.4
+  numpy == 1.22.0
   pytz == 2018.3
