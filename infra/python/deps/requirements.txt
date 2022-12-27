@@ -52,7 +52,7 @@ python-magic == 0.4.11
   pbr == 3.1.1
 requests == 2.7.0
 # Newer versions of setuptools don't support Python 2.6
-setuptools == 36.8.0
+setuptools == 65.5.1
 setuptools-scm == 1.15.4
 sh == 1.11
 # Note: This version for sqlparse is not what is used for the shell. The shell uses
